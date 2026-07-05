@@ -18,3 +18,12 @@ create table portfolio_holdings (
 
 -- Index om snel te filteren op e-mailadres
 create index idx_portfolio_holdings_user_email on portfolio_holdings (user_email);
+
+-- E-mail-voorkeuren per gebruiker (opt-in voor de wekelijkse screener-mail
+-- en/of de persoonlijke portfolio-mail)
+create table user_preferences (
+    user_email text primary key,
+    wants_screener_email boolean not null default false,
+    wants_portfolio_email boolean not null default true,
+    updated_at timestamp with time zone default now()
+);

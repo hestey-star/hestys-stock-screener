@@ -46,6 +46,29 @@ def delete_holding(holding_id: int, user_email: str) -> None:
     client.table("portfolio_holdings").delete().eq("id", holding_id).eq("user_email", user_email).execute()
 
 
+def get_user_preferences(user_email: str) -> dict:
+    """
+    Geeft de e-mail-voorkeuren van deze gebruiker terug. Als er nog geen
+    rij bestaat (nieuwe gebruiker), gelden de standaardwaarden: WEL de
+    persoonlijke portfolio-mail, NIET de bredere screener-mail (opt-in).
+    """
+    client = get_supabase_client()
+    response = client.table("user_preferences").select("*").eq("user_email", user_email).execute()
+    if response.data:
+        return response.data[0]
+    return {"user_email": user_email, "wants_screener_email": False, "wants_portfolio_email": True}
+
+
+def set_user_preferences(user_email: str, wants_screener_email: bool, wants_portfolio_email: bool) -> None:
+    """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "wants_screener_email": wants_screener_email,
+        "wants_portfolio_email": wants_portfolio_email,
+    }).execute()
+
+
 def get_all_users_with_holdings() -> dict[str, list[dict]]:
     """
     Geeft ALLE gebruikers en hun posities terug, gegroepeerd per e-mailadres.

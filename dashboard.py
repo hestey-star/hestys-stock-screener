@@ -66,6 +66,21 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 [data-testid="stDataFrame"] {
     overflow-x: auto !important;
 }
+
+/* Duidelijke header-balk: onderscheidt de titel visueel van de inhoud eronder */
+.app-header {
+    padding: 1.2rem 0 1rem 0;
+    border-bottom: 2px solid #1FAE96;
+    margin-bottom: 1.5rem;
+}
+.app-header h1 {
+    margin: 0 !important;
+}
+
+/* Iets compactere tabellen: kleinere tekst in de databladen */
+[data-testid="stDataFrame"] * {
+    font-size: 0.85rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,7 +113,10 @@ def load_portfolio_news():
         return json.load(f)
 
 
-st.title("Trading Signalen Dashboard")
+st.markdown(
+    '<div class="app-header"><h1>Trading Signalen Dashboard</h1></div>',
+    unsafe_allow_html=True,
+)
 st.caption("Persoonlijk onderzoeksproject -- geen koopadvies. Doe altijd je eigen verdere afweging.")
 
 tab_screener, tab_portfolio = st.tabs(["Nieuwe signalen (Screener)", "Mijn Portfolio"])
@@ -112,7 +130,7 @@ with tab_screener:
         st.subheader("Nieuwe bullish Supertrend-signalen")
         st.caption(f"Laatst bijgewerkt: {file_last_modified('supertrend_signals.csv')}")
     with col2:
-        run_screener = st.button("Ververs nu (duurt lang, 10-20+ min)", key="run_screener")
+        run_screener = st.button("Ververs nu (duurt lang, 10-20+ min)", key="run_screener", type="primary")
 
     if run_screener:
         with st.spinner("Screener draait... dit kan lang duren (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
@@ -134,6 +152,8 @@ with tab_screener:
             "prijs_bij_omslag": "{:.2f}", "prijs_nu": "{:.2f}",
             "sinds_omslag_pct": "{:+.2f}%", "relatieve_sterkte": "{:+.2f}%",
             "roic_pct": "{:+.1f}%", "score": "{:.2f}",
+            "earnings_surprise_pct": "{:+.1f}%", "afwijking_fair_value_pct": "{:+.1f}%",
+            "fair_value": "{:.2f}",
         }
         format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
 
@@ -156,7 +176,7 @@ with tab_portfolio:
             unsafe_allow_html=True,
         )
         st.info("Log in om je eigen posities bij te houden. Niemand anders ziet wat je toevoegt.")
-        st.button("Inloggen met Google", on_click=st.login)
+        st.button("Inloggen met Google", on_click=st.login, type="primary")
         st.stop()
 
     import database
@@ -173,6 +193,20 @@ with tab_portfolio:
         st.caption(user_email)
     with col2:
         st.button("Uitloggen", on_click=st.logout)
+
+    with st.expander("E-mail-voorkeuren", expanded=False):
+        prefs = database.get_user_preferences(user_email)
+        wants_screener = st.checkbox(
+            "Wekelijkse screener-mail ontvangen (nieuwe signalen uit AEX/Nasdaq-100/S&P500/DAX/CAC40)",
+            value=prefs["wants_screener_email"],
+        )
+        wants_portfolio = st.checkbox(
+            "Wekelijkse portfolio-mail ontvangen (status + nieuws van jouw eigen posities)",
+            value=prefs["wants_portfolio_email"],
+        )
+        if st.button("Voorkeuren opslaan"):
+            database.set_user_preferences(user_email, wants_screener, wants_portfolio)
+            st.success("Voorkeuren opgeslagen!")
 
     st.markdown("### Jouw posities")
 
@@ -218,7 +252,7 @@ with tab_portfolio:
         else:
             st.caption("Geen resultaten gevonden voor deze zoekopdracht -- probeer een andere naam.")
 
-    if selected_symbol and st.button("Toevoegen aan mijn portfolio"):
+    if selected_symbol and st.button("Toevoegen aan mijn portfolio", type="primary"):
         with st.spinner(f"Data controleren voor {selected_symbol}..."):
             try:
                 test_df = yf.Ticker(selected_symbol).history(period="5d")
@@ -235,7 +269,7 @@ with tab_portfolio:
 
     st.divider()
 
-    if holdings and st.button("Check mijn portfolio nu", key="check_my_portfolio"):
+    if holdings and st.button("Check mijn portfolio nu", key="check_my_portfolio", type="primary"):
         with st.spinner("Bezig met checken van je posities..."):
             results = []
             for holding in holdings:
@@ -262,6 +296,7 @@ with tab_portfolio:
             st.dataframe(
                 df_my_portfolio[display_cols].style.apply(_highlight_status, axis=1),
                 width="stretch",
+                height=min(38 * (len(df_my_portfolio) + 1), 300),
             )
 
             st.markdown("### Recent nieuws")
