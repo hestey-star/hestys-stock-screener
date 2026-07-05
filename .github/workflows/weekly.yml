@@ -1,0 +1,32 @@
+name: Wekelijkse screener en portfolio-mails
+
+on:
+  schedule:
+    # Zaterdag 07:00 UTC = 08:00 CET / 09:00 CEST (zomertijd)
+    - cron: "0 7 * * 6"
+  workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Wekelijks batch-script draaien
+        run: python weekly_batch.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          EMAIL_SMTP_SERVER: smtp.gmail.com
+          EMAIL_SMTP_PORT: 587
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}

@@ -1,0 +1,14 @@
+# Geheimen -- NOOIT naar GitHub
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Gegenereerde output (wordt elke run opnieuw aangemaakt, hoeft niet in git)
+supertrend_signals.csv
+portfolio_watch.csv
+portfolio_watch_news.json
