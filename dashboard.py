@@ -69,12 +69,24 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 
 /* Duidelijke header-balk: onderscheidt de titel visueel van de inhoud eronder */
 .app-header {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
     padding: 1.2rem 0 1rem 0;
     border-bottom: 2px solid #1FAE96;
     margin-bottom: 1.5rem;
 }
 .app-header h1 {
     margin: 0 !important;
+    font-size: 1.8rem !important;
+    line-height: 1.1;
+}
+.app-header .tagline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: #8992A3;
+    margin-top: 0.15rem;
 }
 
 /* Iets compactere tabellen: kleinere tekst in de databladen */
@@ -114,7 +126,21 @@ def load_portfolio_news():
 
 
 st.markdown(
-    '<div class="app-header"><h1>Trading Signalen Dashboard</h1></div>',
+    """
+    <div class="app-header">
+        <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+            <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
+                  stroke-width="2.5" transform="rotate(45 24 24)"/>
+            <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
+                      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
+        </svg>
+        <div>
+            <h1>Hesty's Signals</h1>
+            <div class="tagline">SUPERTREND &middot; ROIC &middot; NIEUWS</div>
+        </div>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 st.caption("Persoonlijk onderzoeksproject -- geen koopadvies. Doe altijd je eigen verdere afweging.")
