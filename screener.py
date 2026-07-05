@@ -48,12 +48,12 @@ FALLBACK_TICKERS = [
 # --- Instellingen (pas gerust aan om te 'tweaken') ---
 ATR_LENGTH = 6
 ATR_MULTIPLIER = 2.6
-LOOKBACK_WEEKS_FOR_SIGNAL = 1
+LOOKBACK_WEEKS_FOR_SIGNAL = 2
 TREND_FILTER_EMA_LENGTH = 20
 YEARS_OF_HISTORY = 3
 BENCHMARK_LOOKBACK_WEEKS = 12
 VOLUME_AVG_WEEKS = 20  # periode voor het gemiddelde volume, voor de volume-bevestiging
-MIN_PRIOR_TREND_WEEKS = 10  # de voorgaande (bearish) periode moet minstens dit lang zijn geweest --
+MIN_PRIOR_TREND_WEEKS = 8  # de voorgaande (bearish) periode moet minstens dit lang zijn geweest --
                             # filtert zigzag-ruis binnen een al lopende trend eruit
 EARNINGS_RELEVANCE_WEEKS = 8  # een winst-verrassing telt alleen nog mee in de score als
                                # de cijfers niet ouder zijn dan dit -- daarna is het al 'verwerkt'  # periode waarover relatieve sterkte t.o.v. de index wordt vergeleken
@@ -650,7 +650,7 @@ def build_email_body(df_hits: pd.DataFrame) -> tuple:
     return text_body, html_body
 
 
-def main() -> None:
+def main(send_own_email: bool = True) -> None:
     tickers = TICKERS if TICKERS is not None else build_ticker_list()
 
     print("Benchmark-rendementen ophalen (voor relatieve sterkte)...")
@@ -675,7 +675,7 @@ def main() -> None:
     if not hits:
         print(f"\nGeen enkel aandeel had de afgelopen {LOOKBACK_WEEKS_FOR_SIGNAL} "
               f"week(en) een bullish omslag.")
-        if email_is_configured():
+        if send_own_email and email_is_configured():
             send_email(
                 subject="Supertrend-screener: geen signalen deze week",
                 body_text=f"Geen van de {len(tickers)} gescreende tickers had de afgelopen "
@@ -706,7 +706,7 @@ def main() -> None:
     print("verdere afweging (fundamentals, nieuws, sector, waardering) voordat")
     print("je op basis hiervan een positie overweegt.")
 
-    if email_is_configured():
+    if send_own_email and email_is_configured():
         text_body, html_body = build_email_body(df_hits)
         send_email(
             subject=f"Supertrend-screener: {len(hits)} nieuwe signalen",

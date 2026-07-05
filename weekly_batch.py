@@ -52,9 +52,15 @@ def get_all_preferences() -> dict:
 
 
 def run_screener_shared() -> None:
-    """Draait de gedeelde screener 1x -- de resultaten zijn voor iedereen zichtbaar."""
+    """
+    Draait de gedeelde screener 1x -- de resultaten (CSV) zijn voor iedereen
+    zichtbaar op de website. send_own_email=False, want de vaste mail naar
+    het eigen GitHub-secrets-adres zou dubbel op kunnen tellen met de
+    per-gebruiker-opt-in-mail hieronder (run_screener_emails) als dat
+    hetzelfde adres is.
+    """
     print("=== Gedeelde screener draaien (publiek, voor iedereen zichtbaar) ===")
-    screener.main()
+    screener.main(send_own_email=False)
 
 
 def run_screener_emails(preferences: dict) -> None:
