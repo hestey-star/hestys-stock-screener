@@ -77,19 +77,23 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     display: flex;
     align-items: center;
     gap: 0.9rem;
-    text-decoration: none;
+    text-decoration: none !important;
     margin-bottom: 1rem;
+}
+.app-header-top:hover, .app-header-top:visited, .app-header-top:active {
+    text-decoration: none !important;
 }
 .app-header h1 {
     margin: 0 !important;
     font-size: 1.8rem !important;
     line-height: 1.1;
+    color: #EAEDF1 !important;
 }
 .app-header .tagline {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.7rem;
     letter-spacing: 0.08em;
-    color: #8992A3;
+    color: #8992A3 !important;
     margin-top: 0.15rem;
 }
 .nav-bar {
@@ -97,24 +101,69 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
-.nav-link {
+.nav-link, .nav-link:visited, .nav-link:active {
     font-family: 'Inter', sans-serif;
     font-size: 0.9rem;
     font-weight: 500;
     padding: 0.4rem 1rem;
     border-radius: 6px;
-    text-decoration: none;
-    color: #8992A3;
+    text-decoration: none !important;
+    color: #8992A3 !important;
     border: 1px solid transparent;
 }
 .nav-link:hover {
-    color: #EAEDF1;
+    color: #EAEDF1 !important;
     border: 1px solid #1FAE96;
 }
-.nav-link.active {
-    color: #1FAE96;
+.nav-link.active, .nav-link.active:visited {
+    color: #1FAE96 !important;
     background: rgba(31, 174, 150, 0.1);
     border: 1px solid #1FAE96;
+}
+
+/* Compacte, met lijntjes gescheiden posities-lijst in 'Your positions' */
+.holding-text {
+    font-size: 0.85rem;
+    color: #EAEDF1;
+}
+.holding-divider {
+    border: none;
+    border-top: 1px solid #232D3A;
+    margin: 0.35rem 0;
+}
+
+/* Compacte, duidelijk afgebakende tabel voor 'Your positions' */
+.positions-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #141B24;
+    border: 1px solid #232D3A;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1.2rem;
+}
+.positions-table th {
+    text-align: left;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: #8992A3;
+    padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid #232D3A;
+}
+.positions-table td {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.85rem;
+    color: #EAEDF1;
+    border-bottom: 1px solid #1B2536;
+}
+.positions-table tr:last-child td {
+    border-bottom: none;
+}
+.positions-table code {
+    color: #1FAE96;
+    background: none;
+    font-size: 0.85rem;
 }
 
 /* Iets compactere tabellen: kleinere tekst in de databladen */
@@ -257,12 +306,24 @@ elif current_view == "screener":
         }
         filtered.rename(columns=column_labels, inplace=True)
 
+        # Score als 3e kolom, de rest in de logische volgorde erachter
+        preferred_order = [
+            "Ticker", "Flip Date", "Score", "Weeks Ago", "Prior Trend (Weeks)",
+            "Price at Flip", "Price Now", "Since Flip", "Above EMA20",
+            "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
+            "Earnings Surprise", "Earnings Beat", "Earnings Date",
+            "Weeks Since Earnings", "Fair Value", "Vs Fair Value",
+        ]
+        ordered_cols = [c for c in preferred_order if c in filtered.columns]
+        ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
+        filtered = filtered[ordered_cols]
+
         format_dict = {
             "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
             "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
             "ROIC": "{:+.1f}%", "Score": "{:.2f}",
             "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
-            "Fair Value": "{:.2f}",
+            "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
         }
         format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
 
@@ -324,12 +385,29 @@ elif current_view == "portfolio":
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
     else:
-        for holding in holdings:
-            hcol1, hcol2, hcol3 = st.columns([3, 3, 1])
-            hcol1.write(holding["naam"])
-            hcol2.write(holding["ticker"])
-            if hcol3.button("Remove", key=f"delete_{holding['id']}"):
-                database.delete_holding(holding["id"], user_email)
+        rows_html = "".join(
+            f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td></tr>'
+            for h in holdings
+        )
+        st.markdown(
+            f"""
+            <table class="positions-table">
+                <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
+                <tbody>{rows_html}</tbody>
+            </table>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        remove_options = {f"{h['naam']} ({h['ticker']})": h["id"] for h in holdings}
+        rcol1, rcol2 = st.columns([4, 1])
+        with rcol1:
+            to_remove_label = st.selectbox(
+                "Remove a position", list(remove_options.keys()), label_visibility="collapsed"
+            )
+        with rcol2:
+            if st.button("Remove"):
+                database.delete_holding(remove_options[to_remove_label], user_email)
                 st.rerun()
 
     st.markdown("**Add a new position**")
