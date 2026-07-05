@@ -1,9 +1,16 @@
 """
 Dashboard: visualiseert de resultaten van screener.py en portfolio_watch.py.
+(Deze code-commentaren blijven in het Nederlands -- alleen de daadwerkelijk
+zichtbare website-tekst is naar het Engels vertaald.)
 
-Dit dashboard LEEST de CSV/JSON-bestanden die de andere twee scripts
-produceren -- het haalt zelf geen nieuwe data op (behalve via de
-'Ververs nu'-knoppen), zodat het snel laadt.
+Navigatie is bewust GEEN st.tabs(): de opdracht was dat de startpagina
+leeg is totdat je expliciet op 'Welcome' (of een andere nav-link/het logo)
+klikt. Dat is met st.tabs() niet mogelijk (die toont altijd meteen de
+inhoud van het eerste tabblad) -- daarom gebruiken we hier een eigen
+navigatiebalk van HTML-links die de URL-query-parameter '?view=...'
+aanpassen, en tonen we inhoud alleen als die parameter overeenkomt.
+Dat maakt het logo ook op een natuurlijke manier klikbaar (het is zelf
+ook zo'n link, naar '?view=welcome').
 
 Lokaal draaien:
     streamlit run dashboard.py
@@ -26,7 +33,7 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
-st.set_page_config(page_title="Trading Signalen Dashboard", page_icon="◆", layout="wide")
+st.set_page_config(page_title="Hesty's Signals", page_icon="◆", layout="wide")
 
 # --- Visuele identiteit: donkere 'kluis/terminal'-stijl, geen standaard-look ---
 st.markdown("""
@@ -60,21 +67,18 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     margin-bottom: 1rem;
 }
 
-/* Zorgt dat brede tabellen horizontaal kunnen scrollen, zonder de
-   verticale hoogte/scroll van Streamlit's eigen tabel-weergave te
-   verstoren (vandaar: alleen deze ene laag, niet de kind-elementen) */
-[data-testid="stDataFrame"] {
-    overflow-x: auto !important;
-}
-
-/* Duidelijke header-balk: onderscheidt de titel visueel van de inhoud eronder */
+/* Header: logo (klikbaar, linkt naar Welcome) + navigatiebalk eronder */
 .app-header {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
     padding: 1.2rem 0 1rem 0;
     border-bottom: 2px solid #1FAE96;
     margin-bottom: 1.5rem;
+}
+.app-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    text-decoration: none;
+    margin-bottom: 1rem;
 }
 .app-header h1 {
     margin: 0 !important;
@@ -88,6 +92,30 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     color: #8992A3;
     margin-top: 0.15rem;
 }
+.nav-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.nav-link {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #8992A3;
+    border: 1px solid transparent;
+}
+.nav-link:hover {
+    color: #EAEDF1;
+    border: 1px solid #1FAE96;
+}
+.nav-link.active {
+    color: #1FAE96;
+    background: rgba(31, 174, 150, 0.1);
+    border: 1px solid #1FAE96;
+}
 
 /* Iets compactere tabellen: kleinere tekst in de databladen */
 [data-testid="stDataFrame"] * {
@@ -99,7 +127,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 
 def file_last_modified(path: str) -> str:
     if not os.path.exists(path):
-        return "nooit"
+        return "never"
     ts = os.path.getmtime(path)
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
@@ -125,84 +153,139 @@ def load_portfolio_news():
         return json.load(f)
 
 
+# --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
+#     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
+current_view = st.query_params.get("view", None)
+
+
+def _nav_class(view_name: str) -> str:
+    return "nav-link active" if current_view == view_name else "nav-link"
+
+
 st.markdown(
-    """
+    f"""
     <div class="app-header">
-        <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-            <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
-                  stroke-width="2.5" transform="rotate(45 24 24)"/>
-            <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
-                      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
-        </svg>
-        <div>
-            <h1>Hesty's Signals</h1>
-            <div class="tagline">SUPERTREND &middot; ROIC &middot; NIEUWS</div>
+        <a href="?view=welcome" class="app-header-top" target="_self">
+            <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
+                      stroke-width="2.5" transform="rotate(45 24 24)"/>
+                <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
+            </svg>
+            <div>
+                <h1>Hesty's Signals</h1>
+                <div class="tagline">PERSONAL &middot; CLEAR &middot; EASY</div>
+            </div>
+        </a>
+        <div class="nav-bar">
+            <a href="?view=welcome" class="{_nav_class('welcome')}" target="_self">Welcome</a>
+            <a href="?view=screener" class="{_nav_class('screener')}" target="_self">New Signals</a>
+            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
         </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
-st.caption("Persoonlijk onderzoeksproject -- geen koopadvies. Doe altijd je eigen verdere afweging.")
-
-tab_screener, tab_portfolio = st.tabs(["Nieuwe signalen (Screener)", "Mijn Portfolio"])
 
 # ============================================================
-# TAB 1: SCREENER (publiek, geen login nodig)
+# VIEW: WELCOME
 # ============================================================
-with tab_screener:
+if current_view == "welcome":
+    st.markdown("### What is this?")
+    st.write(
+        "Hesty's Signals is a personal research tool for exploring stock market trends. "
+        "It has two parts, and you can jump straight to either one using the navigation above."
+    )
+
+    st.markdown("#### New Signals")
+    st.write(
+        "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 every week for stocks that "
+        "just turned bullish on a weekly Supertrend indicator. Each signal is scored on "
+        "several factors -- how fresh the trend change is, ROIC level and trend, relative "
+        "strength versus the index, volume confirmation, earnings surprises, and how the "
+        "price compares to analyst price targets. This part is public, no login required."
+    )
+
+    st.markdown("#### My Portfolio")
+    st.write(
+        "Log in with Google to privately track your own holdings. See their current trend "
+        "status, recent news, and get a personal weekly email update -- visible only to you."
+    )
+
+# ============================================================
+# VIEW: SCREENER (public, no login required)
+# ============================================================
+elif current_view == "screener":
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.subheader("Nieuwe bullish Supertrend-signalen")
-        st.caption(f"Laatst bijgewerkt: {file_last_modified('supertrend_signals.csv')}")
+        st.subheader("Signals")
+        st.caption(f"Last updated: {file_last_modified('supertrend_signals.csv')}")
     with col2:
-        run_screener = st.button("Ververs nu (duurt lang, 10-20+ min)", key="run_screener", type="primary")
+        run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
 
     if run_screener:
-        with st.spinner("Screener draait... dit kan lang duren (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
+        with st.spinner("Screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
             import screener
             screener.main()
-        st.success("Klaar! Ververs de pagina om de nieuwe resultaten te zien.")
+        st.success("Done! Refresh the page to see the new results.")
 
     df_screener = load_screener_data()
     if df_screener is None or df_screener.empty:
-        st.info("Nog geen resultaten gevonden. Draai eerst 'python screener.py', of klik hierboven op Ververs.")
+        st.info("No results yet. Run 'python screener.py' first, or click Refresh above.")
     else:
         df_screener = df_screener.sort_values("score", ascending=False)
 
-        min_score = st.slider("Minimale score", float(df_screener["score"].min()),
+        min_score = st.slider("Minimum score", float(df_screener["score"].min()),
                                float(df_screener["score"].max()), float(df_screener["score"].min()))
-        filtered = df_screener[df_screener["score"] >= min_score]
+        filtered = df_screener[df_screener["score"] >= min_score].copy()
+
+        # 'benchmark' is interne informatie (welke index gebruikt is voor de
+        # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
+        filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
+
+        # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met underscores
+        column_labels = {
+            "ticker": "Ticker", "flip_date": "Flip Date", "weken_geleden": "Weeks Ago",
+            "voorgaande_trend_weken": "Prior Trend (Weeks)", "prijs_bij_omslag": "Price at Flip",
+            "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip", "boven_ema20": "Above EMA20",
+            "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
+            "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
+            "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
+            "weken_sinds_earnings": "Weeks Since Earnings", "fair_value": "Fair Value",
+            "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
+        }
+        filtered.rename(columns=column_labels, inplace=True)
 
         format_dict = {
-            "prijs_bij_omslag": "{:.2f}", "prijs_nu": "{:.2f}",
-            "sinds_omslag_pct": "{:+.2f}%", "relatieve_sterkte": "{:+.2f}%",
-            "roic_pct": "{:+.1f}%", "score": "{:.2f}",
-            "earnings_surprise_pct": "{:+.1f}%", "afwijking_fair_value_pct": "{:+.1f}%",
-            "fair_value": "{:.2f}",
+            "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
+            "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
+            "ROIC": "{:+.1f}%", "Score": "{:.2f}",
+            "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
+            "Fair Value": "{:.2f}",
         }
         format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
 
         st.dataframe(
-            filtered.style.format(format_dict, na_rep="onbekend")
-                          .background_gradient(subset=["score"], cmap="Greens")
-                          .background_gradient(subset=["relatieve_sterkte"], cmap="RdYlGn"),
+            filtered.style.format(format_dict, na_rep="unknown")
+                          .background_gradient(subset=["Score"], cmap="Greens")
+                          .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
             width="stretch",
             height=500,
         )
-        st.caption(f"{len(filtered)} van {len(df_screener)} signalen getoond (gefilterd op score).")
+        st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
 
 # ============================================================
-# TAB 2: MIJN PORTFOLIO (persoonlijk, login vereist)
+# VIEW: MY PORTFOLIO (personal, login required)
 # ============================================================
-with tab_portfolio:
+elif current_view == "portfolio":
     if not st.user.is_logged_in:
         st.markdown(
-            '<div class="privacy-seal">&#128274; PRIVÉ &middot; alleen zichtbaar voor jou</div>',
+            '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
         )
-        st.info("Log in om je eigen posities bij te houden. Niemand anders ziet wat je toevoegt.")
-        st.button("Inloggen met Google", on_click=st.login, type="primary")
+        st.info("Log in to track your own positions. No one else can see what you add.")
+        st.button("Log in with Google", on_click=st.login, type="primary")
         st.stop()
 
     import database
@@ -210,48 +293,48 @@ with tab_portfolio:
 
     user_email = st.user.email
     st.markdown(
-        '<div class="privacy-seal">&#128274; PRIVÉ &middot; alleen zichtbaar voor jou</div>',
+        '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
         unsafe_allow_html=True,
     )
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.subheader(f"Welkom, {st.user.name}")
+        st.subheader(f"Welcome, {st.user.name}")
         st.caption(user_email)
     with col2:
-        st.button("Uitloggen", on_click=st.logout)
+        st.button("Log out", on_click=st.logout)
 
-    with st.expander("E-mail-voorkeuren", expanded=False):
+    with st.expander("Email preferences", expanded=False):
         prefs = database.get_user_preferences(user_email)
         wants_screener = st.checkbox(
-            "Wekelijkse screener-mail ontvangen (nieuwe signalen uit AEX/Nasdaq-100/S&P500/DAX/CAC40)",
+            "Receive the weekly screener email (new signals from AEX/Nasdaq-100/S&P500/DAX/CAC40)",
             value=prefs["wants_screener_email"],
         )
         wants_portfolio = st.checkbox(
-            "Wekelijkse portfolio-mail ontvangen (status + nieuws van jouw eigen posities)",
+            "Receive the weekly portfolio email (status + news for your own positions)",
             value=prefs["wants_portfolio_email"],
         )
-        if st.button("Voorkeuren opslaan"):
+        if st.button("Save preferences"):
             database.set_user_preferences(user_email, wants_screener, wants_portfolio)
-            st.success("Voorkeuren opgeslagen!")
+            st.success("Preferences saved!")
 
-    st.markdown("### Jouw posities")
+    st.markdown("### Your positions")
 
     holdings = database.get_user_holdings(user_email)
 
     if not holdings:
-        st.info("Je hebt nog geen posities toegevoegd. Voeg hieronder je eerste toe.")
+        st.info("You haven't added any positions yet. Add your first one below.")
     else:
         for holding in holdings:
             hcol1, hcol2, hcol3 = st.columns([3, 3, 1])
             hcol1.write(holding["naam"])
             hcol2.write(holding["ticker"])
-            if hcol3.button("Verwijder", key=f"delete_{holding['id']}"):
+            if hcol3.button("Remove", key=f"delete_{holding['id']}"):
                 database.delete_holding(holding["id"], user_email)
                 st.rerun()
 
-    st.markdown("**Nieuwe positie toevoegen**")
+    st.markdown("**Add a new position**")
     search_query = st.text_input(
-        "Zoek een bedrijf of crypto (bv. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
+        "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
     )
 
     selected_symbol = None
@@ -262,7 +345,7 @@ with tab_portfolio:
             search_results = yf.Search(search_query, max_results=8).quotes
         except Exception as exc:
             search_results = []
-            st.caption(f"Zoeken mislukt: {exc}")
+            st.caption(f"Search failed: {exc}")
 
         if search_results:
             options = {}
@@ -271,32 +354,32 @@ with tab_portfolio:
                 label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
                 options[label] = r
 
-            chosen_label = st.selectbox("Kies de juiste match", list(options.keys()))
+            chosen_label = st.selectbox("Choose the right match", list(options.keys()))
             chosen = options[chosen_label]
             selected_symbol = chosen.get("symbol")
             selected_name = chosen.get("shortname") or chosen.get("longname") or selected_symbol
         else:
-            st.caption("Geen resultaten gevonden voor deze zoekopdracht -- probeer een andere naam.")
+            st.caption("No results found for this search -- try a different name.")
 
-    if selected_symbol and st.button("Toevoegen aan mijn portfolio", type="primary"):
-        with st.spinner(f"Data controleren voor {selected_symbol}..."):
+    if selected_symbol and st.button("Add to my portfolio", type="primary"):
+        with st.spinner(f"Checking data for {selected_symbol}..."):
             try:
                 test_df = yf.Ticker(selected_symbol).history(period="5d")
             except Exception as exc:
                 test_df = None
-                st.error(f"Kon {selected_symbol} niet valideren: {exc}")
+                st.error(f"Could not validate {selected_symbol}: {exc}")
 
         if test_df is not None and test_df.empty:
-            st.error(f"Geen recente koersdata gevonden voor {selected_symbol} -- niet toegevoegd.")
+            st.error(f"No recent price data found for {selected_symbol} -- not added.")
         elif test_df is not None:
             database.add_holding(user_email, selected_name, selected_symbol)
-            st.success(f"{selected_name} ({selected_symbol}) toegevoegd!")
+            st.success(f"{selected_name} ({selected_symbol}) added!")
             st.rerun()
 
     st.divider()
 
-    if holdings and st.button("Check mijn portfolio nu", key="check_my_portfolio", type="primary"):
-        with st.spinner("Bezig met checken van je posities..."):
+    if holdings and st.button("Check my portfolio now", key="check_my_portfolio", type="primary"):
+        with st.spinner("Checking your positions..."):
             results = []
             for holding in holdings:
                 result = check_holding(holding["naam"], holding["ticker"])
@@ -304,12 +387,12 @@ with tab_portfolio:
                     results.append(result)
 
         if not results:
-            st.warning("Kon geen van je posities checken -- controleer of de tickers kloppen.")
+            st.warning("Could not check any of your positions -- please verify the tickers.")
         else:
             df_my_portfolio = pd.DataFrame(results)
             changed = df_my_portfolio[df_my_portfolio["recent_gewijzigd"] == True]  # noqa: E712
             if len(changed) > 0:
-                st.warning(f"{len(changed)} positie(s) recent van trend gewisseld: "
+                st.warning(f"{len(changed)} position(s) recently changed trend: "
                            + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
 
             def _highlight_status(row):
@@ -325,22 +408,22 @@ with tab_portfolio:
                 height=min(38 * (len(df_my_portfolio) + 1), 300),
             )
 
-            st.markdown("### Recent nieuws")
+            st.markdown("### Recent news")
             any_news = False
             for _, row in df_my_portfolio.iterrows():
                 if row["nieuws"]:
                     any_news = True
-                    with st.expander(f"{row['naam']} ({row['ticker']}) -- {len(row['nieuws'])} bericht(en)"):
+                    with st.expander(f"{row['naam']} ({row['ticker']}) -- {len(row['nieuws'])} item(s)"):
                         for item in row["nieuws"]:
                             pub_date = item["published"].strftime("%Y-%m-%d")
                             st.markdown(f"**[{item['title']}]({item['link']})**  \n"
                                         f"*{item['publisher']}, {pub_date}*")
             if not any_news:
-                st.caption("Geen recent nieuws gevonden voor je posities.")
+                st.caption("No recent news found for your positions.")
 
-    st.caption("Je ontvangt ook wekelijks automatisch een e-mail met deze update, "
-               "op het adres waarmee je bent ingelogd.")
+    st.caption("You'll also automatically receive a weekly email with this update, "
+               "at the address you're logged in with.")
 
 st.divider()
-st.caption("Dit dashboard toont technische signalen (Supertrend), fundamentele context (ROIC-schatting) "
-           "en nieuws. Het is geen geautomatiseerde strategie en geen financieel advies.")
+st.caption("This dashboard shows technical signals (Supertrend), fundamental context (ROIC estimate), "
+           "and news. It is not an automated strategy and not financial advice.")
