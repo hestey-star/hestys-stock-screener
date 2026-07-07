@@ -218,7 +218,7 @@ def get_fx_rate(from_currency: str, to_currency: str):
 
 
 def build_portfolio_pie_chart(holdings: list):
-    """Bouwt een compacte donut-chart van de portfolio-verdeling, in een rustig jade/teal-kleurenverloop."""
+    """Bouwt een compacte donut-chart van de portfolio-verdeling, met de legenda naast (niet onder) de taart."""
     palette = ["#1FAE96", "#17876F", "#3ED9C4", "#0F5C4E", "#5AC8B0",
                "#0B4A3E", "#2FBFA3", "#0D6653", "#4DD0BA", "#124F42"]
     colors = (palette * (len(holdings) // len(palette) + 1))[:len(holdings)]
@@ -227,20 +227,21 @@ def build_portfolio_pie_chart(holdings: list):
     values = [h.get("position_value") or 0 for h in holdings]
 
     fig = go.Figure(data=[go.Pie(
-        labels=labels, values=values, hole=0.6,
+        labels=labels, values=values, hole=0.55,
         marker=dict(colors=colors, line=dict(color="#101825", width=2)),
-        textinfo="percent",  # alleen percentage OP de taart -- namen staan al in de tabel eronder
-        textfont=dict(family="Inter, sans-serif", size=12, color="#EAEDF1"),
-        hovertemplate="%{label}: %{value:,.0f} (%{percent})<extra></extra>",
+        texttemplate="%{percent:.0%}",  # afgerond, geen decimalen
+        textposition="inside",
+        textfont=dict(family="Inter, sans-serif", size=14, color="#EAEDF1"),
+        hovertemplate="%{label}: %{value:,.0f} (%{percent:.0%})<extra></extra>",
     )])
     fig.update_layout(
         showlegend=True,
-        legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5,
+        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02,
                     font=dict(family="Inter, sans-serif", size=10, color="#8992A3"), bgcolor="rgba(0,0,0,0)"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=10, b=10, l=10, r=10),
-        height=280,
+        margin=dict(t=10, b=10, l=10, r=100),  # ruimte rechts voor de legenda, naast de taart
+        height=320,
         font=dict(family="Inter, sans-serif", color="#EAEDF1"),
     )
     return fig
@@ -568,7 +569,7 @@ elif current_view == "portfolio":
 
     total_value_preview = sum(h.get("position_value") or 0 for h in holdings)
     if total_value_preview > 0:
-        chart_col, _spacer_col = st.columns([2, 3])
+        chart_col, _spacer_col = st.columns([3, 2])
         with chart_col:
             with st.container(border=True):
                 st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
