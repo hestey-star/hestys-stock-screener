@@ -181,10 +181,10 @@ def file_last_modified(path: str) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
 
-def load_screener_data():
-    if not os.path.exists("supertrend_signals.csv"):
+def load_screener_data(csv_file: str = "supertrend_signals.csv"):
+    if not os.path.exists(csv_file):
         return None
-    df = pd.read_csv("supertrend_signals.csv")
+    df = pd.read_csv(csv_file)
     return df
 
 
@@ -391,22 +391,33 @@ if current_view == "welcome":
 # VIEW: SCREENER (public, no login required)
 # ============================================================
 elif current_view == "screener":
+    timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
+    csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
+
     col1, col2 = st.columns([3, 1])
     with col1:
         st.subheader("Signals")
-        st.caption(f"Last updated: {file_last_modified('supertrend_signals.csv')}")
+        st.caption(f"Last updated: {file_last_modified(csv_file)}")
     with col2:
-        run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
+        if timeframe == "Weekly":
+            run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
+        else:
+            run_screener = st.button("Refresh now (takes a while, 5-15 min)", key="run_screener_daily", type="primary")
 
     if run_screener:
-        with st.spinner("Screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
-            import screener
-            screener.main()
+        with st.spinner(f"{timeframe} screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
+            if timeframe == "Weekly":
+                import screener
+                screener.main()
+            else:
+                import screener_daily
+                screener_daily.main()
         st.success("Done! Refresh the page to see the new results.")
 
-    df_screener = load_screener_data()
+    df_screener = load_screener_data(csv_file)
     if df_screener is None or df_screener.empty:
-        st.info("No results yet. Run 'python screener.py' first, or click Refresh above.")
+        run_hint = "python screener.py" if timeframe == "Weekly" else "python screener_daily.py"
+        st.info(f"No results yet. Run '{run_hint}' first, or click Refresh above.")
     else:
         df_screener = df_screener.sort_values("score", ascending=False)
 
@@ -418,26 +429,33 @@ elif current_view == "screener":
         # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
         filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
 
-        # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met underscores
+        # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
+        # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
+        # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
         column_labels = {
-            "ticker": "Ticker", "flip_date": "Flip Date", "weken_geleden": "Weeks Ago",
-            "voorgaande_trend_weken": "Prior Trend (Weeks)", "prijs_bij_omslag": "Price at Flip",
-            "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip", "boven_ema20": "Above EMA20",
+            "ticker": "Ticker", "flip_date": "Flip Date",
+            "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
+            "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
+            "prijs_bij_omslag": "Price at Flip",
+            "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
+            "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
             "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
             "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
             "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
-            "weken_sinds_earnings": "Weeks Since Earnings", "fair_value": "Fair Value",
+            "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
+            "fair_value": "Fair Value",
             "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
         }
         filtered.rename(columns=column_labels, inplace=True)
 
         # Score als 3e kolom, de rest in de logische volgorde erachter
         preferred_order = [
-            "Ticker", "Flip Date", "Score", "Weeks Ago", "Prior Trend (Weeks)",
-            "Price at Flip", "Price Now", "Since Flip", "Above EMA20",
+            "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
+            "Prior Trend (Weeks)", "Prior Trend (Days)",
+            "Price at Flip", "Price Now", "Since Flip", "Above EMA",
             "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
             "Earnings Surprise", "Earnings Beat", "Earnings Date",
-            "Weeks Since Earnings", "Fair Value", "Vs Fair Value",
+            "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
         ]
         ordered_cols = [c for c in preferred_order if c in filtered.columns]
         ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen

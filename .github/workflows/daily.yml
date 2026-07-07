@@ -1,0 +1,31 @@
+name: Dagelijkse screener
+
+on:
+  schedule:
+    # Maandag t/m vrijdag, 23:00 UTC = 00:00/01:00 CET/CEST -- ruim na
+    # sluiting van alle Europese en Amerikaanse beurzen die dag
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
+
+jobs:
+  run-daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Dagelijkse screener draaien
+        run: python screener_daily.py
+        env:
+          EMAIL_SMTP_SERVER: smtp.gmail.com
+          EMAIL_SMTP_PORT: 587
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
