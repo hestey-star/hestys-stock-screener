@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
@@ -200,6 +200,99 @@ def load_portfolio_news():
         return {}
     with open("portfolio_watch_news.json", encoding="utf-8") as f:
         return json.load(f)
+
+
+def refresh_portfolio_values(holdings: list, user_email: str) -> tuple:
+    """
+    Haalt voor elke positie de actuele koers op en werkt position_value bij
+    (shares x koers). Rate-limited tot 1x per minuut per gebruiker, om
+    onnodige/herhaalde yfinance-aanroepen (en dus spam) te voorkomen.
+
+    Geeft (success: bool, message: str) terug.
+    """
+    last_refresh = database.get_last_price_refresh(user_email)
+    if last_refresh:
+        last_refresh_dt = datetime.fromisoformat(last_refresh.replace("Z", "+00:00"))
+        seconds_since = (datetime.now(timezone.utc) - last_refresh_dt).total_seconds()
+        if seconds_since < 60:
+            wait_seconds = int(60 - seconds_since)
+            return False, f"Please wait {wait_seconds} more second(s) before updating again."
+
+    updated_count = 0
+    for holding in holdings:
+        if not holding.get("shares"):
+            continue
+        try:
+            price_data = yf.Ticker(holding["ticker"]).history(period="1d")
+            if price_data.empty:
+                continue
+            current_price = float(price_data["Close"].iloc[-1])
+            new_value = holding["shares"] * current_price
+            database.update_holding_value(holding["id"], user_email, new_value)
+            updated_count += 1
+        except Exception:
+            continue
+
+    database.set_last_price_refresh(user_email, datetime.now(timezone.utc).isoformat())
+    return True, f"Updated {updated_count} of {len(holdings)} position(s)."
+
+
+def analyze_portfolio(holdings: list) -> list:
+    """
+    Objectieve, regel-gebaseerde analyse van de portfolio -- geen mening,
+    alleen concrete cijfers en veelgebruikte vuistregels (bv. 'een positie
+    boven 25% van je portfolio geldt algemeen als een concentratie-risico').
+    """
+    findings = []
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+
+    if total_value <= 0:
+        return ["No position values available yet -- click 'Update portfolio value' first."]
+
+    # --- Concentratie ---
+    sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
+    largest = sorted_holdings[0]
+    largest_pct = (largest.get("position_value") or 0) / total_value * 100
+
+    if largest_pct >= 40:
+        findings.append(f"🔴 High concentration risk: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio (common guideline: keep any single position under ~25%).")
+    elif largest_pct >= 25:
+        findings.append(f"🟡 Moderate concentration: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio.")
+    else:
+        findings.append(f"🟢 No single position dominates: largest is {largest['naam']} at {largest_pct:.0f}%.")
+
+    top3_pct = sum((h.get("position_value") or 0) for h in sorted_holdings[:3]) / total_value * 100
+    if len(holdings) > 3:
+        findings.append(f"Your top 3 positions represent {top3_pct:.0f}% of your tracked portfolio.")
+
+    # --- Spreiding (aantal posities) ---
+    if len(holdings) <= 3:
+        findings.append(f"🟡 Only {len(holdings)} position(s) tracked -- limited diversification.")
+    elif len(holdings) <= 7:
+        findings.append(f"🟢 {len(holdings)} positions tracked -- reasonable spread.")
+    else:
+        findings.append(f"🟢 {len(holdings)} positions tracked -- well spread out.")
+
+    # --- Type aandelen (asset class, via yfinance quoteType) ---
+    type_values = {}
+    for h in holdings:
+        value = h.get("position_value") or 0
+        try:
+            info = yf.Ticker(h["ticker"]).info
+            asset_type = info.get("quoteType", "UNKNOWN")
+        except Exception:
+            asset_type = "UNKNOWN"
+        type_values[asset_type] = type_values.get(asset_type, 0) + value
+
+    if type_values:
+        breakdown = ", ".join(
+            f"{t.title()}: {v / total_value * 100:.0f}%" for t, v in sorted(type_values.items(), key=lambda x: -x[1])
+        )
+        findings.append(f"Asset type breakdown -- {breakdown}.")
+        if len(type_values) == 1:
+            findings.append("🟡 All tracked positions are the same asset type -- no cross-asset-class diversification.")
+
+    return findings
 
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -385,24 +478,24 @@ elif current_view == "portfolio":
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
     else:
-        # --- Concentratie-risico: percentage van elke positie t.o.v. het totaal ---
+        # --- Update-knop: haalt actuele koersen op en herberekent alle waardes (max 1x/min) ---
+        ucol1, ucol2 = st.columns([3, 1])
+        with ucol2:
+            if st.button("Update portfolio value"):
+                with st.spinner("Fetching current prices..."):
+                    success, message = refresh_portfolio_values(holdings, user_email)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.warning(message)
+
         total_value = sum(h.get("position_value") or 0 for h in holdings)
-        concentration_threshold = st.slider(
-            "Concentration warning threshold", min_value=5, max_value=75, value=25, step=5,
-            format="%d%%", help="Get warned when a single position exceeds this percentage of your total tracked portfolio value.",
-        )
-
-        over_threshold = []
-        if total_value > 0:
-            for h in holdings:
-                value = h.get("position_value") or 0
-                pct = (value / total_value) * 100
-                if pct >= concentration_threshold:
-                    over_threshold.append((h["naam"], pct))
-
-        if over_threshold:
-            warning_text = ", ".join(f"{naam} ({pct:.0f}%)" for naam, pct in over_threshold)
-            st.warning(f"⚠️ Concentration risk: {warning_text} of your tracked portfolio.")
+        with ucol1:
+            if total_value > 0:
+                st.caption(f"Total tracked value: €{total_value:,.2f}")
+            else:
+                st.caption("Click 'Update portfolio value' to fetch current prices.")
 
         def _format_pct(holding):
             if total_value <= 0:
@@ -410,22 +503,24 @@ elif current_view == "portfolio":
             value = holding.get("position_value") or 0
             return f"{value / total_value * 100:.1f}%"
 
+        def _format_value(holding):
+            value = holding.get("position_value")
+            return f"€{value:,.2f}" if value else "-"
+
         rows_html = "".join(
             f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
-            f'<td>{_format_pct(h)}</td></tr>'
+            f'<td>{h.get("shares") or "-"}</td><td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
             for h in holdings
         )
         st.markdown(
             f"""
             <table class="positions-table">
-                <thead><tr><th>Name</th><th>Ticker</th><th>% of portfolio</th></tr></thead>
+                <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Value</th><th>% of portfolio</th></tr></thead>
                 <tbody>{rows_html}</tbody>
             </table>
             """,
             unsafe_allow_html=True,
         )
-        if total_value == 0:
-            st.caption("Add a position value when adding a position to see concentration percentages.")
 
         remove_options = {f"{h['naam']} ({h['ticker']})": h["id"] for h in holdings}
         rcol1, rcol2 = st.columns([4, 1])
@@ -438,13 +533,19 @@ elif current_view == "portfolio":
                 database.delete_holding(remove_options[to_remove_label], user_email)
                 st.rerun()
 
+        st.markdown("**Portfolio analysis**")
+        if st.button("Analyze my portfolio"):
+            findings = analyze_portfolio(holdings)
+            for finding in findings:
+                st.markdown(f"- {finding}")
+
     st.markdown("**Add a new position**")
     search_query = st.text_input(
         "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
     )
-    position_value_input = st.number_input(
-        "Current value of this position (€, optional -- needed for the concentration warning above)",
-        min_value=0.0, value=0.0, step=100.0,
+    shares_input = st.number_input(
+        "Number of shares/units you hold (optional -- needed for value tracking and portfolio analysis)",
+        min_value=0.0, value=0.0, step=1.0,
     )
 
     selected_symbol = None
@@ -484,7 +585,7 @@ elif current_view == "portfolio":
         elif test_df is not None:
             database.add_holding(
                 user_email, selected_name, selected_symbol,
-                position_value = position_value_input if position_value_input > 0 else None,
+                shares = shares_input if shares_input > 0 else None,
             )
             st.success(f"{selected_name} ({selected_symbol}) added!")
             st.rerun()

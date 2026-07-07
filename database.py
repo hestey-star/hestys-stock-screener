@@ -26,15 +26,23 @@ def get_user_holdings(user_email: str) -> list[dict]:
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str, position_value: float = None) -> None:
-    """Voegt een nieuwe positie toe voor deze gebruiker, optioneel met de huidige waarde (voor concentratie-risico)."""
+def add_holding(user_email: str, naam: str, ticker: str, shares: float = None) -> None:
+    """Voegt een nieuwe positie toe voor deze gebruiker, optioneel met het aantal aandelen/eenheden."""
     client = get_supabase_client()
     client.table("portfolio_holdings").insert({
         "user_email": user_email,
         "naam": naam,
         "ticker": ticker,
-        "position_value": position_value,
+        "shares": shares,
+        "position_value": None,  # wordt pas gevuld na de eerste 'Update waarde'-klik
     }).execute()
+
+
+def update_holding_value(holding_id: int, user_email: str, position_value: float) -> None:
+    """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers)."""
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"position_value": position_value}) \
+        .eq("id", holding_id).eq("user_email", user_email).execute()
 
 
 def delete_holding(holding_id: int, user_email: str) -> None:
@@ -45,6 +53,24 @@ def delete_holding(holding_id: int, user_email: str) -> None:
     """
     client = get_supabase_client()
     client.table("portfolio_holdings").delete().eq("id", holding_id).eq("user_email", user_email).execute()
+
+
+def get_last_price_refresh(user_email: str):
+    """Geeft het tijdstip van de laatste waarde-update terug (of None als nog nooit gedaan)."""
+    client = get_supabase_client()
+    response = client.table("user_preferences").select("last_price_refresh_at").eq("user_email", user_email).execute()
+    if response.data and response.data[0].get("last_price_refresh_at"):
+        return response.data[0]["last_price_refresh_at"]
+    return None
+
+
+def set_last_price_refresh(user_email: str, timestamp_iso: str) -> None:
+    """Slaat het tijdstip van de zojuist uitgevoerde waarde-update op (voor de rate-limit)."""
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "last_price_refresh_at": timestamp_iso,
+    }).execute()
 
 
 def get_user_preferences(user_email: str) -> dict:

@@ -13,13 +13,19 @@ create table portfolio_holdings (
     user_email text not null,
     naam text not null,
     ticker text not null,
-    position_value numeric,  -- huidige waarde van de positie in EUR, voor concentratie-risico-berekening (optioneel, mag leeg zijn)
+    shares numeric,          -- aantal aandelen/eenheden dat je bezit
+    position_value numeric,  -- LAATST BEREKENDE waarde (shares x koers), bijgewerkt via de 'Update'-knop
     created_at timestamp with time zone default now()
 );
 
 -- Als je portfolio_holdings AL bestond (van eerder), draai dan ALLEEN
--- deze regel om de nieuwe kolom toe te voegen, niet de create table hierboven:
--- alter table portfolio_holdings add column position_value numeric;
+-- deze regels om de nieuwe kolommen toe te voegen, niet de create table hierboven:
+-- alter table portfolio_holdings add column shares numeric;
+-- (position_value bestond al van de vorige update)
+
+-- Tijdstempel van de laatste keer dat de waardes zijn bijgewerkt, per
+-- gebruiker -- voorkomt spam (max 1x per minuut, zie screener.py-achtige logica)
+-- alter table user_preferences add column last_price_refresh_at timestamp with time zone;
 
 -- Index om snel te filteren op e-mailadres
 create index idx_portfolio_holdings_user_email on portfolio_holdings (user_email);
@@ -30,5 +36,6 @@ create table user_preferences (
     user_email text primary key,
     wants_screener_email boolean not null default false,
     wants_portfolio_email boolean not null default true,
+    last_price_refresh_at timestamp with time zone,  -- voor de 1x-per-minuut rate-limit op de 'Update waarde'-knop
     updated_at timestamp with time zone default now()
 );
