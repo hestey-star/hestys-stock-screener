@@ -218,27 +218,29 @@ def get_fx_rate(from_currency: str, to_currency: str):
 
 
 def build_portfolio_pie_chart(holdings: list):
-    """Bouwt een donut-chart van de portfolio-verdeling, in Hesty's kleurenpalet."""
-    palette = ["#1FAE96", "#3ED9C4", "#5FBF8F", "#8FD6C7", "#2D8C7F",
-               "#6FA8DC", "#C9A66B", "#C1524A", "#8992A3", "#4A7A8C"]
+    """Bouwt een compacte donut-chart van de portfolio-verdeling, in een rustig jade/teal-kleurenverloop."""
+    palette = ["#1FAE96", "#17876F", "#3ED9C4", "#0F5C4E", "#5AC8B0",
+               "#0B4A3E", "#2FBFA3", "#0D6653", "#4DD0BA", "#124F42"]
     colors = (palette * (len(holdings) // len(palette) + 1))[:len(holdings)]
 
     labels = [h["naam"] for h in holdings]
     values = [h.get("position_value") or 0 for h in holdings]
 
     fig = go.Figure(data=[go.Pie(
-        labels=labels, values=values, hole=0.55,
+        labels=labels, values=values, hole=0.6,
         marker=dict(colors=colors, line=dict(color="#101825", width=2)),
-        textinfo="label+percent",
-        textfont=dict(family="Inter, sans-serif", size=13, color="#EAEDF1"),
+        textinfo="percent",  # alleen percentage OP de taart -- namen staan al in de tabel eronder
+        textfont=dict(family="Inter, sans-serif", size=12, color="#EAEDF1"),
         hovertemplate="%{label}: %{value:,.0f} (%{percent})<extra></extra>",
     )])
     fig.update_layout(
-        showlegend=False,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5,
+                    font=dict(family="Inter, sans-serif", size=10, color="#8992A3"), bgcolor="rgba(0,0,0,0)"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(t=10, b=10, l=10, r=10),
-        height=350,
+        height=280,
         font=dict(family="Inter, sans-serif", color="#EAEDF1"),
     )
     return fig
@@ -564,6 +566,13 @@ elif current_view == "portfolio":
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
 
+    total_value_preview = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value_preview > 0:
+        chart_col, _spacer_col = st.columns([2, 3])
+        with chart_col:
+            with st.container(border=True):
+                st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
+
     with st.container(border=True):
         if holdings:
             # --- Valuta-keuze + totaalbedrag, prominent bovenaan ---
@@ -589,10 +598,6 @@ elif current_view == "portfolio":
                     st.rerun()
                 else:
                     st.warning(message)
-
-            # --- Pie chart: alleen tonen als er daadwerkelijk waardes bekend zijn ---
-            if total_value > 0:
-                st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
 
             def _format_pct(holding):
                 if total_value <= 0:
