@@ -890,14 +890,20 @@ elif current_view == "portfolio":
                     # nodig hebt (welke trend, net geflipt of niet). Geen ROIC hier --
                     # dat hoort bij fundamentele analyse, niet bij trend-status. Geen
                     # nieuws hier -- dat blijft voorbehouden aan de wekelijkse e-mail.
+                    def _format_weeks(value):
+                        return "-" if value is None else f"{value:.0f}"
+
+                    def _format_price(value):
+                        return "-" if value is None else f"{value:.0f}"
+
                     df_display = pd.DataFrame([
                         {
                             "Name": r["naam"],
                             "Ticker": r["ticker"],
                             "Weekly Trend": r["status"],
                             "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
-                            "Weeks in Trend": r["weken_in_trend"],
-                            "Price": r["prijs"],
+                            "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
+                            "Price": _format_price(r["prijs"]),
                         }
                         for r in trend_results
                     ])
@@ -911,7 +917,7 @@ elif current_view == "portfolio":
                     st.caption("Weekly Supertrend status per position.")
                     st.dataframe(
                         df_display.style.apply(_highlight_status, axis=1),
-                        width="stretch",
+                        width="content",
                         height=min(38 * (len(df_display) + 1), 300),
                     )
 
