@@ -45,10 +45,10 @@ def update_holding_shares(holding_id: int, user_email: str, shares: float) -> No
         .eq("id", holding_id).eq("user_email", user_email).execute()
 
 
-def update_holding_value(holding_id: int, user_email: str, position_value: float) -> None:
-    """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers)."""
+def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR") -> None:
+    """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat."""
     client = get_supabase_client()
-    client.table("portfolio_holdings").update({"position_value": position_value}) \
+    client.table("portfolio_holdings").update({"position_value": position_value, "value_currency": value_currency}) \
         .eq("id", holding_id).eq("user_email", user_email).execute()
 
 

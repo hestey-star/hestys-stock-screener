@@ -14,13 +14,15 @@ create table portfolio_holdings (
     naam text not null,
     ticker text not null,
     shares numeric,          -- aantal aandelen/eenheden dat je bezit
-    position_value numeric,  -- LAATST BEREKENDE waarde (shares x koers), bijgewerkt via de 'Update'-knop
+    position_value numeric,  -- LAATST BEREKENDE waarde (shares x koers x wisselkoers), bijgewerkt via de 'Update'-knop
+    value_currency text,     -- in welke valuta position_value staat (bv. 'EUR' of 'USD') -- voorkomt verwarring bij het wisselen van weergave-valuta
     created_at timestamp with time zone default now()
 );
 
 -- Als je portfolio_holdings AL bestond (van eerder), draai dan ALLEEN
 -- deze regels om de nieuwe kolommen toe te voegen, niet de create table hierboven:
 -- alter table portfolio_holdings add column shares numeric;
+-- alter table portfolio_holdings add column value_currency text;
 -- (position_value bestond al van de vorige update)
 
 -- Tijdstempel van de laatste keer dat de waardes zijn bijgewerkt, per

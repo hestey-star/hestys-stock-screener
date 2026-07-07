@@ -202,11 +202,25 @@ def load_portfolio_news():
         return json.load(f)
 
 
-def refresh_portfolio_values(holdings: list, user_email: str) -> tuple:
+def get_fx_rate(from_currency: str, to_currency: str):
+    """Haalt de actuele wisselkoers op. Geeft None terug als het niet lukt (i.p.v. een gok te doen)."""
+    if from_currency == to_currency:
+        return 1.0
+    pair_ticker = f"{from_currency}{to_currency}=X"
+    try:
+        data = yf.Ticker(pair_ticker).history(period="1d")
+        if not data.empty:
+            return float(data["Close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
+def refresh_portfolio_values(holdings: list, user_email: str, display_currency: str = "EUR") -> tuple:
     """
-    Haalt voor elke positie de actuele koers op en werkt position_value bij
-    (shares x koers). Rate-limited tot 1x per minuut per gebruiker, om
-    onnodige/herhaalde yfinance-aanroepen (en dus spam) te voorkomen.
+    Haalt voor elke positie de actuele koers EN de eigen valuta op, rekent
+    om naar de gekozen weergave-valuta (display_currency), en werkt
+    position_value bij. Rate-limited tot 1x per minuut per gebruiker.
 
     Geeft (success: bool, message: str) terug.
     """
@@ -218,23 +232,41 @@ def refresh_portfolio_values(holdings: list, user_email: str) -> tuple:
             wait_seconds = int(60 - seconds_since)
             return False, f"Please wait {wait_seconds} more second(s) before updating again."
 
+    fx_cache = {}
     updated_count = 0
+    skipped_currencies = set()
+
     for holding in holdings:
         if not holding.get("shares"):
             continue
         try:
-            price_data = yf.Ticker(holding["ticker"]).history(period="1d")
+            ticker_obj = yf.Ticker(holding["ticker"])
+            price_data = ticker_obj.history(period="1d")
             if price_data.empty:
                 continue
-            current_price = float(price_data["Close"].iloc[-1])
-            new_value = holding["shares"] * current_price
-            database.update_holding_value(holding["id"], user_email, new_value)
+            native_price = float(price_data["Close"].iloc[-1])
+            native_currency = ticker_obj.info.get("currency", "USD")
+
+            if native_currency not in fx_cache:
+                fx_cache[native_currency] = get_fx_rate(native_currency, display_currency)
+            fx_rate = fx_cache[native_currency]
+
+            if fx_rate is None:
+                skipped_currencies.add(native_currency)
+                continue
+
+            new_value = holding["shares"] * native_price * fx_rate
+            database.update_holding_value(holding["id"], user_email, new_value, value_currency=display_currency)
             updated_count += 1
         except Exception:
             continue
 
     database.set_last_price_refresh(user_email, datetime.now(timezone.utc).isoformat())
-    return True, f"Updated {updated_count} of {len(holdings)} position(s)."
+
+    message = f"Updated {updated_count} of {len(holdings)} position(s) in {display_currency}."
+    if skipped_currencies:
+        message += f" Could not get exchange rate for: {', '.join(skipped_currencies)}."
+    return True, message
 
 
 def analyze_portfolio(holdings: list) -> list:
@@ -477,28 +509,34 @@ elif current_view == "portfolio":
 
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
-    else:
-        with st.container(border=True):
-            st.markdown("**Manage positions**")
 
-            # --- Update-knop: haalt actuele koersen op en herberekent alle waardes (max 1x/min) ---
-            ucol1, ucol2 = st.columns([3, 1])
-            with ucol2:
-                if st.button("Update portfolio value"):
-                    with st.spinner("Fetching current prices..."):
-                        success, message = refresh_portfolio_values(holdings, user_email)
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.warning(message)
+    with st.container(border=True):
+        st.markdown("**Manage positions**")
+
+        if holdings:
+            # --- Valuta-keuze + totaalbedrag, prominent bovenaan ---
+            display_currency = st.selectbox("Display currency", ["EUR", "USD"], key="display_currency")
 
             total_value = sum(h.get("position_value") or 0 for h in holdings)
-            with ucol1:
-                if total_value > 0:
-                    st.caption(f"Total tracked value: €{total_value:,.0f}")
+            stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
+            currency_symbol = "€" if display_currency == "EUR" else "$"
+
+            if total_value > 0 and stored_currency == display_currency:
+                st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f}")
+            elif total_value > 0:
+                st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
+                st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency})")
+            else:
+                st.caption("Click 'Update portfolio value' to fetch current prices.")
+
+            if st.button("Update portfolio value"):
+                with st.spinner("Fetching current prices and exchange rates..."):
+                    success, message = refresh_portfolio_values(holdings, user_email, display_currency)
+                if success:
+                    st.success(message)
+                    st.rerun()
                 else:
-                    st.caption("Click 'Update portfolio value' to fetch current prices.")
+                    st.warning(message)
 
             def _format_pct(holding):
                 if total_value <= 0:
@@ -508,7 +546,8 @@ elif current_view == "portfolio":
 
             def _format_value(holding):
                 value = holding.get("position_value")
-                return f"€{value:,.0f}" if value else "-"
+                sym = "€" if holding.get("value_currency") == "EUR" else "$"
+                return f"{sym}{value:,.0f}" if value else "-"
 
             rows_html = "".join(
                 f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
@@ -524,45 +563,9 @@ elif current_view == "portfolio":
                 """,
                 unsafe_allow_html=True,
             )
+            st.divider()
 
-            holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
-
-            st.caption("Edit shares")
-            ecol1, ecol2, ecol3 = st.columns([3, 2, 1])
-            with ecol1:
-                edit_label = st.selectbox(
-                    "Position to edit", list(holding_options.keys()), key="edit_select", label_visibility="collapsed"
-                )
-            with ecol2:
-                current_shares = holding_options[edit_label].get("shares") or 0.0
-                new_shares = st.number_input(
-                    "New share count", min_value=0.0, value=float(current_shares), step=1.0,
-                    key="edit_shares_input", label_visibility="collapsed",
-                )
-            with ecol3:
-                if st.button("Save shares"):
-                    database.update_holding_shares(holding_options[edit_label]["id"], user_email, new_shares)
-                    st.rerun()
-
-            st.caption("Remove a position")
-            rcol1, rcol2 = st.columns([4, 1])
-            with rcol1:
-                to_remove_label = st.selectbox(
-                    "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
-                )
-            with rcol2:
-                if st.button("Remove"):
-                    database.delete_holding(holding_options[to_remove_label]["id"], user_email)
-                    st.rerun()
-
-        with st.container(border=True):
-            st.markdown("**Portfolio analysis**")
-            if st.button("Analyze my portfolio"):
-                findings = analyze_portfolio(holdings)
-                for finding in findings:
-                    st.markdown(f"- {finding}")
-
-    with st.container(border=True):
+        # --- Add a new position (bewust BOVEN Remove, in hetzelfde vak) ---
         st.markdown("**Add a new position**")
         search_query = st.text_input(
             "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
@@ -574,13 +577,6 @@ elif current_view == "portfolio":
 
         selected_symbol = None
         selected_name = None
-
-        if search_query:
-            try:
-                search_results = yf.Search(search_query, max_results=8).quotes
-            except Exception as exc:
-                search_results = []
-                st.caption(f"Search failed: {exc}")
 
         if search_query:
             try:
@@ -620,6 +616,46 @@ elif current_view == "portfolio":
                 )
                 st.success(f"{selected_name} ({selected_symbol}) added!")
                 st.rerun()
+
+        if holdings:
+            st.divider()
+            holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+
+            st.markdown("**Edit shares**")
+            ecol1, ecol2, ecol3 = st.columns([3, 2, 1])
+            with ecol1:
+                edit_label = st.selectbox(
+                    "Position to edit", list(holding_options.keys()), key="edit_select", label_visibility="collapsed"
+                )
+            with ecol2:
+                current_shares = holding_options[edit_label].get("shares") or 0.0
+                new_shares = st.number_input(
+                    "New share count", min_value=0.0, value=float(current_shares), step=1.0,
+                    key="edit_shares_input", label_visibility="collapsed",
+                )
+            with ecol3:
+                if st.button("Save shares"):
+                    database.update_holding_shares(holding_options[edit_label]["id"], user_email, new_shares)
+                    st.rerun()
+
+            st.markdown("**Remove a position**")
+            rcol1, rcol2 = st.columns([4, 1])
+            with rcol1:
+                to_remove_label = st.selectbox(
+                    "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
+                )
+            with rcol2:
+                if st.button("Remove"):
+                    database.delete_holding(holding_options[to_remove_label]["id"], user_email)
+                    st.rerun()
+
+    if holdings:
+        with st.container(border=True):
+            st.markdown("**Portfolio analysis**")
+            if st.button("Analyze my portfolio"):
+                findings = analyze_portfolio(holdings)
+                for finding in findings:
+                    st.markdown(f"- {finding}")
 
     st.divider()
 
