@@ -38,6 +38,13 @@ create table user_preferences (
     user_email text primary key,
     wants_screener_email boolean not null default false,
     wants_portfolio_email boolean not null default true,
-    last_price_refresh_at timestamp with time zone,  -- voor de 1x-per-minuut rate-limit op de 'Update waarde'-knop
+    wants_daily_email boolean not null default false,  -- opt-in voor de dagelijkse screener-mail
+    is_premium boolean not null default false,  -- handmatig te zetten totdat er een echt betaalsysteem is (zie punt 5 van de roadmap)
+    last_price_refresh_at timestamp with time zone,  -- voor de rate-limit op de 'Update waarde'-knop
     updated_at timestamp with time zone default now()
 );
+
+-- Als je user_preferences AL bestond (van eerder), draai dan ALLEEN deze
+-- regels om de nieuwe kolommen toe te voegen:
+-- alter table user_preferences add column wants_daily_email boolean not null default false;
+-- alter table user_preferences add column is_premium boolean not null default false;

@@ -22,9 +22,11 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
-      - name: Dagelijkse screener draaien
-        run: python screener_daily.py
+      - name: Dagelijkse screener + opt-in-mails draaien
+        run: python daily_batch.py
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           EMAIL_SMTP_SERVER: smtp.gmail.com
           EMAIL_SMTP_PORT: 587
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}

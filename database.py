@@ -82,25 +82,38 @@ def set_last_price_refresh(user_email: str, timestamp_iso: str) -> None:
 
 def get_user_preferences(user_email: str) -> dict:
     """
-    Geeft de e-mail-voorkeuren van deze gebruiker terug. Als er nog geen
-    rij bestaat (nieuwe gebruiker), gelden de standaardwaarden: WEL de
-    persoonlijke portfolio-mail, NIET de bredere screener-mail (opt-in).
+    Geeft de e-mail-voorkeuren (en premium-status) van deze gebruiker terug.
+    Als er nog geen rij bestaat (nieuwe gebruiker), gelden de
+    standaardwaarden: WEL de persoonlijke portfolio-mail, NIET de bredere
+    screener-mails (opt-in), GEEN premium.
     """
     client = get_supabase_client()
     response = client.table("user_preferences").select("*").eq("user_email", user_email).execute()
     if response.data:
         return response.data[0]
-    return {"user_email": user_email, "wants_screener_email": False, "wants_portfolio_email": True}
+    return {
+        "user_email": user_email, "wants_screener_email": False, "wants_portfolio_email": True,
+        "wants_daily_email": False, "is_premium": False,
+    }
 
 
-def set_user_preferences(user_email: str, wants_screener_email: bool, wants_portfolio_email: bool) -> None:
+def set_user_preferences(
+    user_email: str, wants_screener_email: bool, wants_portfolio_email: bool, wants_daily_email: bool = False,
+) -> None:
     """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
     client = get_supabase_client()
     client.table("user_preferences").upsert({
         "user_email": user_email,
         "wants_screener_email": wants_screener_email,
         "wants_portfolio_email": wants_portfolio_email,
+        "wants_daily_email": wants_daily_email,
     }).execute()
+
+
+def is_premium_user(user_email: str) -> bool:
+    """Handmatig te zetten (via Supabase) totdat er een echt betaalsysteem is."""
+    prefs = get_user_preferences(user_email)
+    return bool(prefs.get("is_premium", False))
 
 
 def get_all_users_with_holdings() -> dict[str, list[dict]]:
