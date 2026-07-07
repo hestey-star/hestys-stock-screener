@@ -301,7 +301,18 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     return True, message
 
 
-def analyze_portfolio(holdings: list) -> list:
+def get_tickers_info(holdings: list) -> dict:
+    """Haalt 1x per ticker de yfinance-info op, voor hergebruik door meerdere analyses (voorkomt dubbele aanroepen)."""
+    infos = {}
+    for h in holdings:
+        try:
+            infos[h["ticker"]] = yf.Ticker(h["ticker"]).info
+        except Exception:
+            infos[h["ticker"]] = {}
+    return infos
+
+
+def analyze_portfolio(holdings: list, infos: dict = None) -> list:
     """
     Objectieve, regel-gebaseerde analyse van de portfolio -- geen mening,
     alleen concrete cijfers en veelgebruikte vuistregels (bv. 'een positie
@@ -312,6 +323,9 @@ def analyze_portfolio(holdings: list) -> list:
 
     if total_value <= 0:
         return ["No position values available yet -- click 'Update portfolio value' first."]
+
+    if infos is None:
+        infos = get_tickers_info(holdings)
 
     # --- Concentratie ---
     sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
@@ -341,11 +355,7 @@ def analyze_portfolio(holdings: list) -> list:
     type_values = {}
     for h in holdings:
         value = h.get("position_value") or 0
-        try:
-            info = yf.Ticker(h["ticker"]).info
-            asset_type = info.get("quoteType", "UNKNOWN")
-        except Exception:
-            asset_type = "UNKNOWN"
+        asset_type = infos.get(h["ticker"], {}).get("quoteType", "UNKNOWN")
         type_values[asset_type] = type_values.get(asset_type, 0) + value
 
     if type_values:
@@ -356,7 +366,161 @@ def analyze_portfolio(holdings: list) -> list:
         if len(type_values) == 1:
             findings.append("🟡 All tracked positions are the same asset type -- no cross-asset-class diversification.")
 
+    # --- Sector-concentratie (gratis) ---
+    sector_values = {}
+    for h in holdings:
+        value = h.get("position_value") or 0
+        sector = infos.get(h["ticker"], {}).get("sector")
+        if sector:
+            sector_values[sector] = sector_values.get(sector, 0) + value
+
+    if sector_values:
+        dominant_sector, dominant_value = max(sector_values.items(), key=lambda x: x[1])
+        dominant_pct = dominant_value / total_value * 100
+        if dominant_pct >= 50:
+            level = "🔴 High"
+        elif dominant_pct >= 30:
+            level = "🟡 Medium"
+        else:
+            level = "🟢 Low"
+        findings.append(f"{level} sector concentration: {dominant_sector} makes up {dominant_pct:.0f}% of your tracked portfolio.")
+
     return findings
+
+
+def analyze_portfolio_premium(holdings: list, infos: dict, cash_value: float = 0.0) -> list:
+    """
+    Uitgebreide analyse, alleen voor premium-gebruikers: dividend-overzicht,
+    gewogen koers-winst-verhouding, cash-percentage, en simpele
+    rebalancing-suggesties. Net als de gratis analyse: regel-gebaseerd en
+    transparant, geen giswerk over waar 'de markt' naartoe gaat.
+    """
+    findings = []
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return ["No position values available yet -- click 'Update portfolio value' first."]
+
+    # --- Dividend-overzicht ---
+    total_annual_dividend = 0.0
+    upcoming = []
+    for h in holdings:
+        info = infos.get(h["ticker"], {})
+        shares = h.get("shares") or 0
+        dividend_rate = info.get("dividendRate")
+        if dividend_rate and shares:
+            total_annual_dividend += dividend_rate * shares
+        ex_div = info.get("exDividendDate")
+        if ex_div:
+            try:
+                date_str = pd.Timestamp(ex_div, unit="s").date()
+                upcoming.append((h["naam"], date_str))
+            except Exception:
+                pass
+
+    if total_annual_dividend > 0:
+        findings.append(
+            f"💰 Estimated annual dividend income: ~{total_annual_dividend:,.0f} "
+            f"(sum of each position's own currency, not converted -- treat as an approximation)."
+        )
+        if upcoming:
+            upcoming.sort(key=lambda x: x[1])
+            dates_str = ", ".join(f"{n} ({d})" for n, d in upcoming[:5])
+            findings.append(f"Upcoming ex-dividend dates: {dates_str}.")
+    else:
+        findings.append("No dividend-paying positions detected (or data unavailable).")
+
+    # --- Gewogen koers-winst-verhouding ---
+    pe_pairs = [
+        (infos.get(h["ticker"], {}).get("trailingPE"), h.get("position_value") or 0)
+        for h in holdings
+    ]
+    pe_pairs = [(pe, w) for pe, w in pe_pairs if pe and w]
+    if pe_pairs:
+        weighted_pe = sum(pe * w for pe, w in pe_pairs) / sum(w for _, w in pe_pairs)
+        if weighted_pe >= 25:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
+        elif weighted_pe <= 12:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
+        else:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
+
+    # --- Cash-percentage ---
+    grand_total = total_value + cash_value
+    if grand_total > 0:
+        cash_pct = cash_value / grand_total * 100
+        if cash_pct < 10:
+            findings.append(f"🟡 Cash: {cash_pct:.0f}% of your total (invested + cash) -- limited buying power if prices drop.")
+        elif cash_pct > 30:
+            findings.append(f"🟡 Cash: {cash_pct:.0f}% of your total -- a large uninvested position; worth checking this matches your intention.")
+        else:
+            findings.append(f"🟢 Cash: {cash_pct:.0f}% of your total -- a reasonable buffer.")
+
+    # --- Simpele rebalancing-suggestie, gebaseerd op concentratie ---
+    sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
+    largest = sorted_holdings[0]
+    largest_value = largest.get("position_value") or 0
+    largest_pct = largest_value / total_value * 100
+    if largest_pct > 25:
+        target_value = total_value * 0.25
+        trim_amount = largest_value - target_value
+        findings.append(
+            f"↔️ Rebalancing idea: trimming {largest['naam']} by roughly {trim_amount:,.0f} "
+            f"would bring it down to ~25% of your tracked portfolio."
+        )
+
+    return findings
+
+
+def build_risk_return_chart(holdings: list):
+    """
+    Simpel risico-rendement-overzicht: gewogen 1-jaars-rendement van je
+    portfolio vs. S&P 500 en AEX, als staafdiagram. Een lichte, benaderde
+    versie -- geen volatiliteits-gewogen Sharpe-ratio-achtige analyse.
+    """
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return None
+
+    weighted_return = 0.0
+    for h in holdings:
+        weight = (h.get("position_value") or 0) / total_value
+        try:
+            hist = yf.Ticker(h["ticker"]).history(period="1y")
+            if len(hist) >= 2:
+                own_return = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+                weighted_return += weight * own_return
+        except Exception:
+            continue
+
+    benchmark_returns = {}
+    for name, ticker in [("S&P 500", "^GSPC"), ("AEX", "^AEX")]:
+        try:
+            hist = yf.Ticker(ticker).history(period="1y")
+            if len(hist) >= 2:
+                benchmark_returns[name] = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+        except Exception:
+            continue
+
+    labels = ["Your portfolio"] + list(benchmark_returns.keys())
+    values = [weighted_return] + list(benchmark_returns.values())
+    colors = ["#1FAE96"] + ["#4A7A8C"] * len(benchmark_returns)
+
+    fig = go.Figure(data=[go.Bar(
+        x=labels, y=values, marker=dict(color=colors),
+        text=[f"{v:+.1f}%" for v in values], textposition="outside",
+        textfont=dict(family="Inter, sans-serif", color="#EAEDF1"),
+    )])
+    fig.update_layout(
+        title=dict(text="1-year return vs. benchmarks", font=dict(family="Fraunces, serif", size=16, color="#EAEDF1")),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(title="Return (%)", gridcolor="#232D3A", color="#8992A3"),
+        xaxis=dict(color="#EAEDF1"),
+        height=320,
+        margin=dict(t=50, b=30, l=40, r=20),
+        font=dict(family="Inter, sans-serif", color="#EAEDF1"),
+    )
+    return fig
 
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -388,6 +552,7 @@ st.markdown(
             <a href="?view=welcome" class="{_nav_class('welcome')}" target="_self">Welcome</a>
             <a href="?view=screener" class="{_nav_class('screener')}" target="_self">New Signals</a>
             <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
+            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
         </div>
     </div>
     """,
@@ -721,10 +886,46 @@ elif current_view == "portfolio":
     if holdings:
         with st.container(border=True):
             st.markdown("**Portfolio analysis**")
+            is_premium = database.is_premium_user(user_email)
+
+            if not is_premium:
+                st.caption("Free: concentration, diversification, sector & asset mix. "
+                           "Premium adds dividends, valuation, cash%, rebalancing ideas, and a return comparison.")
+
             if st.button("Analyze my portfolio"):
-                findings = analyze_portfolio(holdings)
+                with st.spinner("Analyzing..."):
+                    infos = get_tickers_info(holdings)
+                    findings = analyze_portfolio(holdings, infos)
+
                 for finding in findings:
                     st.markdown(f"- {finding}")
+
+                if is_premium:
+                    st.markdown("---")
+                    st.markdown("**Premium insights**")
+                    cash_value = database.get_cash_value(user_email)
+                    premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
+                    for finding in premium_findings:
+                        st.markdown(f"- {finding}")
+
+                    with st.spinner("Building return comparison..."):
+                        chart = build_risk_return_chart(holdings)
+                    if chart is not None:
+                        st.plotly_chart(chart, width="stretch")
+                else:
+                    st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
+                             "rebalancing ideas, and a return-vs-benchmark chart.")
+
+            if is_premium:
+                with st.expander("Set your cash / uninvested amount", expanded=False):
+                    current_cash = database.get_cash_value(user_email)
+                    new_cash = st.number_input(
+                        "Cash not currently invested (used for the cash% check above)",
+                        min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
+                    )
+                    if st.button("Save cash amount"):
+                        database.set_cash_value(user_email, new_cash)
+                        st.success("Saved!")
 
     st.divider()
 
@@ -773,6 +974,48 @@ elif current_view == "portfolio":
 
     st.caption("You'll also automatically receive a weekly email with this update, "
                "at the address you're logged in with.")
+
+elif current_view == "premium":
+    st.markdown("### Premium")
+    st.write(
+        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking. "
+        "Premium is currently in early access -- see the note below."
+    )
+
+    st.markdown(
+        """
+        <table class="positions-table">
+            <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
+            <tbody>
+                <tr><td>Weekly &amp; daily screener</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Tracked positions</td><td>Up to 10</td><td>Unlimited</td></tr>
+                <tr><td>Concentration, diversification, sector &amp; asset mix</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Dividend income overview</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Weighted valuation (P/E)</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Cash % and rebalancing ideas</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Return vs. benchmark chart</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Email preferences (screener, daily, portfolio)</td><td>&#10003;</td><td>&#10003;</td></tr>
+            </tbody>
+        </table>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.container(border=True):
+        st.markdown("#### Start Premium")
+        st.write(
+            "Payment processing isn't set up yet -- this is the first step towards it. "
+            "For now, click below to register your interest and we'll follow up by email "
+            "to enable Premium on your account."
+        )
+        if st.user.is_logged_in:
+            if st.button("I'm interested in Premium", type="primary"):
+                st.success(
+                    f"Thanks! We've noted your interest for {st.user.email}. "
+                    "We'll be in touch once payments are live."
+                )
+        else:
+            st.info("Log in first (via My Portfolio) so we know which account to upgrade.")
 
 st.divider()
 st.caption("This dashboard shows technical signals (Supertrend), fundamental context (ROIC estimate), "

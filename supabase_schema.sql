@@ -40,6 +40,7 @@ create table user_preferences (
     wants_portfolio_email boolean not null default true,
     wants_daily_email boolean not null default false,  -- opt-in voor de dagelijkse screener-mail
     is_premium boolean not null default false,  -- handmatig te zetten totdat er een echt betaalsysteem is (zie punt 5 van de roadmap)
+    cash_value numeric,  -- niet-geïnvesteerd kapitaal, voor de cash%-check in de premium-analyse
     last_price_refresh_at timestamp with time zone,  -- voor de rate-limit op de 'Update waarde'-knop
     updated_at timestamp with time zone default now()
 );
@@ -48,3 +49,4 @@ create table user_preferences (
 -- regels om de nieuwe kolommen toe te voegen:
 -- alter table user_preferences add column wants_daily_email boolean not null default false;
 -- alter table user_preferences add column is_premium boolean not null default false;
+-- alter table user_preferences add column cash_value numeric;

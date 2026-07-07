@@ -116,6 +116,20 @@ def is_premium_user(user_email: str) -> bool:
     return bool(prefs.get("is_premium", False))
 
 
+def get_cash_value(user_email: str) -> float:
+    """Geeft het opgeslagen, niet-geïnvesteerde kapitaal terug (0.0 als nog niet ingesteld)."""
+    prefs = get_user_preferences(user_email)
+    return float(prefs.get("cash_value") or 0.0)
+
+
+def set_cash_value(user_email: str, cash_value: float) -> None:
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "cash_value": cash_value,
+    }).execute()
+
+
 def get_all_users_with_holdings() -> dict[str, list[dict]]:
     """
     Geeft ALLE gebruikers en hun posities terug, gegroepeerd per e-mailadres.
