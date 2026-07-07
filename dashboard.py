@@ -478,117 +478,148 @@ elif current_view == "portfolio":
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
     else:
-        # --- Update-knop: haalt actuele koersen op en herberekent alle waardes (max 1x/min) ---
-        ucol1, ucol2 = st.columns([3, 1])
-        with ucol2:
-            if st.button("Update portfolio value"):
-                with st.spinner("Fetching current prices..."):
-                    success, message = refresh_portfolio_values(holdings, user_email)
-                if success:
-                    st.success(message)
-                    st.rerun()
+        with st.container(border=True):
+            st.markdown("**Manage positions**")
+
+            # --- Update-knop: haalt actuele koersen op en herberekent alle waardes (max 1x/min) ---
+            ucol1, ucol2 = st.columns([3, 1])
+            with ucol2:
+                if st.button("Update portfolio value"):
+                    with st.spinner("Fetching current prices..."):
+                        success, message = refresh_portfolio_values(holdings, user_email)
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.warning(message)
+
+            total_value = sum(h.get("position_value") or 0 for h in holdings)
+            with ucol1:
+                if total_value > 0:
+                    st.caption(f"Total tracked value: €{total_value:,.0f}")
                 else:
-                    st.warning(message)
+                    st.caption("Click 'Update portfolio value' to fetch current prices.")
 
-        total_value = sum(h.get("position_value") or 0 for h in holdings)
-        with ucol1:
-            if total_value > 0:
-                st.caption(f"Total tracked value: €{total_value:,.2f}")
-            else:
-                st.caption("Click 'Update portfolio value' to fetch current prices.")
+            def _format_pct(holding):
+                if total_value <= 0:
+                    return "-"
+                value = holding.get("position_value") or 0
+                return f"{value / total_value * 100:.0f}%"
 
-        def _format_pct(holding):
-            if total_value <= 0:
-                return "-"
-            value = holding.get("position_value") or 0
-            return f"{value / total_value * 100:.1f}%"
+            def _format_value(holding):
+                value = holding.get("position_value")
+                return f"€{value:,.0f}" if value else "-"
 
-        def _format_value(holding):
-            value = holding.get("position_value")
-            return f"€{value:,.2f}" if value else "-"
-
-        rows_html = "".join(
-            f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
-            f'<td>{h.get("shares") or "-"}</td><td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
-            for h in holdings
-        )
-        st.markdown(
-            f"""
-            <table class="positions-table">
-                <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Value</th><th>% of portfolio</th></tr></thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        remove_options = {f"{h['naam']} ({h['ticker']})": h["id"] for h in holdings}
-        rcol1, rcol2 = st.columns([4, 1])
-        with rcol1:
-            to_remove_label = st.selectbox(
-                "Remove a position", list(remove_options.keys()), label_visibility="collapsed"
+            rows_html = "".join(
+                f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
+                f'<td>{h.get("shares") or "-"}</td><td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
+                for h in holdings
             )
-        with rcol2:
-            if st.button("Remove"):
-                database.delete_holding(remove_options[to_remove_label], user_email)
-                st.rerun()
+            st.markdown(
+                f"""
+                <table class="positions-table">
+                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Value</th><th>% of portfolio</th></tr></thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        st.markdown("**Portfolio analysis**")
-        if st.button("Analyze my portfolio"):
-            findings = analyze_portfolio(holdings)
-            for finding in findings:
-                st.markdown(f"- {finding}")
+            holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
 
-    st.markdown("**Add a new position**")
-    search_query = st.text_input(
-        "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
-    )
-    shares_input = st.number_input(
-        "Number of shares/units you hold (optional -- needed for value tracking and portfolio analysis)",
-        min_value=0.0, value=0.0, step=1.0,
-    )
+            st.caption("Edit shares")
+            ecol1, ecol2, ecol3 = st.columns([3, 2, 1])
+            with ecol1:
+                edit_label = st.selectbox(
+                    "Position to edit", list(holding_options.keys()), key="edit_select", label_visibility="collapsed"
+                )
+            with ecol2:
+                current_shares = holding_options[edit_label].get("shares") or 0.0
+                new_shares = st.number_input(
+                    "New share count", min_value=0.0, value=float(current_shares), step=1.0,
+                    key="edit_shares_input", label_visibility="collapsed",
+                )
+            with ecol3:
+                if st.button("Save shares"):
+                    database.update_holding_shares(holding_options[edit_label]["id"], user_email, new_shares)
+                    st.rerun()
 
-    selected_symbol = None
-    selected_name = None
+            st.caption("Remove a position")
+            rcol1, rcol2 = st.columns([4, 1])
+            with rcol1:
+                to_remove_label = st.selectbox(
+                    "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
+                )
+            with rcol2:
+                if st.button("Remove"):
+                    database.delete_holding(holding_options[to_remove_label]["id"], user_email)
+                    st.rerun()
 
-    if search_query:
-        try:
-            search_results = yf.Search(search_query, max_results=8).quotes
-        except Exception as exc:
-            search_results = []
-            st.caption(f"Search failed: {exc}")
+        with st.container(border=True):
+            st.markdown("**Portfolio analysis**")
+            if st.button("Analyze my portfolio"):
+                findings = analyze_portfolio(holdings)
+                for finding in findings:
+                    st.markdown(f"- {finding}")
 
-        if search_results:
-            options = {}
-            for r in search_results:
-                name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                options[label] = r
+    with st.container(border=True):
+        st.markdown("**Add a new position**")
+        search_query = st.text_input(
+            "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
+        )
+        shares_input = st.number_input(
+            "Number of shares/units you hold (optional -- needed for value tracking and portfolio analysis)",
+            min_value=0.0, value=0.0, step=1.0,
+        )
 
-            chosen_label = st.selectbox("Choose the right match", list(options.keys()))
-            chosen = options[chosen_label]
-            selected_symbol = chosen.get("symbol")
-            selected_name = chosen.get("shortname") or chosen.get("longname") or selected_symbol
-        else:
-            st.caption("No results found for this search -- try a different name.")
+        selected_symbol = None
+        selected_name = None
 
-    if selected_symbol and st.button("Add to my portfolio", type="primary"):
-        with st.spinner(f"Checking data for {selected_symbol}..."):
+        if search_query:
             try:
-                test_df = yf.Ticker(selected_symbol).history(period="5d")
+                search_results = yf.Search(search_query, max_results=8).quotes
             except Exception as exc:
-                test_df = None
-                st.error(f"Could not validate {selected_symbol}: {exc}")
+                search_results = []
+                st.caption(f"Search failed: {exc}")
 
-        if test_df is not None and test_df.empty:
-            st.error(f"No recent price data found for {selected_symbol} -- not added.")
-        elif test_df is not None:
-            database.add_holding(
-                user_email, selected_name, selected_symbol,
-                shares = shares_input if shares_input > 0 else None,
-            )
-            st.success(f"{selected_name} ({selected_symbol}) added!")
-            st.rerun()
+        if search_query:
+            try:
+                search_results = yf.Search(search_query, max_results=8).quotes
+            except Exception as exc:
+                search_results = []
+                st.caption(f"Search failed: {exc}")
+
+            if search_results:
+                options = {}
+                for r in search_results:
+                    name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                    label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                    options[label] = r
+
+                chosen_label = st.selectbox("Choose the right match", list(options.keys()))
+                chosen = options[chosen_label]
+                selected_symbol = chosen.get("symbol")
+                selected_name = chosen.get("shortname") or chosen.get("longname") or selected_symbol
+            else:
+                st.caption("No results found for this search -- try a different name.")
+
+        if selected_symbol and st.button("Add to my portfolio", type="primary"):
+            with st.spinner(f"Checking data for {selected_symbol}..."):
+                try:
+                    test_df = yf.Ticker(selected_symbol).history(period="5d")
+                except Exception as exc:
+                    test_df = None
+                    st.error(f"Could not validate {selected_symbol}: {exc}")
+
+            if test_df is not None and test_df.empty:
+                st.error(f"No recent price data found for {selected_symbol} -- not added.")
+            elif test_df is not None:
+                database.add_holding(
+                    user_email, selected_name, selected_symbol,
+                    shares = shares_input if shares_input > 0 else None,
+                )
+                st.success(f"{selected_name} ({selected_symbol}) added!")
+                st.rerun()
 
     st.divider()
 

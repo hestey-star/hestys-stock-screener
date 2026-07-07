@@ -38,6 +38,13 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None) -
     }).execute()
 
 
+def update_holding_shares(holding_id: int, user_email: str, shares: float) -> None:
+    """Wijzigt het aantal shares/eenheden van een bestaande positie (zonder verwijderen+opnieuw-toevoegen)."""
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"shares": shares}) \
+        .eq("id", holding_id).eq("user_email", user_email).execute()
+
+
 def update_holding_value(holding_id: int, user_email: str, position_value: float) -> None:
     """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers)."""
     client = get_supabase_client()
