@@ -867,12 +867,12 @@ elif current_view == "portfolio":
         with st.container(border=True):
             st.markdown("**Insights**")
             if not is_premium:
-                st.caption("Free: trend status, news, concentration, diversification, sector & asset mix. "
+                st.caption("Free: weekly trend status, concentration, diversification, sector & asset mix. "
                            "Premium adds dividends, valuation, cash%, rebalancing ideas, a return comparison, "
                            "and a correlation matrix.")
 
             if st.button("Analyze my portfolio", type="primary"):
-                with st.spinner("Checking trend status and news..."):
+                with st.spinner("Checking trend status..."):
                     trend_results = []
                     for holding in holdings:
                         result = check_holding(holding["naam"], holding["ticker"])
@@ -883,33 +883,37 @@ elif current_view == "portfolio":
                     df_trend = pd.DataFrame(trend_results)
                     changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
                     if len(changed) > 0:
-                        st.warning(f"{len(changed)} position(s) recently changed trend: "
+                        st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
                                    + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
 
+                    # Compacte, direct-leesbare weergave: alleen wat je in 1 oogopslag
+                    # nodig hebt (welke trend, net geflipt of niet). Geen ROIC hier --
+                    # dat hoort bij fundamentele analyse, niet bij trend-status. Geen
+                    # nieuws hier -- dat blijft voorbehouden aan de wekelijkse e-mail.
+                    df_display = pd.DataFrame([
+                        {
+                            "Name": r["naam"],
+                            "Ticker": r["ticker"],
+                            "Weekly Trend": r["status"],
+                            "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
+                            "Weeks in Trend": r["weken_in_trend"],
+                            "Price": r["prijs"],
+                        }
+                        for r in trend_results
+                    ])
+
                     def _highlight_status(row):
-                        color = "#1B3A2E" if row["status"] == "BULLISH" else (
-                            "#3A1F1D" if row["status"] == "BEARISH" else "#332B14"
+                        color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
+                            "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
                         )
                         return [f"background-color: {color}"] * len(row)
 
-                    display_cols = [c for c in df_trend.columns if c != "nieuws"]
+                    st.caption("Weekly Supertrend status per position.")
                     st.dataframe(
-                        df_trend[display_cols].style.apply(_highlight_status, axis=1),
+                        df_display.style.apply(_highlight_status, axis=1),
                         width="stretch",
-                        height=min(38 * (len(df_trend) + 1), 300),
+                        height=min(38 * (len(df_display) + 1), 300),
                     )
-
-                    any_news = False
-                    for _, row in df_trend.iterrows():
-                        if row["nieuws"]:
-                            any_news = True
-                            with st.expander(f"{row['naam']} ({row['ticker']}) -- {len(row['nieuws'])} news item(s)"):
-                                for item in row["nieuws"]:
-                                    pub_date = item["published"].strftime("%Y-%m-%d")
-                                    st.markdown(f"**[{item['title']}]({item['link']})**  \n"
-                                                f"*{item['publisher']}, {pub_date}*")
-                    if not any_news:
-                        st.caption("No recent news found for your positions.")
 
                 st.markdown("---")
                 with st.spinner("Analyzing concentration, diversification & sectors..."):
@@ -1114,9 +1118,24 @@ elif current_view == "premium":
             try:
                 with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
                     pine_code = f.read()
+
+                # Watermerk wordt NA de //@version=6-regel geplaatst (niet ervoor) --
+                # bronnen spreken elkaar tegen of commentaar vóór die regel de
+                # compilatie kan verstoren, dus voor de zekerheid altijd erna.
+                lines = pine_code.split("\n", 1)
+                watermark = (
+                    f"// Licensed to: {st.user.email}\n"
+                    f"// Downloaded from Hesty's Signals on {datetime.now().strftime('%Y-%m-%d')}\n"
+                    f"// For personal use only -- do not redistribute or republish.\n"
+                )
+                if len(lines) == 2:
+                    watermarked_code = lines[0] + "\n" + watermark + lines[1]
+                else:
+                    watermarked_code = pine_code + "\n" + watermark
+
                 st.download_button(
                     "Download smart_dca_assistant.pine",
-                    data=pine_code,
+                    data=watermarked_code,
                     file_name="smart_dca_assistant.pine",
                     mime="text/plain",
                 )
