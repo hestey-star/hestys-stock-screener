@@ -35,6 +35,8 @@ import stripe
 import streamlit as st
 import yfinance as yf
 
+from emailer import send_email
+
 st.set_page_config(page_title="Hesty's Signals", page_icon="◆", layout="wide")
 
 # --- Visuele identiteit: donkere 'kluis/terminal'-stijl, geen standaard-look ---
@@ -640,6 +642,7 @@ st.markdown(
             <a href="?view=screener" class="{_nav_class('screener')}" target="_self">New Signals</a>
             <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
             <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
+            <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
         </div>
     </div>
     """,
@@ -1193,6 +1196,80 @@ elif current_view == "premium":
                         )
                     st.link_button("Continue to payment →", session.url, type="primary")
             st.caption("Payments are processed securely by Stripe -- we never see or store your card details.")
+
+elif current_view == "support":
+    st.markdown("### Support")
+    st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
+              "or send us a message directly.")
+
+    st.markdown("#### Frequently asked questions")
+
+    with st.expander("What does the Signals screener do?"):
+        st.write(
+            "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
+            "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
+            "and fundamental factors. It's public, no login required."
+        )
+
+    with st.expander("Is my portfolio data private?"):
+        st.write(
+            "Yes. Your tracked positions are only visible to you, tied to your Google account. "
+            "We never share or sell your data."
+        )
+
+    with st.expander("What's the difference between Free and Premium?"):
+        st.write(
+            "Free covers concentration, diversification, sector and asset mix, and up to 10 "
+            "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
+            "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
+            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full "
+            "comparison."
+        )
+
+    with st.expander("How do I cancel my Premium subscription?"):
+        st.write(
+            "Subscriptions are managed through Stripe. Use the message form below and we'll "
+            "help you cancel or point you to the right place -- self-service cancellation is "
+            "on our list to add directly to the site."
+        )
+
+    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
+        st.write(
+            "Premium members can download it directly from the Premium page, with setup "
+            "instructions for TradingView's Pine Editor."
+        )
+
+    with st.expander("How do I change what emails I receive?"):
+        st.write(
+            "Log in, go to My Portfolio -> Settings -> Email preferences, and toggle the "
+            "weekly screener, daily screener, and/or portfolio emails on or off."
+        )
+
+    st.markdown("#### Send us a message")
+    st.write("Found a bug, have an idea, or need help with something else? Let us know.")
+
+    default_email = st.user.email if st.user.is_logged_in else ""
+    contact_email = st.text_input("Your email", value=default_email)
+    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Other"])
+    message_body = st.text_area("Message", height=150)
+
+    if st.button("Send message", type="primary"):
+        if not contact_email or not message_body.strip():
+            st.error("Please fill in your email and a message before sending.")
+        else:
+            support_email = st.secrets.get("support", {}).get("email")
+            if not support_email:
+                st.error("Support inbox isn't configured yet -- please try again later.")
+            else:
+                success = send_email(
+                    subject=f"[Hesty's Signals Support] {message_type} from {contact_email}",
+                    body_text=message_body,
+                    to_email=support_email,
+                )
+                if success:
+                    st.success("Thanks! Your message has been sent -- we'll get back to you by email.")
+                else:
+                    st.error("Something went wrong sending your message -- please try again later.")
 
 st.divider()
 st.caption("This dashboard shows technical signals (Supertrend), fundamental context (ROIC estimate), "
