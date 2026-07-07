@@ -976,6 +976,8 @@ elif current_view == "portfolio":
                "at the address you're logged in with.")
 
 elif current_view == "premium":
+    import database
+
     st.markdown("### Premium")
     st.write(
         "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking. "
@@ -994,12 +996,38 @@ elif current_view == "premium":
                 <tr><td>Weighted valuation (P/E)</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Cash % and rebalancing ideas</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Return vs. benchmark chart</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Smart DCA Assistant (TradingView indicator)</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Email preferences (screener, daily, portfolio)</td><td>&#10003;</td><td>&#10003;</td></tr>
             </tbody>
         </table>
         """,
         unsafe_allow_html=True,
     )
+
+    if st.user.is_logged_in and database.is_premium_user(st.user.email):
+        with st.container(border=True):
+            st.markdown("#### Smart DCA Assistant [Hestey's] -- TradingView indicator")
+            st.write(
+                "A TradingView indicator that adjusts your periodic contribution based on how "
+                "cheap/expensive the market looks (moving average distance, RSI, drawdown), plus "
+                "a built-in comparison against a fixed, regular DCA strategy."
+            )
+            try:
+                with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
+                    pine_code = f.read()
+                st.download_button(
+                    "Download smart_dca_assistant.pine",
+                    data=pine_code,
+                    file_name="smart_dca_assistant.pine",
+                    mime="text/plain",
+                )
+                st.caption(
+                    "Open TradingView -> Pine Editor -> New blank indicator -> paste the file contents -> "
+                    "Add to chart. Right-click the indicator name in the chart legend and 'Pin to scale' "
+                    "to the same scale as your candles."
+                )
+            except FileNotFoundError:
+                st.caption("Indicator file not found -- contact support.")
 
     with st.container(border=True):
         st.markdown("#### Start Premium")

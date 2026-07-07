@@ -1,0 +1,135 @@
+//@version=6
+indicator("Smart DCA Assistant [Hestey's]", overlay = true, max_labels_count = 500)
+
+// =============================================================
+// Smart DCA Assistant [Hestey's]
+//
+// ASYMMETRISCHE aanpassing van je periodieke inleg:
+// - Bij neutrale marktomstandigheden: gewoon je normale inlegbedrag (1.0x)
+// - Bij MATIGE duurte (bv. een sterke, gezonde trend): bescheiden minder
+// - Bij EXTREME duurte: mag volledig overgeslagen worden (0x) -- je wil
+//   simpelweg niet kopen tijdens euforie
+// - Bij EXTREME goedkoopte: een BESCHEIDEN boost (instelbaar, standaard
+//   1.5x) -- geen verdubbeling/verdrievoudiging, want een dip kan altijd
+//   dieper gaan
+//
+// LET OP, belangrijk om te beseffen: 'duur' betekent niet hetzelfde als
+// 'gaat dalen' -- een asset kan lang 'duur' blijven tijdens een gezonde,
+// aanhoudende trend. Deze indicator kan daardoor in periodes met een
+// sterke, aanhoudende trend UITKOMEN op een lager totaalrendement dan
+// gewone, vaste DCA (je legt dan structureel iets minder in tijdens
+// precies de periode die het meeste rendement opleverde). Dat is geen
+// bug, maar een inherent kenmerk van elke strategie die de inleg
+// vermindert op basis van 'duur'-signalen. Gebruik de vergelijkings-
+// tabel om dit voor je eigen asset/periode te checken.
+//
+// Combineert 3 signalen (elk genormaliseerd via ta.percentrank, 0-100):
+//   1. Afstand tot een lange-termijn voortschrijdend gemiddelde
+//   2. RSI
+//   3. Drawdown t.o.v. een recente high
+// Gemiddeld tot 1 score, met versterkte extremen (matige afwijkingen
+// tellen minder zwaar dan echte extremen), en vertaald naar de
+// asymmetrische multiplier hierboven.
+// =============================================================
+
+// --- Instellingen (bewust beperkt tot het essentiele) ---
+float baseAmountInput = input.float(100.0, "Base contribution amount", minval = 0.0, group = "DCA settings")
+string intervalInput = input.string("Weekly", "DCA interval", options = ["Weekly", "Monthly"], group = "DCA settings")
+int maLengthInput = input.int(200, "Moving average length (tweak per asset: korter = gevoeliger)", minval = 10, group = "DCA settings")
+int lookbackInput = input.int(252, "Lookback period (bars, voor de percentiel-vergelijking en de recente high)", minval = 20, group = "DCA settings")
+float maxBoostInput = input.float(1.5, "Max boost bij extreme goedkoopte (bewust bescheiden, geen 3x)", minval = 1.0, maxval = 2.5, group = "DCA settings")
+int startDateInput = input.time(timestamp("2020-01-01"), "Performance comparison: start date", group = "DCA settings")
+
+// --- Component 1: distance from moving average ---
+float maValue = ta.sma(close, maLengthInput)
+float distFromMa = (close - maValue) / maValue * 100.0
+float distPercentile = ta.percentrank(distFromMa, lookbackInput)
+
+// --- Component 2: RSI (standaard lengte 14, universeel genoeg) ---
+float rsiValue = ta.rsi(close, 14)
+float rsiPercentile = ta.percentrank(rsiValue, lookbackInput)
+
+// --- Component 3: drawdown from recent high ---
+float recentHigh = ta.highest(high, lookbackInput)
+float drawdownPct = (close - recentHigh) / recentHigh * 100.0
+float ddPercentile = ta.percentrank(drawdownPct, lookbackInput)
+
+// --- Samengestelde score: 0 = goedkoopst, 100 = duurst ---
+float compositeScore = (distPercentile + rsiPercentile + ddPercentile) / 3.0
+
+// --- Versterk extremen: matige afwijkingen wegen minder zwaar dan echte extremen ---
+float centered = (compositeScore - 50.0) / 50.0
+float amplified = math.sign(centered) * math.pow(math.abs(centered), 0.6)
+float amplifiedScore = 50.0 + amplified * 50.0
+
+// --- ASYMMETRISCHE multiplier: neutraal = 1.0x altijd, richting duur
+//     (score > 50) daalt naar 0 (volledig overslaan mag), richting
+//     goedkoop (score < 50) stijgt bescheiden naar maxBoostInput ---
+float multiplier = amplifiedScore <= 50.0 ?
+     1.0 + (50.0 - amplifiedScore) / 50.0 * (maxBoostInput - 1.0) :
+     1.0 - (amplifiedScore - 50.0) / 50.0 * 1.0
+float contribution = baseAmountInput * multiplier
+
+// --- Detecteer het begin van elke nieuwe DCA-periode ---
+bool isNewWeek = timeframe.change("1W")
+bool isNewMonth = timeframe.change("1M")
+bool isDcaSignal = intervalInput == "Weekly" ? isNewWeek : isNewMonth
+
+// --- Kleurcodering, nu gekoppeld aan betekenisvolle, vaste grenzen:
+//     groen = duidelijk EXTRA inleggen (echte koopkans), rood = duidelijk
+//     MINDER/overslaan (te duur), grijs = min of meer normale DCA ---
+color signalColor = multiplier >= 1.2 ? color.new(color.green, 0) : multiplier <= 0.3 ? color.new(color.red, 0) : color.new(color.gray, 0)
+
+// --- Signaalmarkering: plot() (beweegt betrouwbaar mee met de chart) +
+//     een label met het exacte bedrag bij een duidelijke afwijking ---
+bool showLabel = isDcaSignal and math.abs(multiplier - 1.0) >= 0.15
+float signalMarkerPrice = showLabel ? low : na
+
+plot(signalMarkerPrice, title = "DCA Signal", style = plot.style_circles, color = signalColor, linewidth = 3)
+
+if showLabel
+    label.new(bar_index, na, text = str.tostring(contribution, "#.##"), yloc = yloc.belowbar, style = label.style_label_up, color = signalColor, textcolor = color.white, size = size.small)
+
+plot(maValue, title = "Long-term MA", color = color.new(color.blue, 40), linewidth = 1)
+
+// =============================================================
+// Performance comparison: Smart DCA vs. gewone (vaste) DCA
+// =============================================================
+bool afterStartDate = time >= startDateInput
+
+var float smartUnits = 0.0
+var float smartInvested = 0.0
+var float regularUnits = 0.0
+var float regularInvested = 0.0
+
+if isDcaSignal and afterStartDate
+    smartUnits += contribution / close
+    smartInvested += contribution
+    regularUnits += baseAmountInput / close
+    regularInvested += baseAmountInput
+
+float smartValue = smartUnits * close
+float regularValue = regularUnits * close
+float smartReturnPct = smartInvested > 0.0 ? (smartValue / smartInvested - 1.0) * 100.0 : na
+float regularReturnPct = regularInvested > 0.0 ? (regularValue / regularInvested - 1.0) * 100.0 : na
+float returnDifferencePct = (not na(smartReturnPct)) and (not na(regularReturnPct)) ? smartReturnPct - regularReturnPct : na
+
+// --- Overzichtstabel ---
+var table infoTable = table.new(position.top_right, 2, 8, bgcolor = color.new(color.black, 70), border_width = 1)
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Composite score", text_color = color.white)
+    table.cell(infoTable, 1, 0, str.tostring(compositeScore, "#.#"), text_color = color.white)
+    table.cell(infoTable, 0, 1, "Multiplier", text_color = color.white)
+    table.cell(infoTable, 1, 1, str.tostring(multiplier, "#.##") + "x", text_color = color.white)
+    table.cell(infoTable, 0, 2, "Suggested contribution", text_color = color.white)
+    table.cell(infoTable, 1, 2, str.tostring(contribution, "#.##"), text_color = color.white)
+    table.cell(infoTable, 0, 3, "Smart DCA return", text_color = color.white)
+    table.cell(infoTable, 1, 3, na(smartReturnPct) ? "n/a" : str.tostring(smartReturnPct, "#.#") + "%", text_color = color.white)
+    table.cell(infoTable, 0, 4, "Regular DCA return", text_color = color.white)
+    table.cell(infoTable, 1, 4, na(regularReturnPct) ? "n/a" : str.tostring(regularReturnPct, "#.#") + "%", text_color = color.white)
+    table.cell(infoTable, 0, 5, "Difference", text_color = color.white)
+    table.cell(infoTable, 1, 5, na(returnDifferencePct) ? "n/a" : str.tostring(returnDifferencePct, "+.#") + "%", text_color = returnDifferencePct > 0 ? color.new(color.green, 0) : color.new(color.red, 0))
+    table.cell(infoTable, 0, 6, "Smart DCA invested", text_color = color.white)
+    table.cell(infoTable, 1, 6, str.tostring(smartInvested, "#.##"), text_color = color.white)
+    table.cell(infoTable, 0, 7, "Regular DCA invested", text_color = color.white)
+    table.cell(infoTable, 1, 7, str.tostring(regularInvested, "#.##"), text_color = color.white)
