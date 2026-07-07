@@ -524,6 +524,53 @@ def build_risk_return_chart(holdings: list):
     return fig
 
 
+def build_correlation_matrix_chart(holdings: list):
+    """Berekent de historische rendements-correlatie tussen je posities (6 maanden dagelijks), als heatmap."""
+    if len(holdings) < 2:
+        return None
+
+    price_series = {}
+    for h in holdings:
+        try:
+            hist = yf.Ticker(h["ticker"]).history(period="6mo")
+            if len(hist) >= 20:
+                price_series[h["naam"]] = hist["Close"].pct_change().dropna()
+        except Exception:
+            continue
+
+    if len(price_series) < 2:
+        return None
+
+    df_returns = pd.DataFrame(price_series).dropna()
+    if df_returns.empty or len(df_returns) < 10:
+        return None
+
+    corr = df_returns.corr()
+
+    fig = go.Figure(data=go.Heatmap(
+        z=corr.values,
+        x=corr.columns.tolist(),
+        y=corr.columns.tolist(),
+        colorscale=[[0, "#0B4A3E"], [0.5, "#101825"], [1, "#1FAE96"]],
+        zmin=-1, zmax=1,
+        text=[[f"{v:.2f}" for v in row] for row in corr.values],
+        texttemplate="%{text}",
+        textfont=dict(size=11, color="#EAEDF1"),
+        hovertemplate="%{x} vs %{y}: %{z:.2f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=dict(text="Correlation matrix (6-month daily returns)", font=dict(family="Fraunces, serif", size=16, color="#EAEDF1")),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=350,
+        margin=dict(t=50, b=30, l=80, r=20),
+        font=dict(family="Inter, sans-serif", color="#EAEDF1"),
+        xaxis=dict(color="#8992A3"),
+        yaxis=dict(color="#8992A3"),
+    )
+    return fig
+
+
 def create_checkout_session(price_id: str, customer_email: str):
     """Maakt een Stripe Checkout Session aan voor een abonnement, geeft de sessie (met .url) terug."""
     stripe.api_key = st.secrets["stripe"]["secret_key"]
@@ -746,42 +793,19 @@ elif current_view == "portfolio":
     with col2:
         st.button("Log out", on_click=st.logout)
 
-    with st.expander("Email preferences", expanded=False):
-        prefs = database.get_user_preferences(user_email)
-        wants_screener = st.checkbox(
-            "Receive the weekly screener email (new signals from AEX/Nasdaq-100/S&P500/DAX/CAC40)",
-            value=prefs["wants_screener_email"],
-        )
-        wants_daily = st.checkbox(
-            "Receive the daily screener email (swing-trade signals, weekdays)",
-            value=prefs.get("wants_daily_email", False),
-        )
-        wants_portfolio = st.checkbox(
-            "Receive the weekly portfolio email (status + news for your own positions)",
-            value=prefs["wants_portfolio_email"],
-        )
-        if st.button("Save preferences"):
-            database.set_user_preferences(user_email, wants_screener, wants_portfolio, wants_daily_email=wants_daily)
-            st.success("Preferences saved!")
-
-    st.markdown("### Your positions")
-
     holdings = database.get_user_holdings(user_email)
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
+    is_premium = database.is_premium_user(user_email)
 
     if not holdings:
-        st.info("You haven't added any positions yet. Add your first one below.")
+        st.info("You haven't added any positions yet -- add your first one under 'Manage' below.")
 
-    total_value_preview = sum(h.get("position_value") or 0 for h in holdings)
-    if total_value_preview > 0:
-        chart_col, _spacer_col = st.columns([3, 2])
-        with chart_col:
-            with st.container(border=True):
-                st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
-
-    with st.container(border=True):
-        if holdings:
-            # --- Valuta-keuze + totaalbedrag, prominent bovenaan ---
+    # ============================================================
+    # 1. OVERVIEW -- totaal, valuta, pie chart, en de tabel, samen in 1 vak
+    # ============================================================
+    if holdings:
+        with st.container(border=True):
+            st.markdown("**Overview**")
             display_currency = st.selectbox("Display currency", ["EUR", "USD"], key="display_currency")
 
             total_value = sum(h.get("position_value") or 0 for h in holdings)
@@ -804,6 +828,9 @@ elif current_view == "portfolio":
                     st.rerun()
                 else:
                     st.warning(message)
+
+            if total_value > 0:
+                st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
 
             def _format_pct(holding):
                 if total_value <= 0:
@@ -831,9 +858,96 @@ elif current_view == "portfolio":
                 unsafe_allow_html=True,
             )
 
-        # --- Add/edit/remove: bewust ingeklapt, portfolio zelf is de hoofdfocus van deze pagina ---
-        with st.expander("Manage positions (add / edit / remove)", expanded=not holdings):
-            st.markdown("**Add a new position**")
+    # ============================================================
+    # 2. INSIGHTS -- 1 gecombineerde analyse-knop (trend + nieuws + concentratie
+    #    + sector + asset-mix, en premium: dividend/PE/cash/rebalancing/
+    #    benchmark-rendement/correlatie-matrix)
+    # ============================================================
+    if holdings:
+        with st.container(border=True):
+            st.markdown("**Insights**")
+            if not is_premium:
+                st.caption("Free: trend status, news, concentration, diversification, sector & asset mix. "
+                           "Premium adds dividends, valuation, cash%, rebalancing ideas, a return comparison, "
+                           "and a correlation matrix.")
+
+            if st.button("Analyze my portfolio", type="primary"):
+                with st.spinner("Checking trend status and news..."):
+                    trend_results = []
+                    for holding in holdings:
+                        result = check_holding(holding["naam"], holding["ticker"])
+                        if result:
+                            trend_results.append(result)
+
+                if trend_results:
+                    df_trend = pd.DataFrame(trend_results)
+                    changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
+                    if len(changed) > 0:
+                        st.warning(f"{len(changed)} position(s) recently changed trend: "
+                                   + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
+
+                    def _highlight_status(row):
+                        color = "#1B3A2E" if row["status"] == "BULLISH" else (
+                            "#3A1F1D" if row["status"] == "BEARISH" else "#332B14"
+                        )
+                        return [f"background-color: {color}"] * len(row)
+
+                    display_cols = [c for c in df_trend.columns if c != "nieuws"]
+                    st.dataframe(
+                        df_trend[display_cols].style.apply(_highlight_status, axis=1),
+                        width="stretch",
+                        height=min(38 * (len(df_trend) + 1), 300),
+                    )
+
+                    any_news = False
+                    for _, row in df_trend.iterrows():
+                        if row["nieuws"]:
+                            any_news = True
+                            with st.expander(f"{row['naam']} ({row['ticker']}) -- {len(row['nieuws'])} news item(s)"):
+                                for item in row["nieuws"]:
+                                    pub_date = item["published"].strftime("%Y-%m-%d")
+                                    st.markdown(f"**[{item['title']}]({item['link']})**  \n"
+                                                f"*{item['publisher']}, {pub_date}*")
+                    if not any_news:
+                        st.caption("No recent news found for your positions.")
+
+                st.markdown("---")
+                with st.spinner("Analyzing concentration, diversification & sectors..."):
+                    infos = get_tickers_info(holdings)
+                    findings = analyze_portfolio(holdings, infos)
+                for finding in findings:
+                    st.markdown(f"- {finding}")
+
+                if is_premium:
+                    st.markdown("---")
+                    st.markdown("**Premium insights**")
+                    cash_value = database.get_cash_value(user_email)
+                    premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
+                    for finding in premium_findings:
+                        st.markdown(f"- {finding}")
+
+                    with st.spinner("Building return comparison..."):
+                        chart = build_risk_return_chart(holdings)
+                    if chart is not None:
+                        st.plotly_chart(chart, width="stretch")
+
+                    with st.spinner("Building correlation matrix..."):
+                        corr_chart = build_correlation_matrix_chart(holdings)
+                    if corr_chart is not None:
+                        st.plotly_chart(corr_chart, width="stretch")
+                    elif len(holdings) < 2:
+                        st.caption("Add at least 2 positions to see a correlation matrix.")
+                else:
+                    st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
+                             "rebalancing ideas, a return-vs-benchmark chart, and a correlation matrix.")
+
+    # ============================================================
+    # 3. MANAGE -- 3 losse, individueel uitklapbare vakjes
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("**Manage**")
+
+        with st.expander("Add a new position", expanded=not holdings):
             search_query = st.text_input(
                 "Search for a company, crypto, commodity, or precious metal (e.g. 'Tesla', 'Bitcoin', 'Gold')",
                 key="ticker_search",
@@ -878,7 +992,7 @@ elif current_view == "portfolio":
                 if test_df is not None and test_df.empty:
                     st.error(f"No recent price data found for {selected_symbol} -- not added.")
                 elif test_df is not None:
-                    if len(holdings) >= 10 and not database.is_premium_user(user_email):
+                    if len(holdings) >= 10 and not is_premium:
                         st.error(
                             "You've reached the free plan limit of 10 tracked positions. "
                             "Upgrade to Premium for unlimited tracking."
@@ -891,11 +1005,10 @@ elif current_view == "portfolio":
                         st.success(f"{selected_name} ({selected_symbol}) added!")
                         st.rerun()
 
-            if holdings:
-                st.divider()
-                holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+        if holdings:
+            holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
 
-                st.markdown("**Edit shares**")
+            with st.expander("Edit shares", expanded=False):
                 ecol1, ecol2, ecol3 = st.columns([3, 2, 1])
                 with ecol1:
                     edit_label = st.selectbox(
@@ -912,7 +1025,7 @@ elif current_view == "portfolio":
                         database.update_holding_shares(holding_options[edit_label]["id"], user_email, new_shares)
                         st.rerun()
 
-                st.markdown("**Remove a position**")
+            with st.expander("Remove a position", expanded=False):
                 rcol1, rcol2 = st.columns([4, 1])
                 with rcol1:
                     to_remove_label = st.selectbox(
@@ -923,94 +1036,40 @@ elif current_view == "portfolio":
                         database.delete_holding(holding_options[to_remove_label]["id"], user_email)
                         st.rerun()
 
-    if holdings:
-        with st.container(border=True):
-            st.markdown("**Portfolio analysis**")
-            is_premium = database.is_premium_user(user_email)
+    # ============================================================
+    # 4. SETTINGS -- e-mail-voorkeuren + cash-bedrag, samen in 1 vak
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("**Settings**")
 
-            if not is_premium:
-                st.caption("Free: concentration, diversification, sector & asset mix. "
-                           "Premium adds dividends, valuation, cash%, rebalancing ideas, and a return comparison.")
-
-            if st.button("Analyze my portfolio"):
-                with st.spinner("Analyzing..."):
-                    infos = get_tickers_info(holdings)
-                    findings = analyze_portfolio(holdings, infos)
-
-                for finding in findings:
-                    st.markdown(f"- {finding}")
-
-                if is_premium:
-                    st.markdown("---")
-                    st.markdown("**Premium insights**")
-                    cash_value = database.get_cash_value(user_email)
-                    premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
-                    for finding in premium_findings:
-                        st.markdown(f"- {finding}")
-
-                    with st.spinner("Building return comparison..."):
-                        chart = build_risk_return_chart(holdings)
-                    if chart is not None:
-                        st.plotly_chart(chart, width="stretch")
-                else:
-                    st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
-                             "rebalancing ideas, and a return-vs-benchmark chart.")
-
-            if is_premium:
-                with st.expander("Set your cash / uninvested amount", expanded=False):
-                    current_cash = database.get_cash_value(user_email)
-                    new_cash = st.number_input(
-                        "Cash not currently invested (used for the cash% check above)",
-                        min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
-                    )
-                    if st.button("Save cash amount"):
-                        database.set_cash_value(user_email, new_cash)
-                        st.success("Saved!")
-
-    st.divider()
-
-    if holdings and st.button("Check my portfolio now", key="check_my_portfolio", type="primary"):
-        with st.spinner("Checking your positions..."):
-            results = []
-            for holding in holdings:
-                result = check_holding(holding["naam"], holding["ticker"])
-                if result:
-                    results.append(result)
-
-        if not results:
-            st.warning("Could not check any of your positions -- please verify the tickers.")
-        else:
-            df_my_portfolio = pd.DataFrame(results)
-            changed = df_my_portfolio[df_my_portfolio["recent_gewijzigd"] == True]  # noqa: E712
-            if len(changed) > 0:
-                st.warning(f"{len(changed)} position(s) recently changed trend: "
-                           + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
-
-            def _highlight_status(row):
-                color = "#1B3A2E" if row["status"] == "BULLISH" else (
-                    "#3A1F1D" if row["status"] == "BEARISH" else "#332B14"
-                )
-                return [f"background-color: {color}"] * len(row)
-
-            display_cols = [c for c in df_my_portfolio.columns if c != "nieuws"]
-            st.dataframe(
-                df_my_portfolio[display_cols].style.apply(_highlight_status, axis=1),
-                width="stretch",
-                height=min(38 * (len(df_my_portfolio) + 1), 300),
+        with st.expander("Email preferences", expanded=False):
+            prefs = database.get_user_preferences(user_email)
+            wants_screener = st.checkbox(
+                "Receive the weekly screener email (new signals from AEX/Nasdaq-100/S&P500/DAX/CAC40)",
+                value=prefs["wants_screener_email"],
             )
+            wants_daily = st.checkbox(
+                "Receive the daily screener email (swing-trade signals, weekdays)",
+                value=prefs.get("wants_daily_email", False),
+            )
+            wants_portfolio = st.checkbox(
+                "Receive the weekly portfolio email (status + news for your own positions)",
+                value=prefs["wants_portfolio_email"],
+            )
+            if st.button("Save preferences"):
+                database.set_user_preferences(user_email, wants_screener, wants_portfolio, wants_daily_email=wants_daily)
+                st.success("Preferences saved!")
 
-            st.markdown("### Recent news")
-            any_news = False
-            for _, row in df_my_portfolio.iterrows():
-                if row["nieuws"]:
-                    any_news = True
-                    with st.expander(f"{row['naam']} ({row['ticker']}) -- {len(row['nieuws'])} item(s)"):
-                        for item in row["nieuws"]:
-                            pub_date = item["published"].strftime("%Y-%m-%d")
-                            st.markdown(f"**[{item['title']}]({item['link']})**  \n"
-                                        f"*{item['publisher']}, {pub_date}*")
-            if not any_news:
-                st.caption("No recent news found for your positions.")
+        if is_premium:
+            with st.expander("Cash / uninvested amount", expanded=False):
+                current_cash = database.get_cash_value(user_email)
+                new_cash = st.number_input(
+                    "Cash not currently invested (used for the cash% check in Insights)",
+                    min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
+                )
+                if st.button("Save cash amount"):
+                    database.set_cash_value(user_email, new_cash)
+                    st.success("Saved!")
 
     st.caption("You'll also automatically receive a weekly email with this update, "
                "at the address you're logged in with.")
