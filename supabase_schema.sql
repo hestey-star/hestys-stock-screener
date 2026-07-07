@@ -13,8 +13,13 @@ create table portfolio_holdings (
     user_email text not null,
     naam text not null,
     ticker text not null,
+    position_value numeric,  -- huidige waarde van de positie in EUR, voor concentratie-risico-berekening (optioneel, mag leeg zijn)
     created_at timestamp with time zone default now()
 );
+
+-- Als je portfolio_holdings AL bestond (van eerder), draai dan ALLEEN
+-- deze regel om de nieuwe kolom toe te voegen, niet de create table hierboven:
+-- alter table portfolio_holdings add column position_value numeric;
 
 -- Index om snel te filteren op e-mailadres
 create index idx_portfolio_holdings_user_email on portfolio_holdings (user_email);

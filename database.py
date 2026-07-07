@@ -26,13 +26,14 @@ def get_user_holdings(user_email: str) -> list[dict]:
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str) -> None:
-    """Voegt een nieuwe positie toe voor deze gebruiker."""
+def add_holding(user_email: str, naam: str, ticker: str, position_value: float = None) -> None:
+    """Voegt een nieuwe positie toe voor deze gebruiker, optioneel met de huidige waarde (voor concentratie-risico)."""
     client = get_supabase_client()
     client.table("portfolio_holdings").insert({
         "user_email": user_email,
         "naam": naam,
         "ticker": ticker,
+        "position_value": position_value,
     }).execute()
 
 

@@ -385,19 +385,47 @@ elif current_view == "portfolio":
     if not holdings:
         st.info("You haven't added any positions yet. Add your first one below.")
     else:
+        # --- Concentratie-risico: percentage van elke positie t.o.v. het totaal ---
+        total_value = sum(h.get("position_value") or 0 for h in holdings)
+        concentration_threshold = st.slider(
+            "Concentration warning threshold", min_value=5, max_value=75, value=25, step=5,
+            format="%d%%", help="Get warned when a single position exceeds this percentage of your total tracked portfolio value.",
+        )
+
+        over_threshold = []
+        if total_value > 0:
+            for h in holdings:
+                value = h.get("position_value") or 0
+                pct = (value / total_value) * 100
+                if pct >= concentration_threshold:
+                    over_threshold.append((h["naam"], pct))
+
+        if over_threshold:
+            warning_text = ", ".join(f"{naam} ({pct:.0f}%)" for naam, pct in over_threshold)
+            st.warning(f"⚠️ Concentration risk: {warning_text} of your tracked portfolio.")
+
+        def _format_pct(holding):
+            if total_value <= 0:
+                return "-"
+            value = holding.get("position_value") or 0
+            return f"{value / total_value * 100:.1f}%"
+
         rows_html = "".join(
-            f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td></tr>'
+            f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
+            f'<td>{_format_pct(h)}</td></tr>'
             for h in holdings
         )
         st.markdown(
             f"""
             <table class="positions-table">
-                <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
+                <thead><tr><th>Name</th><th>Ticker</th><th>% of portfolio</th></tr></thead>
                 <tbody>{rows_html}</tbody>
             </table>
             """,
             unsafe_allow_html=True,
         )
+        if total_value == 0:
+            st.caption("Add a position value when adding a position to see concentration percentages.")
 
         remove_options = {f"{h['naam']} ({h['ticker']})": h["id"] for h in holdings}
         rcol1, rcol2 = st.columns([4, 1])
@@ -413,6 +441,10 @@ elif current_view == "portfolio":
     st.markdown("**Add a new position**")
     search_query = st.text_input(
         "Search for a company or crypto (e.g. 'Tesla', 'ASML', 'Bitcoin')", key="ticker_search"
+    )
+    position_value_input = st.number_input(
+        "Current value of this position (€, optional -- needed for the concentration warning above)",
+        min_value=0.0, value=0.0, step=100.0,
     )
 
     selected_symbol = None
@@ -450,7 +482,10 @@ elif current_view == "portfolio":
         if test_df is not None and test_df.empty:
             st.error(f"No recent price data found for {selected_symbol} -- not added.")
         elif test_df is not None:
-            database.add_holding(user_email, selected_name, selected_symbol)
+            database.add_holding(
+                user_email, selected_name, selected_symbol,
+                position_value = position_value_input if position_value_input > 0 else None,
+            )
             st.success(f"{selected_name} ({selected_symbol}) added!")
             st.rerun()
 
