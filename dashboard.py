@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import plotly.graph_objects as go
+import stripe
 import streamlit as st
 import yfinance as yf
 
@@ -521,6 +522,45 @@ def build_risk_return_chart(holdings: list):
         font=dict(family="Inter, sans-serif", color="#EAEDF1"),
     )
     return fig
+
+
+def create_checkout_session(price_id: str, customer_email: str):
+    """Maakt een Stripe Checkout Session aan voor een abonnement, geeft de sessie (met .url) terug."""
+    stripe.api_key = st.secrets["stripe"]["secret_key"]
+    app_url = st.secrets["app"]["url"]
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": price_id, "quantity": 1}],
+        customer_email=customer_email,
+        success_url=f"{app_url}/?view=premium&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{app_url}/?view=premium",
+    )
+    return session
+
+
+def verify_and_activate_premium(session_id: str) -> tuple:
+    """
+    Vraagt bij Stripe zelf na (met onze secret key, niet vertrouwend op de
+    URL alleen) of deze sessie daadwerkelijk is afgerond. Zo ja: zet
+    premium aan voor het bijbehorende e-mailadres.
+    """
+    stripe.api_key = st.secrets["stripe"]["secret_key"]
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except Exception:
+        return False, None
+
+    if session.status == "complete":
+        customer_email = None
+        if getattr(session, "customer_details", None):
+            customer_email = session.customer_details.email
+        if not customer_email:
+            customer_email = session.customer_email
+        if customer_email:
+            database.set_premium_status(customer_email, True)
+        return True, customer_email
+
+    return False, None
 
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -1031,19 +1071,44 @@ elif current_view == "premium":
 
     with st.container(border=True):
         st.markdown("#### Start Premium")
-        st.write(
-            "Payment processing isn't set up yet -- this is the first step towards it. "
-            "For now, click below to register your interest and we'll follow up by email "
-            "to enable Premium on your account."
-        )
-        if st.user.is_logged_in:
-            if st.button("I'm interested in Premium", type="primary"):
-                st.success(
-                    f"Thanks! We've noted your interest for {st.user.email}. "
-                    "We'll be in touch once payments are live."
+
+        # --- Terugkeer van Stripe: verifieer de sessie en zet premium aan ---
+        returned_session_id = st.query_params.get("session_id")
+        if returned_session_id:
+            with st.spinner("Confirming your payment..."):
+                success, paid_email = verify_and_activate_premium(returned_session_id)
+            if success:
+                st.success(f"🎉 Payment confirmed! Premium is now active for {paid_email}.")
+            else:
+                st.warning(
+                    "We couldn't confirm this payment yet. If you just completed checkout, "
+                    "please wait a few seconds and refresh this page."
                 )
-        else:
+
+        if not st.user.is_logged_in:
             st.info("Log in first (via My Portfolio) so we know which account to upgrade.")
+        elif database.is_premium_user(st.user.email):
+            st.success("You're already on Premium. Thank you!")
+        else:
+            st.write("Choose a plan:")
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                st.markdown("**Monthly -- €4.99/mo**")
+                if st.button("Subscribe monthly", key="sub_monthly"):
+                    with st.spinner("Preparing checkout..."):
+                        session = create_checkout_session(
+                            st.secrets["stripe"]["price_id_monthly"], st.user.email,
+                        )
+                    st.link_button("Continue to payment →", session.url, type="primary")
+            with pcol2:
+                st.markdown("**Yearly -- €49/yr**")
+                if st.button("Subscribe yearly", key="sub_yearly"):
+                    with st.spinner("Preparing checkout..."):
+                        session = create_checkout_session(
+                            st.secrets["stripe"]["price_id_yearly"], st.user.email,
+                        )
+                    st.link_button("Continue to payment →", session.url, type="primary")
+            st.caption("Payments are processed securely by Stripe -- we never see or store your card details.")
 
 st.divider()
 st.caption("This dashboard shows technical signals (Supertrend), fundamental context (ROIC estimate), "

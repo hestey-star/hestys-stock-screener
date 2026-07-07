@@ -116,6 +116,15 @@ def is_premium_user(user_email: str) -> bool:
     return bool(prefs.get("is_premium", False))
 
 
+def set_premium_status(user_email: str, is_premium: bool) -> None:
+    """Zet de premium-status, aangeroepen nadat een Stripe-betaling geverifieerd is."""
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "is_premium": is_premium,
+    }).execute()
+
+
 def get_cash_value(user_email: str) -> float:
     """Geeft het opgeslagen, niet-geïnvesteerde kapitaal terug (0.0 als nog niet ingesteld)."""
     prefs = get_user_preferences(user_email)
