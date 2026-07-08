@@ -44,6 +44,11 @@ create table user_preferences (
     is_premium boolean not null default false,  -- handmatig te zetten totdat er een echt betaalsysteem is (zie punt 5 van de roadmap)
     cash_value numeric,  -- niet-geïnvesteerd kapitaal, voor de cash%-check in de premium-analyse
     stripe_customer_id text,  -- voor het 'Manage subscription'-portaal en de dagelijkse abonnement-check
+    investment_horizon text,       -- risicoprofiel-wizard: 'short', 'medium', of 'long'
+    risk_tolerance text,           -- risicoprofiel-wizard: 'conservative', 'balanced', of 'aggressive'
+    max_position_pct numeric,      -- risicoprofiel-wizard: max % dat je prettig vindt in 1 positie
+    max_sector_pct numeric,        -- risicoprofiel-wizard: max % dat je prettig vindt in 1 sector
+    target_cash_pct numeric,       -- risicoprofiel-wizard: gewenste cash-buffer %
     last_price_refresh_at timestamp with time zone,  -- voor de rate-limit op de 'Update waarde'-knop
     updated_at timestamp with time zone default now()
 );
@@ -54,3 +59,8 @@ create table user_preferences (
 -- alter table user_preferences add column is_premium boolean not null default false;
 -- alter table user_preferences add column cash_value numeric;
 -- alter table user_preferences add column stripe_customer_id text;
+-- alter table user_preferences add column investment_horizon text;
+-- alter table user_preferences add column risk_tolerance text;
+-- alter table user_preferences add column max_position_pct numeric;
+-- alter table user_preferences add column max_sector_pct numeric;
+-- alter table user_preferences add column target_cash_pct numeric;

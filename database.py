@@ -163,6 +163,47 @@ def set_cash_value(user_email: str, cash_value: float) -> None:
     }).execute()
 
 
+# Standaardwaarden -- exact gelijk aan de eerder hardgecodeerde grenzen, dus
+# niemands analyse verandert totdat ze zelf de wizard invullen.
+DEFAULT_RISK_PROFILE = {
+    "investment_horizon": "medium",
+    "risk_tolerance": "balanced",
+    "max_position_pct": 25.0,
+    "max_sector_pct": 40.0,
+    "target_cash_pct": 10.0,
+}
+
+
+def get_risk_profile(user_email: str) -> dict:
+    """Geeft het risicoprofiel terug (wizard-antwoorden), met verstandige standaardwaarden."""
+    prefs = get_user_preferences(user_email)
+    profile = dict(DEFAULT_RISK_PROFILE)
+    for key in DEFAULT_RISK_PROFILE:
+        if prefs.get(key) is not None:
+            profile[key] = prefs[key]
+    return profile
+
+
+def set_risk_profile(
+    user_email: str, investment_horizon: str, risk_tolerance: str,
+    max_position_pct: float, max_sector_pct: float, target_cash_pct: float,
+) -> None:
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "investment_horizon": investment_horizon,
+        "risk_tolerance": risk_tolerance,
+        "max_position_pct": max_position_pct,
+        "max_sector_pct": max_sector_pct,
+        "target_cash_pct": target_cash_pct,
+    }).execute()
+
+
+def reset_risk_profile(user_email: str) -> None:
+    """Zet het risicoprofiel terug naar de standaardwaarden."""
+    set_risk_profile(user_email, **DEFAULT_RISK_PROFILE)
+
+
 def get_all_users_with_holdings() -> dict[str, list[dict]]:
     """
     Geeft ALLE gebruikers en hun posities terug, gegroepeerd per e-mailadres.

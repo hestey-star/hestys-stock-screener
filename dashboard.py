@@ -315,38 +315,83 @@ def get_tickers_info(holdings: list) -> dict:
     return infos
 
 
-def analyze_portfolio(holdings: list, infos: dict = None) -> list:
-    """
-    Objectieve, regel-gebaseerde analyse van de portfolio -- geen mening,
-    alleen concrete cijfers en veelgebruikte vuistregels (bv. 'een positie
-    boven 25% van je portfolio geldt algemeen als een concentratie-risico').
-    """
+def analyze_concentration(holdings: list, max_position_pct: float = 25.0) -> list:
+    """Concentratie Risk-kaart: grootste positie vs. jouw eigen doel-max, + rebalancing-tip."""
     findings = []
     total_value = sum(h.get("position_value") or 0 for h in holdings)
-
     if total_value <= 0:
         return ["No position values available yet -- click 'Update portfolio value' first."]
 
-    if infos is None:
-        infos = get_tickers_info(holdings)
-
-    # --- Concentratie ---
     sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
     largest = sorted_holdings[0]
-    largest_pct = (largest.get("position_value") or 0) / total_value * 100
+    largest_value = largest.get("position_value") or 0
+    largest_pct = largest_value / total_value * 100
 
-    if largest_pct >= 40:
-        findings.append(f"🔴 High concentration risk: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio (common guideline: keep any single position under ~25%).")
-    elif largest_pct >= 25:
-        findings.append(f"🟡 Moderate concentration: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio.")
+    if largest_pct >= max_position_pct * 1.5:
+        findings.append(f"🔴 High concentration: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio (your target max: {max_position_pct:.0f}%).")
+    elif largest_pct > max_position_pct:
+        findings.append(f"🟡 Above your target: {largest['naam']} is {largest_pct:.0f}% of your tracked portfolio (your target max: {max_position_pct:.0f}%).")
     else:
-        findings.append(f"🟢 No single position dominates: largest is {largest['naam']} at {largest_pct:.0f}%.")
+        findings.append(f"🟢 Within your target: largest position is {largest['naam']} at {largest_pct:.0f}% (your target max: {max_position_pct:.0f}%).")
 
-    top3_pct = sum((h.get("position_value") or 0) for h in sorted_holdings[:3]) / total_value * 100
     if len(holdings) > 3:
+        top3_pct = sum((h.get("position_value") or 0) for h in sorted_holdings[:3]) / total_value * 100
         findings.append(f"Your top 3 positions represent {top3_pct:.0f}% of your tracked portfolio.")
 
-    # --- Spreiding (aantal posities) ---
+    if largest_pct > max_position_pct:
+        target_value = total_value * (max_position_pct / 100)
+        trim_amount = largest_value - target_value
+        findings.append(
+            f"↔️ Rebalancing idea: trimming {largest['naam']} by roughly {trim_amount:,.0f} "
+            f"would bring it down to your target of {max_position_pct:.0f}%."
+        )
+
+    return findings
+
+
+def analyze_sectors(holdings: list, infos: dict, max_sector_pct: float = 40.0) -> list:
+    """Sectoren-kaart: grootste sector vs. jouw eigen doel-max, + volledige uitsplitsing."""
+    findings = []
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return ["No position values available yet -- click 'Update portfolio value' first."]
+
+    sector_values = {}
+    for h in holdings:
+        value = h.get("position_value") or 0
+        sector = infos.get(h["ticker"], {}).get("sector")
+        if sector:
+            sector_values[sector] = sector_values.get(sector, 0) + value
+
+    if not sector_values:
+        return ["No sector data available for your tracked positions."]
+
+    dominant_sector, dominant_value = max(sector_values.items(), key=lambda x: x[1])
+    dominant_pct = dominant_value / total_value * 100
+
+    if dominant_pct >= max_sector_pct * 1.5:
+        level = "🔴 High concentration"
+    elif dominant_pct > max_sector_pct:
+        level = "🟡 Above your target"
+    else:
+        level = "🟢 Within your target"
+    findings.append(f"{level}: {dominant_sector} makes up {dominant_pct:.0f}% of your tracked portfolio (your target max: {max_sector_pct:.0f}%).")
+
+    breakdown = ", ".join(
+        f"{s}: {v / total_value * 100:.0f}%" for s, v in sorted(sector_values.items(), key=lambda x: -x[1])
+    )
+    findings.append(f"Full breakdown -- {breakdown}.")
+
+    return findings
+
+
+def analyze_diversification(holdings: list, infos: dict) -> list:
+    """Diversificatie-kaart: aantal posities + asset-type-mix."""
+    findings = []
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return ["No position values available yet -- click 'Update portfolio value' first."]
+
     if len(holdings) <= 3:
         findings.append(f"🟡 Only {len(holdings)} position(s) tracked -- limited diversification.")
     elif len(holdings) <= 7:
@@ -354,7 +399,6 @@ def analyze_portfolio(holdings: list, infos: dict = None) -> list:
     else:
         findings.append(f"🟢 {len(holdings)} positions tracked -- well spread out.")
 
-    # --- Type aandelen (asset class, via yfinance quoteType) ---
     type_values = {}
     for h in holdings:
         value = h.get("position_value") or 0
@@ -369,41 +413,38 @@ def analyze_portfolio(holdings: list, infos: dict = None) -> list:
         if len(type_values) == 1:
             findings.append("🟡 All tracked positions are the same asset type -- no cross-asset-class diversification.")
 
-    # --- Sector-concentratie (gratis) ---
-    sector_values = {}
-    for h in holdings:
-        value = h.get("position_value") or 0
-        sector = infos.get(h["ticker"], {}).get("sector")
-        if sector:
-            sector_values[sector] = sector_values.get(sector, 0) + value
-
-    if sector_values:
-        dominant_sector, dominant_value = max(sector_values.items(), key=lambda x: x[1])
-        dominant_pct = dominant_value / total_value * 100
-        if dominant_pct >= 50:
-            level = "🔴 High"
-        elif dominant_pct >= 30:
-            level = "🟡 Medium"
-        else:
-            level = "🟢 Low"
-        findings.append(f"{level} sector concentration: {dominant_sector} makes up {dominant_pct:.0f}% of your tracked portfolio.")
-
     return findings
 
 
-def analyze_portfolio_premium(holdings: list, infos: dict, cash_value: float = 0.0) -> list:
-    """
-    Uitgebreide analyse, alleen voor premium-gebruikers: dividend-overzicht,
-    gewogen koers-winst-verhouding, cash-percentage, en simpele
-    rebalancing-suggesties. Net als de gratis analyse: regel-gebaseerd en
-    transparant, geen giswerk over waar 'de markt' naartoe gaat.
-    """
+def analyze_risk(holdings: list, infos: dict) -> list:
+    """Risico-kaart: gewogen koers-winst-verhouding (de correlatie-matrix wordt apart als grafiek getoond)."""
     findings = []
     total_value = sum(h.get("position_value") or 0 for h in holdings)
     if total_value <= 0:
         return ["No position values available yet -- click 'Update portfolio value' first."]
 
-    # --- Dividend-overzicht ---
+    pe_pairs = [
+        (infos.get(h["ticker"], {}).get("trailingPE"), h.get("position_value") or 0)
+        for h in holdings
+    ]
+    pe_pairs = [(pe, w) for pe, w in pe_pairs if pe and w]
+    if pe_pairs:
+        weighted_pe = sum(pe * w for pe, w in pe_pairs) / sum(w for _, w in pe_pairs)
+        if weighted_pe >= 25:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
+        elif weighted_pe <= 12:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
+        else:
+            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
+    else:
+        findings.append("No valuation (P/E) data available for your tracked positions.")
+
+    return findings
+
+
+def analyze_dividend(holdings: list, infos: dict) -> list:
+    """Dividend-kaart: geschat jaarlijks dividend + aankomende ex-dividend-data."""
+    findings = []
     total_annual_dividend = 0.0
     upcoming = []
     for h in holdings:
@@ -432,98 +473,7 @@ def analyze_portfolio_premium(holdings: list, infos: dict, cash_value: float = 0
     else:
         findings.append("No dividend-paying positions detected (or data unavailable).")
 
-    # --- Gewogen koers-winst-verhouding ---
-    pe_pairs = [
-        (infos.get(h["ticker"], {}).get("trailingPE"), h.get("position_value") or 0)
-        for h in holdings
-    ]
-    pe_pairs = [(pe, w) for pe, w in pe_pairs if pe and w]
-    if pe_pairs:
-        weighted_pe = sum(pe * w for pe, w in pe_pairs) / sum(w for _, w in pe_pairs)
-        if weighted_pe >= 25:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
-        elif weighted_pe <= 12:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
-        else:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
-
-    # --- Cash-percentage ---
-    grand_total = total_value + cash_value
-    if grand_total > 0:
-        cash_pct = cash_value / grand_total * 100
-        if cash_pct < 10:
-            findings.append(f"🟡 Cash: {cash_pct:.0f}% of your total (invested + cash) -- limited buying power if prices drop.")
-        elif cash_pct > 30:
-            findings.append(f"🟡 Cash: {cash_pct:.0f}% of your total -- a large uninvested position; worth checking this matches your intention.")
-        else:
-            findings.append(f"🟢 Cash: {cash_pct:.0f}% of your total -- a reasonable buffer.")
-
-    # --- Simpele rebalancing-suggestie, gebaseerd op concentratie ---
-    sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
-    largest = sorted_holdings[0]
-    largest_value = largest.get("position_value") or 0
-    largest_pct = largest_value / total_value * 100
-    if largest_pct > 25:
-        target_value = total_value * 0.25
-        trim_amount = largest_value - target_value
-        findings.append(
-            f"↔️ Rebalancing idea: trimming {largest['naam']} by roughly {trim_amount:,.0f} "
-            f"would bring it down to ~25% of your tracked portfolio."
-        )
-
     return findings
-
-
-def build_risk_return_chart(holdings: list):
-    """
-    Simpel risico-rendement-overzicht: gewogen 1-jaars-rendement van je
-    portfolio vs. S&P 500 en AEX, als staafdiagram. Een lichte, benaderde
-    versie -- geen volatiliteits-gewogen Sharpe-ratio-achtige analyse.
-    """
-    total_value = sum(h.get("position_value") or 0 for h in holdings)
-    if total_value <= 0:
-        return None
-
-    weighted_return = 0.0
-    for h in holdings:
-        weight = (h.get("position_value") or 0) / total_value
-        try:
-            hist = yf.Ticker(h["ticker"]).history(period="1y")
-            if len(hist) >= 2:
-                own_return = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
-                weighted_return += weight * own_return
-        except Exception:
-            continue
-
-    benchmark_returns = {}
-    for name, ticker in [("S&P 500", "^GSPC"), ("AEX", "^AEX")]:
-        try:
-            hist = yf.Ticker(ticker).history(period="1y")
-            if len(hist) >= 2:
-                benchmark_returns[name] = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
-        except Exception:
-            continue
-
-    labels = ["Your portfolio"] + list(benchmark_returns.keys())
-    values = [weighted_return] + list(benchmark_returns.values())
-    colors = ["#1FAE96"] + ["#4A7A8C"] * len(benchmark_returns)
-
-    fig = go.Figure(data=[go.Bar(
-        x=labels, y=values, marker=dict(color=colors),
-        text=[f"{v:+.1f}%" for v in values], textposition="outside",
-        textfont=dict(family="Inter, sans-serif", color="#EAEDF1"),
-    )])
-    fig.update_layout(
-        title=dict(text="1-year return vs. benchmarks", font=dict(family="Fraunces, serif", size=16, color="#EAEDF1")),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(title="Return (%)", gridcolor="#232D3A", color="#8992A3"),
-        xaxis=dict(color="#EAEDF1"),
-        height=320,
-        margin=dict(t=50, b=30, l=40, r=20),
-        font=dict(family="Inter, sans-serif", color="#EAEDF1"),
-    )
-    return fig
 
 
 def build_daily_portfolio_stats(holdings: list):
@@ -1310,92 +1260,92 @@ elif current_view == "analyse":
         st.info("Add positions under My Portfolio to see your analysis here.")
         st.stop()
 
-    with st.container(border=True):
-        st.markdown("**Insights**")
-        if not is_premium:
-            st.caption("Free: weekly trend status, concentration, diversification, sector & asset mix. "
-                       "Premium adds dividends, valuation, cash%, rebalancing ideas, a return comparison, "
-                       "and a correlation matrix.")
+    risk_profile = database.get_risk_profile(user_email)
+    infos = get_tickers_info(holdings)
 
-        if st.button("Analyze my portfolio", type="primary"):
-            with st.spinner("Checking trend status..."):
-                trend_results = []
-                for holding in holdings:
-                    result = check_holding(holding["naam"], holding["ticker"])
-                    if result:
-                        trend_results.append(result)
+    # --- Concentratie Risk ---
+    with st.expander("🎯 Concentration Risk", expanded=True):
+        for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
+            st.markdown(f"- {finding}")
 
-            if trend_results:
-                df_trend = pd.DataFrame(trend_results)
-                changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
-                if len(changed) > 0:
-                    st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
-                               + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
+    # --- Sectoren ---
+    with st.expander("🏭 Sectors"):
+        for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
+            st.markdown(f"- {finding}")
 
-                # Compacte, direct-leesbare weergave: alleen wat je in 1 oogopslag
-                # nodig hebt (welke trend, net geflipt of niet). Geen ROIC hier --
-                # dat hoort bij fundamentele analyse, niet bij trend-status. Geen
-                # nieuws hier -- dat blijft voorbehouden aan de wekelijkse e-mail.
-                def _format_weeks(value):
-                    return "-" if value is None else f"{value:.0f}"
+    # --- Diversificatie ---
+    with st.expander("🧩 Diversification"):
+        for finding in analyze_diversification(holdings, infos):
+            st.markdown(f"- {finding}")
 
-                def _format_price(value):
-                    return "-" if value is None else f"{value:.0f}"
+    # --- Risico ---
+    with st.expander("⚖️ Risk"):
+        for finding in analyze_risk(holdings, infos):
+            st.markdown(f"- {finding}")
 
-                df_display = pd.DataFrame([
-                    {
-                        "Name": r["naam"],
-                        "Ticker": r["ticker"],
-                        "Weekly Trend": r["status"],
-                        "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
-                        "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
-                        "Price": _format_price(r["prijs"]),
-                    }
-                    for r in trend_results
-                ])
-
-                def _highlight_status(row):
-                    color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
-                        "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
-                    )
-                    return [f"background-color: {color}"] * len(row)
-
-                st.caption("Weekly Supertrend status per position.")
-                st.dataframe(
-                    df_display.style.apply(_highlight_status, axis=1),
-                    width="content",
-                    height=min(38 * (len(df_display) + 1), 300),
-                )
-
-            st.markdown("---")
-            with st.spinner("Analyzing concentration, diversification & sectors..."):
-                infos = get_tickers_info(holdings)
-                findings = analyze_portfolio(holdings, infos)
-            for finding in findings:
-                st.markdown(f"- {finding}")
-
-            if is_premium:
-                st.markdown("---")
-                st.markdown("**Premium insights**")
-                cash_value = database.get_cash_value(user_email)
-                premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
-                for finding in premium_findings:
-                    st.markdown(f"- {finding}")
-
-                with st.spinner("Building return comparison..."):
-                    chart = build_risk_return_chart(holdings)
-                if chart is not None:
-                    st.plotly_chart(chart, width="stretch")
-
+        if is_premium:
+            if len(holdings) >= 2:
                 with st.spinner("Building correlation matrix..."):
                     corr_chart = build_correlation_matrix_chart(holdings)
                 if corr_chart is not None:
                     st.plotly_chart(corr_chart, width="stretch")
-                elif len(holdings) < 2:
-                    st.caption("Add at least 2 positions to see a correlation matrix.")
             else:
-                st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
-                         "rebalancing ideas, a return-vs-benchmark chart, and a correlation matrix.")
+                st.caption("Add at least 2 positions to see a correlation matrix.")
+        else:
+            st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
+
+    # --- Performance ---
+    with st.expander("📈 Performance"):
+        with st.spinner("Checking trend status..."):
+            trend_results = []
+            for holding in holdings:
+                result = check_holding(holding["naam"], holding["ticker"])
+                if result:
+                    trend_results.append(result)
+
+        if trend_results:
+            df_trend = pd.DataFrame(trend_results)
+            changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
+            if len(changed) > 0:
+                st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
+                           + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
+
+            def _format_weeks(value):
+                return "-" if value is None else f"{value:.0f}"
+
+            df_display = pd.DataFrame([
+                {
+                    "Name": r["naam"],
+                    "Ticker": r["ticker"],
+                    "Weekly Trend": r["status"],
+                    "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
+                    "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
+                }
+                for r in trend_results
+            ])
+
+            def _highlight_status(row):
+                color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
+                    "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
+                )
+                return [f"background-color: {color}"] * len(row)
+
+            st.caption("Weekly Supertrend status per position.")
+            st.dataframe(
+                df_display.style.apply(_highlight_status, axis=1),
+                width="content",
+                height=min(38 * (len(df_display) + 1), 300),
+            )
+        else:
+            st.caption("No trend data available for your tracked positions.")
+
+    # --- Dividend ---
+    with st.expander("💰 Dividend"):
+        if is_premium:
+            for finding in analyze_dividend(holdings, infos):
+                st.markdown(f"- {finding}")
+        else:
+            st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
 
 elif current_view == "instellingen":
     import database
@@ -1437,6 +1387,55 @@ elif current_view == "instellingen":
                 if st.button("Save cash amount"):
                     database.set_cash_value(user_email, new_cash)
                     st.success("Saved!")
+
+        with st.container(border=True):
+            st.markdown("#### Risk profile")
+            st.caption("Used to personalize your Concentration Risk and Sectors analysis under "
+                       "Analyse. Not a one-time thing -- update it anytime your situation changes.")
+
+            profile = database.get_risk_profile(user_email)
+            horizon_options = ["short", "medium", "long"]
+            horizon_labels = {"short": "Short (< 2 years)", "medium": "Medium (2-7 years)", "long": "Long (7+ years)"}
+            horizon = st.selectbox(
+                "Investment horizon", horizon_options,
+                index=horizon_options.index(profile["investment_horizon"]),
+                format_func=lambda x: horizon_labels[x],
+                help="How long do you plan to hold most of your investments?",
+            )
+
+            tolerance_options = ["conservative", "balanced", "aggressive"]
+            tolerance = st.selectbox(
+                "Risk tolerance", tolerance_options,
+                index=tolerance_options.index(profile["risk_tolerance"]),
+                format_func=lambda x: x.capitalize(),
+                help="How comfortable are you with short-term swings for potentially higher returns?",
+            )
+
+            max_position = st.slider(
+                "Max % you're comfortable with in a single position", 5, 100,
+                int(profile["max_position_pct"]),
+                help="A common rule of thumb is 20-25%, but this is personal.",
+            )
+            max_sector = st.slider(
+                "Max % you're comfortable with in a single sector", 5, 100,
+                int(profile["max_sector_pct"]),
+                help="A common rule of thumb is 30-40%.",
+            )
+            target_cash = st.slider(
+                "Target cash buffer %", 0, 100, int(profile["target_cash_pct"]),
+                help="How much of your total portfolio do you want to keep as uninvested cash?",
+            )
+
+            wcol1, wcol2 = st.columns(2)
+            with wcol1:
+                if st.button("Save risk profile", type="primary"):
+                    database.set_risk_profile(user_email, horizon, tolerance, max_position, max_sector, target_cash)
+                    st.success("Saved!")
+            with wcol2:
+                if st.button("Reset to defaults"):
+                    database.reset_risk_profile(user_email)
+                    st.success("Reset to defaults!")
+                    st.rerun()
     else:
         st.info("Log in (top right) to manage your email preferences.")
 
