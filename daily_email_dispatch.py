@@ -62,11 +62,15 @@ def run_daily_screener_emails_for_region(preferences: dict, region: str) -> None
 
     df_hits = pd.read_csv("supertrend_signals_daily.csv")
     if df_hits.empty:
-        print("Geen signalen vandaag -- geen mail nodig.")
+        print("Geen signalen vandaag -- toch een korte, warme mail versturen (dagelijks contactmoment).")
+        text_body, html_body = screener_daily.build_no_signals_email_daily()
+        subject = "Hesty's Daily: a quiet day, no new signals"
+        for user_email in opted_in:
+            send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
         return
 
     text_body, html_body = screener_daily.build_email_body_daily(df_hits)
-    subject = f"Daily screener: {len(df_hits)} new signals"
+    subject = f"Hesty's Daily: {len(df_hits)} new signal(s) today"
 
     for user_email in opted_in:
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)

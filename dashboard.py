@@ -927,18 +927,28 @@ if current_view == "today":
                 )
                 st.caption("See the full list under Discover.")
 
-            # --- Earnings surprises (alleen je eigen portfolio + watchlist) ---
+            # --- Earnings surprises (alleen je eigen portfolio + watchlist, max 2 dagen oud) ---
+            def _is_recent_earnings(earnings_date_str, max_days=2):
+                try:
+                    earnings_date = pd.to_datetime(earnings_date_str).date()
+                    days_since = (datetime.now().date() - earnings_date).days
+                    return 0 <= days_since <= max_days
+                except Exception:
+                    return False
+
             tracked_tickers = {item["ticker"] for item in tracked_items}
             personal_surprises = [
                 s for s in get_earnings_surprises_from_signals(max_items=50)
-                if s["ticker"] in tracked_tickers
+                if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
             ]
-            if personal_surprises:
-                with st.container(border=True):
-                    st.markdown("**Earnings surprises for you**")
+            with st.container(border=True):
+                st.markdown("**Earnings surprises for you**")
+                if personal_surprises:
                     for s in personal_surprises[:5]:
                         emoji = "🟢" if s["earnings_beat"] else "🔴"
                         st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
+                else:
+                    st.caption("No recent earnings surprises on your positions (last 2 days).")
 
             # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) ---
             with st.container(border=True):

@@ -202,31 +202,117 @@ def check_ticker_daily(ticker: str, benchmark_returns: dict, df: pd.DataFrame = 
     return result
 
 
-def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
-    lines = [f"Daily screener: {len(df_hits)} signals found (sorted by score, highest first).\n"]
-    for _, row in df_hits.iterrows():
-        lines.append(
-            f"- [score {row['score']}] {row['ticker']}: flip on {row['flip_date']} "
-            f"({row['dagen_geleden']} day(s) ago, after {row['voorgaande_trend_dagen']} days bearish), "
-            f"price then {row['prijs_bij_omslag']}, now {row['prijs_nu']} ({row['sinds_omslag_pct']:+.2f}%)"
-        )
-    text_body = "\n".join(lines)
-    text_body += "\n\nThis is a screener, not investment advice."
+def build_no_signals_email_daily() -> tuple:
+    """Korte, warme mail voor een dag zonder signalen -- houdt het dagelijkse contactmoment in stand."""
+    text_body = (
+        "Good morning from Hesty's\n\n"
+        "No bullish flips showed up on today's scan -- a quiet day on that front.\n\n"
+        "Check Discover for sector rotation and top movers, or Analyse for your own portfolio.\n\n"
+        "-- Hesty's, your personal investment assistant\n\n"
+        "This is a screener, not investment advice."
+    )
+    html_body = """
+    <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
+        <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
+            <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Good morning</div>
+        </div>
+        <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">
+                No bullish flips showed up on today's scan -- a quiet day on that front.
+            </p>
+            <p style="margin-top:16px; font-size:14px; color:#5B6472; line-height:1.5;">
+                Check <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
+                for sector rotation and top movers, or
+                <a href="https://hestys-stock-screener.streamlit.app/?view=analyse" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
+            </p>
+            <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
+            <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
+        </div>
+    </div>
+    """
+    return text_body, html_body
 
+
+def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
+    """
+    Bouwt de dagelijkse mail -- zakelijk maar met een eigen stem: een korte,
+    op de data gebaseerde toelichting (geen hype, geen giswerk) vooraf, dan
+    de tabel, en een korte, herkenbare afsluiting namens Hesty's.
+    """
+    n = len(df_hits)
+    top_pick = df_hits.iloc[0]  # df_hits is al gesorteerd op score (hoog naar laag)
+
+    intro_line = (
+        f"{n} stock{'s' if n != 1 else ''} just flipped bullish on today's scan. "
+        f"{top_pick['ticker']} leads with the highest score ({top_pick['score']})."
+    )
+
+    # --- Tekst-versie ---
+    text_lines = [
+        "Good morning from Hesty's",
+        "",
+        intro_line,
+        "",
+        "Today's signals (highest score first):",
+    ]
+    for _, row in df_hits.iterrows():
+        text_lines.append(
+            f"- [{row['score']}] {row['ticker']}: flipped {row['dagen_geleden']} day(s) ago "
+            f"after {row['voorgaande_trend_dagen']} days bearish -- "
+            f"{row['prijs_bij_omslag']} -> {row['prijs_nu']} ({row['sinds_omslag_pct']:+.2f}%)"
+        )
+    text_lines += [
+        "",
+        "See the full list, sector rotation, and top movers under Discover on the site.",
+        "",
+        "-- Hesty's, your personal investment assistant",
+        "",
+        "This is a screener, not investment advice.",
+    ]
+    text_body = "\n".join(text_lines)
+
+    # --- HTML-versie: lichte achtergrond (betrouwbaarder in e-mail-clients
+    # dan een donkere), met de merk-kleur (jade) als accent ---
     rows_html = "".join(
-        f"<tr><td><b>{r['score']}</b></td><td>{r['ticker']}</td><td>{r['flip_date']}</td>"
-        f"<td>{r['dagen_geleden']}</td><td>{r['prijs_bij_omslag']}</td><td>{r['prijs_nu']}</td>"
-        f"<td>{r['sinds_omslag_pct']:+.2f}%</td></tr>"
+        f"""<tr style="border-bottom:1px solid #E5E8EC;">
+            <td style="padding:10px 8px;font-weight:700;color:#101825;">{r['score']}</td>
+            <td style="padding:10px 8px;font-weight:600;color:#101825;">{r['ticker']}</td>
+            <td style="padding:10px 8px;color:#5B6472;">{r['flip_date']}</td>
+            <td style="padding:10px 8px;color:#5B6472;">{r['dagen_geleden']}d ago</td>
+            <td style="padding:10px 8px;color:#5B6472;">{r['prijs_bij_omslag']} &rarr; {r['prijs_nu']}</td>
+            <td style="padding:10px 8px;font-weight:600;color:{'#0F8F6E' if r['sinds_omslag_pct'] >= 0 else '#C1524A'};">{r['sinds_omslag_pct']:+.2f}%</td>
+        </tr>"""
         for _, r in df_hits.iterrows()
     )
+
     html_body = f"""
-    <h3>Daily screener: {len(df_hits)} signals found</h3>
-    <table border="1" cellpadding="5" cellspacing="0">
-      <tr><th>Score</th><th>Ticker</th><th>Flip Date</th><th>Days Ago</th>
-          <th>Price at Flip</th><th>Price Now</th><th>Since Flip</th></tr>
-      {rows_html}
-    </table>
-    <p><i>This is a screener, not investment advice. Intended for swing-trade timeframes (days-weeks).</i></p>
+    <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
+        <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
+            <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Good morning</div>
+        </div>
+        <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">{intro_line}</p>
+            <table style="width:100%; border-collapse:collapse; margin-top:16px;">
+                <tr style="border-bottom:2px solid #101825;">
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Score</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Ticker</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Flip Date</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Since</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Price</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Change</th>
+                </tr>
+                {rows_html}
+            </table>
+            <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
+                Want sector rotation, top movers, and earnings surprises too? Check
+                <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
+            </p>
+            <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
+            <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
+        </div>
+    </div>
     """
     return text_body, html_body
 
