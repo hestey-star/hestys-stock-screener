@@ -37,7 +37,7 @@ import yfinance as yf
 
 from emailer import send_email
 
-st.set_page_config(page_title="Hesty's Signals", page_icon="◆", layout="wide")
+st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 
 # --- Visuele identiteit: donkere 'kluis/terminal'-stijl, geen standaard-look ---
 st.markdown("""
@@ -607,9 +607,22 @@ def verify_and_activate_premium(session_id: str) -> tuple:
             customer_email = session.customer_email
         if customer_email:
             database.set_premium_status(customer_email, True)
+            if getattr(session, "customer", None):
+                database.set_stripe_customer_id(customer_email, session.customer)
         return True, customer_email
 
     return False, None
+
+
+def create_billing_portal_session(customer_id: str):
+    """Maakt een Stripe Billing Portal-sessie aan -- hierin kan de klant zelf opzeggen/betaalmethode wijzigen."""
+    stripe.api_key = st.secrets["stripe"]["secret_key"]
+    app_url = st.secrets["app"]["url"]
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{app_url}/?view=premium",
+    )
+    return session
 
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -621,63 +634,72 @@ def _nav_class(view_name: str) -> str:
     return "nav-link active" if current_view == view_name else "nav-link"
 
 
-st.markdown(
-    f"""
-    <div class="app-header">
-        <a href="?view=welcome" class="app-header-top" target="_self">
-            <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
-                      stroke-width="2.5" transform="rotate(45 24 24)"/>
-                <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
-                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
-            </svg>
-            <div>
-                <h1>Hesty's Signals</h1>
-                <div class="tagline">PERSONAL &middot; CLEAR &middot; EASY</div>
-            </div>
-        </a>
-        <div class="nav-bar">
-            <a href="?view=welcome" class="{_nav_class('welcome')}" target="_self">Welcome</a>
-            <a href="?view=screener" class="{_nav_class('screener')}" target="_self">New Signals</a>
-            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
-            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
-            <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+header_col, login_col = st.columns([5, 1])
 
-# ============================================================
-# VIEW: WELCOME
-# ============================================================
-if current_view == "welcome":
-    st.markdown("### What is this?")
-    st.write(
-        "Hesty's Signals is a personal research tool for exploring stock market trends. "
-        "It has two parts, and you can jump straight to either one using the navigation above."
+with header_col:
+    st.markdown(
+        f"""
+        <div class="app-header">
+            <a href="?view=today" class="app-header-top" target="_self">
+                <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
+                          stroke-width="2.5" transform="rotate(45 24 24)"/>
+                    <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
+                              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
+                </svg>
+                <div>
+                    <h1>Hesty's</h1>
+                    <div class="tagline">YOUR PERSONAL INVESTMENT ASSISTANT</div>
+                </div>
+            </a>
+            <div class="nav-bar">
+                <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
+                <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
+                <a href="?view=analyse" class="{_nav_class('analyse')}" target="_self">Analyse</a>
+                <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
+                <a href="?view=instellingen" class="{_nav_class('instellingen')}" target="_self">Instellingen</a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    st.markdown("#### New Signals")
+with login_col:
+    st.markdown("<div style='height: 1.4rem'></div>", unsafe_allow_html=True)  # verticaal uitlijnen met het logo
+    if st.user.is_logged_in:
+        st.caption(st.user.name)
+        st.button("Log out", on_click=st.logout, key="header_logout")
+    else:
+        st.button("Log in", on_click=st.login, key="header_login", type="primary")
+
+# ============================================================
+# VIEW: TODAY
+# ============================================================
+if current_view == "today":
+    st.markdown("### What is this?")
     st.write(
-        "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 every week for stocks that "
-        "just turned bullish on a weekly Supertrend indicator. Each signal is scored on "
-        "several factors -- how fresh the trend change is, ROIC level and trend, relative "
-        "strength versus the index, volume confirmation, earnings surprises, and how the "
-        "price compares to analyst price targets. This part is public, no login required."
+        "Hesty's is your personal investment assistant. It has a few parts, and you can "
+        "jump straight to any of them using the navigation above."
+    )
+
+    st.markdown("#### Discover")
+    st.write(
+        "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 for stocks that just turned "
+        "bullish on a Supertrend indicator (weekly and daily variants), each scored on "
+        "technical and fundamental factors. Public, no login required."
     )
 
     st.markdown("#### My Portfolio")
     st.write(
-        "Log in with Google to privately track your own holdings. See their current trend "
-        "status, recent news, and get a personal weekly email update -- visible only to you."
+        "Log in with Google (top right) to privately track your own holdings and watchlist -- "
+        "visible only to you."
     )
 
 # ============================================================
 # VIEW: SCREENER (public, no login required)
 # ============================================================
-elif current_view == "screener":
+elif current_view == "discover":
     timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
     csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
 
@@ -777,8 +799,7 @@ elif current_view == "portfolio":
             '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
         )
-        st.info("Log in to track your own positions. No one else can see what you add.")
-        st.button("Log in with Google", on_click=st.login, type="primary")
+        st.info("Log in (top right) to track your own positions. No one else can see what you add.")
         st.stop()
 
     import database
@@ -789,12 +810,7 @@ elif current_view == "portfolio":
         '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
         unsafe_allow_html=True,
     )
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.subheader(f"Welcome, {st.user.name}")
-        st.caption(user_email)
-    with col2:
-        st.button("Log out", on_click=st.logout)
+    st.subheader(f"Welcome, {st.user.name}")
 
     holdings = database.get_user_holdings(user_email)
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
@@ -1049,13 +1065,27 @@ elif current_view == "portfolio":
                         database.delete_holding(holding_options[to_remove_label]["id"], user_email)
                         st.rerun()
 
-    # ============================================================
-    # 4. SETTINGS -- e-mail-voorkeuren + cash-bedrag, samen in 1 vak
-    # ============================================================
-    with st.container(border=True):
-        st.markdown("**Settings**")
+    st.caption("Manage email preferences and cash amount under Instellingen. "
+               "You'll also automatically receive a weekly email with this update, "
+               "at the address you're logged in with.")
 
-        with st.expander("Email preferences", expanded=False):
+elif current_view == "analyse":
+    st.markdown("### Analyse")
+    st.info("This page is being redesigned -- for now, the portfolio analysis (concentration, "
+            "sectors, and premium extras) still lives under My Portfolio -> Insights.")
+
+elif current_view == "instellingen":
+    import database
+
+    st.markdown("### Instellingen")
+
+    # --- Email preferences + cash amount (login vereist) ---
+    if st.user.is_logged_in:
+        user_email = st.user.email
+        is_premium = database.is_premium_user(user_email)
+
+        with st.container(border=True):
+            st.markdown("#### Email preferences")
             prefs = database.get_user_preferences(user_email)
             wants_screener = st.checkbox(
                 "Receive the weekly screener email (new signals from AEX/Nasdaq-100/S&P500/DAX/CAC40)",
@@ -1073,27 +1103,26 @@ elif current_view == "portfolio":
                 database.set_user_preferences(user_email, wants_screener, wants_portfolio, wants_daily_email=wants_daily)
                 st.success("Preferences saved!")
 
-        if is_premium:
-            with st.expander("Cash / uninvested amount", expanded=False):
+            if is_premium:
+                st.markdown("---")
+                st.markdown("**Cash / uninvested amount**")
                 current_cash = database.get_cash_value(user_email)
                 new_cash = st.number_input(
-                    "Cash not currently invested (used for the cash% check in Insights)",
+                    "Cash not currently invested (used for the cash% check in Analyse)",
                     min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
                 )
                 if st.button("Save cash amount"):
                     database.set_cash_value(user_email, new_cash)
                     st.success("Saved!")
+    else:
+        st.info("Log in (top right) to manage your email preferences.")
 
-    st.caption("You'll also automatically receive a weekly email with this update, "
-               "at the address you're logged in with.")
+    st.divider()
 
-elif current_view == "premium":
-    import database
-
-    st.markdown("### Premium")
+    # --- Premium: feature-vergelijking + abonnement-beheer ---
+    st.markdown("#### Premium")
     st.write(
-        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking. "
-        "Premium is currently in early access -- see the note below."
+        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
     )
 
     st.markdown(
@@ -1101,13 +1130,14 @@ elif current_view == "premium":
         <table class="positions-table">
             <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
             <tbody>
-                <tr><td>Weekly &amp; daily screener</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Weekly &amp; daily screener (Discover)</td><td>&#10003;</td><td>&#10003;</td></tr>
                 <tr><td>Tracked positions</td><td>Up to 10</td><td>Unlimited</td></tr>
                 <tr><td>Concentration, diversification, sector &amp; asset mix</td><td>&#10003;</td><td>&#10003;</td></tr>
                 <tr><td>Dividend income overview</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Weighted valuation (P/E)</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Cash % and rebalancing ideas</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Return vs. benchmark chart</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Correlation matrix</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Smart DCA Assistant (TradingView indicator)</td><td>--</td><td>&#10003;</td></tr>
                 <tr><td>Email preferences (screener, daily, portfolio)</td><td>&#10003;</td><td>&#10003;</td></tr>
             </tbody>
@@ -1118,7 +1148,7 @@ elif current_view == "premium":
 
     if st.user.is_logged_in and database.is_premium_user(st.user.email):
         with st.container(border=True):
-            st.markdown("#### Smart DCA Assistant [Hestey's] -- TradingView indicator")
+            st.markdown("##### Smart DCA Assistant -- TradingView indicator")
             st.write(
                 "A TradingView indicator that adjusts your periodic contribution based on how "
                 "cheap/expensive the market looks (moving average distance, RSI, drawdown), plus "
@@ -1134,7 +1164,7 @@ elif current_view == "premium":
                 lines = pine_code.split("\n", 1)
                 watermark = (
                     f"// Licensed to: {st.user.email}\n"
-                    f"// Downloaded from Hesty's Signals on {datetime.now().strftime('%Y-%m-%d')}\n"
+                    f"// Downloaded from Hesty's on {datetime.now().strftime('%Y-%m-%d')}\n"
                     f"// For personal use only -- do not redistribute or republish.\n"
                 )
                 if len(lines) == 2:
@@ -1157,7 +1187,7 @@ elif current_view == "premium":
                 st.caption("Indicator file not found -- contact support.")
 
     with st.container(border=True):
-        st.markdown("#### Start Premium")
+        st.markdown("##### Subscription")
 
         # --- Terugkeer van Stripe: verifieer de sessie en zet premium aan ---
         returned_session_id = st.query_params.get("session_id")
@@ -1173,9 +1203,18 @@ elif current_view == "premium":
                 )
 
         if not st.user.is_logged_in:
-            st.info("Log in first (via My Portfolio) so we know which account to upgrade.")
+            st.info("Log in first (top right) so we know which account to upgrade.")
         elif database.is_premium_user(st.user.email):
             st.success("You're already on Premium. Thank you!")
+            customer_id = database.get_stripe_customer_id(st.user.email)
+            if customer_id:
+                if st.button("Manage subscription"):
+                    with st.spinner("Preparing your subscription portal..."):
+                        portal_session = create_billing_portal_session(customer_id)
+                    st.link_button("Open subscription portal →", portal_session.url, type="primary")
+                st.caption("Cancel anytime -- you'll keep Premium access until the end of your current billing period.")
+            else:
+                st.caption("Manage your subscription by contacting support -- see below.")
         else:
             st.write("Choose a plan:")
             pcol1, pcol2 = st.columns(2)
@@ -1197,14 +1236,16 @@ elif current_view == "premium":
                     st.link_button("Continue to payment →", session.url, type="primary")
             st.caption("Payments are processed securely by Stripe -- we never see or store your card details.")
 
-elif current_view == "support":
-    st.markdown("### Support")
+    st.divider()
+
+    # --- Support: FAQ + contactformulier ---
+    st.markdown("#### Support")
     st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
               "or send us a message directly.")
 
-    st.markdown("#### Frequently asked questions")
+    st.markdown("##### Frequently asked questions")
 
-    with st.expander("What does the Signals screener do?"):
+    with st.expander("What does Discover do?"):
         st.write(
             "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
             "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
@@ -1222,34 +1263,32 @@ elif current_view == "support":
             "Free covers concentration, diversification, sector and asset mix, and up to 10 "
             "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
             "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
-            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full "
-            "comparison."
+            "the Smart DCA Assistant TradingView indicator. See the comparison table above."
         )
 
     with st.expander("How do I cancel my Premium subscription?"):
         st.write(
-            "Subscriptions are managed through Stripe. Use the message form below and we'll "
-            "help you cancel or point you to the right place -- self-service cancellation is "
-            "on our list to add directly to the site."
+            "Above, under Subscription, click 'Manage subscription' -- this opens Stripe's "
+            "secure billing portal, where you can cancel anytime. You'll keep Premium access "
+            "until the end of your current billing period."
         )
 
     with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
         st.write(
-            "Premium members can download it directly from the Premium page, with setup "
-            "instructions for TradingView's Pine Editor."
+            "Premium members can download it directly above, with setup instructions for "
+            "TradingView's Pine Editor."
         )
 
     with st.expander("How do I change what emails I receive?"):
         st.write(
-            "Log in, go to My Portfolio -> Settings -> Email preferences, and toggle the "
-            "weekly screener, daily screener, and/or portfolio emails on or off."
+            "Log in, and use the Email preferences section above to toggle the weekly "
+            "screener, daily screener, and/or portfolio emails on or off."
         )
 
-    st.markdown("#### Send us a message")
+    st.markdown("##### Send us a message")
     st.write("Found a bug, have an idea, or need help with something else? Let us know.")
 
-    default_email = st.user.email if st.user.is_logged_in else ""
-    contact_email = st.text_input("Your email", value=default_email)
+    contact_email = st.text_input("Your email")
     message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Other"])
     message_body = st.text_area("Message", height=150)
 
@@ -1262,7 +1301,7 @@ elif current_view == "support":
                 st.error("Support inbox isn't configured yet -- please try again later.")
             else:
                 success = send_email(
-                    subject=f"[Hesty's Signals Support] {message_type} from {contact_email}",
+                    subject=f"[Hesty's Support] {message_type} from {contact_email}",
                     body_text=message_body,
                     to_email=support_email,
                 )
