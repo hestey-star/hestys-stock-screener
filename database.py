@@ -87,7 +87,7 @@ def get_user_preferences(user_email: str) -> dict:
     Geeft de e-mail-voorkeuren (en premium-status) van deze gebruiker terug.
     Als er nog geen rij bestaat (nieuwe gebruiker), gelden de
     standaardwaarden: WEL de persoonlijke portfolio-mail, NIET de bredere
-    screener-mails (opt-in), GEEN premium.
+    screener-mails (opt-in), GEEN premium, EU als regio.
     """
     client = get_supabase_client()
     response = client.table("user_preferences").select("*").eq("user_email", user_email).execute()
@@ -95,12 +95,13 @@ def get_user_preferences(user_email: str) -> dict:
         return response.data[0]
     return {
         "user_email": user_email, "wants_screener_email": False, "wants_portfolio_email": True,
-        "wants_daily_email": False, "is_premium": False,
+        "wants_daily_email": False, "is_premium": False, "email_region": "EU",
     }
 
 
 def set_user_preferences(
-    user_email: str, wants_screener_email: bool, wants_portfolio_email: bool, wants_daily_email: bool = False,
+    user_email: str, wants_screener_email: bool, wants_portfolio_email: bool,
+    wants_daily_email: bool = False, email_region: str = "EU",
 ) -> None:
     """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
     client = get_supabase_client()
@@ -109,6 +110,7 @@ def set_user_preferences(
         "wants_screener_email": wants_screener_email,
         "wants_portfolio_email": wants_portfolio_email,
         "wants_daily_email": wants_daily_email,
+        "email_region": email_region,
     }).execute()
 
 

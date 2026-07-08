@@ -871,8 +871,10 @@ if current_view == "today":
             # --- Top nieuws (portfolio + watchlist) ---
             with st.container(border=True):
                 st.markdown("**Top news for you**")
+                st.caption("The 5 most recent news items across your portfolio and watchlist "
+                           "(up to 3 per position, from the last 3 days), most recent first.")
                 with st.spinner("Checking news..."):
-                    top_news = get_top_news_for_tickers(tracked_items, max_items=3)
+                    top_news = get_top_news_for_tickers(tracked_items, max_items=5)
                 if top_news:
                     for n in top_news:
                         pub_date = n["published"].strftime("%Y-%m-%d")
@@ -925,13 +927,26 @@ if current_view == "today":
                 )
                 st.caption("See the full list under Discover.")
 
+            # --- Earnings surprises (alleen je eigen portfolio + watchlist) ---
+            tracked_tickers = {item["ticker"] for item in tracked_items}
+            personal_surprises = [
+                s for s in get_earnings_surprises_from_signals(max_items=50)
+                if s["ticker"] in tracked_tickers
+            ]
+            if personal_surprises:
+                with st.container(border=True):
+                    st.markdown("**Earnings surprises for you**")
+                    for s in personal_surprises[:5]:
+                        emoji = "🟢" if s["earnings_beat"] else "🔴"
+                        st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
+
             # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) ---
             with st.container(border=True):
                 st.markdown("**Market news**")
                 with st.spinner("Checking market news..."):
                     market_news = get_top_news_for_tickers(
                         [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
-                        max_items=2,
+                        max_items=3,
                     )
                 if market_news:
                     for n in market_news:
@@ -1495,12 +1510,27 @@ elif current_view == "instellingen":
                 "Receive the daily screener email (swing-trade signals, weekdays)",
                 value=prefs.get("wants_daily_email", False),
             )
+            region_options = ["EU", "US_East", "US_West"]
+            region_labels = {
+                "EU": "Europe (~07:00 CET / 08:00 CEST)",
+                "US_East": "US East (~07:00 ET)",
+                "US_West": "US West (~07:00 PT)",
+            }
+            email_region = st.selectbox(
+                "Morning delivery time (for the daily email)",
+                region_options,
+                index=region_options.index(prefs.get("email_region", "EU")),
+                format_func=lambda x: region_labels[x],
+            )
             wants_portfolio = st.checkbox(
                 "Receive the weekly portfolio email (status + news for your own positions)",
                 value=prefs["wants_portfolio_email"],
             )
             if st.button("Save preferences"):
-                database.set_user_preferences(user_email, wants_screener, wants_portfolio, wants_daily_email=wants_daily)
+                database.set_user_preferences(
+                    user_email, wants_screener, wants_portfolio,
+                    wants_daily_email=wants_daily, email_region=email_region,
+                )
                 st.success("Preferences saved!")
 
             if is_premium:

@@ -2,10 +2,25 @@ name: Dagelijkse screener
 
 on:
   schedule:
-    # Maandag t/m vrijdag, 23:00 UTC = 00:00/01:00 CET/CEST -- ruim na
-    # sluiting van alle Europese en Amerikaanse beurzen die dag
-    - cron: "0 23 * * 1-5"
-  workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
+    # Maandag t/m vrijdag:
+    # 06:00 UTC = scan draaien + direct mail naar EU-gebruikers
+    #             (~07:00 CET winter / ~08:00 CEST zomer)
+    # 12:00 UTC = alleen mail naar VS-oost-gebruikers (~07:00-08:00 ET)
+    # 15:00 UTC = alleen mail naar VS-west-gebruikers (~07:00-08:00 PT)
+    - cron: "0 6 * * 1-5"
+    - cron: "0 12 * * 1-5"
+    - cron: "0 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "Regio voor een handmatige test-run"
+        required: false
+        default: "EU"
+        type: choice
+        options:
+          - EU
+          - US_East
+          - US_West
 
 jobs:
   run-daily:
@@ -22,8 +37,34 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
-      - name: Dagelijkse screener + opt-in-mails draaien
+      - name: Regio bepalen en of de scan nodig is
+        id: determine
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 6 * * 1-5" ]; then
+            echo "region=EU" >> "$GITHUB_OUTPUT"
+            echo "do_scan=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then
+            echo "region=US_East" >> "$GITHUB_OUTPUT"
+            echo "do_scan=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 15 * * 1-5" ]; then
+            echo "region=US_West" >> "$GITHUB_OUTPUT"
+            echo "do_scan=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "region=${{ github.event.inputs.region }}" >> "$GITHUB_OUTPUT"
+            echo "do_scan=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dagelijkse scan draaien (alleen bij de vroege EU-run of handmatig)
+        if: steps.determine.outputs.do_scan == 'true'
         run: python daily_batch.py
+        env:
+          EMAIL_SMTP_SERVER: smtp.gmail.com
+          EMAIL_SMTP_PORT: 587
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+
+      - name: Mail versturen voor deze regio
+        run: python daily_email_dispatch.py ${{ steps.determine.outputs.region }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -32,7 +73,8 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
-      - name: Bijgewerkte bestanden committen en pushen
+      - name: Bijgewerkte bestanden committen en pushen (alleen na een scan)
+        if: steps.determine.outputs.do_scan == 'true'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
