@@ -546,6 +546,74 @@ def build_opportunities_today(holdings: list, watchlist_items: list) -> dict:
     }
 
 
+US_SECTOR_ETFS = {
+    "Technology": "XLK", "Financials": "XLF", "Energy": "XLE", "Health Care": "XLV",
+    "Consumer Discretionary": "XLY", "Consumer Staples": "XLP", "Industrials": "XLI",
+    "Materials": "XLB", "Utilities": "XLU", "Real Estate": "XLRE", "Communication Services": "XLC",
+}
+
+# Geverifieerde iShares STOXX Europe 600 sector-ETF's (Xetra) -- een kleinere,
+# minder gestandaardiseerde set dan de Amerikaanse SPDR-sector-ETF's, maar dit
+# zijn de tickers die daadwerkelijk bestaan en op Yahoo Finance te vinden zijn.
+EU_SECTOR_ETFS = {
+    "Banks": "EXV1.DE", "Technology": "EXV3.DE", "Health Care": "EXV4.DE",
+    "Telecommunications": "EXV2.DE", "Oil & Gas": "EXH1.DE", "Food & Beverage": "EXH3.DE",
+    "Industrial Goods & Services": "EXH4.DE", "Utilities": "EXH9.DE",
+    "Basic Resources": "EXV6.DE", "Automobiles & Parts": "EXV5.DE",
+}
+
+
+def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
+    """
+    Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
+    signaal (welke sectoren doen het momenteel relatief goed/slecht?).
+    Sectoren waarvan de ETF geen data teruggeeft, worden gewoon overgeslagen
+    (geen crash bij een enkele niet-beschikbare ticker).
+    """
+    etfs = US_SECTOR_ETFS if region == "US" else EU_SECTOR_ETFS
+    results = []
+    for sector, ticker in etfs.items():
+        try:
+            hist = yf.Ticker(ticker).history(period=period)
+            if len(hist) >= 2:
+                ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+                results.append({"sector": sector, "ticker": ticker, "return_pct": round(ret, 2)})
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x["return_pct"], reverse=True)
+    return results
+
+
+def get_earnings_surprises_from_signals(max_items: int = 5) -> list:
+    """
+    Licht signalen met een opvallende recente winst-verrassing uit de
+    bestaande screener-CSV's (dagelijks + wekelijks) -- geen nieuwe
+    data-ophaal nodig, dit zit al in de bestaande scores verwerkt.
+    """
+    results = []
+    for csv_file in ["supertrend_signals_daily.csv", "supertrend_signals.csv"]:
+        if not os.path.exists(csv_file):
+            continue
+        try:
+            df = pd.read_csv(csv_file)
+        except Exception:
+            continue
+        if "earnings_surprise_pct" not in df.columns:
+            continue
+        df_with_earnings = df[df["earnings_surprise_pct"].notna()]
+        for _, row in df_with_earnings.iterrows():
+            results.append({
+                "ticker": row["ticker"],
+                "earnings_surprise_pct": row["earnings_surprise_pct"],
+                "earnings_beat": row.get("earnings_beat"),
+                "earnings_date": row.get("earnings_date"),
+            })
+
+    results.sort(key=lambda x: abs(x["earnings_surprise_pct"]), reverse=True)
+    return results[:max_items]
+
+
 def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -> list:
     """Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente 'max_items' items terug."""
     import screener as _screener  # lokale import: voorkomt een cirkelverwijzing bij module-laadtijd
@@ -876,95 +944,154 @@ if current_view == "today":
 # VIEW: SCREENER (public, no login required)
 # ============================================================
 elif current_view == "discover":
-    timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
-    csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
+    st.markdown("### Discover")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("Signals")
-        st.caption(f"Last updated: {file_last_modified(csv_file)}")
-    with col2:
-        if timeframe == "Weekly":
-            run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
-        else:
-            run_screener = st.button("Refresh now (takes a while, 5-15 min)", key="run_screener_daily", type="primary")
+    # --- New signals (bestaande, ongewijzigde functionaliteit) ---
+    with st.container(border=True):
+        st.markdown("**New signals**")
+        timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
+        csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
 
-    if run_screener:
-        st.warning("⚠️ Do not click anything else while this is running -- doing so will interrupt "
-                   "the scan (Streamlit restarts the whole page on any click) and you'll need to start over.")
-        with st.spinner(f"{timeframe} screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.caption(f"Last updated: {file_last_modified(csv_file)}")
+        with col2:
             if timeframe == "Weekly":
-                import screener
-                screener.main()
+                run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
             else:
-                import screener_daily
-                screener_daily.main()
-        st.success("Done! Refresh the page to see the new results.")
+                run_screener = st.button("Refresh now (takes a while, 5-15 min)", key="run_screener_daily", type="primary")
 
-    df_screener = load_screener_data(csv_file)
-    if df_screener is None or df_screener.empty:
-        run_hint = "python screener.py" if timeframe == "Weekly" else "python screener_daily.py"
-        st.info(f"No results yet. Run '{run_hint}' first, or click Refresh above.")
-    else:
-        df_screener = df_screener.sort_values("score", ascending=False)
+        if run_screener:
+            st.warning("⚠️ Do not click anything else while this is running -- doing so will interrupt "
+                       "the scan (Streamlit restarts the whole page on any click) and you'll need to start over.")
+            with st.spinner(f"{timeframe} screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
+                if timeframe == "Weekly":
+                    import screener
+                    screener.main()
+                else:
+                    import screener_daily
+                    screener_daily.main()
+            st.success("Done! Refresh the page to see the new results.")
 
-        min_score = st.slider("Minimum score", float(df_screener["score"].min()),
-                               float(df_screener["score"].max()), float(df_screener["score"].min()))
-        filtered = df_screener[df_screener["score"] >= min_score].copy()
+        df_screener = load_screener_data(csv_file)
+        if df_screener is None or df_screener.empty:
+            run_hint = "python screener.py" if timeframe == "Weekly" else "python screener_daily.py"
+            st.info(f"No results yet. Run '{run_hint}' first, or click Refresh above.")
+        else:
+            df_screener = df_screener.sort_values("score", ascending=False)
 
-        # 'benchmark' is interne informatie (welke index gebruikt is voor de
-        # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
-        filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
+            min_score = st.slider("Minimum score", float(df_screener["score"].min()),
+                                   float(df_screener["score"].max()), float(df_screener["score"].min()))
+            filtered = df_screener[df_screener["score"] >= min_score].copy()
 
-        # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
-        # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
-        # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
-        column_labels = {
-            "ticker": "Ticker", "flip_date": "Flip Date",
-            "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
-            "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
-            "prijs_bij_omslag": "Price at Flip",
-            "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
-            "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
-            "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
-            "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
-            "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
-            "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
-            "fair_value": "Fair Value",
-            "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
-        }
-        filtered.rename(columns=column_labels, inplace=True)
+            # 'benchmark' is interne informatie (welke index gebruikt is voor de
+            # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
+            filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
 
-        # Score als 3e kolom, de rest in de logische volgorde erachter
-        preferred_order = [
-            "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
-            "Prior Trend (Weeks)", "Prior Trend (Days)",
-            "Price at Flip", "Price Now", "Since Flip", "Above EMA",
-            "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
-            "Earnings Surprise", "Earnings Beat", "Earnings Date",
-            "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
-        ]
-        ordered_cols = [c for c in preferred_order if c in filtered.columns]
-        ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
-        filtered = filtered[ordered_cols]
+            # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
+            # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
+            # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
+            column_labels = {
+                "ticker": "Ticker", "flip_date": "Flip Date",
+                "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
+                "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
+                "prijs_bij_omslag": "Price at Flip",
+                "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
+                "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
+                "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
+                "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
+                "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
+                "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
+                "fair_value": "Fair Value",
+                "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
+            }
+            filtered.rename(columns=column_labels, inplace=True)
 
-        format_dict = {
-            "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
-            "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
-            "ROIC": "{:+.1f}%", "Score": "{:.2f}",
-            "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
-            "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
-        }
-        format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
+            # Score als 3e kolom, de rest in de logische volgorde erachter
+            preferred_order = [
+                "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
+                "Prior Trend (Weeks)", "Prior Trend (Days)",
+                "Price at Flip", "Price Now", "Since Flip", "Above EMA",
+                "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
+                "Earnings Surprise", "Earnings Beat", "Earnings Date",
+                "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
+            ]
+            ordered_cols = [c for c in preferred_order if c in filtered.columns]
+            ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
+            filtered = filtered[ordered_cols]
 
-        st.dataframe(
-            filtered.style.format(format_dict, na_rep="unknown")
-                          .background_gradient(subset=["Score"], cmap="Greens")
-                          .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
-            width="stretch",
-            height=500,
-        )
-        st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
+            format_dict = {
+                "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
+                "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
+                "ROIC": "{:+.1f}%", "Score": "{:.2f}",
+                "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
+                "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
+            }
+            format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
+
+            st.dataframe(
+                filtered.style.format(format_dict, na_rep="unknown")
+                              .background_gradient(subset=["Score"], cmap="Greens")
+                              .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
+                width="stretch",
+                height=500,
+            )
+            st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
+
+    # --- Sector rotation (nieuw) ---
+    with st.container(border=True):
+        st.markdown("**Sector rotation**")
+        st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
+        region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
+        with st.spinner("Checking sector performance..."):
+            rotation = build_sector_rotation(region=region, period="1mo")
+        if rotation:
+            df_rotation = pd.DataFrame(rotation)[["sector", "return_pct"]]
+            df_rotation.columns = ["Sector", "1-Month Return"]
+            st.dataframe(
+                df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
+                                  .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
+                width="content",
+            )
+        else:
+            st.caption("No sector data available right now.")
+
+    # --- Top movers (nieuw, ververst 1x per dag via de dagelijkse scan) ---
+    with st.container(border=True):
+        st.markdown("**Top movers**")
+        if os.path.exists("top_movers.csv"):
+            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
+            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
+                st.markdown("Top gainers")
+                gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
+                st.dataframe(gainers.style.format({"change_pct": "{:+.1f}%"}), width="content")
+            with mcol2:
+                st.markdown("Top losers")
+                losers = df_movers.sort_values("change_pct", ascending=True).head(5)
+                st.dataframe(losers.style.format({"change_pct": "{:+.1f}%"}), width="content")
+        else:
+            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
+
+    # --- Earnings surprises (nieuw, hergebruikt bestaande screener-data) ---
+    with st.container(border=True):
+        st.markdown("**Earnings surprises**")
+        st.caption("Notable recent earnings beats/misses among today's and this week's signals.")
+        surprises = get_earnings_surprises_from_signals(max_items=5)
+        if surprises:
+            for s in surprises:
+                emoji = "🟢" if s["earnings_beat"] else "🔴"
+                st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
+        else:
+            st.caption("No notable earnings surprises among current signals.")
+
+    # --- Buy smarter (DCA-teaser) ---
+    with st.container(border=True):
+        st.markdown("**Buy smarter**")
+        st.write("The Smart DCA Assistant adjusts your periodic contribution based on how "
+                  "cheap or expensive the market looks -- available for Premium members.")
+        st.caption("Find the download under Instellingen -> Premium.")
 
 # ============================================================
 # VIEW: MY PORTFOLIO (personal, login required)

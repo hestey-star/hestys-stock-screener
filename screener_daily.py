@@ -113,12 +113,13 @@ def compute_score_daily(result: dict) -> float:
     )
 
 
-def check_ticker_daily(ticker: str, benchmark_returns: dict):
-    try:
-        df = fetch_daily(ticker)
-    except Exception as exc:
-        print(f"  {ticker}: fout bij ophalen ({exc})")
-        return None
+def check_ticker_daily(ticker: str, benchmark_returns: dict, df: pd.DataFrame = None):
+    if df is None:
+        try:
+            df = fetch_daily(ticker)
+        except Exception as exc:
+            print(f"  {ticker}: fout bij ophalen ({exc})")
+            return None
 
     min_needed = max(ATR_LENGTH, TREND_FILTER_EMA_LENGTH) + 5
     if df.empty or len(df) < min_needed:
@@ -240,13 +241,35 @@ def main(send_own_email: bool = True) -> None:
           f"(daily, ATR length {ATR_LENGTH}, multiplier {ATR_MULTIPLIER})...\n")
 
     hits = []
+    movers = []
     for ticker in tickers:
-        result = check_ticker_daily(ticker, benchmark_returns)
+        try:
+            df = fetch_daily(ticker)
+        except Exception as exc:
+            print(f"  {ticker}: fout bij ophalen ({exc})")
+            continue
+
+        # Dag-op-dag-verandering, voor 'top movers' -- hergebruikt dezelfde
+        # opgehaalde data als de signaal-check hieronder, dus GEEN extra
+        # API-aanroepen nodig.
+        if not df.empty and len(df) >= 2:
+            try:
+                day_change = (df["close"].iloc[-1] / df["close"].iloc[-2] - 1) * 100
+                movers.append({"ticker": ticker, "change_pct": round(day_change, 2)})
+            except Exception:
+                pass
+
+        result = check_ticker_daily(ticker, benchmark_returns, df=df)
         if result:
             hits.append(result)
             print(f"  {ticker}: SIGNAL ({result['dagen_geleden']} day(s) ago, score {result['score']})")
         else:
             print(f"  {ticker}: no recent signal")
+
+    if movers:
+        df_movers = pd.DataFrame(movers).sort_values("change_pct", ascending=False)
+        df_movers.to_csv("top_movers.csv", index=False)
+        print(f"\nSaved {len(df_movers)} tickers' daily change to 'top_movers.csv'.")
 
     if not hits:
         print("\nNo signals today.")
