@@ -526,6 +526,94 @@ def build_risk_return_chart(holdings: list):
     return fig
 
 
+def build_daily_portfolio_stats(holdings: list):
+    """Dag-op-dag statistieken: totale verandering, en beste/slechtste presteerder van gisteren."""
+    performers = []
+    total_value_today = 0.0
+    total_value_yesterday = 0.0
+
+    for h in holdings:
+        shares = h.get("shares") or 0
+        if not shares:
+            continue
+        try:
+            hist = yf.Ticker(h["ticker"]).history(period="5d")
+            if len(hist) < 2:
+                continue
+            price_today = float(hist["Close"].iloc[-1])
+            price_yesterday = float(hist["Close"].iloc[-2])
+            change_pct = (price_today / price_yesterday - 1) * 100
+            performers.append({"naam": h["naam"], "change_pct": change_pct})
+            total_value_today += shares * price_today
+            total_value_yesterday += shares * price_yesterday
+        except Exception:
+            continue
+
+    if not performers or total_value_yesterday <= 0:
+        return None
+
+    portfolio_change_pct = (total_value_today / total_value_yesterday - 1) * 100
+    best = max(performers, key=lambda p: p["change_pct"])
+    worst = min(performers, key=lambda p: p["change_pct"])
+
+    return {
+        "portfolio_change_pct": round(portfolio_change_pct, 2),
+        "best_performer": best["naam"],
+        "best_change_pct": round(best["change_pct"], 2),
+        "worst_performer": worst["naam"],
+        "worst_change_pct": round(worst["change_pct"], 2),
+    }
+
+
+def build_opportunities_today(holdings: list, watchlist_items: list) -> dict:
+    """Leest de dagelijkse + wekelijkse screener-uitkomsten en telt hoeveel signalen ergens bij jou horen."""
+    holding_tickers = {h["ticker"] for h in holdings}
+    watchlist_tickers = {w["ticker"] for w in watchlist_items}
+
+    daily_df = pd.read_csv("supertrend_signals_daily.csv") if os.path.exists("supertrend_signals_daily.csv") else None
+    weekly_df = pd.read_csv("supertrend_signals.csv") if os.path.exists("supertrend_signals.csv") else None
+
+    daily_count = len(daily_df) if daily_df is not None else 0
+    weekly_count = len(weekly_df) if weekly_df is not None else 0
+
+    all_signal_tickers = set()
+    if daily_df is not None:
+        all_signal_tickers |= set(daily_df["ticker"])
+    if weekly_df is not None:
+        all_signal_tickers |= set(weekly_df["ticker"])
+
+    in_portfolio = all_signal_tickers & holding_tickers
+    in_watchlist = (all_signal_tickers & watchlist_tickers) - in_portfolio
+    new_opportunities = all_signal_tickers - holding_tickers - watchlist_tickers
+
+    return {
+        "total_signals": daily_count + weekly_count,
+        "daily_signals": daily_count,
+        "weekly_signals": weekly_count,
+        "in_portfolio_count": len(in_portfolio),
+        "in_watchlist_count": len(in_watchlist),
+        "new_opportunities_count": len(new_opportunities),
+    }
+
+
+def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -> list:
+    """Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente 'max_items' items terug."""
+    import screener as _screener  # lokale import: voorkomt een cirkelverwijzing bij module-laadtijd
+
+    all_news = []
+    for item in holdings_and_watchlist:
+        try:
+            news_items = _screener.get_recent_news(item["ticker"], max_items=3, days_back=3)
+        except Exception:
+            news_items = []
+        for n in news_items:
+            n["naam"] = item["naam"]
+            all_news.append(n)
+
+    all_news.sort(key=lambda x: x["published"], reverse=True)
+    return all_news[:max_items]
+
+
 def build_concentration_overview(holdings: list, infos: dict, cash_value: float = 0.0) -> dict:
     """
     Berekent de 'at a glance'-portfolio-kenmerken: top-positie%, verdeling
@@ -735,24 +823,104 @@ with login_col:
 # VIEW: TODAY
 # ============================================================
 if current_view == "today":
-    st.markdown("### What is this?")
-    st.write(
-        "Hesty's is your personal investment assistant. It has a few parts, and you can "
-        "jump straight to any of them using the navigation above."
-    )
+    st.markdown("### Today")
 
-    st.markdown("#### Discover")
-    st.write(
-        "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 for stocks that just turned "
-        "bullish on a Supertrend indicator (weekly and daily variants), each scored on "
-        "technical and fundamental factors. Public, no login required."
-    )
+    if not st.user.is_logged_in:
+        st.write("Here are your daily points that deserve your attention.")
+        st.info("Log in (top right), then add positions under My Portfolio or your Watchlist "
+                 "to get personal signals and news here.")
+        st.markdown("#### Discover")
+        st.write(
+            "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 for stocks that just turned "
+            "bullish on a Supertrend indicator (weekly and daily variants), each scored on "
+            "technical and fundamental factors. Public, no login required."
+        )
+    else:
+        import database
+        import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
 
-    st.markdown("#### My Portfolio")
-    st.write(
-        "Log in with Google (top right) to privately track your own holdings and watchlist -- "
-        "visible only to you."
-    )
+        user_email = st.user.email
+        holdings = database.get_user_holdings(user_email)
+        watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
+
+        st.write("Here are your daily points that deserve your attention.")
+
+        if not holdings and not watchlist_items:
+            st.info("Add assets under My Portfolio or your Watchlist to get personal signals and news here.")
+        else:
+            tracked_items = holdings + watchlist_items
+
+            # --- Top nieuws (portfolio + watchlist) ---
+            with st.container(border=True):
+                st.markdown("**Top news for you**")
+                with st.spinner("Checking news..."):
+                    top_news = get_top_news_for_tickers(tracked_items, max_items=3)
+                if top_news:
+                    for n in top_news:
+                        pub_date = n["published"].strftime("%Y-%m-%d")
+                        st.markdown(f"- **{n['naam']}**: [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
+                else:
+                    st.caption("No recent news found for your tracked positions.")
+
+            # --- Portfolio-kenmerken ---
+            if holdings:
+                with st.container(border=True):
+                    st.markdown("**Your portfolio today**")
+                    with st.spinner("Checking today's price moves..."):
+                        daily_stats = build_daily_portfolio_stats(holdings)
+                    cash_value = database.get_cash_value(user_email)
+                    infos = get_tickers_info(holdings)
+                    overview = build_concentration_overview(holdings, infos, cash_value)
+
+                    dcol1, dcol2, dcol3, dcol4 = st.columns(4)
+                    with dcol1:
+                        if daily_stats:
+                            st.metric("Vs. yesterday", f"{daily_stats['portfolio_change_pct']:+.1f}%")
+                        else:
+                            st.metric("Vs. yesterday", "n/a")
+                    with dcol2:
+                        if daily_stats:
+                            st.metric("Best today", daily_stats["best_performer"], f"{daily_stats['best_change_pct']:+.1f}%")
+                        else:
+                            st.metric("Best today", "n/a")
+                    with dcol3:
+                        if daily_stats:
+                            st.metric("Worst today", daily_stats["worst_performer"], f"{daily_stats['worst_change_pct']:+.1f}%")
+                        else:
+                            st.metric("Worst today", "n/a")
+                    with dcol4:
+                        if overview:
+                            st.metric("Cash", f"{overview['cash_pct']:.0f}%")
+                        else:
+                            st.metric("Cash", "n/a")
+
+            # --- Opportunities today ---
+            with st.container(border=True):
+                st.markdown("**Opportunities today**")
+                opportunities = build_opportunities_today(holdings, watchlist_items)
+                st.write(
+                    f"**{opportunities['total_signals']}** signal(s) found "
+                    f"({opportunities['daily_signals']} daily, {opportunities['weekly_signals']} weekly) -- "
+                    f"**{opportunities['in_portfolio_count']}** relate to your portfolio, "
+                    f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
+                    f"**{opportunities['new_opportunities_count']}** are new ideas."
+                )
+                st.caption("See the full list under Discover.")
+
+            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) ---
+            with st.container(border=True):
+                st.markdown("**Market news**")
+                with st.spinner("Checking market news..."):
+                    market_news = get_top_news_for_tickers(
+                        [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
+                        max_items=2,
+                    )
+                if market_news:
+                    for n in market_news:
+                        pub_date = n["published"].strftime("%Y-%m-%d")
+                        st.markdown(f"- [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
+                else:
+                    st.caption("No market news available right now.")
 
 # ============================================================
 # VIEW: SCREENER (public, no login required)
