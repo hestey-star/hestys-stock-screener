@@ -526,6 +526,64 @@ def build_risk_return_chart(holdings: list):
     return fig
 
 
+def build_concentration_overview(holdings: list, infos: dict, cash_value: float = 0.0) -> dict:
+    """
+    Berekent de 'at a glance'-portfolio-kenmerken: top-positie%, verdeling
+    over Crypto/Dividend/Growth/Other/Cash, en een 0-10-gezondheidsscore
+    (concentratie + spreiding + categorie-balans).
+    """
+    holdings_value = sum(h.get("position_value") or 0 for h in holdings)
+    total_value = holdings_value + cash_value
+
+    if total_value <= 0:
+        return None
+
+    sorted_holdings = sorted(holdings, key=lambda h: h.get("position_value") or 0, reverse=True)
+    top_holding = sorted_holdings[0] if sorted_holdings else None
+    top_pct = (top_holding.get("position_value") or 0) / total_value * 100 if top_holding else 0.0
+
+    category_values = {"Crypto": 0.0, "Dividend": 0.0, "Growth": 0.0, "Other": 0.0}
+    for h in holdings:
+        value = h.get("position_value") or 0
+        info = infos.get(h["ticker"], {})
+        quote_type = info.get("quoteType", "")
+        has_dividend = bool(info.get("dividendRate"))
+        if quote_type == "CRYPTOCURRENCY":
+            category_values["Crypto"] += value
+        elif has_dividend:
+            category_values["Dividend"] += value
+        elif quote_type in ("EQUITY", "ETF"):
+            category_values["Growth"] += value
+        else:
+            category_values["Other"] += value
+
+    category_pct = {k: v / total_value * 100 for k, v in category_values.items()}
+    cash_pct = cash_value / total_value * 100
+
+    max_category_pct = max(list(category_pct.values()) + [cash_pct])
+
+    concentration_score = max(0.0, min(4.0, 4.0 - (top_pct / 100.0) * 8.0))
+    n = len(holdings)
+    if n <= 2:
+        diversification_score = 0.0
+    elif n <= 5:
+        diversification_score = 1.5
+    elif n <= 9:
+        diversification_score = 2.5
+    else:
+        diversification_score = 3.0
+    balance_score = max(0.0, 3.0 - (max_category_pct / 100.0) * 3.0)
+    score = round(concentration_score + diversification_score + balance_score, 1)
+
+    return {
+        "top_holding_name": top_holding["naam"] if top_holding else None,
+        "top_holding_pct": round(top_pct, 0),
+        "category_pct": {k: round(v, 0) for k, v in category_pct.items()},
+        "cash_pct": round(cash_pct, 0),
+        "score": score,
+    }
+
+
 def build_correlation_matrix_chart(holdings: list):
     """Berekent de historische rendements-correlatie tussen je posities (6 maanden dagelijks), als heatmap."""
     if len(holdings) < 2:
@@ -849,7 +907,25 @@ elif current_view == "portfolio":
                     st.warning(message)
 
             if total_value > 0:
-                st.plotly_chart(build_portfolio_pie_chart(holdings), width="stretch")
+                with st.spinner("Analyzing portfolio mix..."):
+                    infos_for_overview = get_tickers_info(holdings)
+                    cash_value_for_overview = database.get_cash_value(user_email)
+                    overview = build_concentration_overview(holdings, infos_for_overview, cash_value_for_overview)
+
+                if overview:
+                    ocol1, ocol2, ocol3, ocol4, ocol5, ocol6 = st.columns(6)
+                    with ocol1:
+                        st.metric("Top holding", f"{overview['top_holding_pct']:.0f}%", help=overview["top_holding_name"])
+                    with ocol2:
+                        st.metric("Crypto", f"{overview['category_pct']['Crypto']:.0f}%")
+                    with ocol3:
+                        st.metric("Dividend", f"{overview['category_pct']['Dividend']:.0f}%")
+                    with ocol4:
+                        st.metric("Growth", f"{overview['category_pct']['Growth']:.0f}%")
+                    with ocol5:
+                        st.metric("Cash", f"{overview['cash_pct']:.0f}%")
+                    with ocol6:
+                        st.metric("Score", f"{overview['score']:.1f}/10")
 
             def _format_pct(holding):
                 if total_value <= 0:
@@ -876,99 +952,6 @@ elif current_view == "portfolio":
                 """,
                 unsafe_allow_html=True,
             )
-
-    # ============================================================
-    # 2. INSIGHTS -- 1 gecombineerde analyse-knop (trend + nieuws + concentratie
-    #    + sector + asset-mix, en premium: dividend/PE/cash/rebalancing/
-    #    benchmark-rendement/correlatie-matrix)
-    # ============================================================
-    if holdings:
-        with st.container(border=True):
-            st.markdown("**Insights**")
-            if not is_premium:
-                st.caption("Free: weekly trend status, concentration, diversification, sector & asset mix. "
-                           "Premium adds dividends, valuation, cash%, rebalancing ideas, a return comparison, "
-                           "and a correlation matrix.")
-
-            if st.button("Analyze my portfolio", type="primary"):
-                with st.spinner("Checking trend status..."):
-                    trend_results = []
-                    for holding in holdings:
-                        result = check_holding(holding["naam"], holding["ticker"])
-                        if result:
-                            trend_results.append(result)
-
-                if trend_results:
-                    df_trend = pd.DataFrame(trend_results)
-                    changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
-                    if len(changed) > 0:
-                        st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
-                                   + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
-
-                    # Compacte, direct-leesbare weergave: alleen wat je in 1 oogopslag
-                    # nodig hebt (welke trend, net geflipt of niet). Geen ROIC hier --
-                    # dat hoort bij fundamentele analyse, niet bij trend-status. Geen
-                    # nieuws hier -- dat blijft voorbehouden aan de wekelijkse e-mail.
-                    def _format_weeks(value):
-                        return "-" if value is None else f"{value:.0f}"
-
-                    def _format_price(value):
-                        return "-" if value is None else f"{value:.0f}"
-
-                    df_display = pd.DataFrame([
-                        {
-                            "Name": r["naam"],
-                            "Ticker": r["ticker"],
-                            "Weekly Trend": r["status"],
-                            "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
-                            "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
-                            "Price": _format_price(r["prijs"]),
-                        }
-                        for r in trend_results
-                    ])
-
-                    def _highlight_status(row):
-                        color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
-                            "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
-                        )
-                        return [f"background-color: {color}"] * len(row)
-
-                    st.caption("Weekly Supertrend status per position.")
-                    st.dataframe(
-                        df_display.style.apply(_highlight_status, axis=1),
-                        width="content",
-                        height=min(38 * (len(df_display) + 1), 300),
-                    )
-
-                st.markdown("---")
-                with st.spinner("Analyzing concentration, diversification & sectors..."):
-                    infos = get_tickers_info(holdings)
-                    findings = analyze_portfolio(holdings, infos)
-                for finding in findings:
-                    st.markdown(f"- {finding}")
-
-                if is_premium:
-                    st.markdown("---")
-                    st.markdown("**Premium insights**")
-                    cash_value = database.get_cash_value(user_email)
-                    premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
-                    for finding in premium_findings:
-                        st.markdown(f"- {finding}")
-
-                    with st.spinner("Building return comparison..."):
-                        chart = build_risk_return_chart(holdings)
-                    if chart is not None:
-                        st.plotly_chart(chart, width="stretch")
-
-                    with st.spinner("Building correlation matrix..."):
-                        corr_chart = build_correlation_matrix_chart(holdings)
-                    if corr_chart is not None:
-                        st.plotly_chart(corr_chart, width="stretch")
-                    elif len(holdings) < 2:
-                        st.caption("Add at least 2 positions to see a correlation matrix.")
-                else:
-                    st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
-                             "rebalancing ideas, a return-vs-benchmark chart, and a correlation matrix.")
 
     # ============================================================
     # 3. MANAGE -- 3 losse, individueel uitklapbare vakjes
@@ -1065,14 +1048,186 @@ elif current_view == "portfolio":
                         database.delete_holding(holding_options[to_remove_label]["id"], user_email)
                         st.rerun()
 
+    # ============================================================
+    # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("**Watchlist**")
+        st.caption("Track tickers you don't own yet -- they'll show up with personalized "
+                   "signals and news on the Today page.")
+
+        watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
+
+        if watchlist_items:
+            rows_html = "".join(
+                f'<tr><td>{w["naam"]}</td><td><code>{w["ticker"]}</code></td></tr>'
+                for w in watchlist_items
+            )
+            st.markdown(
+                f"""
+                <table class="positions-table">
+                    <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("Your watchlist is empty.")
+
+        with st.expander("Add to watchlist", expanded=not watchlist_items):
+            watchlist_search = st.text_input(
+                "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+            )
+            w_selected_symbol = None
+            w_selected_name = None
+            if watchlist_search:
+                try:
+                    w_search_results = yf.Search(watchlist_search, max_results=8).quotes
+                except Exception as exc:
+                    w_search_results = []
+                    st.caption(f"Search failed: {exc}")
+                if w_search_results:
+                    w_options = {}
+                    for r in w_search_results:
+                        name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                        label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                        w_options[label] = r
+                    w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
+                    w_chosen = w_options[w_chosen_label]
+                    w_selected_symbol = w_chosen.get("symbol")
+                    w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
+                else:
+                    st.caption("No results found for this search -- try a different name.")
+
+            if w_selected_symbol and st.button("Add to watchlist", type="primary"):
+                database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
+                st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
+                st.rerun()
+
+        if watchlist_items:
+            with st.expander("Remove from watchlist", expanded=False):
+                w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
+                wcol1, wcol2 = st.columns([4, 1])
+                with wcol1:
+                    w_to_remove = st.selectbox(
+                        "Item to remove", list(w_remove_options.keys()),
+                        key="watchlist_remove_select", label_visibility="collapsed",
+                    )
+                with wcol2:
+                    if st.button("Remove", key="watchlist_remove_btn"):
+                        database.delete_holding(w_remove_options[w_to_remove], user_email)
+                        st.rerun()
+
     st.caption("Manage email preferences and cash amount under Instellingen. "
                "You'll also automatically receive a weekly email with this update, "
                "at the address you're logged in with.")
 
 elif current_view == "analyse":
     st.markdown("### Analyse")
-    st.info("This page is being redesigned -- for now, the portfolio analysis (concentration, "
-            "sectors, and premium extras) still lives under My Portfolio -> Insights.")
+
+    if not st.user.is_logged_in:
+        st.info("Log in (top right) to analyze your portfolio.")
+        st.stop()
+
+    import database
+    from portfolio_watch import check_holding
+
+    user_email = st.user.email
+    holdings = database.get_user_holdings(user_email)
+    holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
+    is_premium = database.is_premium_user(user_email)
+
+    if not holdings:
+        st.info("Add positions under My Portfolio to see your analysis here.")
+        st.stop()
+
+    with st.container(border=True):
+        st.markdown("**Insights**")
+        if not is_premium:
+            st.caption("Free: weekly trend status, concentration, diversification, sector & asset mix. "
+                       "Premium adds dividends, valuation, cash%, rebalancing ideas, a return comparison, "
+                       "and a correlation matrix.")
+
+        if st.button("Analyze my portfolio", type="primary"):
+            with st.spinner("Checking trend status..."):
+                trend_results = []
+                for holding in holdings:
+                    result = check_holding(holding["naam"], holding["ticker"])
+                    if result:
+                        trend_results.append(result)
+
+            if trend_results:
+                df_trend = pd.DataFrame(trend_results)
+                changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
+                if len(changed) > 0:
+                    st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
+                               + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
+
+                # Compacte, direct-leesbare weergave: alleen wat je in 1 oogopslag
+                # nodig hebt (welke trend, net geflipt of niet). Geen ROIC hier --
+                # dat hoort bij fundamentele analyse, niet bij trend-status. Geen
+                # nieuws hier -- dat blijft voorbehouden aan de wekelijkse e-mail.
+                def _format_weeks(value):
+                    return "-" if value is None else f"{value:.0f}"
+
+                def _format_price(value):
+                    return "-" if value is None else f"{value:.0f}"
+
+                df_display = pd.DataFrame([
+                    {
+                        "Name": r["naam"],
+                        "Ticker": r["ticker"],
+                        "Weekly Trend": r["status"],
+                        "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
+                        "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
+                        "Price": _format_price(r["prijs"]),
+                    }
+                    for r in trend_results
+                ])
+
+                def _highlight_status(row):
+                    color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
+                        "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
+                    )
+                    return [f"background-color: {color}"] * len(row)
+
+                st.caption("Weekly Supertrend status per position.")
+                st.dataframe(
+                    df_display.style.apply(_highlight_status, axis=1),
+                    width="content",
+                    height=min(38 * (len(df_display) + 1), 300),
+                )
+
+            st.markdown("---")
+            with st.spinner("Analyzing concentration, diversification & sectors..."):
+                infos = get_tickers_info(holdings)
+                findings = analyze_portfolio(holdings, infos)
+            for finding in findings:
+                st.markdown(f"- {finding}")
+
+            if is_premium:
+                st.markdown("---")
+                st.markdown("**Premium insights**")
+                cash_value = database.get_cash_value(user_email)
+                premium_findings = analyze_portfolio_premium(holdings, infos, cash_value)
+                for finding in premium_findings:
+                    st.markdown(f"- {finding}")
+
+                with st.spinner("Building return comparison..."):
+                    chart = build_risk_return_chart(holdings)
+                if chart is not None:
+                    st.plotly_chart(chart, width="stretch")
+
+                with st.spinner("Building correlation matrix..."):
+                    corr_chart = build_correlation_matrix_chart(holdings)
+                if corr_chart is not None:
+                    st.plotly_chart(corr_chart, width="stretch")
+                elif len(holdings) < 2:
+                    st.caption("Add at least 2 positions to see a correlation matrix.")
+            else:
+                st.info("🔒 Upgrade to Premium for dividend income, valuation, cash%, "
+                         "rebalancing ideas, a return-vs-benchmark chart, and a correlation matrix.")
 
 elif current_view == "instellingen":
     import database

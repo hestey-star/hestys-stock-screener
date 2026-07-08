@@ -13,9 +13,10 @@ create table portfolio_holdings (
     user_email text not null,
     naam text not null,
     ticker text not null,
-    shares numeric,          -- aantal aandelen/eenheden dat je bezit
+    shares numeric,          -- aantal aandelen/eenheden dat je bezit (NULL bij watchlist-items)
     position_value numeric,  -- LAATST BEREKENDE waarde (shares x koers x wisselkoers), bijgewerkt via de 'Update'-knop
     value_currency text,     -- in welke valuta position_value staat (bv. 'EUR' of 'USD') -- voorkomt verwarring bij het wisselen van weergave-valuta
+    is_watchlist boolean not null default false,  -- true = alleen volgen (geen eigendom), false = eigen positie
     created_at timestamp with time zone default now()
 );
 
@@ -23,6 +24,7 @@ create table portfolio_holdings (
 -- deze regels om de nieuwe kolommen toe te voegen, niet de create table hierboven:
 -- alter table portfolio_holdings add column shares numeric;
 -- alter table portfolio_holdings add column value_currency text;
+-- alter table portfolio_holdings add column is_watchlist boolean not null default false;
 -- (position_value bestond al van de vorige update)
 
 -- Tijdstempel van de laatste keer dat de waardes zijn bijgewerkt, per
@@ -41,6 +43,7 @@ create table user_preferences (
     wants_daily_email boolean not null default false,  -- opt-in voor de dagelijkse screener-mail
     is_premium boolean not null default false,  -- handmatig te zetten totdat er een echt betaalsysteem is (zie punt 5 van de roadmap)
     cash_value numeric,  -- niet-geïnvesteerd kapitaal, voor de cash%-check in de premium-analyse
+    stripe_customer_id text,  -- voor het 'Manage subscription'-portaal en de dagelijkse abonnement-check
     last_price_refresh_at timestamp with time zone,  -- voor de rate-limit op de 'Update waarde'-knop
     updated_at timestamp with time zone default now()
 );
@@ -50,3 +53,4 @@ create table user_preferences (
 -- alter table user_preferences add column wants_daily_email boolean not null default false;
 -- alter table user_preferences add column is_premium boolean not null default false;
 -- alter table user_preferences add column cash_value numeric;
+-- alter table user_preferences add column stripe_customer_id text;

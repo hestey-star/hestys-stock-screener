@@ -19,15 +19,16 @@ def get_supabase_client() -> Client:
     return create_client(url, key)
 
 
-def get_user_holdings(user_email: str) -> list[dict]:
-    """Geeft alle posities van deze specifieke gebruiker terug."""
+def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]:
+    """Geeft alle EIGEN posities (is_watchlist=False) of alle WATCHLIST-items (True) van deze gebruiker terug."""
     client = get_supabase_client()
-    response = client.table("portfolio_holdings").select("*").eq("user_email", user_email).execute()
+    response = client.table("portfolio_holdings").select("*") \
+        .eq("user_email", user_email).eq("is_watchlist", is_watchlist).execute()
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str, shares: float = None) -> None:
-    """Voegt een nieuwe positie toe voor deze gebruiker, optioneel met het aantal aandelen/eenheden."""
+def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False) -> None:
+    """Voegt een nieuwe positie toe (eigen positie, of alleen watchlist als is_watchlist=True)."""
     client = get_supabase_client()
     client.table("portfolio_holdings").insert({
         "user_email": user_email,
@@ -35,6 +36,7 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None) -
         "ticker": ticker,
         "shares": shares,
         "position_value": None,  # wordt pas gevuld na de eerste 'Update waarde'-klik
+        "is_watchlist": is_watchlist,
     }).execute()
 
 
@@ -123,6 +125,28 @@ def set_premium_status(user_email: str, is_premium: bool) -> None:
         "user_email": user_email,
         "is_premium": is_premium,
     }).execute()
+
+
+def set_stripe_customer_id(user_email: str, stripe_customer_id: str) -> None:
+    """Onthoudt welke Stripe-klant bij dit e-mailadres hoort (voor het portaal en de dagelijkse abonnement-check)."""
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "stripe_customer_id": stripe_customer_id,
+    }).execute()
+
+
+def get_stripe_customer_id(user_email: str):
+    prefs = get_user_preferences(user_email)
+    return prefs.get("stripe_customer_id")
+
+
+def get_all_premium_users_with_stripe_id() -> list:
+    """Voor de dagelijkse abonnement-check: alle premium-gebruikers die een Stripe-klant-ID hebben."""
+    client = get_supabase_client()
+    response = client.table("user_preferences").select("user_email, stripe_customer_id") \
+        .eq("is_premium", True).execute()
+    return [row for row in response.data if row.get("stripe_customer_id")]
 
 
 def get_cash_value(user_email: str) -> float:
