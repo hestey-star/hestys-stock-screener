@@ -125,6 +125,45 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     border: 1px solid #1FAE96;
 }
 
+/* Settings-dropdown: opent bij hover (desktop) en bij tik (mobiel, via de
+   eerste tik die :hover triggert) -- toont Settings/Support/Premium apart */
+.nav-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.nav-dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #101825;
+    border: 1px solid #1FAE96;
+    border-radius: 6px;
+    min-width: 150px;
+    z-index: 100;
+    padding: 0.25rem 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.nav-dropdown:hover .nav-dropdown-content {
+    display: block;
+}
+.nav-dropdown-content a {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    text-decoration: none !important;
+    color: #8992A3 !important;
+}
+.nav-dropdown-content a:hover {
+    color: #EAEDF1 !important;
+    background: rgba(31, 174, 150, 0.1);
+}
+.nav-dropdown-content a.active {
+    color: #1FAE96 !important;
+}
+
 /* Compacte, met lijntjes gescheiden posities-lijst in 'Your positions' */
 .holding-text {
     font-size: 0.85rem;
@@ -798,6 +837,10 @@ def _nav_class(view_name: str) -> str:
     return "nav-link active" if current_view == view_name else "nav-link"
 
 
+def _nav_class_any(view_names: list) -> str:
+    return "nav-link active" if current_view in view_names else "nav-link"
+
+
 header_col, login_col = st.columns([5, 1])
 
 with header_col:
@@ -822,7 +865,14 @@ with header_col:
                 <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
                 <a href="?view=analyse" class="{_nav_class('analyse')}" target="_self">Analyse</a>
                 <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
-                <a href="?view=instellingen" class="{_nav_class('instellingen')}" target="_self">Instellingen</a>
+                <div class="nav-dropdown">
+                    <span class="{_nav_class_any(['settings', 'support', 'premium'])}">Settings &#9662;</span>
+                    <div class="nav-dropdown-content">
+                        <a href="?view=settings" class="{_nav_class('settings')}" target="_self">Settings</a>
+                        <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
+                        <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
+                    </div>
+                </div>
             </div>
         </div>
         """,
@@ -1499,12 +1549,11 @@ elif current_view == "analyse":
         else:
             st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
 
-elif current_view == "instellingen":
+elif current_view == "settings":
     import database
 
-    st.markdown("### Instellingen")
+    st.markdown("### Settings")
 
-    # --- Email preferences + cash amount (login vereist) ---
     if st.user.is_logged_in:
         user_email = st.user.email
         is_premium = database.is_premium_user(user_email)
@@ -1606,10 +1655,10 @@ elif current_view == "instellingen":
     else:
         st.info("Log in (top right) to manage your email preferences.")
 
-    st.divider()
+elif current_view == "premium":
+    import database
 
-    # --- Premium: feature-vergelijking + abonnement-beheer ---
-    st.markdown("#### Premium")
+    st.markdown("### Premium")
     st.write(
         "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
     )
@@ -1725,14 +1774,12 @@ elif current_view == "instellingen":
                     st.link_button("Continue to payment →", session.url, type="primary")
             st.caption("Payments are processed securely by Stripe -- we never see or store your card details.")
 
-    st.divider()
-
-    # --- Support: FAQ + contactformulier ---
-    st.markdown("#### Support")
+elif current_view == "support":
+    st.markdown("### Support")
     st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
               "or send us a message directly.")
 
-    st.markdown("##### Frequently asked questions")
+    st.markdown("#### Frequently asked questions")
 
     with st.expander("What does Discover do?"):
         st.write(
@@ -1752,29 +1799,29 @@ elif current_view == "instellingen":
             "Free covers concentration, diversification, sector and asset mix, and up to 10 "
             "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
             "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
-            "the Smart DCA Assistant TradingView indicator. See the comparison table above."
+            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full comparison."
         )
 
     with st.expander("How do I cancel my Premium subscription?"):
         st.write(
-            "Above, under Subscription, click 'Manage subscription' -- this opens Stripe's "
-            "secure billing portal, where you can cancel anytime. You'll keep Premium access "
-            "until the end of your current billing period."
+            "On the Premium page, under Subscription, click 'Manage subscription' -- this opens "
+            "Stripe's secure billing portal, where you can cancel anytime. You'll keep Premium "
+            "access until the end of your current billing period."
         )
 
     with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
         st.write(
-            "Premium members can download it directly above, with setup instructions for "
-            "TradingView's Pine Editor."
+            "Premium members can download it directly from the Premium page, with setup "
+            "instructions for TradingView's Pine Editor."
         )
 
     with st.expander("How do I change what emails I receive?"):
         st.write(
-            "Log in, and use the Email preferences section above to toggle the weekly "
+            "Log in, go to Settings, and use the Email preferences section to toggle the weekly "
             "screener, daily screener, and/or portfolio emails on or off."
         )
 
-    st.markdown("##### Send us a message")
+    st.markdown("#### Send us a message")
     st.write("Found a bug, have an idea, or need help with something else? Let us know.")
 
     contact_email = st.text_input("Your email")
