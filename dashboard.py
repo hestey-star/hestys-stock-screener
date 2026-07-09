@@ -1135,7 +1135,8 @@ elif current_view == "discover":
             st.dataframe(
                 df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
                                   .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                width="stretch",
+                width=320,
+                hide_index=True,
             )
         else:
             st.caption("No sector data available right now.")
@@ -1148,12 +1149,16 @@ elif current_view == "discover":
             mcol1, mcol2 = st.columns(2)
             with mcol1:
                 st.markdown("Top gainers")
-                gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
-                st.dataframe(gainers.style.format({"change_pct": "{:+.1f}%"}), width="stretch")
+                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
             with mcol2:
                 st.markdown("Top losers")
-                losers = df_movers.sort_values("change_pct", ascending=True).head(5)
-                st.dataframe(losers.style.format({"change_pct": "{:+.1f}%"}), width="stretch")
+                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
         else:
             st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
@@ -1168,12 +1173,6 @@ elif current_view == "discover":
                 st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
         else:
             st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
-
-    # --- Buy smarter (DCA-teaser) ---
-    with st.expander("🧠 Buy smarter"):
-        st.write("The Smart DCA Assistant adjusts your periodic contribution based on how "
-                  "cheap or expensive the market looks -- available for Premium members.")
-        st.caption("Find the download under Settings -> Premium.")
 
 # ============================================================
 # VIEW: MY PORTFOLIO (personal, login required)
