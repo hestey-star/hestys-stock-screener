@@ -1033,7 +1033,8 @@ elif current_view == "discover":
     st.markdown("### Discover")
 
     # --- New signals (bestaande, ongewijzigde functionaliteit) ---
-    with st.expander("📡 New signals", expanded=True):
+    with st.expander("📡 Momentocrats", expanded=True):
+        st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
         timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
         csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
 
@@ -1122,6 +1123,48 @@ elif current_view == "discover":
                 height=500,
             )
             st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
+
+    # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
+    with st.expander("🐦 Snowball Signal"):
+        st.caption("Quality companies trading below fair value, with low volatility. For the "
+                   "long-term investor -- no fresh trend flip required. Updates weekly.")
+        if os.path.exists("snowball_signals.csv"):
+            df_snowball = pd.read_csv("snowball_signals.csv")
+            if not df_snowball.empty:
+                df_display = df_snowball.rename(columns={
+                    "ticker": "Ticker", "prijs_nu": "Price", "roic_pct": "ROIC",
+                    "afwijking_fair_value_pct": "Vs Fair Value", "volatiliteit_pct": "Volatility",
+                })[["Ticker", "Price", "ROIC", "Vs Fair Value", "Volatility"]]
+                st.dataframe(
+                    df_display.style.format({
+                        "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
+                    }),
+                    width="stretch", hide_index=True,
+                )
+            else:
+                st.caption("No stocks currently meet the Snowball criteria.")
+        else:
+            st.caption("No data yet -- this updates once a week via the scheduled scan.")
+
+    # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
+    with st.expander("🚀 Rocket List"):
+        st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
+                   "with more risk in exchange for growth potential. Updates weekly.")
+        if os.path.exists("rocket_list_signals.csv"):
+            df_rocket = pd.read_csv("rocket_list_signals.csv")
+            if not df_rocket.empty:
+                df_display = df_rocket.rename(columns={
+                    "ticker": "Ticker", "prijs_nu": "Price", "groei_pct": "Growth",
+                    "relatieve_sterkte": "Relative Strength",
+                })[["Ticker", "Price", "Growth", "Relative Strength"]]
+                st.dataframe(
+                    df_display.style.format({"Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
+                    width="stretch", hide_index=True,
+                )
+            else:
+                st.caption("No stocks currently meet the Rocket List criteria.")
+        else:
+            st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):

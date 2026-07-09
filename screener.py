@@ -488,12 +488,106 @@ def get_fair_value_estimate(ticker: str) -> dict:
         return {"fair_value": None, "afwijking_pct": None}
 
 
-def check_ticker(ticker: str, benchmark_returns: dict):
-    try:
-        df = fetch_weekly(ticker)
-    except Exception as exc:
-        print(f"  {ticker}: fout bij ophalen ({exc})")
+def compute_volatility(df: pd.DataFrame, lookback: int = 26) -> float:
+    """Jaarlijkse volatiliteit (op basis van wekelijkse rendementen, laatste 'lookback' weken)."""
+    if len(df) < lookback + 1:
         return None
+    returns = df["close"].pct_change().dropna().tail(lookback)
+    if len(returns) < 10:
+        return None
+    weekly_std = returns.std()
+    return round(float(weekly_std) * (52 ** 0.5) * 100, 1)
+
+
+def check_ticker_snowball(ticker: str, df: pd.DataFrame) -> dict:
+    """
+    Snowball Signal: kwalitatief goede aandelen voor een goede prijs, voor
+    de lange-termijn-belegger. GEEN verse trend-omslag nodig -- dit gaat
+    over 'goedkoop + kwalitatief nu', niet over timing.
+
+    Volgorde bewust: goedkope check (volatiliteit, uit al-opgehaalde
+    koersdata) EERST, dure fundamentele aanroepen (ROIC, fair value) alleen
+    voor kandidaten die de goedkope check al doorstaan.
+    """
+    volatility = compute_volatility(df)
+    if volatility is None or volatility > 30:
+        return None
+
+    roic_data = get_roic_data(ticker)
+    if roic_data["roic"] is None or roic_data["roic"] * 100 < 15 or roic_data["roic_trend"] == "dalend":
+        return None
+
+    fair_value_data = get_fair_value_estimate(ticker)
+    if fair_value_data["afwijking_pct"] is None or fair_value_data["afwijking_pct"] > -10:
+        return None
+
+    return {
+        "ticker": ticker,
+        "prijs_nu": round(float(df["close"].iloc[-1]), 2),
+        "roic_pct": round(roic_data["roic"] * 100, 1),
+        "roic_trend": roic_data["roic_trend"],
+        "fair_value": fair_value_data["fair_value"],
+        "afwijking_fair_value_pct": fair_value_data["afwijking_pct"],
+        "volatiliteit_pct": volatility,
+    }
+
+
+def check_ticker_rocket(ticker: str, df: pd.DataFrame, benchmark_returns: dict) -> dict:
+    """
+    Rocket List: versnellende groei + momentum, voor de jongere/hippere
+    belegger. GEEN ROIC-eis (groei-aandelen zijn vaak nog niet winstgevend).
+    """
+    if len(df) < 14:
+        return None
+
+    try:
+        info = yf.Ticker(ticker).info
+    except Exception:
+        return None
+    growth_candidates = [
+        g for g in [info.get("revenueGrowth"), info.get("earningsGrowth")] if g is not None
+    ]
+    growth = max(growth_candidates) if growth_candidates else None
+    if growth is None or growth < 0.20:
+        return None
+
+    benchmark_ticker = get_benchmark_for_ticker(ticker)
+    own_return = get_trailing_return_pct(df, BENCHMARK_LOOKBACK_WEEKS)
+    benchmark_return = benchmark_returns.get(benchmark_ticker)
+    if own_return is None or benchmark_return is None:
+        return None
+    relative_strength = own_return - benchmark_return
+    if relative_strength <= 0:
+        return None  # moet sterker zijn dan de markt
+
+    # Versnelling: is het rendement van de laatste maand hoger dan het
+    # GEMIDDELDE maand-tempo van de laatste 3 maanden? (puur prijsactie,
+    # geen nieuwe databron nodig)
+    own_return_1m = get_trailing_return_pct(df, 4)
+    own_return_3m = get_trailing_return_pct(df, 13)
+    if own_return_1m is None or own_return_3m is None:
+        return None
+    monthly_pace_3m = own_return_3m / 3
+    if own_return_1m <= monthly_pace_3m:
+        return None
+
+    return {
+        "ticker": ticker,
+        "prijs_nu": round(float(df["close"].iloc[-1]), 2),
+        "groei_pct": round(growth * 100, 1),
+        "relatieve_sterkte": round(relative_strength, 2),
+        "rendement_1m_pct": round(own_return_1m, 2),
+        "rendement_3m_pct": round(own_return_3m, 2),
+    }
+
+
+def check_ticker(ticker: str, benchmark_returns: dict, df: pd.DataFrame = None):
+    if df is None:
+        try:
+            df = fetch_weekly(ticker)
+        except Exception as exc:
+            print(f"  {ticker}: fout bij ophalen ({exc})")
+            return None
 
     min_needed = max(ATR_LENGTH, TREND_FILTER_EMA_LENGTH) + 5
     if df.empty or len(df) < min_needed:
@@ -664,13 +758,45 @@ def main(send_own_email: bool = True) -> None:
     print("(Dit kan enkele minuten duren bij een grote lijst zoals AEX + Nasdaq-100.)\n")
 
     hits = []
+    snowball_hits = []
+    rocket_hits = []
     for ticker in tickers:
-        result = check_ticker(ticker, benchmark_returns)
+        try:
+            df = fetch_weekly(ticker)
+        except Exception as exc:
+            print(f"  {ticker}: fout bij ophalen ({exc})")
+            continue
+
+        result = check_ticker(ticker, benchmark_returns, df=df)
         if result:
             hits.append(result)
-            print(f"  {ticker}: SIGNAAL ({result['weken_geleden']} week(en) geleden, score {result['score']})")
+            print(f"  {ticker}: MOMENTOCRATS-SIGNAAL ({result['weken_geleden']} week(en) geleden, score {result['score']})")
         else:
-            print(f"  {ticker}: geen recent signaal")
+            print(f"  {ticker}: geen Momentocrats-signaal")
+
+        # Snowball en Rocket List zijn ONAFHANKELIJK van een verse omslag --
+        # hergebruiken dezelfde, al opgehaalde koersdata (geen extra API-aanroepen)
+        snowball_result = check_ticker_snowball(ticker, df)
+        if snowball_result:
+            snowball_hits.append(snowball_result)
+            print(f"    -> Snowball Signal: {ticker}")
+
+        rocket_result = check_ticker_rocket(ticker, df, benchmark_returns)
+        if rocket_result:
+            rocket_hits.append(rocket_result)
+            print(f"    -> Rocket List: {ticker}")
+
+    if snowball_hits:
+        pd.DataFrame(snowball_hits).sort_values("afwijking_fair_value_pct").to_csv(
+            "snowball_signals.csv", index=False
+        )
+        print(f"\n{len(snowball_hits)} Snowball Signal(s) opgeslagen naar 'snowball_signals.csv'.")
+
+    if rocket_hits:
+        pd.DataFrame(rocket_hits).sort_values("groei_pct", ascending=False).to_csv(
+            "rocket_list_signals.csv", index=False
+        )
+        print(f"{len(rocket_hits)} Rocket List-signaal/signalen opgeslagen naar 'rocket_list_signals.csv'.")
 
     if not hits:
         print(f"\nGeen enkel aandeel had de afgelopen {LOOKBACK_WEEKS_FOR_SIGNAL} "
