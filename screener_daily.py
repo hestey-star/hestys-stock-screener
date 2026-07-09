@@ -31,7 +31,7 @@ from emailer import send_email, is_configured as email_is_configured
 # --- Instellingen, geschaald voor dagelijkse candles (i.p.v. wekelijkse) ---
 ATR_LENGTH = 10
 ATR_MULTIPLIER = 3.0
-LOOKBACK_DAYS_FOR_SIGNAL = 3       # hoe 'vers' een omslag moet zijn (i.p.v. 2 WEKEN bij de wekelijkse variant)
+LOOKBACK_DAYS_FOR_SIGNAL = 2       # hoe 'vers' een omslag moet zijn (i.p.v. 2 WEKEN bij de wekelijkse variant)
 TREND_FILTER_EMA_LENGTH = 50       # bredere-trend-context (i.p.v. 20 WEKEN)
 YEARS_OF_HISTORY = 2
 BENCHMARK_LOOKBACK_DAYS = 60       # relatieve-sterkte-vergelijkingsperiode (i.p.v. 12 WEKEN)

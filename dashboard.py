@@ -624,11 +624,13 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     return results
 
 
-def get_earnings_surprises_from_signals(max_items: int = 5) -> list:
+def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 60) -> list:
     """
     Licht signalen met een opvallende recente winst-verrassing uit de
     bestaande screener-CSV's (dagelijks + wekelijks) -- geen nieuwe
     data-ophaal nodig, dit zit al in de bestaande scores verwerkt.
+    Alleen relevant tijdens 'earnings season' -- oude verrassingen
+    (bv. van jaren geleden) worden genegeerd.
     """
     results = []
     for csv_file in ["supertrend_signals_daily.csv", "supertrend_signals.csv"]:
@@ -642,6 +644,15 @@ def get_earnings_surprises_from_signals(max_items: int = 5) -> list:
             continue
         df_with_earnings = df[df["earnings_surprise_pct"].notna()]
         for _, row in df_with_earnings.iterrows():
+            earnings_date = row.get("earnings_date")
+            if pd.isna(earnings_date):
+                continue
+            try:
+                days_old = (datetime.now().date() - pd.to_datetime(earnings_date).date()).days
+            except Exception:
+                continue
+            if not (0 <= days_old <= max_days_old):
+                continue
             results.append({
                 "ticker": row["ticker"],
                 "earnings_surprise_pct": row["earnings_surprise_pct"],
@@ -975,7 +986,7 @@ if current_view == "today":
                     f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
                     f"**{opportunities['new_opportunities_count']}** are new ideas."
                 )
-                st.caption("See the full list under Discover.")
+                st.markdown("[See the full list under Discover &rarr;](?view=discover)")
 
             # --- Earnings surprises (alleen je eigen portfolio + watchlist, max 2 dagen oud) ---
             def _is_recent_earnings(earnings_date_str, max_days=2):
@@ -1022,8 +1033,7 @@ elif current_view == "discover":
     st.markdown("### Discover")
 
     # --- New signals (bestaande, ongewijzigde functionaliteit) ---
-    with st.container(border=True):
-        st.markdown("**New signals**")
+    with st.expander("📡 New signals", expanded=True):
         timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
         csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
 
@@ -1114,8 +1124,7 @@ elif current_view == "discover":
             st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
 
     # --- Sector rotation (nieuw) ---
-    with st.container(border=True):
-        st.markdown("**Sector rotation**")
+    with st.expander("🔄 Sector rotation"):
         st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
         region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
         with st.spinner("Checking sector performance..."):
@@ -1126,14 +1135,13 @@ elif current_view == "discover":
             st.dataframe(
                 df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
                                   .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                width="content",
+                width="stretch",
             )
         else:
             st.caption("No sector data available right now.")
 
     # --- Top movers (nieuw, ververst 1x per dag via de dagelijkse scan) ---
-    with st.container(border=True):
-        st.markdown("**Top movers**")
+    with st.expander("📊 Top movers"):
         if os.path.exists("top_movers.csv"):
             st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
             df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
@@ -1141,32 +1149,31 @@ elif current_view == "discover":
             with mcol1:
                 st.markdown("Top gainers")
                 gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
-                st.dataframe(gainers.style.format({"change_pct": "{:+.1f}%"}), width="content")
+                st.dataframe(gainers.style.format({"change_pct": "{:+.1f}%"}), width="stretch")
             with mcol2:
                 st.markdown("Top losers")
                 losers = df_movers.sort_values("change_pct", ascending=True).head(5)
-                st.dataframe(losers.style.format({"change_pct": "{:+.1f}%"}), width="content")
+                st.dataframe(losers.style.format({"change_pct": "{:+.1f}%"}), width="stretch")
         else:
             st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
     # --- Earnings surprises (nieuw, hergebruikt bestaande screener-data) ---
-    with st.container(border=True):
-        st.markdown("**Earnings surprises**")
-        st.caption("Notable recent earnings beats/misses among today's and this week's signals.")
+    with st.expander("💰 Earnings surprises"):
+        st.caption("Notable earnings beats/misses among today's and this week's signals -- "
+                   "only shown during earnings season (last 60 days).")
         surprises = get_earnings_surprises_from_signals(max_items=5)
         if surprises:
             for s in surprises:
                 emoji = "🟢" if s["earnings_beat"] else "🔴"
                 st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
         else:
-            st.caption("No notable earnings surprises among current signals.")
+            st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
 
     # --- Buy smarter (DCA-teaser) ---
-    with st.container(border=True):
-        st.markdown("**Buy smarter**")
+    with st.expander("🧠 Buy smarter"):
         st.write("The Smart DCA Assistant adjusts your periodic contribution based on how "
                   "cheap or expensive the market looks -- available for Premium members.")
-        st.caption("Find the download under Instellingen -> Premium.")
+        st.caption("Find the download under Settings -> Premium.")
 
 # ============================================================
 # VIEW: MY PORTFOLIO (personal, login required)
@@ -1470,10 +1477,33 @@ elif current_view == "analyse":
         for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
             st.markdown(f"- {finding}")
 
+        total_value_check = sum(h.get("position_value") or 0 for h in holdings)
+        if total_value_check > 0:
+            largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
+            largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
+            if largest_pct_check > risk_profile["max_position_pct"]:
+                st.caption("One way to gradually correct an overweight position without a big, "
+                           "one-time move: adjust future contributions with the Smart DCA Assistant.")
+                st.link_button("🧠 Buy smarter with DCA →", "?view=premium", key="dca_concentration")
+
     # --- Sectoren ---
     with st.expander("🏭 Sectors"):
         for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
             st.markdown(f"- {finding}")
+
+        sector_values_check = {}
+        for h in holdings:
+            value = h.get("position_value") or 0
+            sector = infos.get(h["ticker"], {}).get("sector")
+            if sector:
+                sector_values_check[sector] = sector_values_check.get(sector, 0) + value
+        total_value_for_sectors = sum(h.get("position_value") or 0 for h in holdings)
+        if sector_values_check and total_value_for_sectors > 0:
+            dominant_sector_pct = max(sector_values_check.values()) / total_value_for_sectors * 100
+            if dominant_sector_pct > risk_profile["max_sector_pct"]:
+                st.caption("Overweight in one sector? Steering future contributions toward other "
+                           "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
+                st.link_button("🧠 Buy smarter with DCA →", "?view=premium", key="dca_sector")
 
     # --- Diversificatie ---
     with st.expander("🧩 Diversification"):
@@ -1684,14 +1714,20 @@ elif current_view == "premium":
         unsafe_allow_html=True,
     )
 
-    if st.user.is_logged_in and database.is_premium_user(st.user.email):
-        with st.container(border=True):
-            st.markdown("##### Smart DCA Assistant -- TradingView indicator")
-            st.write(
-                "A TradingView indicator that adjusts your periodic contribution based on how "
-                "cheap/expensive the market looks (moving average distance, RSI, drawdown), plus "
-                "a built-in comparison against a fixed, regular DCA strategy."
-            )
+    with st.container(border=True):
+        st.markdown("##### Smart DCA Assistant -- TradingView indicator")
+        st.write(
+            "A TradingView indicator that adjusts your periodic contribution based on how "
+            "cheap or expensive the market looks (moving average distance, RSI, drawdown) -- "
+            "buying a bit more when things look cheap, and holding back when they don't. Includes "
+            "a built-in comparison against a fixed, regular DCA strategy."
+        )
+        try:
+            st.image("premium_content/dca_illustration.png", width="stretch")
+        except Exception:
+            pass
+
+        if st.user.is_logged_in and database.is_premium_user(st.user.email):
             try:
                 with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
                     pine_code = f.read()
@@ -1723,6 +1759,8 @@ elif current_view == "premium":
                 )
             except FileNotFoundError:
                 st.caption("Indicator file not found -- contact support.")
+        else:
+            st.caption("🔒 Available for Premium members -- see Subscription below.")
 
     with st.container(border=True):
         st.markdown("##### Subscription")
