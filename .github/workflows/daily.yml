@@ -80,4 +80,5 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add supertrend_signals_daily.csv top_movers.csv
           git diff --staged --quiet || git commit -m "Automatische dagelijkse update"
+          git pull --rebase origin main
           git push

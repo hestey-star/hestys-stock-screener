@@ -1,0 +1,28 @@
+"""
+Beide workflows (dagelijks + wekelijks) robuuster gemaakt tegen een race
+condition: als jij (of iemand anders) handmatig naar 'main' pusht TERWIJL
+de geplande workflow aan het draaien is, faalde de workflow's eigen
+commit-en-push-stap voorheen met 'fetch first' / non-fast-forward.
+
+Fix: een 'git pull --rebase' vóór het pushen, zodat de workflow eerst
+eventuele tussentijdse wijzigingen ophaalt en zijn eigen commit daaroverheen
+plaatst, in plaats van te falen. Lokaal gereproduceerd en bevestigd dat dit
+de exacte fout oplost.
+
+Gebruik: python fix_git_race_condition.py
+Draai dit vanuit je stock_screener-map.
+"""
+import os
+
+DAILY_CONTENT = 'name: Dagelijkse screener\n\non:\n  schedule:\n    # Maandag t/m vrijdag:\n    # 06:00 UTC = scan draaien + direct mail naar EU-gebruikers\n    #             (~07:00 CET winter / ~08:00 CEST zomer)\n    # 12:00 UTC = alleen mail naar VS-oost-gebruikers (~07:00-08:00 ET)\n    # 15:00 UTC = alleen mail naar VS-west-gebruikers (~07:00-08:00 PT)\n    - cron: "0 6 * * 1-5"\n    - cron: "0 12 * * 1-5"\n    - cron: "0 15 * * 1-5"\n  workflow_dispatch:\n    inputs:\n      region:\n        description: "Regio voor een handmatige test-run"\n        required: false\n        default: "EU"\n        type: choice\n        options:\n          - EU\n          - US_East\n          - US_West\n\njobs:\n  run-daily:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Code ophalen\n        uses: actions/checkout@v4\n\n      - name: Python installeren\n        uses: actions/setup-python@v5\n        with:\n          python-version: "3.12"\n\n      - name: Dependencies installeren\n        run: pip install -r requirements.txt\n\n      - name: Regio bepalen en of de scan nodig is\n        id: determine\n        run: |\n          if [ "${{ github.event.schedule }}" = "0 6 * * 1-5" ]; then\n            echo "region=EU" >> "$GITHUB_OUTPUT"\n            echo "do_scan=true" >> "$GITHUB_OUTPUT"\n          elif [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then\n            echo "region=US_East" >> "$GITHUB_OUTPUT"\n            echo "do_scan=false" >> "$GITHUB_OUTPUT"\n          elif [ "${{ github.event.schedule }}" = "0 15 * * 1-5" ]; then\n            echo "region=US_West" >> "$GITHUB_OUTPUT"\n            echo "do_scan=false" >> "$GITHUB_OUTPUT"\n          else\n            echo "region=${{ github.event.inputs.region }}" >> "$GITHUB_OUTPUT"\n            echo "do_scan=true" >> "$GITHUB_OUTPUT"\n          fi\n\n      - name: Dagelijkse scan draaien (alleen bij de vroege EU-run of handmatig)\n        if: steps.determine.outputs.do_scan == \'true\'\n        run: python daily_batch.py\n        env:\n          EMAIL_SMTP_SERVER: smtp.gmail.com\n          EMAIL_SMTP_PORT: 587\n          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}\n          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}\n\n      - name: Mail versturen voor deze regio\n        run: python daily_email_dispatch.py ${{ steps.determine.outputs.region }}\n        env:\n          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}\n          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}\n          EMAIL_SMTP_SERVER: smtp.gmail.com\n          EMAIL_SMTP_PORT: 587\n          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}\n          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}\n\n      - name: Bijgewerkte bestanden committen en pushen (alleen na een scan)\n        if: steps.determine.outputs.do_scan == \'true\'\n        run: |\n          git config --global user.name "github-actions[bot]"\n          git config --global user.email "github-actions[bot]@users.noreply.github.com"\n          git add supertrend_signals_daily.csv top_movers.csv\n          git diff --staged --quiet || git commit -m "Automatische dagelijkse update"\n          git pull --rebase origin main\n          git push\n'
+WEEKLY_CONTENT = 'name: Wekelijkse screener en portfolio-mails\n\non:\n  schedule:\n    # Zaterdag 07:00 UTC = 08:00 CET / 09:00 CEST (zomertijd)\n    - cron: "0 7 * * 6"\n  workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen\n\njobs:\n  run-weekly:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Code ophalen\n        uses: actions/checkout@v4\n\n      - name: Python installeren\n        uses: actions/setup-python@v5\n        with:\n          python-version: "3.12"\n\n      - name: Dependencies installeren\n        run: pip install -r requirements.txt\n\n      - name: Wekelijks batch-script draaien\n        run: python weekly_batch.py\n        env:\n          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}\n          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}\n          EMAIL_SMTP_SERVER: smtp.gmail.com\n          EMAIL_SMTP_PORT: 587\n          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}\n          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}\n\n      - name: Bijgewerkte bestanden committen en pushen\n        run: |\n          git config --global user.name "github-actions[bot]"\n          git config --global user.email "github-actions[bot]@users.noreply.github.com"\n          git add supertrend_signals.csv\n          git diff --staged --quiet || git commit -m "Automatische wekelijkse update"\n          git pull --rebase origin main\n          git push\n'
+
+os.makedirs(".github/workflows", exist_ok=True)
+
+with open(".github/workflows/daily.yml", "w", encoding="utf-8") as f:
+    f.write(DAILY_CONTENT)
+with open(".github/workflows/weekly.yml", "w", encoding="utf-8") as f:
+    f.write(WEEKLY_CONTENT)
+
+print("Weggeschreven: .github/workflows/daily.yml en weekly.yml")
+print("git add . && git commit -m 'Add git pull --rebase before push to avoid race conditions' && git push")
