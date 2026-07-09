@@ -1042,10 +1042,10 @@ elif current_view == "discover":
             with st.spinner(f"{timeframe} screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
                 if timeframe == "Weekly":
                     import screener
-                    screener.main()
+                    screener.main(send_own_email=False)  # handmatige refresh hoort geen 'goedemorgen'-mail te sturen op een willekeurig tijdstip
                 else:
                     import screener_daily
-                    screener_daily.main()
+                    screener_daily.main(send_own_email=False)  # zelfde reden -- de dagelijkse mail loopt via de aparte, regio-getimede dispatch
             st.success("Done! Refresh the page to see the new results.")
 
         df_screener = load_screener_data(csv_file)
