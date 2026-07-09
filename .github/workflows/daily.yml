@@ -3,11 +3,11 @@ name: Dagelijkse screener
 on:
   schedule:
     # Maandag t/m vrijdag:
-    # 06:00 UTC = scan draaien + direct mail naar EU-gebruikers
-    #             (~07:00 CET winter / ~08:00 CEST zomer)
+    # 05:00 UTC = scan draaien + direct mail naar EU-gebruikers
+    #             (~06:00 CET winter / ~07:00 CEST zomer)
     # 12:00 UTC = alleen mail naar VS-oost-gebruikers (~07:00-08:00 ET)
     # 15:00 UTC = alleen mail naar VS-west-gebruikers (~07:00-08:00 PT)
-    - cron: "0 6 * * 1-5"
+    - cron: "0 5 * * 1-5"
     - cron: "0 12 * * 1-5"
     - cron: "0 15 * * 1-5"
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
       - name: Regio bepalen en of de scan nodig is
         id: determine
         run: |
-          if [ "${{ github.event.schedule }}" = "0 6 * * 1-5" ]; then
+          if [ "${{ github.event.schedule }}" = "0 5 * * 1-5" ]; then
             echo "region=EU" >> "$GITHUB_OUTPUT"
             echo "do_scan=true" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then
