@@ -53,38 +53,141 @@ def get_all_preferences() -> dict:
 
 def run_screener_shared() -> None:
     """
-    Draait de gedeelde screener 1x -- de resultaten (CSV) zijn voor iedereen
-    zichtbaar op de website. send_own_email=False, want de vaste mail naar
-    het eigen GitHub-secrets-adres zou dubbel op kunnen tellen met de
-    per-gebruiker-opt-in-mail hieronder (run_screener_emails) als dat
-    hetzelfde adres is.
+    Draait de gedeelde screener 1x -- de resultaten (CSV's, incl. Snowball
+    Signal en Rocket List) zijn voor iedereen zichtbaar op de website.
+    send_own_email=False, want de vaste mail naar het eigen GitHub-
+    secrets-adres zou dubbel op kunnen tellen met de per-gebruiker-opt-in-
+    mail hieronder (run_weekly_signals_emails) als dat hetzelfde adres is.
     """
     print("=== Gedeelde screener draaien (publiek, voor iedereen zichtbaar) ===")
     screener.main(send_own_email=False)
 
 
-def run_screener_emails(preferences: dict) -> None:
-    """Stuurt de screener-mail naar gebruikers die zich daar expliciet voor hebben aangemeld."""
-    print("\n=== Screener-mails versturen aan opt-in-gebruikers ===")
-    opted_in = [email for email, prefs in preferences.items() if prefs.get("wants_screener_email")]
-    print(f"{len(opted_in)} gebruiker(s) willen de screener-mail ontvangen.")
+def _format_momentocrats_row(row) -> str:
+    return (f"[score {row['score']}] {row['ticker']}: flipped {row['weken_geleden']} week(en) ago "
+            f"({row['sinds_omslag_pct']:+.2f}% since)")
 
-    if not opted_in:
-        return
 
-    if not os.path.exists("supertrend_signals.csv"):
-        print("Geen supertrend_signals.csv gevonden -- kan geen screener-mail versturen.")
-        return
+def _format_snowball_row(row) -> str:
+    return (f"{row['ticker']}: ROIC {row['roic_pct']:.1f}%, "
+            f"{row['afwijking_fair_value_pct']:+.1f}% vs. fair value")
 
-    df_hits = pd.read_csv("supertrend_signals.csv")
-    if df_hits.empty:
-        print("Geen signalen deze week -- geen screener-mail nodig.")
-        return
 
-    text_body, html_body = screener.build_email_body(df_hits)
-    subject = f"Supertrend-screener: {len(df_hits)} nieuwe signalen"
+def _format_rocket_row(row) -> str:
+    return (f"{row['ticker']}: {row['groei_pct']:.1f}% growth, "
+            f"{row['relatieve_sterkte']:+.1f}% relative strength")
 
-    for user_email in opted_in:
+
+SIGNAL_TYPES = {
+    "momentocrats": {
+        "pref_key": "wants_momentocrats_email", "csv": "supertrend_signals.csv",
+        "title": "Momentocrats", "emoji": "📡", "sort_by": "score", "sort_asc": False,
+        "formatter": _format_momentocrats_row,
+    },
+    "snowball": {
+        "pref_key": "wants_snowball_email", "csv": "snowball_signals.csv",
+        "title": "Snowball Signal", "emoji": "🐦", "sort_by": "afwijking_fair_value_pct", "sort_asc": True,
+        "formatter": _format_snowball_row,
+    },
+    "rocket": {
+        "pref_key": "wants_rocket_email", "csv": "rocket_list_signals.csv",
+        "title": "Rocket List", "emoji": "🚀", "sort_by": "groei_pct", "sort_asc": False,
+        "formatter": _format_rocket_row,
+    },
+}
+
+
+def build_weekly_signals_email(sections: list) -> tuple:
+    """
+    Bouwt 1 gecombineerde mail voor alle signaal-types die deze gebruiker
+    heeft aangevinkt -- top 10 per type, in Hesty's stijl (zelfde
+    opmaak-taal als de dagelijkse mail).
+
+    sections: lijst van dicts met keys 'title', 'emoji', 'df', 'formatter'.
+    """
+    text_lines = ["Good morning from Hesty's -- your weekly signals are in.", ""]
+    html_sections_list = []
+
+    for section in sections:
+        top10 = section["df"].head(10)
+        text_lines.append(f"{section['emoji']} {section['title']} ({len(section['df'])} total, showing top 10):")
+        for _, row in top10.iterrows():
+            text_lines.append(f"  - {section['formatter'](row)}")
+        text_lines.append("")
+
+        rows_html = "".join(
+            f"<li style='padding:4px 0;color:#101825;'>{section['formatter'](row)}</li>"
+            for _, row in top10.iterrows()
+        )
+        html_sections_list.append(f"""
+        <h4 style="color:#101825; font-size:16px; margin:20px 0 8px 0;">{section['emoji']} {section['title']}</h4>
+        <ul style="margin:0; padding-left:20px; font-size:14px;">{rows_html}</ul>
+        """)
+
+    text_lines += [
+        "See the full lists, sector rotation, and top movers under Discover on the site.",
+        "",
+        "-- Hesty's, your personal investment assistant",
+        "",
+        "This is a screener, not investment advice.",
+    ]
+    text_body = "\n".join(text_lines)
+
+    html_body = f"""
+    <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
+        <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
+            <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Weekly</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Your weekly signals are in</div>
+        </div>
+        <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            {''.join(html_sections_list)}
+            <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
+                See the full lists, sector rotation, and top movers under
+                <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
+            </p>
+            <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
+            <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
+        </div>
+    </div>
+    """
+    return text_body, html_body
+
+
+def run_weekly_signals_emails(preferences: dict) -> None:
+    """
+    Stuurt 1 gecombineerde mail per gebruiker, met alleen de signaal-types
+    waar diegene zich voor heeft aangemeld (top 10 per type).
+    """
+    print("\n=== Wekelijkse signalen-mails versturen aan opt-in-gebruikers ===")
+
+    # Laad elke CSV maar 1x, niet per gebruiker opnieuw
+    csv_cache = {}
+    for key, config in SIGNAL_TYPES.items():
+        if os.path.exists(config["csv"]):
+            df = pd.read_csv(config["csv"])
+            if not df.empty:
+                df = df.sort_values(config["sort_by"], ascending=config["sort_asc"])
+                csv_cache[key] = df
+
+    for user_email, prefs in preferences.items():
+        sections = []
+        for key, config in SIGNAL_TYPES.items():
+            if not prefs.get(config["pref_key"]):
+                continue
+            if key not in csv_cache:
+                continue
+            sections.append({
+                "title": config["title"], "emoji": config["emoji"],
+                "df": csv_cache[key], "formatter": config["formatter"],
+            })
+
+        if not sections:
+            continue
+
+        print(f"  {user_email}: {', '.join(s['title'] for s in sections)}")
+        text_body, html_body = build_weekly_signals_email(sections)
+        total_signals = sum(len(s["df"]) for s in sections)
+        subject = f"Hesty's Weekly: {total_signals} new signal(s) this week"
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
 
 
@@ -129,6 +232,6 @@ def run_portfolio_emails(preferences: dict) -> None:
 if __name__ == "__main__":
     run_screener_shared()
     all_preferences = get_all_preferences()
-    run_screener_emails(all_preferences)
+    run_weekly_signals_emails(all_preferences)
     run_portfolio_emails(all_preferences)
     print("\nKlaar.")

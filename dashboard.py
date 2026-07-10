@@ -1032,11 +1032,55 @@ if current_view == "today":
 elif current_view == "discover":
     st.markdown("### Discover")
 
-    # --- New signals (bestaande, ongewijzigde functionaliteit) ---
+    # --- Daily Top Movers (bovenaan -- dit is de enige echt DAGELIJKSE check hier) ---
+    with st.expander("📊 Daily Top Movers", expanded=True):
+        if os.path.exists("top_movers.csv"):
+            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
+            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
+                st.markdown("Top gainers")
+                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+            with mcol2:
+                st.markdown("Top losers")
+                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+        else:
+            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
+
+    st.markdown("#### Weekly Signals")
+    st.caption("These 3 are actual stock picks (each with a different investing style). "
+               "Sector rotation and earnings surprises below are market context, not individual signals.")
+
+    def _email_pref_toggle(signal_key: str, label: str, current_value: bool):
+        """Kleine, inline 'mail me dit wekelijks'-toggle, direct binnen een signaal-kaart."""
+        if not st.user.is_logged_in:
+            st.caption("Log in (top right) to get this signal by email, weekly.")
+            return
+        new_value = st.checkbox(label, value=current_value, key=f"inline_{signal_key}")
+        if new_value != current_value:
+            if st.button("Save", key=f"save_{signal_key}"):
+                import database as _database
+                _database.set_signal_email_preference(st.user.email, signal_key, new_value)
+                st.success("Saved!")
+                st.rerun()
+
+    if st.user.is_logged_in:
+        import database
+        _current_prefs = database.get_user_preferences(st.user.email)
+    else:
+        _current_prefs = {}
+
+    # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
     with st.expander("📡 Momentocrats", expanded=True):
         st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
-        timeframe = st.radio("Timeframe", ["Weekly", "Daily"], horizontal=True, key="screener_timeframe")
-        csv_file = "supertrend_signals.csv" if timeframe == "Weekly" else "supertrend_signals_daily.csv"
+        timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
+        csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
 
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -1124,6 +1168,10 @@ elif current_view == "discover":
             )
             st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
 
+        st.divider()
+        _email_pref_toggle("wants_momentocrats_email", "📧 Email me this weekly (top 10)",
+                            _current_prefs.get("wants_momentocrats_email", False))
+
     # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
     with st.expander("🐦 Snowball Signal"):
         st.caption("Quality companies trading below fair value, with low volatility. For the "
@@ -1146,6 +1194,10 @@ elif current_view == "discover":
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
+        st.divider()
+        _email_pref_toggle("wants_snowball_email", "📧 Email me this weekly (top 10)",
+                            _current_prefs.get("wants_snowball_email", False))
+
     # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
     with st.expander("🚀 Rocket List"):
         st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
@@ -1166,6 +1218,10 @@ elif current_view == "discover":
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
+        st.divider()
+        _email_pref_toggle("wants_rocket_email", "📧 Email me this weekly (top 10)",
+                            _current_prefs.get("wants_rocket_email", False))
+
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):
         st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
@@ -1183,27 +1239,6 @@ elif current_view == "discover":
             )
         else:
             st.caption("No sector data available right now.")
-
-    # --- Top movers (nieuw, ververst 1x per dag via de dagelijkse scan) ---
-    with st.expander("📊 Top movers"):
-        if os.path.exists("top_movers.csv"):
-            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
-            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-            mcol1, mcol2 = st.columns(2)
-            with mcol1:
-                st.markdown("Top gainers")
-                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-            with mcol2:
-                st.markdown("Top losers")
-                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-        else:
-            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
     # --- Earnings surprises (nieuw, hergebruikt bestaande screener-data) ---
     with st.expander("💰 Earnings surprises"):
@@ -1633,10 +1668,21 @@ elif current_view == "settings":
         with st.container(border=True):
             st.markdown("#### Email preferences")
             prefs = database.get_user_preferences(user_email)
-            wants_screener = st.checkbox(
-                "Receive the weekly screener email (new signals from AEX/Nasdaq-100/S&P500/DAX/CAC40)",
-                value=prefs["wants_screener_email"],
+
+            st.caption("Weekly signals (choose which ones you want -- delivered in 1 combined email)")
+            wants_momentocrats = st.checkbox(
+                "📡 Momentocrats -- technical momentum + fundamental quality combo",
+                value=prefs.get("wants_momentocrats_email", False),
             )
+            wants_snowball = st.checkbox(
+                "🐦 Snowball Signal -- quality stocks below fair value, for the long term",
+                value=prefs.get("wants_snowball_email", False),
+            )
+            wants_rocket = st.checkbox(
+                "🚀 Rocket List -- accelerating growth + momentum",
+                value=prefs.get("wants_rocket_email", False),
+            )
+
             wants_daily = st.checkbox(
                 "Receive the daily screener email (swing-trade signals, weekdays)",
                 value=prefs.get("wants_daily_email", False),
@@ -1659,8 +1705,10 @@ elif current_view == "settings":
             )
             if st.button("Save preferences"):
                 database.set_user_preferences(
-                    user_email, wants_screener, wants_portfolio,
+                    user_email, wants_portfolio,
                     wants_daily_email=wants_daily, email_region=email_region,
+                    wants_momentocrats_email=wants_momentocrats,
+                    wants_snowball_email=wants_snowball, wants_rocket_email=wants_rocket,
                 )
                 st.success("Preferences saved!")
 

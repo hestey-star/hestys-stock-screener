@@ -86,31 +86,51 @@ def get_user_preferences(user_email: str) -> dict:
     """
     Geeft de e-mail-voorkeuren (en premium-status) van deze gebruiker terug.
     Als er nog geen rij bestaat (nieuwe gebruiker), gelden de
-    standaardwaarden: WEL de persoonlijke portfolio-mail, NIET de bredere
-    screener-mails (opt-in), GEEN premium, EU als regio.
+    standaardwaarden: WEL de persoonlijke portfolio-mail, NIET de
+    signaal-mails (allemaal opt-in, per type), GEEN premium, EU als regio.
     """
     client = get_supabase_client()
     response = client.table("user_preferences").select("*").eq("user_email", user_email).execute()
     if response.data:
         return response.data[0]
     return {
-        "user_email": user_email, "wants_screener_email": False, "wants_portfolio_email": True,
+        "user_email": user_email, "wants_portfolio_email": True,
         "wants_daily_email": False, "is_premium": False, "email_region": "EU",
+        "wants_momentocrats_email": False, "wants_snowball_email": False, "wants_rocket_email": False,
     }
 
 
 def set_user_preferences(
-    user_email: str, wants_screener_email: bool, wants_portfolio_email: bool,
+    user_email: str, wants_portfolio_email: bool,
     wants_daily_email: bool = False, email_region: str = "EU",
+    wants_momentocrats_email: bool = False, wants_snowball_email: bool = False,
+    wants_rocket_email: bool = False,
 ) -> None:
     """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
     client = get_supabase_client()
     client.table("user_preferences").upsert({
         "user_email": user_email,
-        "wants_screener_email": wants_screener_email,
         "wants_portfolio_email": wants_portfolio_email,
         "wants_daily_email": wants_daily_email,
         "email_region": email_region,
+        "wants_momentocrats_email": wants_momentocrats_email,
+        "wants_snowball_email": wants_snowball_email,
+        "wants_rocket_email": wants_rocket_email,
+    }).execute()
+
+
+def set_signal_email_preference(user_email: str, signal_key: str, value: bool) -> None:
+    """
+    Zet 1 losse signaal-mail-voorkeur (bv. vanaf de Discover-pagina zelf,
+    zonder de andere voorkeuren te moeten meesturen).
+    """
+    valid_keys = {"wants_momentocrats_email", "wants_snowball_email", "wants_rocket_email"}
+    if signal_key not in valid_keys:
+        raise ValueError(f"Onbekende signaal-sleutel: {signal_key}")
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        signal_key: value,
     }).execute()
 
 
