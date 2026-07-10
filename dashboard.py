@@ -1072,9 +1072,27 @@ elif current_view == "discover":
         else:
             st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
-    st.markdown("#### Weekly Signals")
-    st.caption("These 3 are actual stock picks (each with a different investing style). "
-               "Sector rotation and earnings surprises below are market context, not individual signals.")
+    st.markdown(
+        """
+        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+                    border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+                    padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
+            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                Hesty's Signature Signals
+            </div>
+            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
+                3 specially-built signals, each with its own investing style -- this is the core of Hesty's.
+            </div>
+            <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
+                📡 <b style="color:#EAEDF1;">Momentocrats</b> -- momentum + quality, for swing trades (days-weeks)<br>
+                🐦 <b style="color:#EAEDF1;">Snowballers</b> -- quality at a good price, for the long-term investor<br>
+                🚀 <b style="color:#EAEDF1;">Rocket List</b> -- accelerating growth, for higher risk/reward
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.caption("Sector rotation and earnings surprises further down are market context, not individual stock picks.")
 
     def _email_pref_toggle(signal_key: str, label: str, current_value: bool):
         """Kleine, inline 'mail me dit wekelijks'-toggle, direct binnen een signaal-kaart."""
@@ -1104,31 +1122,11 @@ elif current_view == "discover":
         timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
         csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.caption(f"Last updated: {file_last_modified(csv_file)}")
-        with col2:
-            if timeframe == "Weekly":
-                run_screener = st.button("Refresh now (takes a while, 10-20+ min)", key="run_screener", type="primary")
-            else:
-                run_screener = st.button("Refresh now (takes a while, 5-15 min)", key="run_screener_daily", type="primary")
-
-        if run_screener:
-            st.warning("⚠️ Do not click anything else while this is running -- doing so will interrupt "
-                       "the scan (Streamlit restarts the whole page on any click) and you'll need to start over.")
-            with st.spinner(f"{timeframe} screener is running... this can take a while (AEX + Nasdaq-100 + S&P 500 + DAX + CAC40)."):
-                if timeframe == "Weekly":
-                    import screener
-                    screener.main(send_own_email=False)  # handmatige refresh hoort geen 'goedemorgen'-mail te sturen op een willekeurig tijdstip
-                else:
-                    import screener_daily
-                    screener_daily.main(send_own_email=False)  # zelfde reden -- de dagelijkse mail loopt via de aparte, regio-getimede dispatch
-            st.success("Done! Refresh the page to see the new results.")
+        st.caption(f"Last updated: {file_last_modified(csv_file)}")
 
         df_screener = load_screener_data(csv_file)
         if df_screener is None or df_screener.empty:
-            run_hint = "python screener.py" if timeframe == "Weekly" else "python screener_daily.py"
-            st.info(f"No results yet. Run '{run_hint}' first, or click Refresh above.")
+            st.info("No results yet -- check back after the next scheduled scan.")
         else:
             df_screener = df_screener.sort_values("score", ascending=False)
 
@@ -1203,7 +1201,9 @@ elif current_view == "discover":
     # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
     with st.expander("🐦 Snowballers"):
         st.caption("Quality companies trading below fair value, with low volatility. For the "
-                   "long-term investor -- no fresh trend flip required. Updates weekly.")
+                   "long-term investor -- no fresh trend flip required.")
+        st.caption(f"Updates weekly (same schedule as Momentocrats' weekly scan). "
+                   f"Last updated: {file_last_modified('snowball_signals.csv')}.")
         if os.path.exists("snowball_signals.csv"):
             df_snowball = pd.read_csv("snowball_signals.csv")
             if not df_snowball.empty:
@@ -1215,10 +1215,11 @@ elif current_view == "discover":
                 df_display = df_display.head(_signal_display_limit)
                 st.dataframe(
                     df_display.style.format({
-                        "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
+                        "Price": "{:.2f}", "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
                     }),
                     width="stretch", hide_index=True,
                 )
+                st.caption(f"{len(df_display)} of {total_snowball} matching stocks shown.")
                 if not _is_premium_discover and total_snowball > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                             f"Upgrade to Premium for the full top 10.")
@@ -1234,7 +1235,9 @@ elif current_view == "discover":
     # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
     with st.expander("🚀 Rocket List"):
         st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
-                   "with more risk in exchange for growth potential. Updates weekly.")
+                   "with more risk in exchange for growth potential.")
+        st.caption(f"Updates weekly (same schedule as Momentocrats' weekly scan). "
+                   f"Last updated: {file_last_modified('rocket_list_signals.csv')}.")
         if os.path.exists("rocket_list_signals.csv"):
             df_rocket = pd.read_csv("rocket_list_signals.csv")
             if not df_rocket.empty:
@@ -1245,9 +1248,10 @@ elif current_view == "discover":
                 total_rocket = len(df_display)
                 df_display = df_display.head(_signal_display_limit)
                 st.dataframe(
-                    df_display.style.format({"Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
+                    df_display.style.format({"Price": "{:.2f}", "Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
                     width="stretch", hide_index=True,
                 )
+                st.caption(f"{len(df_display)} of {total_rocket} matching stocks shown.")
                 if not _is_premium_discover and total_rocket > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
                             f"Upgrade to Premium for the full top 10.")
@@ -1263,6 +1267,7 @@ elif current_view == "discover":
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):
         st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
+        st.caption("Live data -- recalculated fresh every time you open this.")
         region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
         with st.spinner("Checking sector performance..."):
             rotation = build_sector_rotation(region=region, period="1mo")
@@ -1282,6 +1287,9 @@ elif current_view == "discover":
     with st.expander("💰 Earnings surprises"):
         st.caption("Notable earnings beats/misses among today's and this week's signals -- "
                    "only shown during earnings season (last 60 days).")
+        st.caption(f"Sourced from the daily and weekly scans. Last updated: "
+                   f"{file_last_modified('supertrend_signals_daily.csv')} (daily), "
+                   f"{file_last_modified('supertrend_signals.csv')} (weekly).")
         surprises = get_earnings_surprises_from_signals(max_items=5)
         if surprises:
             for s in surprises:
