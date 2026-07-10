@@ -1120,7 +1120,13 @@ elif current_view == "discover":
         _is_premium_discover = database.is_premium_user(st.user.email)
     else:
         _current_prefs = {}
-        _is_premium_discover = False
+        # Discover vereist bewust geen login -- maar tijdens de 'iedereen
+        # premium'-testfase moet dat OOK voor niet-ingelogde bezoekers
+        # gelden, niet alleen voor wie toevallig al is ingelogd.
+        try:
+            _is_premium_discover = st.secrets.get("app", {}).get("premium_free_for_all", False)
+        except Exception:
+            _is_premium_discover = False
     _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
     # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
