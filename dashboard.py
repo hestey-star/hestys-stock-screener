@@ -125,43 +125,61 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     border: 1px solid #1FAE96;
 }
 
-/* Settings-dropdown: opent bij hover (desktop) en bij tik (mobiel, via de
-   eerste tik die :hover triggert) -- toont Settings/Support/Premium apart */
-.nav-dropdown {
-    position: relative;
+/* Mooie inline-link binnen lopende tekst (bv. '... zie Discover') --
+   alleen het woord zelf is gestyled, niet de hele zin, en geen kaal
+   blauw-onderstreept-link-gevoel */
+.inline-link {
+    color: #1FAE96 !important;
+    font-weight: 600;
+    text-decoration: none !important;
+    border-bottom: 1.5px solid rgba(31, 174, 150, 0.4);
+    padding-bottom: 1px;
+    transition: border-color 0.15s ease;
+}
+.inline-link:hover {
+    border-bottom-color: #1FAE96;
+}
+
+/* Knop-achtige link (voor bv. 'Buy smarter with DCA') -- oogt als een
+   Streamlit-knop, is technisch een <a>, zodat 'ie in hetzelfde tabblad
+   navigeert (st.link_button opent altijd een nieuw tabblad) */
+.button-link, .button-link:visited {
     display: inline-block;
-}
-.nav-dropdown-content {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    background: #101825;
-    border: 1px solid #1FAE96;
-    border-radius: 6px;
-    min-width: 150px;
-    z-index: 100;
-    padding: 0.25rem 0;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-}
-.nav-dropdown:hover .nav-dropdown-content {
-    display: block;
-}
-.nav-dropdown-content a {
-    display: block;
     font-family: 'Inter', sans-serif;
     font-size: 0.9rem;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
+    font-weight: 600;
+    color: #101825 !important;
+    background: #1FAE96;
+    padding: 0.45rem 1.1rem;
+    border-radius: 6px;
     text-decoration: none !important;
+    margin-top: 0.4rem;
+}
+.button-link:hover {
+    background: #24C4A8;
+}
+
+/* Naam/account-link in de kop (rechtsboven) -- verwijst naar Settings,
+   gestyled als een subtiele pil i.p.v. platte tekst */
+.account-link, .account-link:visited {
+    display: inline-block;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
     color: #8992A3 !important;
+    text-decoration: none !important;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
 }
-.nav-dropdown-content a:hover {
+.account-link:hover {
     color: #EAEDF1 !important;
-    background: rgba(31, 174, 150, 0.1);
+    border-color: #1FAE96;
 }
-.nav-dropdown-content a.active {
+.account-link.active {
     color: #1FAE96 !important;
+    border-color: #1FAE96;
+    background: rgba(31, 174, 150, 0.1);
 }
 
 /* Compacte, met lijntjes gescheiden posities-lijst in 'Your positions' */
@@ -874,16 +892,10 @@ with header_col:
             <div class="nav-bar">
                 <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
                 <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
-                <a href="?view=analyse" class="{_nav_class('analyse')}" target="_self">Analyse</a>
+                <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
                 <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
-                <div class="nav-dropdown">
-                    <span class="{_nav_class_any(['settings', 'support', 'premium'])}">Settings &#9662;</span>
-                    <div class="nav-dropdown-content">
-                        <a href="?view=settings" class="{_nav_class('settings')}" target="_self">Settings</a>
-                        <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
-                        <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
-                    </div>
-                </div>
+                <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
+                <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
             </div>
         </div>
         """,
@@ -893,7 +905,11 @@ with header_col:
 with login_col:
     st.markdown("<div style='height: 1.4rem'></div>", unsafe_allow_html=True)  # verticaal uitlijnen met het logo
     if st.user.is_logged_in:
-        st.caption(st.user.name)
+        st.markdown(
+            f'<a href="?view=settings" class="account-link {" active" if current_view == "settings" else ""}" '
+            f'target="_self">&#9881; {st.user.name}</a>',
+            unsafe_allow_html=True,
+        )
         st.button("Log out", on_click=st.logout, key="header_logout")
     else:
         st.button("Log in", on_click=st.login, key="header_login", type="primary")
@@ -986,7 +1002,10 @@ if current_view == "today":
                     f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
                     f"**{opportunities['new_opportunities_count']}** are new ideas."
                 )
-                st.markdown("[See the full list under Discover &rarr;](?view=discover)")
+                st.markdown(
+                    'See the full list under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
+                    unsafe_allow_html=True,
+                )
 
             # --- Earnings surprises (alleen je eigen portfolio + watchlist, max 2 dagen oud) ---
             def _is_recent_earnings(earnings_date_str, max_days=2):
@@ -1178,11 +1197,11 @@ elif current_view == "discover":
                         f"Upgrade to Premium for the full top 10.")
 
         st.divider()
-        _email_pref_toggle("wants_momentocrats_email", "📧 Email me this weekly (top 10)",
+        _email_pref_toggle("wants_momentocrats_email", f"📧 Email me this weekly (top {_signal_display_limit})",
                             _current_prefs.get("wants_momentocrats_email", False))
 
     # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-    with st.expander("🐦 Snowball Signal"):
+    with st.expander("🐦 Snowballers"):
         st.caption("Quality companies trading below fair value, with low volatility. For the "
                    "long-term investor -- no fresh trend flip required. Updates weekly.")
         if os.path.exists("snowball_signals.csv"):
@@ -1204,12 +1223,12 @@ elif current_view == "discover":
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                             f"Upgrade to Premium for the full top 10.")
             else:
-                st.caption("No stocks currently meet the Snowball criteria.")
+                st.caption("No stocks currently meet the Snowballers criteria.")
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
         st.divider()
-        _email_pref_toggle("wants_snowball_email", "📧 Email me this weekly (top 10)",
+        _email_pref_toggle("wants_snowball_email", f"📧 Email me this weekly (top {_signal_display_limit})",
                             _current_prefs.get("wants_snowball_email", False))
 
     # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
@@ -1238,7 +1257,7 @@ elif current_view == "discover":
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
         st.divider()
-        _email_pref_toggle("wants_rocket_email", "📧 Email me this weekly (top 10)",
+        _email_pref_toggle("wants_rocket_email", f"📧 Email me this weekly (top {_signal_display_limit})",
                             _current_prefs.get("wants_rocket_email", False))
 
     # --- Sector rotation (nieuw) ---
@@ -1546,8 +1565,8 @@ elif current_view == "portfolio":
                "You'll also automatically receive a weekly email with this update, "
                "at the address you're logged in with.")
 
-elif current_view == "analyse":
-    st.markdown("### Analyse")
+elif current_view == "analyze":
+    st.markdown("### Analyze")
 
     if not st.user.is_logged_in:
         st.info("Log in (top right) to analyze your portfolio.")
@@ -1580,7 +1599,10 @@ elif current_view == "analyse":
             if largest_pct_check > risk_profile["max_position_pct"]:
                 st.caption("One way to gradually correct an overweight position without a big, "
                            "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                st.link_button("🧠 Buy smarter with DCA →", "?view=premium", key="dca_concentration")
+                st.markdown(
+                    '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                    unsafe_allow_html=True,
+                )
 
     # --- Sectoren ---
     with st.expander("🏭 Sectors"):
@@ -1599,7 +1621,10 @@ elif current_view == "analyse":
             if dominant_sector_pct > risk_profile["max_sector_pct"]:
                 st.caption("Overweight in one sector? Steering future contributions toward other "
                            "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                st.link_button("🧠 Buy smarter with DCA →", "?view=premium", key="dca_sector")
+                st.markdown(
+                    '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                    unsafe_allow_html=True,
+                )
 
     # --- Diversificatie ---
     with st.expander("🧩 Diversification"):
@@ -1694,7 +1719,7 @@ elif current_view == "settings":
                 value=prefs.get("wants_momentocrats_email", False),
             )
             wants_snowball = st.checkbox(
-                "🐦 Snowball Signal -- quality stocks below fair value, for the long term",
+                "🐦 Snowballers -- quality stocks below fair value, for the long term",
                 value=prefs.get("wants_snowball_email", False),
             )
             wants_rocket = st.checkbox(
@@ -1736,7 +1761,7 @@ elif current_view == "settings":
                 st.markdown("**Cash / uninvested amount**")
                 current_cash = database.get_cash_value(user_email)
                 new_cash = st.number_input(
-                    "Cash not currently invested (used for the cash% check in Analyse)",
+                    "Cash not currently invested (used for the cash% check in Analyze)",
                     min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
                 )
                 if st.button("Save cash amount"):
@@ -1746,7 +1771,7 @@ elif current_view == "settings":
         with st.container(border=True):
             st.markdown("#### Risk profile")
             st.caption("Used to personalize your Concentration Risk and Sectors analysis under "
-                       "Analyse. Not a one-time thing -- update it anytime your situation changes.")
+                       "Analyze. Not a one-time thing -- update it anytime your situation changes.")
 
             profile = database.get_risk_profile(user_email)
             horizon_options = ["short", "medium", "long"]
@@ -1807,17 +1832,13 @@ elif current_view == "premium":
         <table class="positions-table">
             <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
             <tbody>
-                <tr><td>Momentocrats, Snowball Signal, Rocket List</td><td>Top 3 each</td><td>Full top 10</td></tr>
-                <tr><td>Weekly &amp; daily screener (Discover)</td><td>&#10003;</td><td>&#10003;</td></tr>
-                <tr><td>Tracked positions</td><td>Up to 10</td><td>Unlimited</td></tr>
-                <tr><td>Concentration, diversification, sector &amp; asset mix</td><td>&#10003;</td><td>&#10003;</td></tr>
-                <tr><td>Dividend income overview</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Weighted valuation (P/E)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Cash % and rebalancing ideas</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Return vs. benchmark chart</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Correlation matrix</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Smart DCA Assistant (TradingView indicator)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Email preferences (screener, daily, portfolio)</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>Full top 10</td></tr>
+                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>Full top 10</td></tr>
+                <tr><td>Tracked positions (My Portfolio)</td><td>Up to 10</td><td>Unlimited</td></tr>
+                <tr><td>Concentration, Diversification, Sectors, Performance (Analyze)</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Dividend income overview (Analyze)</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Weighted valuation (P/E) &amp; correlation matrix (Analyze)</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Smart DCA Assistant (TradingView indicator download)</td><td>--</td><td>&#10003;</td></tr>
             </tbody>
         </table>
         """,
@@ -1832,16 +1853,17 @@ elif current_view == "premium":
             "buying a bit more when things look cheap, and holding back when they don't. Includes "
             "a built-in comparison against a fixed, regular DCA strategy."
         )
-        try:
-            st.image("premium_content/dca_screenshot.jpg", width="stretch")
-        except Exception:
-            pass
-        st.caption(
-            "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
-            "suggested contribution at each point, and the panel on the right compares Smart DCA "
-            "against a fixed, regular DCA over the same period. This is one historical example, "
-            "not a guarantee of future results."
-        )
+        with st.expander("See it running on a real chart"):
+            try:
+                st.image("premium_content/dca_screenshot.jpg", width=500)
+            except Exception:
+                pass
+            st.caption(
+                "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
+                "suggested contribution at each point, and the panel on the right compares Smart DCA "
+                "against a fixed, regular DCA over the same period. This is one historical example, "
+                "not a guarantee of future results."
+            )
 
         if st.user.is_logged_in and database.is_premium_user(st.user.email):
             try:
@@ -1937,7 +1959,7 @@ elif current_view == "premium":
 elif current_view == "support":
     st.markdown("### Support")
     st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
-              "or send us a message directly.")
+              "or send us a message directly. Business inquiries and partnerships are welcome too.")
 
     st.markdown("#### Frequently asked questions")
 
@@ -1985,7 +2007,7 @@ elif current_view == "support":
     st.write("Found a bug, have an idea, or need help with something else? Let us know.")
 
     contact_email = st.text_input("Your email")
-    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Other"])
+    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Business inquiry", "Other"])
     message_body = st.text_area("Message", height=150)
 
     if st.button("Send message", type="primary"):

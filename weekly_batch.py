@@ -86,7 +86,7 @@ SIGNAL_TYPES = {
     },
     "snowball": {
         "pref_key": "wants_snowball_email", "csv": "snowball_signals.csv",
-        "title": "Snowball Signal", "emoji": "🐦", "sort_by": "afwijking_fair_value_pct", "sort_asc": True,
+        "title": "Snowballers", "emoji": "🐦", "sort_by": "afwijking_fair_value_pct", "sort_asc": True,
         "formatter": _format_snowball_row,
     },
     "rocket": {
@@ -97,32 +97,37 @@ SIGNAL_TYPES = {
 }
 
 
-def build_weekly_signals_email(sections: list) -> tuple:
+def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tuple:
     """
     Bouwt 1 gecombineerde mail voor alle signaal-types die deze gebruiker
-    heeft aangevinkt -- top 10 per type, in Hesty's stijl (zelfde
-    opmaak-taal als de dagelijkse mail).
+    heeft aangevinkt -- top 3 (gratis) of top 10 (premium) per type, in
+    Hesty's stijl (zelfde opmaak-taal als de dagelijkse mail).
 
     sections: lijst van dicts met keys 'title', 'emoji', 'df', 'formatter'.
     """
+    display_limit = 10 if is_premium else 3
     text_lines = ["Good morning from Hesty's -- your weekly signals are in.", ""]
     html_sections_list = []
 
     for section in sections:
-        top10 = section["df"].head(10)
-        text_lines.append(f"{section['emoji']} {section['title']} ({len(section['df'])} total, showing top 10):")
-        for _, row in top10.iterrows():
+        top_n = section["df"].head(display_limit)
+        text_lines.append(f"{section['emoji']} {section['title']} ({len(section['df'])} total, showing top {display_limit}):")
+        for _, row in top_n.iterrows():
             text_lines.append(f"  - {section['formatter'](row)}")
         text_lines.append("")
 
         rows_html = "".join(
             f"<li style='padding:4px 0;color:#101825;'>{section['formatter'](row)}</li>"
-            for _, row in top10.iterrows()
+            for _, row in top_n.iterrows()
         )
         html_sections_list.append(f"""
         <h4 style="color:#101825; font-size:16px; margin:20px 0 8px 0;">{section['emoji']} {section['title']}</h4>
         <ul style="margin:0; padding-left:20px; font-size:14px;">{rows_html}</ul>
         """)
+
+    if not is_premium:
+        text_lines.append("🔒 You're seeing the free top 3 per signal. Upgrade to Premium for the full top 10.")
+        text_lines.append("")
 
     text_lines += [
         "See the full lists, sector rotation, and top movers under Discover on the site.",
@@ -133,6 +138,13 @@ def build_weekly_signals_email(sections: list) -> tuple:
     ]
     text_body = "\n".join(text_lines)
 
+    upgrade_hint_html = (
+        """<p style="margin-top:16px; font-size:13px; color:#5B6472; background:#F5F7F9; padding:10px 14px; border-radius:8px;">
+            &#128274; You're seeing the free top 3 per signal. Upgrade to Premium for the full top 10.
+        </p>"""
+        if not is_premium else ""
+    )
+
     html_body = f"""
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
@@ -141,6 +153,7 @@ def build_weekly_signals_email(sections: list) -> tuple:
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             {''.join(html_sections_list)}
+            {upgrade_hint_html}
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 See the full lists, sector rotation, and top movers under
                 <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
@@ -156,7 +169,7 @@ def build_weekly_signals_email(sections: list) -> tuple:
 def run_weekly_signals_emails(preferences: dict) -> None:
     """
     Stuurt 1 gecombineerde mail per gebruiker, met alleen de signaal-types
-    waar diegene zich voor heeft aangemeld (top 10 per type).
+    waar diegene zich voor heeft aangemeld (top 3 gratis / top 10 premium).
     """
     print("\n=== Wekelijkse signalen-mails versturen aan opt-in-gebruikers ===")
 
@@ -184,8 +197,9 @@ def run_weekly_signals_emails(preferences: dict) -> None:
         if not sections:
             continue
 
-        print(f"  {user_email}: {', '.join(s['title'] for s in sections)}")
-        text_body, html_body = build_weekly_signals_email(sections)
+        is_premium = bool(prefs.get("is_premium", False))
+        print(f"  {user_email} ({'premium' if is_premium else 'free'}): {', '.join(s['title'] for s in sections)}")
+        text_body, html_body = build_weekly_signals_email(sections, is_premium=is_premium)
         total_signals = sum(len(s["df"]) for s in sections)
         subject = f"Hesty's Weekly: {total_signals} new signal(s) this week"
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
