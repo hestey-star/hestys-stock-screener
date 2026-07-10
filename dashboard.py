@@ -1894,8 +1894,13 @@ elif current_view == "premium":
                     "please wait a few seconds and refresh this page."
                 )
 
+        _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
+
         if not st.user.is_logged_in:
             st.info("Log in first (top right) so we know which account to upgrade.")
+        elif _premium_free_for_all:
+            st.success("🚀 Everything is unlocked for free while we're still getting started -- "
+                       "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
         elif database.is_premium_user(st.user.email):
             st.success("You're already on Premium. Thank you!")
             customer_id = database.get_stripe_customer_id(st.user.email)
