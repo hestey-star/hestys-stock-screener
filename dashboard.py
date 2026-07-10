@@ -1073,8 +1073,11 @@ elif current_view == "discover":
     if st.user.is_logged_in:
         import database
         _current_prefs = database.get_user_preferences(st.user.email)
+        _is_premium_discover = database.is_premium_user(st.user.email)
     else:
         _current_prefs = {}
+        _is_premium_discover = False
+    _signal_display_limit = 10 if _is_premium_discover else 3
 
     # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
     with st.expander("📡 Momentocrats", expanded=True):
@@ -1159,6 +1162,9 @@ elif current_view == "discover":
             }
             format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
 
+            total_matching = len(filtered)
+            filtered = filtered.head(_signal_display_limit)
+
             st.dataframe(
                 filtered.style.format(format_dict, na_rep="unknown")
                               .background_gradient(subset=["Score"], cmap="Greens")
@@ -1166,7 +1172,10 @@ elif current_view == "discover":
                 width="stretch",
                 height=500,
             )
-            st.caption(f"{len(filtered)} of {len(df_screener)} signals shown (filtered by score).")
+            st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
+            if not _is_premium_discover and total_matching > _signal_display_limit:
+                st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                        f"Upgrade to Premium for the full top 10.")
 
         st.divider()
         _email_pref_toggle("wants_momentocrats_email", "📧 Email me this weekly (top 10)",
@@ -1183,12 +1192,17 @@ elif current_view == "discover":
                     "ticker": "Ticker", "prijs_nu": "Price", "roic_pct": "ROIC",
                     "afwijking_fair_value_pct": "Vs Fair Value", "volatiliteit_pct": "Volatility",
                 })[["Ticker", "Price", "ROIC", "Vs Fair Value", "Volatility"]]
+                total_snowball = len(df_display)
+                df_display = df_display.head(_signal_display_limit)
                 st.dataframe(
                     df_display.style.format({
                         "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
                     }),
                     width="stretch", hide_index=True,
                 )
+                if not _is_premium_discover and total_snowball > _signal_display_limit:
+                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                            f"Upgrade to Premium for the full top 10.")
             else:
                 st.caption("No stocks currently meet the Snowball criteria.")
         else:
@@ -1209,10 +1223,15 @@ elif current_view == "discover":
                     "ticker": "Ticker", "prijs_nu": "Price", "groei_pct": "Growth",
                     "relatieve_sterkte": "Relative Strength",
                 })[["Ticker", "Price", "Growth", "Relative Strength"]]
+                total_rocket = len(df_display)
+                df_display = df_display.head(_signal_display_limit)
                 st.dataframe(
                     df_display.style.format({"Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
                     width="stretch", hide_index=True,
                 )
+                if not _is_premium_discover and total_rocket > _signal_display_limit:
+                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                            f"Upgrade to Premium for the full top 10.")
             else:
                 st.caption("No stocks currently meet the Rocket List criteria.")
         else:
@@ -1788,6 +1807,7 @@ elif current_view == "premium":
         <table class="positions-table">
             <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
             <tbody>
+                <tr><td>Momentocrats, Snowball Signal, Rocket List</td><td>Top 3 each</td><td>Full top 10</td></tr>
                 <tr><td>Weekly &amp; daily screener (Discover)</td><td>&#10003;</td><td>&#10003;</td></tr>
                 <tr><td>Tracked positions</td><td>Up to 10</td><td>Unlimited</td></tr>
                 <tr><td>Concentration, diversification, sector &amp; asset mix</td><td>&#10003;</td><td>&#10003;</td></tr>
