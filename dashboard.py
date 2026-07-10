@@ -1911,7 +1911,7 @@ elif current_view == "premium":
             st.write("Choose a plan:")
             pcol1, pcol2 = st.columns(2)
             with pcol1:
-                st.markdown("**Monthly -- €4.99/mo**")
+                st.markdown("**Monthly -- €7.99/mo** *(~$8.99)*")
                 if st.button("Subscribe monthly", key="sub_monthly"):
                     with st.spinner("Preparing checkout..."):
                         session = create_checkout_session(
@@ -1919,14 +1919,15 @@ elif current_view == "premium":
                         )
                     st.link_button("Continue to payment →", session.url, type="primary")
             with pcol2:
-                st.markdown("**Yearly -- €49/yr**")
+                st.markdown("**Yearly -- €75/yr** *(~$85)*")
                 if st.button("Subscribe yearly", key="sub_yearly"):
                     with st.spinner("Preparing checkout..."):
                         session = create_checkout_session(
                             st.secrets["stripe"]["price_id_yearly"], st.user.email,
                         )
                     st.link_button("Continue to payment →", session.url, type="primary")
-            st.caption("Payments are processed securely by Stripe -- we never see or store your card details.")
+            st.caption("Payments are processed securely by Stripe -- we never see or store your card details. "
+                       "USD amounts shown are approximate (current EUR/USD rate) -- you're charged in EUR.")
 
 elif current_view == "support":
     st.markdown("### Support")
