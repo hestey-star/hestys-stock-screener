@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -1094,18 +1094,22 @@ elif current_view == "discover":
     )
     st.caption("Sector rotation and earnings surprises further down are market context, not individual stock picks.")
 
-    def _email_pref_toggle(signal_key: str, label: str, current_value: bool):
-        """Kleine, inline 'mail me dit wekelijks'-toggle, direct binnen een signaal-kaart."""
-        if not st.user.is_logged_in:
-            st.caption("Log in (top right) to get this signal by email, weekly.")
-            return
-        new_value = st.checkbox(label, value=current_value, key=f"inline_{signal_key}")
-        if new_value != current_value:
-            if st.button("Save", key=f"save_{signal_key}"):
-                import database as _database
-                _database.set_signal_email_preference(st.user.email, signal_key, new_value)
-                st.success("Saved!")
-                st.rerun()
+    def _email_pref_link(label: str):
+        """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
+        st.markdown(
+            f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} -- manage in '
+            f'<a href="?view=settings" class="inline-link" target="_self">Settings</a>.</div>',
+            unsafe_allow_html=True,
+        )
+
+    def _next_weekly_scan_time() -> str:
+        """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
+        now = datetime.now(timezone.utc)
+        days_ahead = (5 - now.weekday()) % 7  # maandag=0 ... zaterdag=5
+        if days_ahead == 0 and now.hour >= 7:
+            days_ahead = 7  # het is al zaterdag na 07:00 UTC -> volgende week
+        next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
+        return next_date.strftime("%Y-%m-%d %H:%M UTC")
 
     if st.user.is_logged_in:
         import database
@@ -1114,7 +1118,7 @@ elif current_view == "discover":
     else:
         _current_prefs = {}
         _is_premium_discover = False
-    _signal_display_limit = 10 if _is_premium_discover else 3
+    _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
     # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
     with st.expander("📡 Momentocrats", expanded=True):
@@ -1192,18 +1196,17 @@ elif current_view == "discover":
             st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
             if not _is_premium_discover and total_matching > _signal_display_limit:
                 st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                        f"Upgrade to Premium for the full top 10.")
+                        f"Upgrade to Premium to see all {total_matching}.")
 
         st.divider()
-        _email_pref_toggle("wants_momentocrats_email", f"📧 Email me this weekly (top {_signal_display_limit})",
-                            _current_prefs.get("wants_momentocrats_email", False))
+        _email_pref_link("Want this weekly by email?")
 
     # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
     with st.expander("🐦 Snowballers"):
         st.caption("Quality companies trading below fair value, with low volatility. For the "
                    "long-term investor -- no fresh trend flip required.")
-        st.caption(f"Updates weekly (same schedule as Momentocrats' weekly scan). "
-                   f"Last updated: {file_last_modified('snowball_signals.csv')}.")
+        st.caption(f"Last updated: {file_last_modified('snowball_signals.csv')}")
+        st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
         if os.path.exists("snowball_signals.csv"):
             df_snowball = pd.read_csv("snowball_signals.csv")
             if not df_snowball.empty:
@@ -1222,22 +1225,21 @@ elif current_view == "discover":
                 st.caption(f"{len(df_display)} of {total_snowball} matching stocks shown.")
                 if not _is_premium_discover and total_snowball > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                            f"Upgrade to Premium for the full top 10.")
+                            f"Upgrade to Premium to see all {total_snowball}.")
             else:
                 st.caption("No stocks currently meet the Snowballers criteria.")
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
         st.divider()
-        _email_pref_toggle("wants_snowball_email", f"📧 Email me this weekly (top {_signal_display_limit})",
-                            _current_prefs.get("wants_snowball_email", False))
+        _email_pref_link("Want this weekly by email?")
 
     # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
     with st.expander("🚀 Rocket List"):
         st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
                    "with more risk in exchange for growth potential.")
-        st.caption(f"Updates weekly (same schedule as Momentocrats' weekly scan). "
-                   f"Last updated: {file_last_modified('rocket_list_signals.csv')}.")
+        st.caption(f"Last updated: {file_last_modified('rocket_list_signals.csv')}")
+        st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
         if os.path.exists("rocket_list_signals.csv"):
             df_rocket = pd.read_csv("rocket_list_signals.csv")
             if not df_rocket.empty:
@@ -1254,15 +1256,27 @@ elif current_view == "discover":
                 st.caption(f"{len(df_display)} of {total_rocket} matching stocks shown.")
                 if not _is_premium_discover and total_rocket > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                            f"Upgrade to Premium for the full top 10.")
+                            f"Upgrade to Premium to see all {total_rocket}.")
             else:
                 st.caption("No stocks currently meet the Rocket List criteria.")
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
         st.divider()
-        _email_pref_toggle("wants_rocket_email", f"📧 Email me this weekly (top {_signal_display_limit})",
-                            _current_prefs.get("wants_rocket_email", False))
+        _email_pref_link("Want this weekly by email?")
+
+    st.markdown(
+        """
+        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
+            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
+                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
+                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
+                             position: relative; top: -0.6em;">Market Context Below</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):
@@ -1840,8 +1854,8 @@ elif current_view == "premium":
         <table class="positions-table">
             <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
             <tbody>
-                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>Full top 10</td></tr>
-                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>Full top 10</td></tr>
+                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>All results</td></tr>
+                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>All results</td></tr>
                 <tr><td>Tracked positions (My Portfolio)</td><td>Up to 10</td><td>Unlimited</td></tr>
                 <tr><td>Concentration, Diversification, Sectors, Performance (Analyze)</td><td>&#10003;</td><td>&#10003;</td></tr>
                 <tr><td>Dividend income overview (Analyze)</td><td>--</td><td>&#10003;</td></tr>
@@ -2037,5 +2051,6 @@ elif current_view == "support":
                     st.error("Something went wrong sending your message -- please try again later.")
 
 st.divider()
-st.caption("This dashboard shows technical signals (Supertrend), fundamental context (ROIC estimate), "
-           "and news. It is not an automated strategy and not financial advice.")
+st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "
+           "you research faster. It's not an automated trading strategy, and nothing here is "
+           "personalized financial advice.")

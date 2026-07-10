@@ -100,18 +100,20 @@ SIGNAL_TYPES = {
 def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tuple:
     """
     Bouwt 1 gecombineerde mail voor alle signaal-types die deze gebruiker
-    heeft aangevinkt -- top 3 (gratis) of top 10 (premium) per type, in
+    heeft aangevinkt -- top 3 (gratis) of ALLES (premium) per type, in
     Hesty's stijl (zelfde opmaak-taal als de dagelijkse mail).
 
     sections: lijst van dicts met keys 'title', 'emoji', 'df', 'formatter'.
     """
-    display_limit = 10 if is_premium else 3
+    display_limit = None if is_premium else 3  # None = pandas .head(None) geeft alles terug
     text_lines = ["Good morning from Hesty's -- your weekly signals are in.", ""]
     html_sections_list = []
 
     for section in sections:
+        total_this_section = len(section["df"])
         top_n = section["df"].head(display_limit)
-        text_lines.append(f"{section['emoji']} {section['title']} ({len(section['df'])} total, showing top {display_limit}):")
+        shown_label = "all" if is_premium else f"top {len(top_n)}"
+        text_lines.append(f"{section['emoji']} {section['title']} ({total_this_section} total, showing {shown_label}):")
         for _, row in top_n.iterrows():
             text_lines.append(f"  - {section['formatter'](row)}")
         text_lines.append("")
@@ -126,7 +128,7 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
         """)
 
     if not is_premium:
-        text_lines.append("🔒 You're seeing the free top 3 per signal. Upgrade to Premium for the full top 10.")
+        text_lines.append("🔒 You're seeing the free top 3 per signal. Upgrade to Premium to see everything.")
         text_lines.append("")
 
     text_lines += [
@@ -140,7 +142,7 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
 
     upgrade_hint_html = (
         """<p style="margin-top:16px; font-size:13px; color:#5B6472; background:#F5F7F9; padding:10px 14px; border-radius:8px;">
-            &#128274; You're seeing the free top 3 per signal. Upgrade to Premium for the full top 10.
+            &#128274; You're seeing the free top 3 per signal. Upgrade to Premium to see everything.
         </p>"""
         if not is_premium else ""
     )
