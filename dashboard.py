@@ -1865,7 +1865,7 @@ elif current_view == "premium":
                 "not a guarantee of future results."
             )
 
-        if st.user.is_logged_in and database.is_premium_user(st.user.email):
+        if st.user.is_logged_in and database.is_premium_user(st.user.email, ignore_free_for_all=True):
             try:
                 with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
                     pine_code = f.read()

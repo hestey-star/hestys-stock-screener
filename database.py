@@ -134,17 +134,25 @@ def set_signal_email_preference(user_email: str, signal_key: str, value: bool) -
     }).execute()
 
 
-def is_premium_user(user_email: str) -> bool:
-    """Handmatig te zetten (via Supabase) totdat er een echt betaalsysteem is."""
+def is_premium_user(user_email: str, ignore_free_for_all: bool = False) -> bool:
+    """
+    Handmatig te zetten (via Supabase) totdat er een echt betaalsysteem is.
+
+    ignore_free_for_all: zet op True voor content die ECHT premium moet
+    blijven, ook tijdens de 'iedereen premium'-testfase (bv. de download
+    van het Smart DCA-script -- eenmaal weggegeven, krijg je 'm niet
+    terug, in tegenstelling tot bv. extra rijen in een signalenlijst).
+    """
     # Tijdelijke schakelaar (via secrets.toml) om EVERYONE als premium te
     # behandelen -- handig zolang Stripe nog in test-modus staat en je
     # eerst tractie wil opbouwen, voordat er daadwerkelijk afgerekend kan
     # worden. Terugzetten: verwijder de regel of zet 'm op false.
-    try:
-        if st.secrets.get("app", {}).get("premium_free_for_all", False):
-            return True
-    except Exception:
-        pass
+    if not ignore_free_for_all:
+        try:
+            if st.secrets.get("app", {}).get("premium_free_for_all", False):
+                return True
+        except Exception:
+            pass
     prefs = get_user_preferences(user_email)
     return bool(prefs.get("is_premium", False))
 
