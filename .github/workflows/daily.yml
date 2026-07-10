@@ -5,9 +5,14 @@ on:
     # Maandag t/m vrijdag:
     # 05:00 UTC = scan draaien + direct mail naar EU-gebruikers
     #             (~06:00 CET winter / ~07:00 CEST zomer)
+    # 05:30 UTC = VANGNET -- als GitHub's planner de 05:00-tick een keer
+    #             mist (komt voor, 'best effort'-planning), proberen we
+    #             het hier nog een keer. Slaat zichzelf over als de
+    #             05:00-run al gelukt is (voorkomt een dubbele mail).
     # 12:00 UTC = alleen mail naar VS-oost-gebruikers (~07:00-08:00 ET)
     # 15:00 UTC = alleen mail naar VS-west-gebruikers (~07:00-08:00 PT)
     - cron: "0 5 * * 1-5"
+    - cron: "30 5 * * 1-5"
     - cron: "0 12 * * 1-5"
     - cron: "0 15 * * 1-5"
   workflow_dispatch:
@@ -28,6 +33,8 @@ jobs:
     steps:
       - name: Code ophalen
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # volledige geschiedenis nodig om de laatste commit-datum van de CSV te checken
 
       - name: Python installeren
         uses: actions/setup-python@v5
@@ -37,25 +44,32 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
-      - name: Regio bepalen en of de scan nodig is
+      - name: Regio bepalen en of de scan/mail vandaag al gelukt is
         id: determine
         run: |
-          if [ "${{ github.event.schedule }}" = "0 5 * * 1-5" ]; then
+          if [ "${{ github.event.schedule }}" = "0 5 * * 1-5" ] || [ "${{ github.event.schedule }}" = "30 5 * * 1-5" ]; then
             echo "region=EU" >> "$GITHUB_OUTPUT"
-            echo "do_scan=true" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then
             echo "region=US_East" >> "$GITHUB_OUTPUT"
-            echo "do_scan=false" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "0 15 * * 1-5" ]; then
             echo "region=US_West" >> "$GITHUB_OUTPUT"
-            echo "do_scan=false" >> "$GITHUB_OUTPUT"
           else
             echo "region=${{ github.event.inputs.region }}" >> "$GITHUB_OUTPUT"
-            echo "do_scan=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Dagelijkse scan draaien (alleen bij de vroege EU-run of handmatig)
-        if: steps.determine.outputs.do_scan == 'true'
+          # Vangnet-check: is de EU-scan van VANDAAG al gecommit? Zo ja, dan
+          # is de 05:00-run (of een eerdere vangnet-poging) al gelukt, en
+          # slaan we een 2e scan/mail voor vandaag over (voorkomt dubbele mail).
+          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals_daily.csv 2>/dev/null || echo "never")
+          TODAY=$(date -u +%Y-%m-%d)
+          if [ "$LAST_COMMIT_DATE" = "$TODAY" ]; then
+            echo "eu_already_done_today=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "eu_already_done_today=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dagelijkse scan draaien (EU, alleen als dat vandaag nog niet gelukt is)
+        if: steps.determine.outputs.region == 'EU' && steps.determine.outputs.eu_already_done_today == 'false'
         run: python daily_batch.py
         env:
           EMAIL_SMTP_SERVER: smtp.gmail.com
@@ -64,6 +78,7 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
       - name: Mail versturen voor deze regio
+        if: steps.determine.outputs.region != 'EU' || steps.determine.outputs.eu_already_done_today == 'false'
         run: python daily_email_dispatch.py ${{ steps.determine.outputs.region }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -73,8 +88,8 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
-      - name: Bijgewerkte bestanden committen en pushen (alleen na een scan)
-        if: steps.determine.outputs.do_scan == 'true'
+      - name: Bijgewerkte bestanden committen en pushen (alleen na een EU-scan)
+        if: steps.determine.outputs.region == 'EU' && steps.determine.outputs.eu_already_done_today == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

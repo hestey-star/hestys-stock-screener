@@ -1,0 +1,26 @@
+"""
+Vangnet-schema voor de dagelijkse mail: sinds 2 ochtenden op rij de
+geplande 05:00-UTC-run gewoon niet afging (een bekende, door GitHub zelf
+erkende 'best effort'-planningsbeperking), voegt dit een 2e cron-tijdstip
+toe: 05:30 UTC.
+
+Die 2e run controleert zelf (via de laatste git-commit-datum van
+supertrend_signals_daily.csv) of de 05:00-run al gelukt is:
+- Zo ja: slaat zichzelf over (geen dubbele scan, geen dubbele mail)
+- Zo nee: draait de scan + EU-mail alsnog
+
+VS-oost en VS-west blijven ongewijzigd (12:00/15:00 UTC), die zijn nooit
+geraakt door dit probleem.
+
+Gebruik: python fix_daily_mail_failsafe.py
+Draai dit vanuit je stock_screener-map.
+"""
+import os
+
+NEW_CONTENT = 'name: Dagelijkse screener\n\non:\n  schedule:\n    # Maandag t/m vrijdag:\n    # 05:00 UTC = scan draaien + direct mail naar EU-gebruikers\n    #             (~06:00 CET winter / ~07:00 CEST zomer)\n    # 05:30 UTC = VANGNET -- als GitHub\'s planner de 05:00-tick een keer\n    #             mist (komt voor, \'best effort\'-planning), proberen we\n    #             het hier nog een keer. Slaat zichzelf over als de\n    #             05:00-run al gelukt is (voorkomt een dubbele mail).\n    # 12:00 UTC = alleen mail naar VS-oost-gebruikers (~07:00-08:00 ET)\n    # 15:00 UTC = alleen mail naar VS-west-gebruikers (~07:00-08:00 PT)\n    - cron: "0 5 * * 1-5"\n    - cron: "30 5 * * 1-5"\n    - cron: "0 12 * * 1-5"\n    - cron: "0 15 * * 1-5"\n  workflow_dispatch:\n    inputs:\n      region:\n        description: "Regio voor een handmatige test-run"\n        required: false\n        default: "EU"\n        type: choice\n        options:\n          - EU\n          - US_East\n          - US_West\n\njobs:\n  run-daily:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Code ophalen\n        uses: actions/checkout@v4\n        with:\n          fetch-depth: 0  # volledige geschiedenis nodig om de laatste commit-datum van de CSV te checken\n\n      - name: Python installeren\n        uses: actions/setup-python@v5\n        with:\n          python-version: "3.12"\n\n      - name: Dependencies installeren\n        run: pip install -r requirements.txt\n\n      - name: Regio bepalen en of de scan/mail vandaag al gelukt is\n        id: determine\n        run: |\n          if [ "${{ github.event.schedule }}" = "0 5 * * 1-5" ] || [ "${{ github.event.schedule }}" = "30 5 * * 1-5" ]; then\n            echo "region=EU" >> "$GITHUB_OUTPUT"\n          elif [ "${{ github.event.schedule }}" = "0 12 * * 1-5" ]; then\n            echo "region=US_East" >> "$GITHUB_OUTPUT"\n          elif [ "${{ github.event.schedule }}" = "0 15 * * 1-5" ]; then\n            echo "region=US_West" >> "$GITHUB_OUTPUT"\n          else\n            echo "region=${{ github.event.inputs.region }}" >> "$GITHUB_OUTPUT"\n          fi\n\n          # Vangnet-check: is de EU-scan van VANDAAG al gecommit? Zo ja, dan\n          # is de 05:00-run (of een eerdere vangnet-poging) al gelukt, en\n          # slaan we een 2e scan/mail voor vandaag over (voorkomt dubbele mail).\n          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals_daily.csv 2>/dev/null || echo "never")\n          TODAY=$(date -u +%Y-%m-%d)\n          if [ "$LAST_COMMIT_DATE" = "$TODAY" ]; then\n            echo "eu_already_done_today=true" >> "$GITHUB_OUTPUT"\n          else\n            echo "eu_already_done_today=false" >> "$GITHUB_OUTPUT"\n          fi\n\n      - name: Dagelijkse scan draaien (EU, alleen als dat vandaag nog niet gelukt is)\n        if: steps.determine.outputs.region == \'EU\' && steps.determine.outputs.eu_already_done_today == \'false\'\n        run: python daily_batch.py\n        env:\n          EMAIL_SMTP_SERVER: smtp.gmail.com\n          EMAIL_SMTP_PORT: 587\n          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}\n          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}\n\n      - name: Mail versturen voor deze regio\n        if: steps.determine.outputs.region != \'EU\' || steps.determine.outputs.eu_already_done_today == \'false\'\n        run: python daily_email_dispatch.py ${{ steps.determine.outputs.region }}\n        env:\n          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}\n          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}\n          EMAIL_SMTP_SERVER: smtp.gmail.com\n          EMAIL_SMTP_PORT: 587\n          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}\n          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}\n\n      - name: Bijgewerkte bestanden committen en pushen (alleen na een EU-scan)\n        if: steps.determine.outputs.region == \'EU\' && steps.determine.outputs.eu_already_done_today == \'false\'\n        run: |\n          git config --global user.name "github-actions[bot]"\n          git config --global user.email "github-actions[bot]@users.noreply.github.com"\n          git add supertrend_signals_daily.csv top_movers.csv\n          git diff --staged --quiet || git commit -m "Automatische dagelijkse update"\n          git pull --rebase origin main\n          git push\n'
+
+os.makedirs(".github/workflows", exist_ok=True)
+with open(".github/workflows/daily.yml", "w", encoding="utf-8") as f:
+    f.write(NEW_CONTENT)
+print(f"Klaar. 'daily.yml' overschreven ({len(NEW_CONTENT)} tekens).")
+print("git add . && git commit -m 'Add failsafe retry for daily EU email' && git push")
