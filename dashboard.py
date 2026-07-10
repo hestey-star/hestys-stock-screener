@@ -891,9 +891,9 @@ with header_col:
             </a>
             <div class="nav-bar">
                 <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
+                <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
                 <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
                 <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
-                <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
                 <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
                 <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
             </div>
@@ -924,11 +924,15 @@ if current_view == "today":
         st.write("Here are your daily points that deserve your attention.")
         st.info("Log in (top right), then add positions under My Portfolio or your Watchlist "
                  "to get personal signals and news here.")
-        st.markdown("#### Discover")
+        st.markdown("#### No account needed to browse")
         st.write(
-            "Scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 for stocks that just turned "
-            "bullish on a Supertrend indicator (weekly and daily variants), each scored on "
-            "technical and fundamental factors. Public, no login required."
+            "Discover is fully public: 3 specially-built stock signals (Momentocrats, "
+            "Snowballers, Rocket List), plus sector rotation and more -- free to browse "
+            "right now, no login required."
+        )
+        st.markdown(
+            '<a href="?view=discover" class="button-link" target="_self">Explore Discover &rarr;</a>',
+            unsafe_allow_html=True,
         )
     else:
         import database
