@@ -1092,7 +1092,6 @@ elif current_view == "discover":
         """,
         unsafe_allow_html=True,
     )
-    st.caption("Sector rotation and earnings surprises further down are market context, not individual stock picks.")
 
     def _email_pref_link(label: str):
         """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
@@ -1271,7 +1270,7 @@ elif current_view == "discover":
             <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
                 <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
                              letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
-                             position: relative; top: -0.6em;">Market Context Below</span>
+                             position: relative; top: -0.6em;">The Bigger Picture</span>
             </div>
         </div>
         """,
