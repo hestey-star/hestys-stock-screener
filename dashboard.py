@@ -1813,9 +1813,15 @@ elif current_view == "premium":
             "a built-in comparison against a fixed, regular DCA strategy."
         )
         try:
-            st.image("premium_content/dca_illustration.png", width="stretch")
+            st.image("premium_content/dca_screenshot.jpg", width="stretch")
         except Exception:
             pass
+        st.caption(
+            "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
+            "suggested contribution at each point, and the panel on the right compares Smart DCA "
+            "against a fixed, regular DCA over the same period. This is one historical example, "
+            "not a guarantee of future results."
+        )
 
         if st.user.is_logged_in and database.is_premium_user(st.user.email):
             try:
