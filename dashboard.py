@@ -752,6 +752,44 @@ def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -
     return all_news[:max_items]
 
 
+def compute_holding_performance(transactions: list, current_price: float) -> dict:
+    """
+    Berekent rendement uit een lijst buy/sell-transacties, met de
+    gemiddelde-kostprijs-methode (inclusief betaalde fees). Geeft None
+    terug als er geen (bruikbare) transacties zijn, of de huidige prijs
+    onbekend is -- geen dividenden meegenomen (bewust, voor nu).
+    """
+    if not transactions or current_price is None:
+        return None
+
+    total_bought_shares = sum(tx["shares"] for tx in transactions if tx["transaction_type"] == "buy")
+    total_bought_cost = sum(tx["shares"] * tx["price"] + tx["fee"] for tx in transactions if tx["transaction_type"] == "buy")
+    total_sold_shares = sum(tx["shares"] for tx in transactions if tx["transaction_type"] == "sell")
+    total_sold_proceeds = sum(tx["shares"] * tx["price"] - tx["fee"] for tx in transactions if tx["transaction_type"] == "sell")
+
+    if total_bought_shares <= 0:
+        return None  # geen aankopen gelogd, kan geen kostprijs bepalen
+
+    avg_cost_per_share = total_bought_cost / total_bought_shares
+    shares_held = total_bought_shares - total_sold_shares
+    cost_basis_held = shares_held * avg_cost_per_share
+    unrealized_pnl = (current_price * shares_held) - cost_basis_held
+    realized_pnl = total_sold_proceeds - (total_sold_shares * avg_cost_per_share)
+    total_pnl = unrealized_pnl + realized_pnl
+    total_return_pct = (total_pnl / total_bought_cost) * 100 if total_bought_cost > 0 else None
+
+    return {
+        "shares_held": round(shares_held, 4),
+        "avg_cost_per_share": round(avg_cost_per_share, 4),
+        "cost_basis_held": round(cost_basis_held, 2),
+        "current_value_held": round(current_price * shares_held, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "realized_pnl": round(realized_pnl, 2),
+        "total_pnl": round(total_pnl, 2),
+        "total_return_pct": round(total_return_pct, 2) if total_return_pct is not None else None,
+    }
+
+
 def build_concentration_overview(holdings: list, infos: dict, cash_value: float = 0.0) -> dict:
     """
     Berekent de 'at a glance'-portfolio-kenmerken: top-positie%, verdeling
@@ -1583,16 +1621,92 @@ elif current_view == "portfolio":
                     edit_label = st.selectbox(
                         "Position to edit", list(holding_options.keys()), key="edit_select", label_visibility="collapsed"
                     )
-                with ecol2:
-                    current_shares = holding_options[edit_label].get("shares") or 0.0
-                    new_shares = st.number_input(
-                        "New share count", min_value=0.0, value=float(current_shares), step=1.0,
-                        key="edit_shares_input", label_visibility="collapsed",
+                edit_holding = holding_options[edit_label]
+                edit_transactions = database.get_transactions_for_holding(user_email, edit_holding["id"])
+                if edit_transactions:
+                    derived_shares = sum(
+                        t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
+                        for t in edit_transactions
                     )
-                with ecol3:
-                    if st.button("Save shares"):
-                        database.update_holding_shares(holding_options[edit_label]["id"], user_email, new_shares)
+                    with ecol2:
+                        st.markdown(f"**{derived_shares:.2f}** shares *(from transaction history)*")
+                    st.caption("This position's share count now comes from its logged transactions -- "
+                               "manage it under 'Log a transaction' below instead of editing it directly here.")
+                else:
+                    with ecol2:
+                        current_shares = edit_holding.get("shares") or 0.0
+                        new_shares = st.number_input(
+                            "New share count", min_value=0.0, value=float(current_shares), step=1.0,
+                            key="edit_shares_input", label_visibility="collapsed",
+                        )
+                    with ecol3:
+                        if st.button("Save shares"):
+                            database.update_holding_shares(edit_holding["id"], user_email, new_shares)
+                            st.rerun()
+
+            with st.expander("Log a transaction", expanded=False):
+                st.caption("Log your actual buys and sells to see your real return under Analyze. "
+                           "Optional -- positions without transactions logged just won't show a return.")
+                tx_label = st.selectbox(
+                    "Position", list(holding_options.keys()), key="tx_select", label_visibility="collapsed"
+                )
+                tx_holding = holding_options[tx_label]
+
+                tx_type = st.radio(
+                    "Type", ["🟢 Log a buy", "🔴 Log a sell"], horizontal=True, key="tx_type_radio",
+                )
+                is_buy = tx_type == "🟢 Log a buy"
+
+                tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+                with tcol1:
+                    tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
+                with tcol2:
+                    tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
+                with tcol3:
+                    tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
+                with tcol4:
+                    tx_date = st.date_input("Date", key="tx_date_input")
+
+                if st.button("Save transaction", type="primary"):
+                    if tx_shares <= 0 or tx_price <= 0:
+                        st.error("Shares and price must both be greater than 0.")
+                    else:
+                        existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
+                        existing_manual_shares = tx_holding.get("shares") or 0.0
+                        if not existing_tx and existing_manual_shares > 0:
+                            # Eerste transactie voor deze positie, en er stond al een handmatig
+                            # aantal shares -- die vangen we automatisch op als een 'gekocht
+                            # tegen de huidige prijs, vandaag'-transactie (simpele standaard,
+                            # geen keuzemenu nodig; later aanpasbaar als je de echte
+                            # historische aankoopprijs nog weet).
+                            try:
+                                backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
+                            except Exception:
+                                backfill_price = tx_price  # fallback als de live prijs niet op te halen is
+                            database.add_transaction(
+                                user_email, tx_holding["id"], "buy",
+                                shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                                transaction_date=datetime.now().date().isoformat(),
+                            )
+                            st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
+                                    f"bought at today's price (€{backfill_price:.2f}) -- edit this later if "
+                                    f"you remember the actual original purchase price.")
+
+                        database.add_transaction(
+                            user_email, tx_holding["id"], "buy" if is_buy else "sell",
+                            shares=tx_shares, price=tx_price, fee=tx_fee,
+                            transaction_date=tx_date.isoformat(),
+                        )
+                        st.success("Transaction saved!")
                         st.rerun()
+
+                tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
+                if tx_history:
+                    st.markdown("**Transaction history**")
+                    for t in tx_history:
+                        emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
+                        st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
+                                   f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
 
             with st.expander("Remove a position", expanded=False):
                 rcol1, rcol2 = st.columns([4, 1])
@@ -1701,6 +1815,42 @@ elif current_view == "analyze":
 
     risk_profile = database.get_risk_profile(user_email)
     infos = get_tickers_info(holdings)
+
+    # --- Performance (rendement uit gelogde transacties) ---
+    with st.expander("📈 Performance", expanded=True):
+        st.caption("Your real return, based on the buy/sell transactions you've logged under "
+                   "My Portfolio -- excludes dividends. Positions without logged transactions "
+                   "won't show a return here.")
+        performance_rows = []
+        total_invested = 0.0
+        total_pnl = 0.0
+        for h in holdings:
+            transactions = database.get_transactions_for_holding(user_email, h["id"])
+            if not transactions:
+                continue
+            current_price = infos.get(h["ticker"], {}).get("currentPrice") or infos.get(h["ticker"], {}).get("regularMarketPrice")
+            perf = compute_holding_performance(transactions, current_price)
+            if perf:
+                performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], **perf})
+                bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
+                total_invested += bought_cost
+                total_pnl += perf["total_pnl"]
+
+        if performance_rows:
+            overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
+            if overall_return_pct is not None:
+                st.metric("Overall return (tracked positions)", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
+
+            for r in performance_rows:
+                pct = r["total_return_pct"]
+                if pct is not None:
+                    color_emoji = "🟢" if pct >= 0 else "🔴"
+                    st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
+                else:
+                    st.markdown(f"- {r['naam']} ({r['ticker']}): return unknown")
+        else:
+            st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
+                       "to start tracking your return.")
 
     # --- Concentratie Risk ---
     with st.expander("🎯 Concentration Risk", expanded=True):

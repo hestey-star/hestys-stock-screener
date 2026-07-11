@@ -83,3 +83,20 @@ create table portfolio_score_history (
     created_at timestamp with time zone default now(),
     unique (user_email, date)  -- voorkomt dubbele snapshots op 1 dag, maakt upsert mogelijk
 );
+
+-- Buy/sell-transactiegeschiedenis per positie -- optioneel, alleen
+-- gebruikt door wie z'n rendement wil zien (zie Analyze -> Performance).
+-- Zodra een positie 1+ transacties heeft, wordt het aantal shares
+-- daaruit afgeleid i.p.v. handmatig ingevoerd (voorkomt 2 conflicterende
+-- bronnen van waarheid).
+create table portfolio_transactions (
+    id bigint generated always as identity primary key,
+    user_email text not null,
+    holding_id bigint not null references portfolio_holdings(id) on delete cascade,
+    transaction_type text not null check (transaction_type in ('buy', 'sell')),
+    shares numeric not null check (shares > 0),
+    price numeric not null check (price >= 0),
+    fee numeric not null default 0 check (fee >= 0),
+    transaction_date date not null,
+    created_at timestamp with time zone default now()
+);

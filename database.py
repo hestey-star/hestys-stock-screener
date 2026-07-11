@@ -49,6 +49,56 @@ def update_holding_shares(holding_id: int, user_email: str, shares: float) -> No
         .eq("id", holding_id).eq("user_email", user_email).execute()
 
 
+def add_transaction(
+    user_email: str, holding_id: int, transaction_type: str,
+    shares: float, price: float, fee: float, transaction_date: str,
+) -> None:
+    """
+    Logt 1 buy/sell-transactie voor een positie. Filtert ALTIJD op
+    user_email (zie de module-docstring voor waarom dit hier gebeurt).
+    """
+    client = get_supabase_client()
+    client.table("portfolio_transactions").insert({
+        "user_email": user_email,
+        "holding_id": holding_id,
+        "transaction_type": transaction_type,
+        "shares": shares,
+        "price": price,
+        "fee": fee,
+        "transaction_date": transaction_date,
+    }).execute()
+
+
+def get_transactions_for_holding(user_email: str, holding_id: int) -> list:
+    """Geeft alle transacties voor 1 positie terug, oudste eerst."""
+    client = get_supabase_client()
+    response = (
+        client.table("portfolio_transactions")
+        .select("*")
+        .eq("user_email", user_email)
+        .eq("holding_id", holding_id)
+        .order("transaction_date", desc=False)
+        .execute()
+    )
+    return response.data or []
+
+
+def get_all_transactions(user_email: str) -> dict:
+    """Geeft ALLE transacties van een gebruiker terug, gegroepeerd per holding_id."""
+    client = get_supabase_client()
+    response = (
+        client.table("portfolio_transactions")
+        .select("*")
+        .eq("user_email", user_email)
+        .order("transaction_date", desc=False)
+        .execute()
+    )
+    grouped: dict = {}
+    for tx in (response.data or []):
+        grouped.setdefault(tx["holding_id"], []).append(tx)
+    return grouped
+
+
 def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR") -> None:
     """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat."""
     client = get_supabase_client()
