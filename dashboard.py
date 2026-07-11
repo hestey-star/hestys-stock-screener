@@ -869,25 +869,56 @@ def sync_holding_shares_from_transactions(holding_id: int, user_email: str) -> f
     return derived_shares
 
 
+def _looks_like_isin(value: str) -> bool:
+    """Checkt of een string er zelf uitziet als een ISIN (2 letters + 9 alfanumeriek + 1 cijfer,
+    12 tekens totaal) -- gebruikt om te detecteren als Yahoo's zoekfunctie per ongeluk de
+    ISIN zelf teruggeeft als 'symbool' (komt voor bij ETF's met meerdere beursnoteringen)."""
+    if not value or len(value) != 12:
+        return False
+    return value[:2].isalpha() and value[2:11].isalnum() and value[11].isdigit()
+
+
 def guess_ticker_for_product(product_name: str, isin: str = None) -> str:
     """
     Zoekt de meest waarschijnlijke ticker voor een positie uit een
     broker-export. Probeert EERST op ISIN (preciezer, geen fuzzy-matching
-    nodig -- een ISIN is een uniek identificatienummer), en valt terug op
-    de productnaam als dat niks oplevert (bv. bij crypto, dat geen ISIN
-    heeft). Geeft None terug als beide niks vinden.
+    nodig), en valt terug op de productnaam als dat niks (bruikbaars)
+    oplevert -- bv. bij crypto, dat geen ISIN heeft, of bij ETF's met
+    meerdere beursnoteringen waar Yahoo soms de ISIN zelf teruggeeft
+    i.p.v. een echte ticker (die valse match wordt hier herkend en
+    afgekeurd). Bij crypto (geen ISIN) filteren we specifiek op
+    quoteType 'CRYPTOCURRENCY', want een platte naam-zoekopdracht is
+    te grofmazig (bv. 'SOLANA' kan van alles teruggeven).
+
+    Geeft None terug als er niks betrouwbaars gevonden wordt -- dan moet
+    de gebruiker het zelf invullen.
     """
     if isin:
         try:
             isin_results = yf.Search(isin, max_results=1).quotes
             if isin_results:
-                return isin_results[0].get("symbol")
+                symbol = isin_results[0].get("symbol")
+                if symbol and not _looks_like_isin(symbol):
+                    return symbol
         except Exception:
             pass
+    else:
+        # Geen ISIN -- waarschijnlijk crypto. Specifiek filteren op
+        # quoteType, i.p.v. blind het eerste resultaat te pakken.
+        try:
+            crypto_results = yf.Search(product_name, max_results=5).quotes
+            for r in crypto_results:
+                if r.get("quoteType") == "CRYPTOCURRENCY":
+                    return r.get("symbol")
+        except Exception:
+            pass
+
     try:
         name_results = yf.Search(product_name, max_results=1).quotes
         if name_results:
-            return name_results[0].get("symbol")
+            symbol = name_results[0].get("symbol")
+            if symbol and not _looks_like_isin(symbol):
+                return symbol
     except Exception:
         pass
     return None
@@ -1726,12 +1757,32 @@ elif current_view == "portfolio":
                     st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
                                f"{reasons_preview}{more}")
 
+                unmatched_keys = [
+                    key for key, group in degiro_grouped.items()
+                    if not st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                ]
+                if unmatched_keys:
+                    unmatched_lines = "\n".join(
+                        f"- **{degiro_grouped[key]['product']}**"
+                        + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
+                        for key in unmatched_keys
+                    )
+                    st.warning(f"⚠️ **{len(unmatched_keys)} security/securities need your attention** "
+                               f"-- no ticker could be auto-matched. Fill these in manually below, "
+                               f"or they'll be skipped:\n\n{unmatched_lines}")
+
                 st.markdown("**Review the ticker for each security** (auto-suggested -- please "
-                             "double-check and correct if wrong before importing):")
-                for key, group in degiro_grouped.items():
+                             "double-check and correct if wrong before importing). "
+                             "Unmatched ones are shown first:")
+                sorted_items = sorted(
+                    degiro_grouped.items(),
+                    key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
+                )
+                for key, group in sorted_items:
                     dcol1, dcol2 = st.columns([3, 2])
                     with dcol1:
-                        st.caption(f"{group['product']} ({len(group['transactions'])} transactions)")
+                        prefix = "⚠️ " if key in unmatched_keys else ""
+                        st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)")
                     with dcol2:
                         current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
                         new_ticker = st.text_input(
