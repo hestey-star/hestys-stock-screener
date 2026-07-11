@@ -2,8 +2,14 @@ name: Wekelijkse screener en portfolio-mails
 
 on:
   schedule:
-    # Zaterdag 07:00 UTC = 08:00 CET / 09:00 CEST (zomertijd)
-    - cron: "0 7 * * 6"
+    # Zaterdag:
+    # 06:00 UTC = scan + mail draaien (~07:00 CET winter / ~08:00 CEST zomer)
+    # 06:30 UTC = VANGNET -- als GitHub's planner de 06:00-tick een keer
+    #             mist (komt voor, 'best effort'-planning), proberen we
+    #             het hier nog een keer. Slaat zichzelf over als de
+    #             06:00-run al gelukt is (voorkomt een dubbele mail).
+    - cron: "0 6 * * 6"
+    - cron: "30 6 * * 6"
   workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
 
 jobs:
@@ -12,6 +18,8 @@ jobs:
     steps:
       - name: Code ophalen
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # volledige geschiedenis nodig om de laatste commit-datum te checken
 
       - name: Python installeren
         uses: actions/setup-python@v5
@@ -21,7 +29,19 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
+      - name: Checken of de scan/mail vandaag al gelukt is
+        id: determine
+        run: |
+          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals.csv 2>/dev/null || echo "never")
+          TODAY=$(date -u +%Y-%m-%d)
+          if [ "$LAST_COMMIT_DATE" = "$TODAY" ] && [ "${{ github.event.schedule }}" = "30 6 * * 6" ]; then
+            echo "already_done_today=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_done_today=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Wekelijks batch-script draaien
+        if: steps.determine.outputs.already_done_today == 'false'
         run: python weekly_batch.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -32,6 +52,7 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
       - name: Bijgewerkte bestanden committen en pushen
+        if: steps.determine.outputs.already_done_today == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
