@@ -841,6 +841,15 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows}
 
 
+def filter_active_holdings(holdings: list) -> list:
+    """
+    Verbergt posities die op 0 shares staan (volledig verkocht, bv. via
+    een bulk-import waarbij koop+verkoop samen tot 0 optellen) -- shares
+    van None (nog helemaal niet ingevuld/bekend) blijft wel gewoon zichtbaar.
+    """
+    return [h for h in holdings if h.get("shares") is None or abs(h["shares"]) > 0.0001]
+
+
 def sync_holding_shares_from_transactions(holding_id: int, user_email: str) -> float:
     """
     Herberekent het aantal shares uit ALLE transacties van deze positie, en
@@ -1161,7 +1170,7 @@ if current_view == "today":
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
 
         user_email = st.user.email
-        holdings = database.get_user_holdings(user_email)
+        holdings = filter_active_holdings(database.get_user_holdings(user_email))
         watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
 
         st.write("Here are your daily points that deserve your attention.")
@@ -1597,7 +1606,7 @@ elif current_view == "portfolio":
     )
     st.subheader(f"Welcome, {st.user.name}")
 
-    holdings = database.get_user_holdings(user_email)
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
     is_premium = database.is_premium_user(user_email)
 
@@ -1738,10 +1747,17 @@ elif current_view == "portfolio":
                 if st.button("Import all matched transactions", type="primary"):
                     imported_positions = 0
                     imported_transactions = 0
-                    for key, group in degiro_grouped.items():
-                        ticker = st.session_state["degiro_ticker_matches"].get(key, "").strip()
-                        if not ticker:
-                            continue
+                    to_import = [
+                        (key, group) for key, group in degiro_grouped.items()
+                        if st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                    ]
+
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+
+                    for i, (key, group) in enumerate(to_import):
+                        ticker = st.session_state["degiro_ticker_matches"][key].strip()
+                        status_text.markdown(f"📥 **Importing {group['product']}...** ({i + 1} of {len(to_import)})")
 
                         existing = next((h for h in holdings if h["ticker"] == ticker), None)
                         if existing:
@@ -1773,6 +1789,10 @@ elif current_view == "portfolio":
                             imported_transactions += 1
 
                         sync_holding_shares_from_transactions(holding_id, user_email)
+                        progress_bar.progress((i + 1) / len(to_import))
+
+                    status_text.empty()
+                    progress_bar.empty()
 
                     st.success(f"Imported {imported_transactions} transactions across "
                                f"{imported_positions} new position(s)!")
@@ -2017,7 +2037,7 @@ elif current_view == "analyze":
     from portfolio_watch import check_holding
 
     user_email = st.user.email
-    holdings = database.get_user_holdings(user_email)
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
     is_premium = database.is_premium_user(user_email)
 
