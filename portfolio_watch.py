@@ -216,7 +216,7 @@ def build_email_body(df: pd.DataFrame) -> tuple:
 
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 See the full analysis under
-                <a href="https://hestys-stock-screener.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyze</a> on the site.
+                <a href="https://hestys.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyze</a> on the site.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>

@@ -222,9 +222,9 @@ def build_no_signals_email_daily() -> tuple:
                 No bullish flips showed up on today's scan -- a quiet day on that front.
             </p>
             <p style="margin-top:16px; font-size:14px; color:#5B6472; line-height:1.5;">
-                Check <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
+                Check <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
                 for sector rotation and top movers, or
-                <a href="https://hestys-stock-screener.streamlit.app/?view=analyse" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
+                <a href="https://hestys.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
@@ -307,7 +307,7 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
             </table>
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 Want sector rotation, top movers, and earnings surprises too? Check
-                <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
+                <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>

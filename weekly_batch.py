@@ -150,7 +150,7 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
             {''.join(html_sections_list)}
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 See the full lists, sector rotation, and top movers under
-                <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
+                <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
