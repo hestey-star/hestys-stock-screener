@@ -29,6 +29,7 @@ import json
 import os
 from datetime import datetime, timezone, timedelta
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import stripe
@@ -938,6 +939,101 @@ def guess_ticker_for_product(product_name: str, isin: str = None) -> str:
     return candidates[0]["symbol"] if candidates else None
 
 
+# De 5 grootste/bekendste wereldwijde indices, als benchmark-keuze bij Performance
+BENCHMARK_OPTIONS = {
+    "S&P 500": "^GSPC",
+    "NASDAQ Composite": "^IXIC",
+    "EURO STOXX 50": "^STOXX50E",
+    "DAX": "^GDAXI",
+    "FTSE 100": "^FTSE",
+}
+
+
+def compute_price_return(price_history: pd.DataFrame, days_back: int = None, since_date=None) -> float:
+    """
+    Berekent het %-koersrendement over een periode -- ofwel de laatste
+    'days_back' dagen, ofwel sinds een specifieke datum ('since_date',
+    bv. 1 januari voor YTD). Puur op prijs gebaseerd (niet
+    transactie-gebaseerd). Geeft None terug bij te weinig data.
+    """
+    if price_history is None or price_history.empty:
+        return None
+    price_history = price_history.sort_index()
+    latest_price = float(price_history["Close"].iloc[-1])
+    index_naive = price_history.index.tz_localize(None) if price_history.index.tz is not None else price_history.index
+
+    if since_date is not None:
+        mask = index_naive >= pd.Timestamp(since_date)
+        if not mask.any():
+            return None
+        start_price = float(price_history["Close"].iloc[mask.argmax()])
+    elif days_back is not None:
+        cutoff = index_naive[-1] - pd.Timedelta(days=days_back)
+        mask = index_naive <= cutoff
+        if not mask.any():
+            return None
+        start_price = float(price_history["Close"].iloc[np.where(mask)[0][-1]])
+    else:
+        return None
+
+    if start_price == 0:
+        return None
+    return (latest_price - start_price) / start_price * 100
+
+
+def get_ticker_ytd_and_1y_return(ticker: str) -> dict:
+    """Haalt YTD- en 1-jaars-koersrendement op voor 1 ticker."""
+    try:
+        history = yf.Ticker(ticker).history(period="2y")
+    except Exception:
+        return {"ytd_pct": None, "one_year_pct": None}
+    if history is None or history.empty:
+        return {"ytd_pct": None, "one_year_pct": None}
+
+    jan_1_this_year = datetime(datetime.now().year, 1, 1)
+    return {
+        "ytd_pct": compute_price_return(history, since_date=jan_1_this_year),
+        "one_year_pct": compute_price_return(history, days_back=365),
+    }
+
+
+def compute_portfolio_weighted_return(holdings: list, period: str) -> float:
+    """
+    Berekent het naar huidige positie-waarde GEWOGEN YTD- of 1-jaars-
+    koersrendement van de hele portfolio (period: 'ytd' of '1y').
+    Normaliseert voor posities waarvan de koersdata ontbreekt.
+    """
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return None
+
+    weighted_sum = 0.0
+    total_weight_used = 0.0
+    for h in holdings:
+        value = h.get("position_value") or 0
+        if value <= 0:
+            continue
+        try:
+            history = yf.Ticker(h["ticker"]).history(period="2y")
+        except Exception:
+            continue
+        if history is None or history.empty:
+            continue
+        if period == "ytd":
+            pct = compute_price_return(history, since_date=datetime(datetime.now().year, 1, 1))
+        else:
+            pct = compute_price_return(history, days_back=365)
+        if pct is None:
+            continue
+        weight = value / total_value
+        weighted_sum += pct * weight
+        total_weight_used += weight
+
+    if total_weight_used == 0:
+        return None
+    return weighted_sum / total_weight_used
+
+
 def compute_holding_performance(transactions: list, current_price: float) -> dict:
     """
     Berekent rendement uit een lijst buy/sell-transacties, met de
@@ -1225,18 +1321,10 @@ if current_view == "today":
         else:
             tracked_items = holdings + watchlist_items
 
-            # --- Your portfolio today (gestyled als de Discover-banner) + Health Score i.p.v. Cash ---
+            # --- Your portfolio today (gestyled als de Discover-banner) ---
             if holdings:
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings)
-                cash_value = database.get_cash_value(user_email)
-                infos = get_tickers_info(holdings)
-                overview = build_concentration_overview(holdings, infos, cash_value)
-
-                if overview:
-                    database.save_score_snapshot(user_email, overview["score"])
-                    score_week_ago = database.get_score_days_ago(user_email, days_ago=7)
-                    score_delta = f"{overview['score'] - score_week_ago:+.1f} vs last week" if score_week_ago is not None else None
 
                 st.markdown(
                     """
@@ -1247,14 +1335,14 @@ if current_view == "today":
                             Your Portfolio Today
                         </div>
                         <div style="color:#8992A3; font-size:0.85rem; margin-top:3px;">
-                            How your positions did today, and how healthy your overall mix looks.
+                            How your positions did today.
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                dcol1, dcol2, dcol3, dcol4 = st.columns(4)
+                dcol1, dcol2, dcol3 = st.columns(3)
                 with dcol1:
                     if daily_stats:
                         st.metric("Vs. yesterday", f"{daily_stats['portfolio_change_pct']:+.1f}%")
@@ -1270,11 +1358,6 @@ if current_view == "today":
                         st.metric("Worst today", daily_stats["worst_performer"], f"{daily_stats['worst_change_pct']:+.1f}%")
                     else:
                         st.metric("Worst today", "n/a")
-                with dcol4:
-                    if overview:
-                        st.metric("Health Score", f"{overview['score']:.1f}/10", score_delta)
-                    else:
-                        st.metric("Health Score", "n/a")
 
                 st.markdown(
                     '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
@@ -1669,12 +1752,17 @@ elif current_view == "portfolio":
             total_value = sum(h.get("position_value") or 0 for h in holdings)
             stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
             currency_symbol = "€" if display_currency == "EUR" else "$"
+            cash_value = database.get_cash_value(user_email)
 
             if total_value > 0 and stored_currency == display_currency:
-                st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f}")
+                st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f} "
+                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
+                            f"(incl. €{cash_value:,.0f} cash)</span>", unsafe_allow_html=True)
             elif total_value > 0:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
-                st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency})")
+                st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency}) "
+                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
+                            f"(incl. €{cash_value:,.0f} cash)</span>", unsafe_allow_html=True)
             else:
                 st.caption("Click 'Update portfolio value' to fetch current prices.")
 
@@ -1686,27 +1774,6 @@ elif current_view == "portfolio":
                     st.rerun()
                 else:
                     st.warning(message)
-
-            if total_value > 0:
-                with st.spinner("Analyzing portfolio mix..."):
-                    infos_for_overview = get_tickers_info(holdings)
-                    cash_value_for_overview = database.get_cash_value(user_email)
-                    overview = build_concentration_overview(holdings, infos_for_overview, cash_value_for_overview)
-
-                if overview:
-                    ocol1, ocol2, ocol3, ocol4, ocol5, ocol6 = st.columns(6)
-                    with ocol1:
-                        st.metric("Top holding", f"{overview['top_holding_pct']:.0f}%", help=overview["top_holding_name"])
-                    with ocol2:
-                        st.metric("Crypto", f"{overview['category_pct']['Crypto']:.0f}%")
-                    with ocol3:
-                        st.metric("Dividend", f"{overview['category_pct']['Dividend']:.0f}%")
-                    with ocol4:
-                        st.metric("Growth", f"{overview['category_pct']['Growth']:.0f}%")
-                    with ocol5:
-                        st.metric("Cash", f"{overview['cash_pct']:.0f}%")
-                    with ocol6:
-                        st.metric("Score", f"{overview['score']:.1f}/10")
 
             def _format_pct(holding):
                 if total_value <= 0:
@@ -1740,13 +1807,29 @@ elif current_view == "portfolio":
     with st.container(border=True):
         st.markdown("**Manage**")
 
-        # --- Import from a broker (DEGIRO) -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-        with st.expander("Import from a broker (DEGIRO)", expanded=False):
-            st.caption("Upload your DEGIRO 'Transactions' export (CSV) to import your full "
-                       "buy/sell history in one go, instead of logging each one by hand.")
-            degiro_file = st.file_uploader("DEGIRO Transactions CSV", type=["csv"], key="degiro_upload")
+        # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
+        with st.expander("Import from a broker", expanded=False):
+            st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
+                       "(CSV) to import your full buy/sell history in one go, instead of "
+                       "logging each one by hand.")
+            st.markdown(
+                'Using a different broker? '
+                '<a href="?view=support" class="inline-link" target="_self">Request it via Support</a> '
+                'and we\'ll look into adding it.',
+                unsafe_allow_html=True,
+            )
+            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
 
-            if degiro_file is not None:
+            already_imported = st.session_state.get("degiro_imported_filenames", set())
+
+            if degiro_file is not None and degiro_file.name in already_imported:
+                st.success(f"✅ '{degiro_file.name}' was already imported.")
+                if st.button("Process this file again anyway"):
+                    already_imported.discard(degiro_file.name)
+                    st.session_state["degiro_imported_filenames"] = already_imported
+                    st.session_state.pop("degiro_parsed_filename", None)
+                    st.rerun()
+            elif degiro_file is not None:
                 if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
                     # Nieuw bestand -- opnieuw parsen en de matches resetten
                     with st.spinner("Reading your file..."):
@@ -1891,7 +1974,10 @@ elif current_view == "portfolio":
 
                     st.success(f"Imported {imported_transactions} transactions across "
                                f"{imported_positions} new position(s)!")
-                    for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped", "degiro_ticker_matches"]:
+                    already_imported.add(degiro_file.name)
+                    st.session_state["degiro_imported_filenames"] = already_imported
+                    for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
+                                       "degiro_ticker_matches", "degiro_ticker_candidates"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
@@ -1921,9 +2007,9 @@ elif current_view == "portfolio":
                 )
                 tx_holding = tx_holding_options[tx_label]
                 tx_type = st.radio(
-                    "Type", ["🟢 Log a buy", "🔴 Log a sell"], horizontal=True, key="tx_type_radio",
+                    "Type", ["Buy", "Sell"], horizontal=True, key="tx_type_radio",
                 )
-                is_buy = tx_type == "🟢 Log a buy"
+                is_buy = tx_type == "Buy"
             else:
                 # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
                 is_buy = True
@@ -2025,26 +2111,26 @@ elif current_view == "portfolio":
             if tx_holding is not None:
                 tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
                 if tx_history:
-                    st.markdown("**Transaction history**")
-                    for t in tx_history:
-                        hcol1, hcol2 = st.columns([5, 1])
-                        with hcol1:
-                            emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
-                            st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
-                                       f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
-                        with hcol2:
-                            if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
-                                database.delete_transaction(t["id"], user_email)
-                                remaining = [x for x in tx_history if x["id"] != t["id"]]
-                                if not remaining:
-                                    # Geen transacties meer over voor deze positie -- voorkomt een
-                                    # 'verweesde' positie zonder shares en zonder geschiedenis.
-                                    database.delete_holding(tx_holding["id"], user_email)
-                                    st.success("Transaction deleted -- this position had no other "
-                                               "transactions left, so it was removed too.")
-                                else:
-                                    sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-                                    st.success("Transaction deleted.")
+                    if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
+                        for t in tx_history:
+                            hcol1, hcol2 = st.columns([5, 1])
+                            with hcol1:
+                                emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
+                                st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
+                                           f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
+                            with hcol2:
+                                if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                    database.delete_transaction(t["id"], user_email)
+                                    remaining = [x for x in tx_history if x["id"] != t["id"]]
+                                    if not remaining:
+                                        # Geen transacties meer over voor deze positie -- voorkomt een
+                                        # 'verweesde' positie zonder shares en zonder geschiedenis.
+                                        database.delete_holding(tx_holding["id"], user_email)
+                                        st.success("Transaction deleted -- this position had no other "
+                                                   "transactions left, so it was removed too.")
+                                    else:
+                                        sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+                                        st.success("Transaction deleted.")
                                 st.rerun()
 
     # ============================================================
@@ -2151,6 +2237,7 @@ elif current_view == "analyze":
         performance_rows = []
         total_invested = 0.0
         total_pnl = 0.0
+        earliest_date = None
         for h in holdings:
             transactions = database.get_transactions_for_holding(user_email, h["id"])
             if not transactions:
@@ -2162,19 +2249,59 @@ elif current_view == "analyze":
                 bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
                 total_invested += bought_cost
                 total_pnl += perf["total_pnl"]
+                for t in transactions:
+                    if earliest_date is None or t["transaction_date"] < earliest_date:
+                        earliest_date = t["transaction_date"]
 
         if performance_rows:
             overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
             if overall_return_pct is not None:
-                st.metric("Overall return (tracked positions)", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
+                since_txt = f" since {earliest_date}" if earliest_date else ""
+                st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
 
-            for r in performance_rows:
-                pct = r["total_return_pct"]
-                if pct is not None:
-                    color_emoji = "🟢" if pct >= 0 else "🔴"
-                    st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
+            with st.spinner("Checking YTD and 1-year performance..."):
+                ytd_pct = compute_portfolio_weighted_return(holdings, period="ytd")
+                one_year_pct = compute_portfolio_weighted_return(holdings, period="1y")
+
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                st.metric("YTD (price-only)", f"{ytd_pct:+.1f}%" if ytd_pct is not None else "n/a")
+            with pcol2:
+                st.metric("1-Year (price-only)", f"{one_year_pct:+.1f}%" if one_year_pct is not None else "n/a")
+            st.caption("YTD/1-Year are price-only (not weighted by when you actually bought) -- "
+                       "useful to compare against a benchmark below.")
+
+            benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
+            with st.spinner(f"Fetching {benchmark_name}..."):
+                try:
+                    benchmark_history = yf.Ticker(BENCHMARK_OPTIONS[benchmark_name]).history(period="2y")
+                    benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
+                    benchmark_1y = compute_price_return(benchmark_history, days_back=365)
+                except Exception:
+                    benchmark_ytd = benchmark_1y = None
+
+            bcol1, bcol2 = st.columns(2)
+            with bcol1:
+                if ytd_pct is not None and benchmark_ytd is not None:
+                    st.metric(f"YTD vs {benchmark_name}", f"{ytd_pct - benchmark_ytd:+.1f}pp",
+                              help=f"Your YTD: {ytd_pct:+.1f}% -- {benchmark_name} YTD: {benchmark_ytd:+.1f}%")
                 else:
-                    st.markdown(f"- {r['naam']} ({r['ticker']}): return unknown")
+                    st.metric(f"YTD vs {benchmark_name}", "n/a")
+            with bcol2:
+                if one_year_pct is not None and benchmark_1y is not None:
+                    st.metric(f"1Y vs {benchmark_name}", f"{one_year_pct - benchmark_1y:+.1f}pp",
+                              help=f"Your 1Y: {one_year_pct:+.1f}% -- {benchmark_name} 1Y: {benchmark_1y:+.1f}%")
+                else:
+                    st.metric(f"1Y vs {benchmark_name}", "n/a")
+
+            if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
+                for r in performance_rows:
+                    pct = r["total_return_pct"]
+                    if pct is not None:
+                        color_emoji = "🟢" if pct >= 0 else "🔴"
+                        st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
+                    else:
+                        st.markdown(f"- {r['naam']} ({r['ticker']}): return unknown")
         else:
             st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
                        "to start tracking your return.")
@@ -2239,8 +2366,9 @@ elif current_view == "analyze":
         else:
             st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
 
-    # --- Performance ---
-    with st.expander("📈 Performance"):
+    # --- Weekly Trend Status (voorheen ook 'Performance' genoemd -- hernoemd om verwarring
+    # met de nieuwe rendement-kaart hierboven te voorkomen) ---
+    with st.expander("📊 Weekly Trend Status"):
         with st.spinner("Checking trend status..."):
             trend_results = []
             for holding in holdings:
@@ -2560,6 +2688,12 @@ elif current_view == "support":
             "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
             "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
             "and fundamental factors. It's public, no login required."
+        )
+
+    with st.expander("Can I import my transaction history from my broker?"):
+        st.write(
+            "Yes, for DEGIRO -- under My Portfolio, 'Import from a broker'. Using a different "
+            "broker? Let us know via the contact form below, and we'll look into adding it."
         )
 
     with st.expander("Is my portfolio data private?"):
