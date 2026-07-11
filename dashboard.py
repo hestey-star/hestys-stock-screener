@@ -682,6 +682,58 @@ def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 
     return results[:max_items]
 
 
+# Handmatig bijgehouden kalender van de belangrijkste, maanden-vooruit-
+# aangekondigde macro-events (FOMC + ECB-rentebesluiten). Bron: officiële
+# Fed/ECB-kalenders. Bijwerken zodra een nieuw jaar bekend wordt gemaakt
+# (meestal 1x per jaar, eind vorig jaar/begin dit jaar).
+MACRO_EVENTS_2026 = [
+    {"date": "2026-01-28", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-03-18", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-03-19", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-04-29", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-04-30", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-06-11", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-06-17", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-07-23", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-07-29", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-09-10", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-09-16", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-10-28", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-10-29", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-12-09", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-12-17", "name": "ECB rate decision", "time": "14:15 CET"},
+]
+
+
+def get_todays_macro_events(max_items: int = 3) -> list:
+    """Geeft de macro-events terug die vandaag plaatsvinden (uit de handmatig bijgehouden kalender)."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    return [e for e in MACRO_EVENTS_2026 if e["date"] == today_str][:max_items]
+
+
+def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> list:
+    """
+    Checkt of een van je posities/watchlist-items VANDAAG earnings rapporteert
+    (yfinance geeft ook toekomstige, aangekondigde earnings-datums terug).
+    """
+    today = datetime.now().date()
+    results = []
+    for item in tracked_items:
+        try:
+            dates_df = yf.Ticker(item["ticker"]).get_earnings_dates(limit=8)
+            if dates_df is None or dates_df.empty:
+                continue
+            for earnings_date in dates_df.index:
+                if earnings_date.date() == today:
+                    results.append({"naam": item["naam"], "ticker": item["ticker"]})
+                    break
+        except Exception:
+            continue
+        if len(results) >= max_items:
+            break
+    return results[:max_items]
+
+
 def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -> list:
     """Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente 'max_items' items terug."""
     import screener as _screener  # lokale import: voorkomt een cirkelverwijzing bij module-laadtijd
@@ -994,6 +1046,34 @@ if current_view == "today":
                             st.metric("Cash", f"{overview['cash_pct']:.0f}%")
                         else:
                             st.metric("Cash", "n/a")
+
+                # --- Portfolio Health Score (prominent, met verandering t.o.v. vorige week) ---
+                if overview:
+                    database.save_score_snapshot(user_email, overview["score"])
+                    score_week_ago = database.get_score_days_ago(user_email, days_ago=7)
+                    with st.container(border=True):
+                        st.markdown("**Your Portfolio Health Score**")
+                        if score_week_ago is not None:
+                            delta = overview["score"] - score_week_ago
+                            st.metric("Score", f"{overview['score']:.1f}/10", f"{delta:+.1f} vs last week")
+                        else:
+                            st.metric("Score", f"{overview['score']:.1f}/10")
+                            st.caption("Check back next week to see how this changes over time.")
+                        st.caption("Based on concentration, diversification, and category balance -- see Analyze for the details.")
+
+            # --- Today's events (macro + je eigen posities/watchlist die vandaag rapporteren) ---
+            macro_events = get_todays_macro_events(max_items=3)
+            with st.spinner("Checking for earnings today..."):
+                earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
+            todays_events = macro_events + [
+                {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
+            ]
+            if todays_events:
+                with st.container(border=True):
+                    st.markdown("**Today's events**")
+                    for event in todays_events[:3]:
+                        time_part = f" -- {event['time']}" if "time" in event else ""
+                        st.markdown(f"- 📅 {event['name']}{time_part}")
 
             # --- Opportunities today ---
             with st.container(border=True):

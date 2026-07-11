@@ -38,7 +38,9 @@ create index idx_portfolio_holdings_user_email on portfolio_holdings (user_email
 -- en/of de persoonlijke portfolio-mail)
 create table user_preferences (
     user_email text primary key,
-    wants_screener_email boolean not null default false,
+    wants_momentocrats_email boolean not null default false,  -- opt-in per signaal-type, i.p.v. 1 blanket 'wants_screener_email'
+    wants_snowball_email boolean not null default false,
+    wants_rocket_email boolean not null default false,
     wants_portfolio_email boolean not null default true,
     wants_daily_email boolean not null default false,  -- opt-in voor de dagelijkse screener-mail
     email_region text not null default 'EU',  -- 'EU', 'US_East', of 'US_West' -- bepaalt om welk lokaal tijdstip de dagelijkse mail aankomt
@@ -57,6 +59,9 @@ create table user_preferences (
 -- Als je user_preferences AL bestond (van eerder), draai dan ALLEEN deze
 -- regels om de nieuwe kolommen toe te voegen:
 -- alter table user_preferences add column wants_daily_email boolean not null default false;
+-- alter table user_preferences add column wants_momentocrats_email boolean not null default false;
+-- alter table user_preferences add column wants_snowball_email boolean not null default false;
+-- alter table user_preferences add column wants_rocket_email boolean not null default false;
 -- alter table user_preferences add column email_region text not null default 'EU';
 -- alter table user_preferences add column is_premium boolean not null default false;
 -- alter table user_preferences add column cash_value numeric;
@@ -66,3 +71,15 @@ create table user_preferences (
 -- alter table user_preferences add column max_position_pct numeric;
 -- alter table user_preferences add column max_sector_pct numeric;
 -- alter table user_preferences add column target_cash_pct numeric;
+
+-- Slaat 1 score-snapshot per dag op, per gebruiker -- zodat we op Today
+-- kunnen tonen hoe de Portfolio Health Score verandert over tijd (bv.
+-- '7.2/10, +0.4 t.o.v. vorige week').
+create table portfolio_score_history (
+    id bigint generated always as identity primary key,
+    user_email text not null,
+    date date not null,
+    score numeric not null,
+    created_at timestamp with time zone default now(),
+    unique (user_email, date)  -- voorkomt dubbele snapshots op 1 dag, maakt upsert mogelijk
+);

@@ -8,6 +8,8 @@ eigen inlogsysteem, dus die twee kunnen we niet automatisch koppelen).
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 import streamlit as st
 from supabase import create_client, Client
 
@@ -241,6 +243,43 @@ def set_risk_profile(
 def reset_risk_profile(user_email: str) -> None:
     """Zet het risicoprofiel terug naar de standaardwaarden."""
     set_risk_profile(user_email, **DEFAULT_RISK_PROFILE)
+
+
+def save_score_snapshot(user_email: str, score: float) -> None:
+    """
+    Slaat de Portfolio Health Score van vandaag op -- idempotent (overschrijft
+    gewoon als er al een snapshot van vandaag bestaat, dankzij de unique-
+    constraint op user_email+date). Veilig om bij elk paginabezoek aan te roepen.
+    """
+    client = get_supabase_client()
+    today = datetime.now().date().isoformat()
+    client.table("portfolio_score_history").upsert({
+        "user_email": user_email,
+        "date": today,
+        "score": score,
+    }, on_conflict="user_email,date").execute()
+
+
+def get_score_days_ago(user_email: str, days_ago: int = 7) -> float:
+    """
+    Geeft de meest recente opgeslagen score terug van OP OF VOOR 'days_ago'
+    dagen geleden (niet exact op de dag, want er is niet altijd een
+    snapshot van precies die datum). Geeft None terug als er niets is.
+    """
+    client = get_supabase_client()
+    target_date = (datetime.now().date() - timedelta(days=days_ago)).isoformat()
+    response = (
+        client.table("portfolio_score_history")
+        .select("score")
+        .eq("user_email", user_email)
+        .lte("date", target_date)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return float(response.data[0]["score"])
+    return None
 
 
 def get_all_users_with_holdings() -> dict[str, list[dict]]:
