@@ -924,7 +924,7 @@ if current_view == "today":
         st.write("Here are your daily points that deserve your attention.")
         st.info("Log in (top right), then add positions under My Portfolio or your Watchlist "
                  "to get personal signals and news here.")
-        st.markdown("#### No account needed to browse")
+        st.markdown("#### Start exploring")
         st.write(
             "Discover is fully public: 3 specially-built stock signals (Momentocrats, "
             "Snowballers, Rocket List), plus sector rotation and more -- free to browse "
