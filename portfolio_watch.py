@@ -104,45 +104,66 @@ def check_holding(naam: str, ticker: str):
 
 
 def build_email_body(df: pd.DataFrame) -> tuple:
+    """Bouwt de Portfolio Watch-mail -- zelfde Hesty's-stijl als de dagelijkse/wekelijkse signalen-mails."""
     changed = df[df["recent_gewijzigd"]]
-    lines = [f"Portfolio Watch: status van {len(df)} posities.\n"]
+
+    # --- Tekst-versie ---
+    text_lines = ["Good morning from Hesty's -- here's your portfolio watch.", ""]
 
     if len(changed) > 0:
-        lines.append(f"LET OP -- {len(changed)} positie(s) recent van trend gewisseld:")
+        text_lines.append(f"🔄 {len(changed)} position(s) just flipped trend:")
         for _, row in changed.iterrows():
-            lines.append(f"  * {row['naam']} ({row['ticker']}): nu {row['status']} sinds {row['sinds']}")
-        lines.append("")
+            text_lines.append(f"  - {row['naam']} ({row['ticker']}): now {row['status']} since {row['sinds']}")
+        text_lines.append("")
 
-    lines.append("Volledig overzicht:")
+    text_lines.append(f"Full overview ({len(df)} positions):")
     for _, row in df.iterrows():
-        roic_txt = f"{row['roic_pct']:+.1f}% ({row['roic_trend']})" if row["roic_pct"] is not None else "onbekend"
-        lines.append(
-            f"- {row['naam']} ({row['ticker']}): {row['status']} sinds {row['sinds']} "
-            f"({row['weken_in_trend']} weken), prijs {row['prijs']}, ROIC: {roic_txt}"
+        roic_txt = f"{row['roic_pct']:+.1f}% ({row['roic_trend']})" if row["roic_pct"] is not None else "unknown"
+        text_lines.append(
+            f"  - {row['naam']} ({row['ticker']}): {row['status']} since {row['sinds']} "
+            f"({row['weken_in_trend']} weeks), price {row['prijs']}, ROIC: {roic_txt}"
         )
 
-    lines.append("\n--- Recent nieuws (laatste 7 dagen) ---")
+    text_lines.append("")
+    text_lines.append("Recent news (last 7 days):")
     any_news = False
     for _, row in df.iterrows():
         if row["nieuws"]:
             any_news = True
-            lines.append(f"\n{row['naam']} ({row['ticker']}):")
+            text_lines.append(f"\n{row['naam']} ({row['ticker']}):")
             for item in row["nieuws"]:
-                lines.append(f"  - [{item['published'].strftime('%Y-%m-%d')}] {item['title']} ({item['publisher']})")
+                text_lines.append(f"  - [{item['published'].strftime('%Y-%m-%d')}] {item['title']} ({item['publisher']})")
                 if item["link"]:
-                    lines.append(f"    {item['link']}")
+                    text_lines.append(f"    {item['link']}")
     if not any_news:
-        lines.append("Geen recent nieuws gevonden voor je posities.")
+        text_lines.append("No recent news found for your positions.")
 
-    text_body = "\n".join(lines)
+    text_lines += [
+        "",
+        "See the full analysis under Analyze on the site.",
+        "",
+        "-- Hesty's, your personal investment assistant",
+        "",
+        "This is a screener, not investment advice.",
+    ]
+    text_body = "\n".join(text_lines)
 
+    # --- HTML-versie: lichte achtergrond met jade accent, zelfde stijl als
+    # de dagelijkse/wekelijkse mail ---
     def _row_html(r):
         roic_str = f"{r['roic_pct']:+.1f}%" if r["roic_pct"] is not None else "-"
-        highlight = ' style="background-color:#fff3cd;"' if r["recent_gewijzigd"] else ""
+        status_color = "#0F8F6E" if r["status"] == "BULLISH" else "#C1524A"
+        row_bg = "background-color:#EAF7F3;" if r["recent_gewijzigd"] else ""
         return (
-            f"<tr{highlight}><td>{r['naam']}</td><td>{r['ticker']}</td><td>{r['status']}</td>"
-            f"<td>{r['sinds']}</td><td>{r['weken_in_trend']}</td><td>{r['prijs']}</td>"
-            f"<td>{roic_str}</td><td>{r['roic_trend']}</td></tr>"
+            f"<tr style='border-bottom:1px solid #E5E8EC;{row_bg}'>"
+            f"<td style='padding:8px;font-weight:600;color:#101825;'>{r['naam']}</td>"
+            f"<td style='padding:8px;color:#5B6472;'>{r['ticker']}</td>"
+            f"<td style='padding:8px;font-weight:600;color:{status_color};'>{r['status']}</td>"
+            f"<td style='padding:8px;color:#5B6472;'>{r['sinds']}</td>"
+            f"<td style='padding:8px;color:#5B6472;'>{r['weken_in_trend']}</td>"
+            f"<td style='padding:8px;color:#101825;'>{r['prijs']}</td>"
+            f"<td style='padding:8px;color:#5B6472;'>{roic_str}</td>"
+            f"</tr>"
         )
 
     rows_html = "".join(_row_html(r) for _, r in df.iterrows())
@@ -151,26 +172,56 @@ def build_email_body(df: pd.DataFrame) -> tuple:
         if not row["nieuws"]:
             return ""
         items_html = "".join(
-            f"<li><a href=\"{item['link']}\">{item['title']}</a> "
-            f"<i>({item['publisher']}, {item['published'].strftime('%Y-%m-%d')})</i></li>"
+            f"<li style='padding:4px 0;'><a href=\"{item['link']}\" style='color:#1FAE96;text-decoration:none;font-weight:600;'>{item['title']}</a> "
+            f"<span style='color:#9AA1AC;font-size:12px;'>({item['publisher']}, {item['published'].strftime('%Y-%m-%d')})</span></li>"
             for item in row["nieuws"]
         )
-        return f"<p><b>{row['naam']} ({row['ticker']})</b></p><ul>{items_html}</ul>"
+        return (f"<p style='margin:16px 0 4px 0;font-weight:700;color:#101825;'>{row['naam']} ({row['ticker']})</p>"
+                f"<ul style='margin:0;padding-left:20px;'>{items_html}</ul>")
 
     news_html = "".join(_news_html(r) for _, r in df.iterrows())
     if not news_html:
-        news_html = "<p>Geen recent nieuws gevonden voor je posities.</p>"
+        news_html = "<p style='color:#5B6472;'>No recent news found for your positions.</p>"
+
+    flip_banner = ""
+    if len(changed) > 0:
+        flip_banner = (
+            f"<p style='background:#FFF3CD;padding:10px 14px;border-radius:8px;font-size:14px;color:#101825;margin-top:0;'>"
+            f"🔄 {len(changed)} position(s) just flipped trend -- see highlighted rows below.</p>"
+        )
 
     html_body = f"""
-    <h3>Portfolio Watch</h3>
-    <p>{len(changed)} positie(s) recent van trend gewisseld (geel gemarkeerd).</p>
-    <table border="1" cellpadding="5" cellspacing="0">
-      <tr><th>Naam</th><th>Ticker</th><th>Status</th><th>Sinds</th><th>Weken</th>
-          <th>Prijs</th><th>ROIC</th><th>ROIC-trend</th></tr>
-      {rows_html}
-    </table>
-    <h3>Recent nieuws (laatste 7 dagen)</h3>
-    {news_html}
+    <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
+        <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
+            <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Portfolio Watch</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Your positions, checked</div>
+        </div>
+        <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            {flip_banner}
+            <table style="width:100%; border-collapse:collapse; margin-top:16px; font-size:14px;">
+                <tr style="border-bottom:2px solid #101825;">
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Name</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Ticker</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Trend</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Since</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Weeks</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Price</th>
+                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">ROIC</th>
+                </tr>
+                {rows_html}
+            </table>
+
+            <h4 style="color:#101825; font-size:16px; margin:24px 0 8px 0;">📰 Recent news</h4>
+            {news_html}
+
+            <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
+                See the full analysis under
+                <a href="https://hestys-stock-screener.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyze</a> on the site.
+            </p>
+            <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
+            <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
+        </div>
+    </div>
     """
     return text_body, html_body
 

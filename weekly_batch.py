@@ -100,20 +100,24 @@ SIGNAL_TYPES = {
 def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tuple:
     """
     Bouwt 1 gecombineerde mail voor alle signaal-types die deze gebruiker
-    heeft aangevinkt -- top 3 (gratis) of ALLES (premium) per type, in
-    Hesty's stijl (zelfde opmaak-taal als de dagelijkse mail).
+    heeft aangevinkt.
+
+    Toont altijd top 3 per signaal, OOK voor premium -- een mail met
+    tientallen regels per signaal is geen prettige samenvatting meer,
+    dat is precies waar Discover (met een scrollbare tabel) voor is.
+    De 'is_premium'-parameter blijft bestaan voor later (zodra premium
+    functioneel is), maar beïnvloedt de mail-inhoud nu bewust niet.
 
     sections: lijst van dicts met keys 'title', 'emoji', 'df', 'formatter'.
     """
-    display_limit = None if is_premium else 3  # None = pandas .head(None) geeft alles terug
+    display_limit = 3
     text_lines = ["Good morning from Hesty's -- your weekly signals are in.", ""]
     html_sections_list = []
 
     for section in sections:
         total_this_section = len(section["df"])
         top_n = section["df"].head(display_limit)
-        shown_label = "all" if is_premium else f"top {len(top_n)}"
-        text_lines.append(f"{section['emoji']} {section['title']} ({total_this_section} total, showing {shown_label}):")
+        text_lines.append(f"{section['emoji']} {section['title']} (top {len(top_n)} of {total_this_section} total):")
         for _, row in top_n.iterrows():
             text_lines.append(f"  - {section['formatter'](row)}")
         text_lines.append("")
@@ -127,10 +131,6 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
         <ul style="margin:0; padding-left:20px; font-size:14px;">{rows_html}</ul>
         """)
 
-    if not is_premium:
-        text_lines.append("🔒 You're seeing the free top 3 per signal. Upgrade to Premium to see everything.")
-        text_lines.append("")
-
     text_lines += [
         "See the full lists, sector rotation, and top movers under Discover on the site.",
         "",
@@ -140,13 +140,6 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
     ]
     text_body = "\n".join(text_lines)
 
-    upgrade_hint_html = (
-        """<p style="margin-top:16px; font-size:13px; color:#5B6472; background:#F5F7F9; padding:10px 14px; border-radius:8px;">
-            &#128274; You're seeing the free top 3 per signal. Upgrade to Premium to see everything.
-        </p>"""
-        if not is_premium else ""
-    )
-
     html_body = f"""
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
@@ -155,7 +148,6 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             {''.join(html_sections_list)}
-            {upgrade_hint_html}
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 See the full lists, sector rotation, and top movers under
                 <a href="https://hestys-stock-screener.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site.
