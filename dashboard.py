@@ -944,8 +944,6 @@ BENCHMARK_OPTIONS = {
     "S&P 500": "^GSPC",
     "NASDAQ Composite": "^IXIC",
     "EURO STOXX 50": "^STOXX50E",
-    "DAX": "^GDAXI",
-    "FTSE 100": "^FTSE",
 }
 
 
@@ -1757,12 +1755,12 @@ elif current_view == "portfolio":
             if total_value > 0 and stored_currency == display_currency:
                 st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f} "
                             f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                            f"(incl. €{cash_value:,.0f} cash)</span>", unsafe_allow_html=True)
+                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
             elif total_value > 0:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
                 st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency}) "
                             f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                            f"(incl. €{cash_value:,.0f} cash)</span>", unsafe_allow_html=True)
+                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
             else:
                 st.caption("Click 'Update portfolio value' to fetch current prices.")
 
@@ -1812,10 +1810,9 @@ elif current_view == "portfolio":
             st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
                        "(CSV) to import your full buy/sell history in one go, instead of "
                        "logging each one by hand.")
+            st.caption("Using a different broker?")
             st.markdown(
-                'Using a different broker? '
-                '<a href="?view=support" class="inline-link" target="_self">Request it via Support</a> '
-                'and we\'ll look into adding it.',
+                '<a href="?view=support" class="button-link" target="_self">Go to Support &rarr;</a>',
                 unsafe_allow_html=True,
             )
             degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
@@ -2131,7 +2128,7 @@ elif current_view == "portfolio":
                                     else:
                                         sync_holding_shares_from_transactions(tx_holding["id"], user_email)
                                         st.success("Transaction deleted.")
-                                st.rerun()
+                                    st.rerun()
 
     # ============================================================
     # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
@@ -2263,14 +2260,6 @@ elif current_view == "analyze":
                 ytd_pct = compute_portfolio_weighted_return(holdings, period="ytd")
                 one_year_pct = compute_portfolio_weighted_return(holdings, period="1y")
 
-            pcol1, pcol2 = st.columns(2)
-            with pcol1:
-                st.metric("YTD (price-only)", f"{ytd_pct:+.1f}%" if ytd_pct is not None else "n/a")
-            with pcol2:
-                st.metric("1-Year (price-only)", f"{one_year_pct:+.1f}%" if one_year_pct is not None else "n/a")
-            st.caption("YTD/1-Year are price-only (not weighted by when you actually bought) -- "
-                       "useful to compare against a benchmark below.")
-
             benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
             with st.spinner(f"Fetching {benchmark_name}..."):
                 try:
@@ -2280,19 +2269,20 @@ elif current_view == "analyze":
                 except Exception:
                     benchmark_ytd = benchmark_1y = None
 
-            bcol1, bcol2 = st.columns(2)
-            with bcol1:
-                if ytd_pct is not None and benchmark_ytd is not None:
-                    st.metric(f"YTD vs {benchmark_name}", f"{ytd_pct - benchmark_ytd:+.1f}pp",
-                              help=f"Your YTD: {ytd_pct:+.1f}% -- {benchmark_name} YTD: {benchmark_ytd:+.1f}%")
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                if ytd_pct is not None:
+                    delta_txt = f"{ytd_pct - benchmark_ytd:+.1f}% vs {benchmark_name}" if benchmark_ytd is not None else None
+                    st.metric("YTD", f"{ytd_pct:+.1f}%", delta_txt)
                 else:
-                    st.metric(f"YTD vs {benchmark_name}", "n/a")
-            with bcol2:
-                if one_year_pct is not None and benchmark_1y is not None:
-                    st.metric(f"1Y vs {benchmark_name}", f"{one_year_pct - benchmark_1y:+.1f}pp",
-                              help=f"Your 1Y: {one_year_pct:+.1f}% -- {benchmark_name} 1Y: {benchmark_1y:+.1f}%")
+                    st.metric("YTD", "n/a")
+            with pcol2:
+                if one_year_pct is not None:
+                    delta_txt = f"{one_year_pct - benchmark_1y:+.1f}% vs {benchmark_name}" if benchmark_1y is not None else None
+                    st.metric("1-Year", f"{one_year_pct:+.1f}%", delta_txt)
                 else:
-                    st.metric(f"1Y vs {benchmark_name}", "n/a")
+                    st.metric("1-Year", "n/a")
+            st.caption("Price-only (not weighted by when you actually bought).")
 
             if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                 for r in performance_rows:
