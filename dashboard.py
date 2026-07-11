@@ -859,7 +859,7 @@ def create_billing_portal_session(customer_id: str):
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
 #     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
-current_view = st.query_params.get("view", None)
+current_view = st.query_params.get("view", "today")
 
 
 def _nav_class(view_name: str) -> str:
