@@ -802,7 +802,11 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
 
         if pd.isna(aantal):
             if lokale_waarde is not None and koers not in (None, 0):
-                aantal = lokale_waarde / koers
+                # Aantal en lokale waarde hebben TEGENGESTELDE tekens (een koop
+                # heeft een positief Aantal maar een negatieve lokale waarde --
+                # geld gaat eruit) -- vandaar de min hier, anders komt een koop
+                # er per ongeluk als verkoop uit te zien.
+                aantal = -lokale_waarde / koers
             else:
                 skipped_rows.append((idx, f"{product}: could not determine quantity"))
                 continue
@@ -878,50 +882,60 @@ def _looks_like_isin(value: str) -> bool:
     return value[:2].isalpha() and value[2:11].isalnum() and value[11].isdigit()
 
 
-def guess_ticker_for_product(product_name: str, isin: str = None) -> str:
+def get_ticker_candidates(product_name: str, isin: str = None) -> list:
     """
-    Zoekt de meest waarschijnlijke ticker voor een positie uit een
-    broker-export. Probeert EERST op ISIN (preciezer, geen fuzzy-matching
-    nodig), en valt terug op de productnaam als dat niks (bruikbaars)
-    oplevert -- bv. bij crypto, dat geen ISIN heeft, of bij ETF's met
-    meerdere beursnoteringen waar Yahoo soms de ISIN zelf teruggeeft
-    i.p.v. een echte ticker (die valse match wordt hier herkend en
-    afgekeurd). Bij crypto (geen ISIN) filteren we specifiek op
-    quoteType 'CRYPTOCURRENCY', want een platte naam-zoekopdracht is
-    te grofmazig (bv. 'SOLANA' kan van alles teruggeven).
+    Zoekt mogelijke ticker-kandidaten voor een positie uit een broker-
+    export -- geeft een LIJST terug (niet alleen de beste gok), zodat de
+    gebruiker bij twijfel zelf kan kiezen. Dit is nodig omdat veel
+    fondsen (vooral UCITS-ETF's) op MEERDERE beurzen tegelijk genoteerd
+    staan (bv. 'SMH' op de VS-beurs, in Milaan, EN Londen, elk met een
+    andere prijs) -- een enkele blinde gok kan zomaar de verkeerde
+    beursnotering pakken, met verkeerde koersen als gevolg.
 
-    Geeft None terug als er niks betrouwbaars gevonden wordt -- dan moet
-    de gebruiker het zelf invullen.
+    Elke kandidaat is een dict met 'symbol', 'name', 'exchange'. Filtert
+    de valse 'ISIN als symbool'-match weg (zie _looks_like_isin). Bij
+    crypto (geen ISIN) filteren we op quoteType 'CRYPTOCURRENCY'.
     """
+    candidates = []
+    seen_symbols = set()
+
+    def _add_results(results):
+        for r in results:
+            symbol = r.get("symbol")
+            if not symbol or symbol in seen_symbols or _looks_like_isin(symbol):
+                continue
+            seen_symbols.add(symbol)
+            candidates.append({
+                "symbol": symbol,
+                "name": r.get("shortname") or r.get("longname") or symbol,
+                "exchange": r.get("exchange", ""),
+            })
+
     if isin:
         try:
-            isin_results = yf.Search(isin, max_results=1).quotes
-            if isin_results:
-                symbol = isin_results[0].get("symbol")
-                if symbol and not _looks_like_isin(symbol):
-                    return symbol
+            _add_results(yf.Search(isin, max_results=6).quotes)
         except Exception:
             pass
     else:
-        # Geen ISIN -- waarschijnlijk crypto. Specifiek filteren op
-        # quoteType, i.p.v. blind het eerste resultaat te pakken.
         try:
-            crypto_results = yf.Search(product_name, max_results=5).quotes
-            for r in crypto_results:
-                if r.get("quoteType") == "CRYPTOCURRENCY":
-                    return r.get("symbol")
+            all_results = yf.Search(product_name, max_results=6).quotes
+            _add_results([r for r in all_results if r.get("quoteType") == "CRYPTOCURRENCY"])
         except Exception:
             pass
 
-    try:
-        name_results = yf.Search(product_name, max_results=1).quotes
-        if name_results:
-            symbol = name_results[0].get("symbol")
-            if symbol and not _looks_like_isin(symbol):
-                return symbol
-    except Exception:
-        pass
-    return None
+    if not candidates:
+        try:
+            _add_results(yf.Search(product_name, max_results=6).quotes)
+        except Exception:
+            pass
+
+    return candidates
+
+
+def guess_ticker_for_product(product_name: str, isin: str = None) -> str:
+    """Compacte variant van get_ticker_candidates() die alleen de beste gok teruggeeft."""
+    candidates = get_ticker_candidates(product_name, isin)
+    return candidates[0]["symbol"] if candidates else None
 
 
 def compute_holding_performance(transactions: list, current_price: float) -> dict:
@@ -1741,10 +1755,14 @@ elif current_view == "portfolio":
                     st.session_state["degiro_grouped"] = parse_result["grouped"]
                     st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
                     ticker_matches = {}
+                    ticker_candidates = {}
                     with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
                         for key, group in parse_result["grouped"].items():
-                            ticker_matches[key] = guess_ticker_for_product(group["product"], group.get("isin")) or ""
+                            candidates = get_ticker_candidates(group["product"], group.get("isin"))
+                            ticker_candidates[key] = candidates
+                            ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
                     st.session_state["degiro_ticker_matches"] = ticker_matches
+                    st.session_state["degiro_ticker_candidates"] = ticker_candidates
 
                 degiro_grouped = st.session_state["degiro_grouped"]
                 degiro_skipped = st.session_state["degiro_skipped"]
@@ -1784,12 +1802,38 @@ elif current_view == "portfolio":
                         prefix = "⚠️ " if key in unmatched_keys else ""
                         st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)")
                     with dcol2:
-                        current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
-                        new_ticker = st.text_input(
-                            "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
-                            label_visibility="collapsed", placeholder="leave empty to skip",
-                        )
-                        st.session_state["degiro_ticker_matches"][key] = new_ticker
+                        candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
+                        if len(candidates) >= 2:
+                            # Meerdere beursnoteringen gevonden (bv. hetzelfde ETF op meerdere
+                            # beurzen) -- laat kiezen met naam + beurs erbij, i.p.v. blind te gokken.
+                            options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
+                            options.append("Other (type manually)")
+                            current_symbol = st.session_state["degiro_ticker_matches"].get(key, "")
+                            default_index = next(
+                                (i for i, c in enumerate(candidates) if c["symbol"] == current_symbol),
+                                len(options) - 1,
+                            )
+                            chosen_label = st.selectbox(
+                                "Ticker", options, index=default_index,
+                                key=f"degiro_choice_{key}", label_visibility="collapsed",
+                            )
+                            if chosen_label == "Other (type manually)":
+                                manual_default = current_symbol if current_symbol not in [c["symbol"] for c in candidates] else ""
+                                manual_ticker = st.text_input(
+                                    "Manual ticker", value=manual_default, key=f"degiro_manual_{key}",
+                                    label_visibility="collapsed", placeholder="type ticker",
+                                )
+                                st.session_state["degiro_ticker_matches"][key] = manual_ticker
+                            else:
+                                chosen_symbol = candidates[options.index(chosen_label)]["symbol"]
+                                st.session_state["degiro_ticker_matches"][key] = chosen_symbol
+                        else:
+                            current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
+                            new_ticker = st.text_input(
+                                "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
+                                label_visibility="collapsed", placeholder="leave empty to skip",
+                            )
+                            st.session_state["degiro_ticker_matches"][key] = new_ticker
 
                 ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
                 st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
