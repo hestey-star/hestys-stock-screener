@@ -1549,47 +1549,14 @@ elif current_view == "portfolio":
             )
 
     # ============================================================
-    # 3. MANAGE -- 3 losse, individueel uitklapbare vakjes
+    # 3. MANAGE
     # ============================================================
     with st.container(border=True):
         st.markdown("**Manage**")
 
-        if holdings:
-            holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
-
-            with st.expander("Edit shares", expanded=False):
-                ecol1, ecol2, ecol3 = st.columns([3, 2, 1])
-                with ecol1:
-                    edit_label = st.selectbox(
-                        "Position to edit", list(holding_options.keys()), key="edit_select", label_visibility="collapsed"
-                    )
-                edit_holding = holding_options[edit_label]
-                edit_transactions = database.get_transactions_for_holding(user_email, edit_holding["id"])
-                if edit_transactions:
-                    derived_shares = sum(
-                        t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
-                        for t in edit_transactions
-                    )
-                    with ecol2:
-                        st.markdown(f"**{derived_shares:.2f}** shares *(from transaction history)*")
-                    st.caption("This position's share count now comes from its logged transactions -- "
-                               "manage it under 'Log a transaction' below instead of editing it directly here.")
-                else:
-                    with ecol2:
-                        current_shares = edit_holding.get("shares") or 0.0
-                        new_shares = st.number_input(
-                            "New share count", min_value=0.0, value=float(current_shares), step=1.0,
-                            key="edit_shares_input", label_visibility="collapsed",
-                        )
-                    with ecol3:
-                        if st.button("Save shares"):
-                            database.update_holding_shares(edit_holding["id"], user_email, new_shares)
-                            st.rerun()
-
-        # --- Log a transaction (buiten de 'if holdings'-check, want ook bruikbaar
-        # als je nog GEEN posities hebt -- een nieuwe positie kan direct via een
-        # eerste 'Log a buy' worden aangemaakt, zonder eerst 'Add a new position'
-        # te moeten doorlopen) ---
+        # --- Log a transaction (werkt ook zonder bestaande posities -- een
+        # nieuwe positie kan direct via een eerste 'Log a buy' worden
+        # aangemaakt) ---
         with st.expander("Log a transaction", expanded=False):
             st.caption("Log your actual buys and sells to see your real return under Analyze. "
                        "Optional -- positions without transactions logged just won't show a return.")
