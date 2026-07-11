@@ -752,6 +752,110 @@ def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -
     return all_news[:max_items]
 
 
+def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert een DEGIRO 'Transacties'-export (CSV). Groepeert per ISIN (of
+    productnaam als er geen ISIN is, zoals bij crypto) en geeft per groep de
+    losse buy/sell-transacties terug, al omgerekend naar EUR-prijs + EUR-fee.
+
+    Bewuste keuzes:
+    - Prijs en fee worden ALTIJD in EUR berekend (uit 'Waarde EUR' en
+      'Totaal EUR'), niet uit de kolom 'Koers' zelf (die staat vaak in de
+      lokale valuta, bv. USD) -- zo blijft alles consistent met de rest
+      van de site.
+    - Sommige crypto-rijen missen 'Aantal' in de export zelf -- die
+      leiden we af uit lokale waarde / koers.
+    - Rijen die zelfs dan niet te verwerken zijn (bv. een lege regel)
+      worden overgeslagen en gerapporteerd, niet stilzwijgend genegeerd.
+    """
+    import io
+
+    def parse_dutch_number(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        if isinstance(val, (int, float)):
+            return float(val)
+        s = str(val).strip()
+        if not s or s.lower() == "nan":
+            return None
+        return float(s.replace(".", "").replace(",", "."))
+
+    df = pd.read_csv(io.BytesIO(file_bytes))
+
+    grouped: dict = {}
+    skipped_rows: list = []
+
+    for idx, row in df.iterrows():
+        product = row.get("Product")
+        isin = row.get("ISIN")
+        datum = row.get("Datum")
+
+        if pd.isna(product) or pd.isna(datum):
+            skipped_rows.append((idx, "Missing product name or date"))
+            continue
+
+        aantal = row.get("Aantal")
+        koers = parse_dutch_number(row.get("Koers"))
+        lokale_waarde = parse_dutch_number(row.get("Lokale waarde"))
+        waarde_eur = parse_dutch_number(row.get("Waarde EUR"))
+        totaal_eur = parse_dutch_number(row.get("Totaal EUR"))
+
+        if pd.isna(aantal):
+            if lokale_waarde is not None and koers not in (None, 0):
+                aantal = lokale_waarde / koers
+            else:
+                skipped_rows.append((idx, f"{product}: could not determine quantity"))
+                continue
+        else:
+            aantal = float(aantal)
+
+        if aantal == 0 or waarde_eur is None or totaal_eur is None:
+            skipped_rows.append((idx, f"{product}: missing or zero value fields"))
+            continue
+
+        price_eur = abs(waarde_eur) / abs(aantal)
+        fee_eur = abs(totaal_eur - waarde_eur)
+
+        try:
+            parsed_date = pd.to_datetime(datum, format="%d-%m-%Y").date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{product}: could not parse date '{datum}'"))
+            continue
+
+        key = isin if not pd.isna(isin) else product
+        if key not in grouped:
+            grouped[key] = {
+                "product": product,
+                "isin": isin if not pd.isna(isin) else None,
+                "transactions": [],
+            }
+
+        grouped[key]["transactions"].append({
+            "transaction_type": "buy" if aantal > 0 else "sell",
+            "shares": round(abs(aantal), 6),
+            "price": round(price_eur, 4),
+            "fee": round(fee_eur, 2),
+            "transaction_date": parsed_date,
+        })
+
+    return {"grouped": grouped, "skipped_rows": skipped_rows}
+
+
+def guess_ticker_for_product(product_name: str) -> str:
+    """
+    Zoekt de meest waarschijnlijke ticker voor een productnaam uit een
+    broker-export (bv. 'KRAFT HEINZ CO' -> 'KHC'). Geeft None terug als
+    er niks gevonden wordt -- dan moet de gebruiker het zelf invullen.
+    """
+    try:
+        results = yf.Search(product_name, max_results=1).quotes
+        if results:
+            return results[0].get("symbol")
+    except Exception:
+        pass
+    return None
+
+
 def compute_holding_performance(transactions: list, current_price: float) -> dict:
     """
     Berekent rendement uit een lijst buy/sell-transacties, met de
@@ -1553,6 +1657,98 @@ elif current_view == "portfolio":
     # ============================================================
     with st.container(border=True):
         st.markdown("**Manage**")
+
+        # --- Import from a broker (DEGIRO) -- bulk-importeren i.p.v. 1-voor-1 loggen ---
+        with st.expander("Import from a broker (DEGIRO)", expanded=False):
+            st.caption("Upload your DEGIRO 'Transactions' export (CSV) to import your full "
+                       "buy/sell history in one go, instead of logging each one by hand.")
+            degiro_file = st.file_uploader("DEGIRO Transactions CSV", type=["csv"], key="degiro_upload")
+
+            if degiro_file is not None:
+                if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
+                    # Nieuw bestand -- opnieuw parsen en de matches resetten
+                    with st.spinner("Reading your file..."):
+                        parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
+                    st.session_state["degiro_parsed_filename"] = degiro_file.name
+                    st.session_state["degiro_grouped"] = parse_result["grouped"]
+                    st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
+                    ticker_matches = {}
+                    with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
+                        for key, group in parse_result["grouped"].items():
+                            ticker_matches[key] = guess_ticker_for_product(group["product"]) or ""
+                    st.session_state["degiro_ticker_matches"] = ticker_matches
+
+                degiro_grouped = st.session_state["degiro_grouped"]
+                degiro_skipped = st.session_state["degiro_skipped"]
+
+                total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
+                st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
+                if degiro_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
+                    more = "..." if len(degiro_skipped) > 5 else ""
+                    st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                st.markdown("**Review the ticker for each security** (auto-suggested -- please "
+                             "double-check and correct if wrong before importing):")
+                for key, group in degiro_grouped.items():
+                    dcol1, dcol2 = st.columns([3, 2])
+                    with dcol1:
+                        st.caption(f"{group['product']} ({len(group['transactions'])} transactions)")
+                    with dcol2:
+                        current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
+                        new_ticker = st.text_input(
+                            "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
+                            label_visibility="collapsed", placeholder="leave empty to skip",
+                        )
+                        st.session_state["degiro_ticker_matches"][key] = new_ticker
+
+                ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
+                st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
+                           f"the rest will be skipped.")
+
+                if st.button("Import all matched transactions", type="primary"):
+                    imported_positions = 0
+                    imported_transactions = 0
+                    for key, group in degiro_grouped.items():
+                        ticker = st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                        if not ticker:
+                            continue
+
+                        existing = next((h for h in holdings if h["ticker"] == ticker), None)
+                        if existing:
+                            holding_id = existing["id"]
+                            existing_manual_shares = existing.get("shares") or 0.0
+                            existing_tx = database.get_transactions_for_holding(user_email, holding_id)
+                            if not existing_tx and existing_manual_shares > 0:
+                                # Zelfde inhaal-logica als bij 'Log a transaction': bestaande
+                                # handmatige shares vastleggen tegen de huidige prijs, vandaag.
+                                try:
+                                    backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+                                except Exception:
+                                    backfill_price = group["transactions"][0]["price"]
+                                database.add_transaction(
+                                    user_email, holding_id, "buy",
+                                    shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                                    transaction_date=datetime.now().date().isoformat(),
+                                )
+                        else:
+                            holding_id = database.add_holding(user_email, group["product"], ticker, shares=None)
+                            imported_positions += 1
+
+                        for t in group["transactions"]:
+                            database.add_transaction(
+                                user_email, holding_id, t["transaction_type"],
+                                shares=t["shares"], price=t["price"], fee=t["fee"],
+                                transaction_date=t["transaction_date"],
+                            )
+                            imported_transactions += 1
+
+                    st.success(f"Imported {imported_transactions} transactions across "
+                               f"{imported_positions} new position(s)!")
+                    for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped", "degiro_ticker_matches"]:
+                        st.session_state.pop(state_key, None)
+                    st.rerun()
 
         # --- Log a transaction (werkt ook zonder bestaande posities -- een
         # nieuwe positie kan direct via een eerste 'Log a buy' worden
