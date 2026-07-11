@@ -100,6 +100,13 @@ def get_all_transactions(user_email: str) -> dict:
     return grouped
 
 
+def delete_transaction(transaction_id: int, user_email: str) -> None:
+    """Verwijdert 1 transactie (bv. per ongeluk verkeerd ingevoerd)."""
+    client = get_supabase_client()
+    client.table("portfolio_transactions").delete() \
+        .eq("id", transaction_id).eq("user_email", user_email).execute()
+
+
 def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR") -> None:
     """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat."""
     client = get_supabase_client()

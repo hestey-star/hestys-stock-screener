@@ -1554,64 +1554,6 @@ elif current_view == "portfolio":
     with st.container(border=True):
         st.markdown("**Manage**")
 
-        with st.expander("Add a new position", expanded=not holdings):
-            search_query = st.text_input(
-                "Search for a company, crypto, commodity, or precious metal (e.g. 'Tesla', 'Bitcoin', 'Gold')",
-                key="ticker_search",
-            )
-            shares_input = st.number_input(
-                "Number of shares/units you hold (optional -- needed for value tracking and portfolio analysis)",
-                min_value=0.0, value=0.0, step=1.0,
-            )
-
-            selected_symbol = None
-            selected_name = None
-
-            if search_query:
-                try:
-                    search_results = yf.Search(search_query, max_results=8).quotes
-                except Exception as exc:
-                    search_results = []
-                    st.caption(f"Search failed: {exc}")
-
-                if search_results:
-                    options = {}
-                    for r in search_results:
-                        name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                        label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                        options[label] = r
-
-                    chosen_label = st.selectbox("Choose the right match", list(options.keys()))
-                    chosen = options[chosen_label]
-                    selected_symbol = chosen.get("symbol")
-                    selected_name = chosen.get("shortname") or chosen.get("longname") or selected_symbol
-                else:
-                    st.caption("No results found for this search -- try a different name.")
-
-            if selected_symbol and st.button("Add to my portfolio", type="primary"):
-                with st.spinner(f"Checking data for {selected_symbol}..."):
-                    try:
-                        test_df = yf.Ticker(selected_symbol).history(period="5d")
-                    except Exception as exc:
-                        test_df = None
-                        st.error(f"Could not validate {selected_symbol}: {exc}")
-
-                if test_df is not None and test_df.empty:
-                    st.error(f"No recent price data found for {selected_symbol} -- not added.")
-                elif test_df is not None:
-                    if len(holdings) >= 10 and not is_premium:
-                        st.error(
-                            "You've reached the free plan limit of 10 tracked positions. "
-                            "Upgrade to Premium for unlimited tracking."
-                        )
-                    else:
-                        database.add_holding(
-                            user_email, selected_name, selected_symbol,
-                            shares = shares_input if shares_input > 0 else None,
-                        )
-                        st.success(f"{selected_name} ({selected_symbol}) added!")
-                        st.rerun()
-
         if holdings:
             holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
 
@@ -1643,17 +1585,6 @@ elif current_view == "portfolio":
                         if st.button("Save shares"):
                             database.update_holding_shares(edit_holding["id"], user_email, new_shares)
                             st.rerun()
-
-            with st.expander("Remove a position", expanded=False):
-                rcol1, rcol2 = st.columns([4, 1])
-                with rcol1:
-                    to_remove_label = st.selectbox(
-                        "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
-                    )
-                with rcol2:
-                    if st.button("Remove"):
-                        database.delete_holding(holding_options[to_remove_label]["id"], user_email)
-                        st.rerun()
 
         # --- Log a transaction (buiten de 'if holdings'-check, want ook bruikbaar
         # als je nog GEEN posities hebt -- een nieuwe positie kan direct via een
@@ -1791,15 +1722,29 @@ elif current_view == "portfolio":
                 if tx_history:
                     st.markdown("**Transaction history**")
                     for t in tx_history:
-                        emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
-                        st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
-                                   f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
+                        hcol1, hcol2 = st.columns([5, 1])
+                        with hcol1:
+                            emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
+                            st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
+                                       f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
+                        with hcol2:
+                            if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                database.delete_transaction(t["id"], user_email)
+                                remaining = [x for x in tx_history if x["id"] != t["id"]]
+                                if not remaining:
+                                    # Geen transacties meer over voor deze positie -- voorkomt een
+                                    # 'verweesde' positie zonder shares en zonder geschiedenis.
+                                    database.delete_holding(tx_holding["id"], user_email)
+                                    st.success("Transaction deleted -- this position had no other "
+                                               "transactions left, so it was removed too.")
+                                else:
+                                    st.success("Transaction deleted.")
+                                st.rerun()
 
     # ============================================================
     # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
     # ============================================================
-    with st.container(border=True):
-        st.markdown("**Watchlist**")
+    with st.expander("Watchlist", expanded=False):
         st.caption("Track tickers you don't own yet -- they'll show up with personalized "
                    "signals and news on the Today page.")
 
@@ -1822,51 +1767,51 @@ elif current_view == "portfolio":
         else:
             st.caption("Your watchlist is empty.")
 
-        with st.expander("Add to watchlist", expanded=not watchlist_items):
-            watchlist_search = st.text_input(
-                "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
-            )
-            w_selected_symbol = None
-            w_selected_name = None
-            if watchlist_search:
-                try:
-                    w_search_results = yf.Search(watchlist_search, max_results=8).quotes
-                except Exception as exc:
-                    w_search_results = []
-                    st.caption(f"Search failed: {exc}")
-                if w_search_results:
-                    w_options = {}
-                    for r in w_search_results:
-                        name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                        label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                        w_options[label] = r
-                    w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
-                    w_chosen = w_options[w_chosen_label]
-                    w_selected_symbol = w_chosen.get("symbol")
-                    w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
-                else:
-                    st.caption("No results found for this search -- try a different name.")
+        st.markdown("**Add to watchlist**")
+        watchlist_search = st.text_input(
+            "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+        )
+        w_selected_symbol = None
+        w_selected_name = None
+        if watchlist_search:
+            try:
+                w_search_results = yf.Search(watchlist_search, max_results=8).quotes
+            except Exception as exc:
+                w_search_results = []
+                st.caption(f"Search failed: {exc}")
+            if w_search_results:
+                w_options = {}
+                for r in w_search_results:
+                    name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                    label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                    w_options[label] = r
+                w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
+                w_chosen = w_options[w_chosen_label]
+                w_selected_symbol = w_chosen.get("symbol")
+                w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
+            else:
+                st.caption("No results found for this search -- try a different name.")
 
-            if w_selected_symbol and st.button("Add to watchlist", type="primary"):
-                database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
-                st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
-                st.rerun()
+        if w_selected_symbol and st.button("Add to watchlist", type="primary"):
+            database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
+            st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
+            st.rerun()
 
         if watchlist_items:
-            with st.expander("Remove from watchlist", expanded=False):
-                w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
-                wcol1, wcol2 = st.columns([4, 1])
-                with wcol1:
-                    w_to_remove = st.selectbox(
-                        "Item to remove", list(w_remove_options.keys()),
-                        key="watchlist_remove_select", label_visibility="collapsed",
-                    )
-                with wcol2:
-                    if st.button("Remove", key="watchlist_remove_btn"):
-                        database.delete_holding(w_remove_options[w_to_remove], user_email)
-                        st.rerun()
+            st.markdown("**Remove from watchlist**")
+            w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
+            wcol1, wcol2 = st.columns([4, 1])
+            with wcol1:
+                w_to_remove = st.selectbox(
+                    "Item to remove", list(w_remove_options.keys()),
+                    key="watchlist_remove_select", label_visibility="collapsed",
+                )
+            with wcol2:
+                if st.button("Remove", key="watchlist_remove_btn"):
+                    database.delete_holding(w_remove_options[w_to_remove], user_email)
+                    st.rerun()
 
-    st.caption("Manage email preferences and cash amount under Instellingen. "
+    st.caption("Manage email preferences and cash amount under Settings. "
                "You'll also automatically receive a weekly email with this update, "
                "at the address you're logged in with.")
 
