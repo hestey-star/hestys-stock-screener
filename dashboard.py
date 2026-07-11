@@ -841,6 +841,25 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows}
 
 
+def sync_holding_shares_from_transactions(holding_id: int, user_email: str) -> float:
+    """
+    Herberekent het aantal shares uit ALLE transacties van deze positie, en
+    schrijft dat terug naar portfolio_holdings.shares -- zodat de rest van
+    de app (portfolio-waarde, concentratie-berekeningen, etc.) gewoon het
+    opgeslagen 'shares'-veld kan blijven gebruiken, zonder overal apart de
+    transacties te moeten optellen. Moet aangeroepen worden na ELKE
+    toegevoegde of verwijderde transactie. Geeft het nieuwe aantal terug.
+    """
+    import database
+    transactions = database.get_transactions_for_holding(user_email, holding_id)
+    derived_shares = sum(
+        t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
+        for t in transactions
+    )
+    database.update_holding_shares(holding_id, user_email, derived_shares)
+    return derived_shares
+
+
 def guess_ticker_for_product(product_name: str) -> str:
     """
     Zoekt de meest waarschijnlijke ticker voor een productnaam uit een
@@ -1744,6 +1763,8 @@ elif current_view == "portfolio":
                             )
                             imported_transactions += 1
 
+                        sync_holding_shares_from_transactions(holding_id, user_email)
+
                     st.success(f"Imported {imported_transactions} transactions across "
                                f"{imported_positions} new position(s)!")
                     for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped", "degiro_ticker_matches"]:
@@ -1833,6 +1854,7 @@ elif current_view == "portfolio":
                                 shares=tx_shares, price=tx_price, fee=tx_fee,
                                 transaction_date=tx_date.isoformat(),
                             )
+                            sync_holding_shares_from_transactions(new_id, user_email)
                             st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
                             st.rerun()
                     else:
@@ -1863,19 +1885,15 @@ elif current_view == "portfolio":
                             shares=tx_shares, price=tx_price, fee=tx_fee,
                             transaction_date=tx_date.isoformat(),
                         )
+                        shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
 
                         # Als deze verkoop de positie volledig sluit (~0 shares over),
                         # verwijderen we de positie meteen -- geen apart 'Remove'-stapje nodig.
-                        if not is_buy:
-                            shares_after = sum(
-                                t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
-                                for t in existing_tx
-                            ) - tx_shares
-                            if shares_after <= 0.001:
-                                database.delete_holding(tx_holding["id"], user_email)
-                                st.success(f"Sell logged -- {tx_holding['naam']} is now fully sold, "
-                                           f"so the position was removed automatically.")
-                                st.rerun()
+                        if not is_buy and shares_after <= 0.001:
+                            database.delete_holding(tx_holding["id"], user_email)
+                            st.success(f"Sell logged -- {tx_holding['naam']} is now fully sold, "
+                                       f"so the position was removed automatically.")
+                            st.rerun()
 
                         st.success("Transaction saved!")
                         st.rerun()
@@ -1901,6 +1919,7 @@ elif current_view == "portfolio":
                                     st.success("Transaction deleted -- this position had no other "
                                                "transactions left, so it was removed too.")
                                 else:
+                                    sync_holding_shares_from_transactions(tx_holding["id"], user_email)
                                     st.success("Transaction deleted.")
                                 st.rerun()
 
