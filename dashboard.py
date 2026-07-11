@@ -1644,32 +1644,103 @@ elif current_view == "portfolio":
                             database.update_holding_shares(edit_holding["id"], user_email, new_shares)
                             st.rerun()
 
-            with st.expander("Log a transaction", expanded=False):
-                st.caption("Log your actual buys and sells to see your real return under Analyze. "
-                           "Optional -- positions without transactions logged just won't show a return.")
-                tx_label = st.selectbox(
-                    "Position", list(holding_options.keys()), key="tx_select", label_visibility="collapsed"
-                )
-                tx_holding = holding_options[tx_label]
+            with st.expander("Remove a position", expanded=False):
+                rcol1, rcol2 = st.columns([4, 1])
+                with rcol1:
+                    to_remove_label = st.selectbox(
+                        "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
+                    )
+                with rcol2:
+                    if st.button("Remove"):
+                        database.delete_holding(holding_options[to_remove_label]["id"], user_email)
+                        st.rerun()
 
+        # --- Log a transaction (buiten de 'if holdings'-check, want ook bruikbaar
+        # als je nog GEEN posities hebt -- een nieuwe positie kan direct via een
+        # eerste 'Log a buy' worden aangemaakt, zonder eerst 'Add a new position'
+        # te moeten doorlopen) ---
+        with st.expander("Log a transaction", expanded=False):
+            st.caption("Log your actual buys and sells to see your real return under Analyze. "
+                       "Optional -- positions without transactions logged just won't show a return.")
+
+            position_mode_options = (
+                ["Existing position", "New position"] if holdings else ["New position"]
+            )
+            tx_position_mode = st.radio(
+                "Position", position_mode_options, horizontal=True,
+                key="tx_position_mode", label_visibility="collapsed",
+            )
+
+            tx_holding = None
+            new_position_symbol = None
+            new_position_name = None
+
+            if tx_position_mode == "Existing position":
+                tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+                tx_label = st.selectbox(
+                    "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
+                )
+                tx_holding = tx_holding_options[tx_label]
                 tx_type = st.radio(
                     "Type", ["🟢 Log a buy", "🔴 Log a sell"], horizontal=True, key="tx_type_radio",
                 )
                 is_buy = tx_type == "🟢 Log a buy"
+            else:
+                # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
+                is_buy = True
+                tx_search_query = st.text_input(
+                    "Search for the company/asset you bought", key="tx_search_query",
+                )
+                if tx_search_query:
+                    try:
+                        tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
+                    except Exception as exc:
+                        tx_search_results = []
+                        st.caption(f"Search failed: {exc}")
+                    if tx_search_results:
+                        tx_options = {}
+                        for r in tx_search_results:
+                            name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                            label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                            tx_options[label] = r
+                        tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
+                        tx_chosen = tx_options[tx_chosen_label]
+                        new_position_symbol = tx_chosen.get("symbol")
+                        new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
+                    else:
+                        st.caption("No results found for this search -- try a different name.")
 
-                tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-                with tcol1:
-                    tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
-                with tcol2:
-                    tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
-                with tcol3:
-                    tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
-                with tcol4:
-                    tx_date = st.date_input("Date", key="tx_date_input")
+            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+            with tcol1:
+                tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
+            with tcol2:
+                tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
+            with tcol3:
+                tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
+            with tcol4:
+                tx_date = st.date_input("Date", key="tx_date_input")
 
-                if st.button("Save transaction", type="primary"):
-                    if tx_shares <= 0 or tx_price <= 0:
-                        st.error("Shares and price must both be greater than 0.")
+            can_save = (tx_holding is not None) or (new_position_symbol is not None)
+
+            if can_save and st.button("Save transaction", type="primary"):
+                if tx_shares <= 0 or tx_price <= 0:
+                    st.error("Shares and price must both be greater than 0.")
+                else:
+                    if tx_position_mode == "New position":
+                        if len(holdings) >= 10 and not is_premium:
+                            st.error(
+                                "You've reached the free plan limit of 10 tracked positions. "
+                                "Upgrade to Premium for unlimited tracking."
+                            )
+                        else:
+                            new_id = database.add_holding(user_email, new_position_name, new_position_symbol, shares=None)
+                            database.add_transaction(
+                                user_email, new_id, "buy",
+                                shares=tx_shares, price=tx_price, fee=tx_fee,
+                                transaction_date=tx_date.isoformat(),
+                            )
+                            st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
+                            st.rerun()
                     else:
                         existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
                         existing_manual_shares = tx_holding.get("shares") or 0.0
@@ -1688,6 +1759,7 @@ elif current_view == "portfolio":
                                 shares=existing_manual_shares, price=backfill_price, fee=0.0,
                                 transaction_date=datetime.now().date().isoformat(),
                             )
+                            existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
                             st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
                                     f"bought at today's price (€{backfill_price:.2f}) -- edit this later if "
                                     f"you remember the actual original purchase price.")
@@ -1697,9 +1769,24 @@ elif current_view == "portfolio":
                             shares=tx_shares, price=tx_price, fee=tx_fee,
                             transaction_date=tx_date.isoformat(),
                         )
+
+                        # Als deze verkoop de positie volledig sluit (~0 shares over),
+                        # verwijderen we de positie meteen -- geen apart 'Remove'-stapje nodig.
+                        if not is_buy:
+                            shares_after = sum(
+                                t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
+                                for t in existing_tx
+                            ) - tx_shares
+                            if shares_after <= 0.001:
+                                database.delete_holding(tx_holding["id"], user_email)
+                                st.success(f"Sell logged -- {tx_holding['naam']} is now fully sold, "
+                                           f"so the position was removed automatically.")
+                                st.rerun()
+
                         st.success("Transaction saved!")
                         st.rerun()
 
+            if tx_holding is not None:
                 tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
                 if tx_history:
                     st.markdown("**Transaction history**")
@@ -1707,17 +1794,6 @@ elif current_view == "portfolio":
                         emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
                         st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
                                    f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
-
-            with st.expander("Remove a position", expanded=False):
-                rcol1, rcol2 = st.columns([4, 1])
-                with rcol1:
-                    to_remove_label = st.selectbox(
-                        "Position to remove", list(holding_options.keys()), key="remove_select", label_visibility="collapsed"
-                    )
-                with rcol2:
-                    if st.button("Remove"):
-                        database.delete_holding(holding_options[to_remove_label]["id"], user_email)
-                        st.rerun()
 
     # ============================================================
     # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
