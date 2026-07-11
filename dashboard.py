@@ -1001,6 +1001,109 @@ if current_view == "today":
         else:
             tracked_items = holdings + watchlist_items
 
+            # --- Your portfolio today (gestyled als de Discover-banner) + Health Score i.p.v. Cash ---
+            if holdings:
+                with st.spinner("Checking today's price moves..."):
+                    daily_stats = build_daily_portfolio_stats(holdings)
+                cash_value = database.get_cash_value(user_email)
+                infos = get_tickers_info(holdings)
+                overview = build_concentration_overview(holdings, infos, cash_value)
+
+                if overview:
+                    database.save_score_snapshot(user_email, overview["score"])
+                    score_week_ago = database.get_score_days_ago(user_email, days_ago=7)
+                    score_delta = f"{overview['score'] - score_week_ago:+.1f} vs last week" if score_week_ago is not None else None
+
+                st.markdown(
+                    """
+                    <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+                                border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+                                padding: 1rem 1.25rem; margin: 0.5rem 0 0.5rem 0;">
+                        <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                            Your Portfolio Today
+                        </div>
+                        <div style="color:#8992A3; font-size:0.85rem; margin-top:3px;">
+                            How your positions did today, and how healthy your overall mix looks.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                dcol1, dcol2, dcol3, dcol4 = st.columns(4)
+                with dcol1:
+                    if daily_stats:
+                        st.metric("Vs. yesterday", f"{daily_stats['portfolio_change_pct']:+.1f}%")
+                    else:
+                        st.metric("Vs. yesterday", "n/a")
+                with dcol2:
+                    if daily_stats:
+                        st.metric("Best today", daily_stats["best_performer"], f"{daily_stats['best_change_pct']:+.1f}%")
+                    else:
+                        st.metric("Best today", "n/a")
+                with dcol3:
+                    if daily_stats:
+                        st.metric("Worst today", daily_stats["worst_performer"], f"{daily_stats['worst_change_pct']:+.1f}%")
+                    else:
+                        st.metric("Worst today", "n/a")
+                with dcol4:
+                    if overview:
+                        st.metric("Health Score", f"{overview['score']:.1f}/10", score_delta)
+                    else:
+                        st.metric("Health Score", "n/a")
+
+                st.markdown(
+                    '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+
+            # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
+            with st.container(border=True):
+                st.markdown("**Today's radar**")
+
+                macro_events = get_todays_macro_events(max_items=3)
+                with st.spinner("Checking today's radar..."):
+                    earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
+                todays_events = macro_events + [
+                    {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
+                ]
+                if todays_events:
+                    for event in todays_events[:3]:
+                        time_part = f" -- {event['time']}" if "time" in event else ""
+                        st.markdown(f"- 📅 {event['name']}{time_part}")
+
+                opportunities = build_opportunities_today(holdings, watchlist_items)
+                st.write(
+                    f"- 🔍 **{opportunities['total_signals']}** signal(s) found "
+                    f"({opportunities['daily_signals']} daily, {opportunities['weekly_signals']} weekly) -- "
+                    f"**{opportunities['in_portfolio_count']}** relate to your portfolio, "
+                    f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
+                    f"**{opportunities['new_opportunities_count']}** are new ideas."
+                )
+
+                def _is_recent_earnings(earnings_date_str, max_days=2):
+                    try:
+                        earnings_date = pd.to_datetime(earnings_date_str).date()
+                        days_since = (datetime.now().date() - earnings_date).days
+                        return 0 <= days_since <= max_days
+                    except Exception:
+                        return False
+
+                tracked_tickers = {item["ticker"] for item in tracked_items}
+                personal_surprises = [
+                    s for s in get_earnings_surprises_from_signals(max_items=50)
+                    if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
+                ]
+                for s in personal_surprises[:3]:
+                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})")
+
+                st.markdown(
+                    'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
+                    unsafe_allow_html=True,
+                )
+
             # --- Top nieuws (portfolio + watchlist) ---
             with st.container(border=True):
                 st.markdown("**Top news for you**")
@@ -1014,105 +1117,6 @@ if current_view == "today":
                         st.markdown(f"- **{n['naam']}**: [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
                 else:
                     st.caption("No recent news found for your tracked positions.")
-
-            # --- Portfolio-kenmerken ---
-            if holdings:
-                with st.container(border=True):
-                    st.markdown("**Your portfolio today**")
-                    with st.spinner("Checking today's price moves..."):
-                        daily_stats = build_daily_portfolio_stats(holdings)
-                    cash_value = database.get_cash_value(user_email)
-                    infos = get_tickers_info(holdings)
-                    overview = build_concentration_overview(holdings, infos, cash_value)
-
-                    dcol1, dcol2, dcol3, dcol4 = st.columns(4)
-                    with dcol1:
-                        if daily_stats:
-                            st.metric("Vs. yesterday", f"{daily_stats['portfolio_change_pct']:+.1f}%")
-                        else:
-                            st.metric("Vs. yesterday", "n/a")
-                    with dcol2:
-                        if daily_stats:
-                            st.metric("Best today", daily_stats["best_performer"], f"{daily_stats['best_change_pct']:+.1f}%")
-                        else:
-                            st.metric("Best today", "n/a")
-                    with dcol3:
-                        if daily_stats:
-                            st.metric("Worst today", daily_stats["worst_performer"], f"{daily_stats['worst_change_pct']:+.1f}%")
-                        else:
-                            st.metric("Worst today", "n/a")
-                    with dcol4:
-                        if overview:
-                            st.metric("Cash", f"{overview['cash_pct']:.0f}%")
-                        else:
-                            st.metric("Cash", "n/a")
-
-                # --- Portfolio Health Score (prominent, met verandering t.o.v. vorige week) ---
-                if overview:
-                    database.save_score_snapshot(user_email, overview["score"])
-                    score_week_ago = database.get_score_days_ago(user_email, days_ago=7)
-                    with st.container(border=True):
-                        st.markdown("**Your Portfolio Health Score**")
-                        if score_week_ago is not None:
-                            delta = overview["score"] - score_week_ago
-                            st.metric("Score", f"{overview['score']:.1f}/10", f"{delta:+.1f} vs last week")
-                        else:
-                            st.metric("Score", f"{overview['score']:.1f}/10")
-                            st.caption("Check back next week to see how this changes over time.")
-                        st.caption("Based on concentration, diversification, and category balance -- see Analyze for the details.")
-
-            # --- Today's events (macro + je eigen posities/watchlist die vandaag rapporteren) ---
-            macro_events = get_todays_macro_events(max_items=3)
-            with st.spinner("Checking for earnings today..."):
-                earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
-            todays_events = macro_events + [
-                {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
-            ]
-            if todays_events:
-                with st.container(border=True):
-                    st.markdown("**Today's events**")
-                    for event in todays_events[:3]:
-                        time_part = f" -- {event['time']}" if "time" in event else ""
-                        st.markdown(f"- 📅 {event['name']}{time_part}")
-
-            # --- Opportunities today ---
-            with st.container(border=True):
-                st.markdown("**Opportunities today**")
-                opportunities = build_opportunities_today(holdings, watchlist_items)
-                st.write(
-                    f"**{opportunities['total_signals']}** signal(s) found "
-                    f"({opportunities['daily_signals']} daily, {opportunities['weekly_signals']} weekly) -- "
-                    f"**{opportunities['in_portfolio_count']}** relate to your portfolio, "
-                    f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
-                    f"**{opportunities['new_opportunities_count']}** are new ideas."
-                )
-                st.markdown(
-                    'See the full list under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
-                    unsafe_allow_html=True,
-                )
-
-            # --- Earnings surprises (alleen je eigen portfolio + watchlist, max 2 dagen oud) ---
-            def _is_recent_earnings(earnings_date_str, max_days=2):
-                try:
-                    earnings_date = pd.to_datetime(earnings_date_str).date()
-                    days_since = (datetime.now().date() - earnings_date).days
-                    return 0 <= days_since <= max_days
-                except Exception:
-                    return False
-
-            tracked_tickers = {item["ticker"] for item in tracked_items}
-            personal_surprises = [
-                s for s in get_earnings_surprises_from_signals(max_items=50)
-                if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
-            ]
-            with st.container(border=True):
-                st.markdown("**Earnings surprises for you**")
-                if personal_surprises:
-                    for s in personal_surprises[:5]:
-                        emoji = "🟢" if s["earnings_beat"] else "🔴"
-                        st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
-                else:
-                    st.caption("No recent earnings surprises on your positions (last 2 days).")
 
             # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) ---
             with st.container(border=True):
