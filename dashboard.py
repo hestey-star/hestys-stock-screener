@@ -860,16 +860,25 @@ def sync_holding_shares_from_transactions(holding_id: int, user_email: str) -> f
     return derived_shares
 
 
-def guess_ticker_for_product(product_name: str) -> str:
+def guess_ticker_for_product(product_name: str, isin: str = None) -> str:
     """
-    Zoekt de meest waarschijnlijke ticker voor een productnaam uit een
-    broker-export (bv. 'KRAFT HEINZ CO' -> 'KHC'). Geeft None terug als
-    er niks gevonden wordt -- dan moet de gebruiker het zelf invullen.
+    Zoekt de meest waarschijnlijke ticker voor een positie uit een
+    broker-export. Probeert EERST op ISIN (preciezer, geen fuzzy-matching
+    nodig -- een ISIN is een uniek identificatienummer), en valt terug op
+    de productnaam als dat niks oplevert (bv. bij crypto, dat geen ISIN
+    heeft). Geeft None terug als beide niks vinden.
     """
+    if isin:
+        try:
+            isin_results = yf.Search(isin, max_results=1).quotes
+            if isin_results:
+                return isin_results[0].get("symbol")
+        except Exception:
+            pass
     try:
-        results = yf.Search(product_name, max_results=1).quotes
-        if results:
-            return results[0].get("symbol")
+        name_results = yf.Search(product_name, max_results=1).quotes
+        if name_results:
+            return name_results[0].get("symbol")
     except Exception:
         pass
     return None
@@ -1694,7 +1703,7 @@ elif current_view == "portfolio":
                     ticker_matches = {}
                     with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
                         for key, group in parse_result["grouped"].items():
-                            ticker_matches[key] = guess_ticker_for_product(group["product"]) or ""
+                            ticker_matches[key] = guess_ticker_for_product(group["product"], group.get("isin")) or ""
                     st.session_state["degiro_ticker_matches"] = ticker_matches
 
                 degiro_grouped = st.session_state["degiro_grouped"]
