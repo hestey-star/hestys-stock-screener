@@ -1061,14 +1061,19 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
     return {"return_pct": gain / denominator * 100, "gain": gain}
 
 
-def compute_holding_performance(transactions: list, current_price: float) -> dict:
+def compute_holding_performance(transactions: list, current_price: float = None) -> dict:
     """
     Berekent rendement uit een lijst buy/sell-transacties, met de
     gemiddelde-kostprijs-methode (inclusief betaalde fees). Geeft None
-    terug als er geen (bruikbare) transacties zijn, of de huidige prijs
-    onbekend is -- geen dividenden meegenomen (bewust, voor nu).
+    terug als er geen bruikbare transacties zijn -- geen dividenden
+    meegenomen (bewust, voor nu).
+
+    current_price is alleen nodig als er nog shares in bezit zijn (voor
+    de ongerealiseerde winst/verlies) -- bij een VOLLEDIG GESLOTEN positie
+    (0 shares over) is de huidige prijs irrelevant (0 x wat dan ook = 0),
+    dus die mag dan gewoon None zijn zonder dat de functie stopt.
     """
-    if not transactions or current_price is None:
+    if not transactions:
         return None
 
     total_bought_shares = sum(tx["shares"] for tx in transactions if tx["transaction_type"] == "buy")
@@ -1081,8 +1086,13 @@ def compute_holding_performance(transactions: list, current_price: float) -> dic
 
     avg_cost_per_share = total_bought_cost / total_bought_shares
     shares_held = total_bought_shares - total_sold_shares
+
+    if shares_held > 0.0001 and current_price is None:
+        return None  # er zijn nog shares in bezit, dan is de huidige prijs wel echt nodig
+
     cost_basis_held = shares_held * avg_cost_per_share
-    unrealized_pnl = (current_price * shares_held) - cost_basis_held
+    price_for_calc = current_price if current_price is not None else 0.0
+    unrealized_pnl = (price_for_calc * shares_held) - cost_basis_held
     realized_pnl = total_sold_proceeds - (total_sold_shares * avg_cost_per_share)
     total_pnl = unrealized_pnl + realized_pnl
     total_return_pct = (total_pnl / total_bought_cost) * 100 if total_bought_cost > 0 else None
@@ -1091,7 +1101,7 @@ def compute_holding_performance(transactions: list, current_price: float) -> dic
         "shares_held": round(shares_held, 4),
         "avg_cost_per_share": round(avg_cost_per_share, 4),
         "cost_basis_held": round(cost_basis_held, 2),
-        "current_value_held": round(current_price * shares_held, 2),
+        "current_value_held": round(price_for_calc * shares_held, 2),
         "unrealized_pnl": round(unrealized_pnl, 2),
         "realized_pnl": round(realized_pnl, 2),
         "total_pnl": round(total_pnl, 2),
@@ -2123,12 +2133,14 @@ elif current_view == "portfolio":
                         )
                         shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
 
-                        # Als deze verkoop de positie volledig sluit (~0 shares over),
-                        # verwijderen we de positie meteen -- geen apart 'Remove'-stapje nodig.
+                        # Bij een verkoop naar ~0 shares: de positie NIET verwijderen (dat zou
+                        # via de cascade ook de transactiegeschiedenis wissen, en dus je
+                        # gerealiseerde winst/verlies uit Performance laten verdwijnen) --
+                        # 'ie blijft gewoon bestaan met 0 shares, verborgen uit My Portfolio
+                        # via filter_active_holdings(), maar telt nog mee bij Performance.
                         if not is_buy and shares_after <= 0.001:
-                            database.delete_holding(tx_holding["id"], user_email)
-                            st.success(f"Sell logged -- {tx_holding['naam']} is now fully sold, "
-                                       f"so the position was removed automatically.")
+                            st.success(f"Sell logged -- {tx_holding['naam']} is now fully closed. "
+                                       f"Its history still counts toward your Performance stats.")
                             st.rerun()
 
                         st.success("Transaction saved!")
@@ -2258,20 +2270,22 @@ elif current_view == "analyze":
     # --- Performance (rendement uit gelogde transacties) ---
     with st.expander("📈 Performance", expanded=True):
         st.caption("Your real return, based on the buy/sell transactions you've logged under "
-                   "My Portfolio -- excludes dividends. Positions without logged transactions "
-                   "won't show a return here.")
+                   "My Portfolio -- excludes dividends. Includes fully closed positions. "
+                   "Positions without logged transactions won't show a return here.")
+        all_holdings_incl_closed = database.get_user_holdings(user_email)
         performance_rows = []
         total_invested = 0.0
         total_pnl = 0.0
         earliest_date = None
-        for h in holdings:
+        for h in all_holdings_incl_closed:
             transactions = database.get_transactions_for_holding(user_email, h["id"])
             if not transactions:
                 continue
             current_price = infos.get(h["ticker"], {}).get("currentPrice") or infos.get(h["ticker"], {}).get("regularMarketPrice")
             perf = compute_holding_performance(transactions, current_price)
             if perf:
-                performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], **perf})
+                is_closed = perf["shares_held"] <= 0.0001
+                performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
                 bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
                 total_invested += bought_cost
                 total_pnl += perf["total_pnl"]
@@ -2287,10 +2301,10 @@ elif current_view == "analyze":
 
             with st.spinner("Checking YTD and 1-year performance..."):
                 ytd_result = compute_personal_windowed_return(
-                    holdings, user_email, date(datetime.now().year, 1, 1)
+                    all_holdings_incl_closed, user_email, date(datetime.now().year, 1, 1)
                 )
                 one_year_result = compute_personal_windowed_return(
-                    holdings, user_email, (datetime.now() - timedelta(days=365)).date()
+                    all_holdings_incl_closed, user_email, (datetime.now() - timedelta(days=365)).date()
                 )
                 ytd_pct = ytd_result["return_pct"] if ytd_result else None
                 one_year_pct = one_year_result["return_pct"] if one_year_result else None
@@ -2323,11 +2337,12 @@ elif current_view == "analyze":
             if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                 for r in performance_rows:
                     pct = r["total_return_pct"]
+                    closed_txt = " *(closed)*" if r.get("closed") else ""
                     if pct is not None:
                         color_emoji = "🟢" if pct >= 0 else "🔴"
-                        st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
+                        st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
                     else:
-                        st.markdown(f"- {r['naam']} ({r['ticker']}): return unknown")
+                        st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
         else:
             st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
                        "to start tracking your return.")
