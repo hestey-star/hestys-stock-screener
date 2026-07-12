@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 
 import numpy as np
 import pandas as pd
@@ -995,41 +995,70 @@ def get_ticker_ytd_and_1y_return(ticker: str) -> dict:
     }
 
 
-def compute_portfolio_weighted_return(holdings: list, period: str) -> float:
+def compute_personal_windowed_return(holdings: list, user_email: str, window_start) -> dict:
     """
-    Berekent het naar huidige positie-waarde GEWOGEN YTD- of 1-jaars-
-    koersrendement van de hele portfolio (period: 'ytd' of '1y').
-    Normaliseert voor posities waarvan de koersdata ontbreekt.
-    """
-    total_value = sum(h.get("position_value") or 0 for h in holdings)
-    if total_value <= 0:
-        return None
+    Berekent je ECHTE, persoonlijke rendement over een specifieke periode
+    (bv. YTD of de laatste 12 maanden) -- een vereenvoudigde Dietz-methode:
 
-    weighted_sum = 0.0
-    total_weight_used = 0.0
+    - Begin-waarde: shares die je AL had vóór 'window_start', gewaardeerd
+      tegen de koers van toen (niet je oorspronkelijke aankoopprijs --
+      we meten wat er BINNEN deze periode is gebeurd)
+    - Netto-inleg: aankopen (+) en verkopen (-) die BINNEN de periode
+      vielen
+    - Eind-waarde: de huidige positie-waarde nu
+
+    Rendement = (eind-waarde - begin-waarde - netto-inleg) / (begin-waarde + netto-inleg)
+
+    Geeft None terug als er te weinig data is om iets te zeggen.
+    """
+    import database
+
+    starting_value = 0.0
+    net_contributions = 0.0
+    ending_value = 0.0
+    any_starting_data = False
+
     for h in holdings:
-        value = h.get("position_value") or 0
-        if value <= 0:
+        transactions = database.get_transactions_for_holding(user_email, h["id"])
+        if not transactions:
             continue
-        try:
-            history = yf.Ticker(h["ticker"]).history(period="2y")
-        except Exception:
-            continue
-        if history is None or history.empty:
-            continue
-        if period == "ytd":
-            pct = compute_price_return(history, since_date=datetime(datetime.now().year, 1, 1))
-        else:
-            pct = compute_price_return(history, days_back=365)
-        if pct is None:
-            continue
-        weight = value / total_value
-        weighted_sum += pct * weight
-        total_weight_used += weight
 
-    if total_weight_used == 0:
+        shares_before_window = 0.0
+        for t in transactions:
+            t_date = datetime.strptime(t["transaction_date"], "%Y-%m-%d").date()
+            delta = t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
+            if t_date < window_start:
+                shares_before_window += delta
+            else:
+                if t["transaction_type"] == "buy":
+                    net_contributions += t["shares"] * t["price"] + t["fee"]
+                else:
+                    net_contributions -= t["shares"] * t["price"] - t["fee"]
+
+        if shares_before_window > 0.0001:
+            try:
+                history = yf.Ticker(h["ticker"]).history(
+                    start=(window_start - timedelta(days=7)).isoformat(),
+                    end=(window_start + timedelta(days=7)).isoformat(),
+                )
+                if history is not None and not history.empty:
+                    price_at_start = float(history["Close"].iloc[0])
+                    starting_value += shares_before_window * price_at_start
+                    any_starting_data = True
+            except Exception:
+                pass
+
+        ending_value += h.get("position_value") or 0.0
+
+    if not any_starting_data and net_contributions == 0:
+        return None  # niks om over te rapporteren -- geen posities van vóór deze periode, geen nieuwe inleg
+
+    denominator = starting_value + net_contributions
+    if denominator <= 0:
         return None
-    return weighted_sum / total_weight_used
+
+    gain = ending_value - starting_value - net_contributions
+    return {"return_pct": gain / denominator * 100, "gain": gain}
 
 
 def compute_holding_performance(transactions: list, current_price: float) -> dict:
@@ -2257,8 +2286,14 @@ elif current_view == "analyze":
                 st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
 
             with st.spinner("Checking YTD and 1-year performance..."):
-                ytd_pct = compute_portfolio_weighted_return(holdings, period="ytd")
-                one_year_pct = compute_portfolio_weighted_return(holdings, period="1y")
+                ytd_result = compute_personal_windowed_return(
+                    holdings, user_email, date(datetime.now().year, 1, 1)
+                )
+                one_year_result = compute_personal_windowed_return(
+                    holdings, user_email, (datetime.now() - timedelta(days=365)).date()
+                )
+                ytd_pct = ytd_result["return_pct"] if ytd_result else None
+                one_year_pct = one_year_result["return_pct"] if one_year_result else None
 
             benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
             with st.spinner(f"Fetching {benchmark_name}..."):
@@ -2282,7 +2317,8 @@ elif current_view == "analyze":
                     st.metric("1-Year", f"{one_year_pct:+.1f}%", delta_txt)
                 else:
                     st.metric("1-Year", "n/a")
-            st.caption("Price-only (not weighted by when you actually bought).")
+            st.caption("Your real return over this period -- accounts for shares you already "
+                       "held plus any buys/sells you made during it.")
 
             if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                 for r in performance_rows:
