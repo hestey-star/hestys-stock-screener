@@ -620,6 +620,35 @@ EU_SECTOR_ETFS = {
     "Basic Resources": "EXV6.DE", "Automobiles & Parts": "EXV5.DE",
 }
 
+# Populaire THEMA-ETF's (niet officiële GICS-sectoren, maar cross-sector
+# trends die veel gevolgd worden) -- bewust apart van Sector Rotation
+# gehouden, anders zou een bedrijf dubbel meetellen (1x onder z'n echte
+# sector, 1x onder het thema).
+THEME_ETFS = {
+    "Robotics & AI": "BOTZ", "Clean Energy": "ICLN", "Cybersecurity": "CIBR",
+    "Semiconductors": "SMH", "Genomics & Biotech": "ARKG",
+}
+
+
+def build_theme_rotation(period: str = "1mo") -> list:
+    """
+    Zelfde logica als build_sector_rotation(), maar dan voor de populaire
+    THEMA-ETF's (Robotics & AI, Clean Energy, etc.) i.p.v. de officiële
+    GICS-sectoren.
+    """
+    results = []
+    for theme, ticker in THEME_ETFS.items():
+        try:
+            hist = yf.Ticker(ticker).history(period=period)
+            if len(hist) >= 2:
+                ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+                results.append({"theme": theme, "ticker": ticker, "return_pct": round(ret, 2)})
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x["return_pct"], reverse=True)
+    return results
+
 
 def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     """
@@ -1737,6 +1766,26 @@ elif current_view == "discover":
             )
         else:
             st.caption("No sector data available right now.")
+
+    # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
+    # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
+    with st.expander("💡 Themes"):
+        st.caption("How popular investing themes are doing right now (trailing 1-month return) -- "
+                   "these cut across sectors, so they're tracked separately from Sector rotation.")
+        st.caption("Live data -- recalculated fresh every time you open this.")
+        with st.spinner("Checking theme performance..."):
+            theme_rotation = build_theme_rotation(period="1mo")
+        if theme_rotation:
+            df_themes = pd.DataFrame(theme_rotation)[["theme", "return_pct"]]
+            df_themes.columns = ["Theme", "1-Month Return"]
+            st.dataframe(
+                df_themes.style.format({"1-Month Return": "{:+.1f}%"})
+                                .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
+                width=320,
+                hide_index=True,
+            )
+        else:
+            st.caption("No theme data available right now.")
 
     # --- Earnings surprises (nieuw, hergebruikt bestaande screener-data) ---
     with st.expander("💰 Earnings surprises"):
