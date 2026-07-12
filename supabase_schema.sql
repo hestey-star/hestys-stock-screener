@@ -100,3 +100,9 @@ create table portfolio_transactions (
     transaction_date date not null,
     created_at timestamp with time zone default now()
 );
+
+-- ISIN opslaan bij een positie (indien bekend, bv. via een broker-import)
+-- -- zodat een LATERE herimport van dezelfde broker een eerder gekozen
+-- ticker automatisch herkent en hergebruikt, zonder opnieuw te moeten
+-- zoeken/kiezen.
+alter table portfolio_holdings add column isin text;

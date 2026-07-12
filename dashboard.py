@@ -1321,7 +1321,11 @@ with login_col:
         )
         st.button("Log out", on_click=st.logout, key="header_logout")
     else:
-        st.button("Log in", on_click=st.login, key="header_login", type="primary")
+        login_gcol, login_mcol = st.columns(2)
+        with login_gcol:
+            st.button("Google", on_click=st.login, args=("google",), key="header_login_google", type="primary")
+        with login_mcol:
+            st.button("Microsoft", on_click=st.login, args=("microsoft",), key="header_login_microsoft")
 
 # ============================================================
 # VIEW: TODAY
@@ -1875,11 +1879,23 @@ elif current_view == "portfolio":
                     st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
                     ticker_matches = {}
                     ticker_candidates = {}
+                    # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
+                    # import) -- geen nieuwe zoekopdracht nodig, geen keuzelijst opnieuw.
+                    existing_isin_to_ticker = {
+                        h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
+                    }
                     with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
                         for key, group in parse_result["grouped"].items():
-                            candidates = get_ticker_candidates(group["product"], group.get("isin"))
-                            ticker_candidates[key] = candidates
-                            ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
+                            remembered_ticker = existing_isin_to_ticker.get(group.get("isin"))
+                            if remembered_ticker:
+                                ticker_matches[key] = remembered_ticker
+                                ticker_candidates[key] = [{
+                                    "symbol": remembered_ticker, "name": group["product"], "exchange": "remembered",
+                                }]
+                            else:
+                                candidates = get_ticker_candidates(group["product"], group.get("isin"))
+                                ticker_candidates[key] = candidates
+                                ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
                     st.session_state["degiro_ticker_matches"] = ticker_matches
                     st.session_state["degiro_ticker_candidates"] = ticker_candidates
 
@@ -1961,6 +1977,8 @@ elif current_view == "portfolio":
                 if st.button("Import all matched transactions", type="primary"):
                     imported_positions = 0
                     imported_transactions = 0
+                    imported_duplicates_skipped = 0
+                    all_holdings_for_import = database.get_user_holdings(user_email)
                     to_import = [
                         (key, group) for key, group in degiro_grouped.items()
                         if st.session_state["degiro_ticker_matches"].get(key, "").strip()
@@ -1973,7 +1991,11 @@ elif current_view == "portfolio":
                         ticker = st.session_state["degiro_ticker_matches"][key].strip()
                         status_text.markdown(f"📥 **Importing {group['product']}...** ({i + 1} of {len(to_import)})")
 
-                        existing = next((h for h in holdings if h["ticker"] == ticker), None)
+                        # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
+                        # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
+                        # had, per ongeluk een dubbele, nieuwe positie aanmaken i.p.v. de
+                        # bestaande (met z'n geschiedenis) te hergebruiken.
+                        existing = next((h for h in all_holdings_for_import if h["ticker"] == ticker), None)
                         if existing:
                             holding_id = existing["id"]
                             existing_manual_shares = existing.get("shares") or 0.0
@@ -1991,10 +2013,27 @@ elif current_view == "portfolio":
                                     transaction_date=datetime.now().date().isoformat(),
                                 )
                         else:
-                            holding_id = database.add_holding(user_email, group["product"], ticker, shares=None)
+                            holding_id = database.add_holding(
+                                user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
+                            )
                             imported_positions += 1
 
+                        already_logged = database.get_transactions_for_holding(user_email, holding_id)
+
+                        def _is_duplicate(new_tx, existing_list):
+                            return any(
+                                existing["transaction_type"] == new_tx["transaction_type"]
+                                and existing["transaction_date"] == new_tx["transaction_date"]
+                                and abs(existing["shares"] - new_tx["shares"]) < 0.0001
+                                and abs(existing["price"] - new_tx["price"]) < 0.0001
+                                for existing in existing_list
+                            )
+
+                        skipped_duplicates = 0
                         for t in group["transactions"]:
+                            if _is_duplicate(t, already_logged):
+                                skipped_duplicates += 1
+                                continue
                             database.add_transaction(
                                 user_email, holding_id, t["transaction_type"],
                                 shares=t["shares"], price=t["price"], fee=t["fee"],
@@ -2002,14 +2041,18 @@ elif current_view == "portfolio":
                             )
                             imported_transactions += 1
 
+                        if skipped_duplicates:
+                            imported_duplicates_skipped += skipped_duplicates
+
                         sync_holding_shares_from_transactions(holding_id, user_email)
                         progress_bar.progress((i + 1) / len(to_import))
 
                     status_text.empty()
                     progress_bar.empty()
 
+                    dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
                     st.success(f"Imported {imported_transactions} transactions across "
-                               f"{imported_positions} new position(s)!")
+                               f"{imported_positions} new position(s)!{dup_txt}")
                     already_imported.add(degiro_file.name)
                     st.session_state["degiro_imported_filenames"] = already_imported
                     for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",

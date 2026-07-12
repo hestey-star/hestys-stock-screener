@@ -29,7 +29,7 @@ def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False) -> int:
+def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False, isin: str = None) -> int:
     """Voegt een nieuwe positie toe (eigen positie, of alleen watchlist als is_watchlist=True). Geeft de nieuwe id terug."""
     client = get_supabase_client()
     response = client.table("portfolio_holdings").insert({
@@ -39,6 +39,7 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, i
         "shares": shares,
         "position_value": None,  # wordt pas gevuld na de eerste 'Update waarde'-klik
         "is_watchlist": is_watchlist,
+        "isin": isin,
     }).execute()
     return response.data[0]["id"]
 
