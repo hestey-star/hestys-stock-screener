@@ -1,50 +1,45 @@
-# Supertrend Stock Screener
+# Hesty's — Your Personal Investment Assistant
 
-Losstaand van de crypto-bot: screent AEX + Nasdaq-100 (QQQ) op recente
-bullish Supertrend-omslagen (weekly), en stuurt optioneel een e-mail.
-Dit is een **signaal/screener**, geen geautomatiseerde strategie — jij
-beslist zelf of je op basis van een signaal iets doet.
+Cut through the noise. Hesty's scans global markets for real signals (not hype), tracks your actual portfolio return, and gives you a clear, personal briefing every morning. Free to explore, no account needed to start.
 
-## Structuur
+👉 **[hestys.streamlit.app](https://hestys.streamlit.app)**
 
-| Bestand | Wat het doet |
+## What's inside
+
+- **Today** — your daily briefing: portfolio stats, news, and what needs your attention
+- **Discover** — 3 signature signals (Momentocrats, Snowballers, Rocket List), sector rotation, top movers, and earnings surprises. Public, no login required.
+- **My Portfolio** — track your real positions, log actual buy/sell transactions (or import your DEGIRO history in one go), and see your real return
+- **Analyze** — concentration, diversification, and performance vs. the market (S&P 500, NASDAQ, EURO STOXX 50)
+- **Premium** — unlimited tracking, the full Discover lists, and the Smart DCA Assistant (a TradingView indicator that scales your contributions with how cheap or expensive the market looks)
+
+## Tech stack
+
+Streamlit · Supabase (Postgres) · GitHub Actions (scheduled scans + email) · Google OAuth · Stripe · yfinance
+
+## Structure
+
+| File | What it does |
 |---|---|
-| `indicators.py` | Supertrend, EMA, en dag-naar-week-resampling |
-| `emailer.py` | E-mail-notificaties versturen (Gmail/Outlook/etc.) |
-| `screener.py` | Hoofdscript: haalt data op, checkt signalen, verstuurt mail |
+| `dashboard.py` | The full Streamlit app (all pages) |
+| `screener.py` / `screener_daily.py` | Weekly/daily scans (Momentocrats, Snowballers, Rocket List) |
+| `daily_batch.py` / `daily_email_dispatch.py` | Daily scan + region-timed email delivery |
+| `weekly_batch.py` | Weekly scan + weekly signal emails + portfolio watch emails |
+| `database.py` | Supabase data layer |
+| `emailer.py` | Email sending |
+| `portfolio_watch.py` | Trend-status checks for tracked positions |
 
-## Installatie
+## Running locally
 
 ```
 pip install -r requirements.txt
 ```
 
-Kopieer `.env.example` naar `.env` en vul je e-mailgegevens in (optioneel —
-zonder e-mail-instellingen print het script de resultaten gewoon, zonder
-te mailen).
-
-## Gebruiken
+Copy your Supabase, Google OAuth, email, and Stripe credentials into `.streamlit/secrets.toml`, then:
 
 ```
-python screener.py
+streamlit run dashboard.py
 ```
 
-Standaard wordt de samenstelling van AEX en Nasdaq-100 automatisch van
-Wikipedia gehaald. Wil je een eigen vaste lijst (bv. je DEGIRO-watchlist)?
-Open `screener.py` en zet `TICKERS` op je eigen lijst i.p.v. `None`.
+## This is a screener and portfolio tracker, not financial advice
 
-Instellingen om te 'tweaken' staan bovenin `screener.py`:
-- `ATR_LENGTH` / `ATR_MULTIPLIER` — de Supertrend zelf
-- `LOOKBACK_WEEKS_FOR_SIGNAL` — hoe 'vers' een omslag moet zijn
-- `TREND_FILTER_EMA_LENGTH` — extra brede-trend-context
-
-## Automatisch laten draaien (Windows Taakplanner)
-
-Zie de eerdere uitleg — zelfde principe, alleen wijst het pad nu naar
-deze `stock_screener`-map in plaats van `crypto_bot`.
-
-## Volgende stap: dashboard
-
-Dit project is bewust simpel en command-line-gebaseerd gehouden, zodat
-het een schone basis is om een dashboard/front-end op te bouwen zonder
-ballast van de crypto-bot-codebase.
+Hesty's combines technical signals, fundamental screens, and portfolio analysis to help you research faster. Nothing here is personalized financial advice — you make your own calls.
