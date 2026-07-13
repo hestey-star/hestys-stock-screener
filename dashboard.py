@@ -285,8 +285,9 @@ def load_portfolio_news():
         return json.load(f)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_fx_rate(from_currency: str, to_currency: str):
-    """Haalt de actuele wisselkoers op. Geeft None terug als het niet lukt (i.p.v. een gok te doen)."""
+    """Haalt de actuele wisselkoers op (5 min gecached). Geeft None terug als het niet lukt (i.p.v. een gok te doen)."""
     if from_currency == to_currency:
         return 1.0
     pair_ticker = f"{from_currency}{to_currency}=X"
@@ -383,14 +384,35 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     return True, message
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_cached_ticker_info(ticker: str) -> dict:
+    """
+    Cachet yfinance's .info per ticker voor 5 minuten -- voorkomt dat
+    dezelfde koersinfo steeds opnieuw wordt opgehaald bij elke
+    pagina-interactie (Streamlit herstart het hele script bij elke klik).
+    """
+    try:
+        return yf.Ticker(ticker).info
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_cached_ticker_history(ticker: str, period: str = None, start: str = None, end: str = None):
+    """Cachet yfinance's .history() per ticker+periode voor 5 minuten."""
+    try:
+        if start is not None:
+            return yf.Ticker(ticker).history(start=start, end=end)
+        return yf.Ticker(ticker).history(period=period)
+    except Exception:
+        return pd.DataFrame()
+
+
 def get_tickers_info(holdings: list) -> dict:
-    """Haalt 1x per ticker de yfinance-info op, voor hergebruik door meerdere analyses (voorkomt dubbele aanroepen)."""
+    """Haalt 1x per ticker de yfinance-info op (via de 5-min-cache), voor hergebruik door meerdere analyses."""
     infos = {}
     for h in holdings:
-        try:
-            infos[h["ticker"]] = yf.Ticker(h["ticker"]).info
-        except Exception:
-            infos[h["ticker"]] = {}
+        infos[h["ticker"]] = get_cached_ticker_info(h["ticker"])
     return infos
 
 
@@ -680,7 +702,7 @@ def build_theme_rotation(period: str = "1mo") -> list:
     results = []
     for theme, ticker in THEME_ETFS.items():
         try:
-            hist = yf.Ticker(ticker).history(period=period)
+            hist = get_cached_ticker_history(ticker, period=period)
             if len(hist) >= 2:
                 ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
                 results.append({"theme": theme, "ticker": ticker, "return_pct": round(ret, 2)})
@@ -702,7 +724,7 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     results = []
     for sector, ticker in etfs.items():
         try:
-            hist = yf.Ticker(ticker).history(period=period)
+            hist = get_cached_ticker_history(ticker, period=period)
             if len(hist) >= 2:
                 ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
                 results.append({"sector": sector, "ticker": ticker, "return_pct": round(ret, 2)})
