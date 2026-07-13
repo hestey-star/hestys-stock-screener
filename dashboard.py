@@ -237,6 +237,26 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 """, unsafe_allow_html=True)
 
 
+def get_file_last_commit_date(path: str) -> str:
+    """
+    Geeft alleen de DATUM (YYYY-MM-DD) van de laatste git-commit van dit
+    bestand terug -- gebruikt om te vergelijken of een gebruiker een
+    bepaalde scan-batch al heeft gezien. Geeft None terug als het niet
+    lukt (bestand bestaat niet, of git niet beschikbaar).
+    """
+    if not os.path.exists(path):
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cd", "--date=format:%Y-%m-%d", "--", path],
+            capture_output=True, text=True, timeout=5,
+        )
+        commit_date = result.stdout.strip()
+        return commit_date or None
+    except Exception:
+        return None
+
+
 def file_last_modified(path: str) -> str:
     """
     Geeft het tijdstip terug waarop dit bestand voor het laatst is
@@ -636,13 +656,23 @@ def build_daily_portfolio_stats(holdings: list):
     }
 
 
-def build_opportunities_today(holdings: list, watchlist_items: list) -> dict:
-    """Leest de dagelijkse + wekelijkse screener-uitkomsten en telt hoeveel signalen ergens bij jou horen."""
+def build_opportunities_today(holdings: list, watchlist_items: list, include_weekly: bool = True) -> dict:
+    """
+    Leest de dagelijkse (+ optioneel wekelijkse) screener-uitkomsten en
+    telt hoeveel signalen ergens bij jou horen. include_weekly=False
+    laat de weekly-signalen overal buiten beschouwing (tellingen blijven
+    zo consistent) -- gebruikt op dagen dat de gebruiker de wekelijkse
+    batch al eerder heeft gezien, om niet elke dag dezelfde 58 weekly-
+    signalen opnieuw te melden.
+    """
     holding_tickers = {h["ticker"] for h in holdings}
     watchlist_tickers = {w["ticker"] for w in watchlist_items}
 
     daily_df = pd.read_csv("supertrend_signals_daily.csv") if os.path.exists("supertrend_signals_daily.csv") else None
-    weekly_df = pd.read_csv("supertrend_signals.csv") if os.path.exists("supertrend_signals.csv") else None
+    weekly_df = (
+        pd.read_csv("supertrend_signals.csv")
+        if include_weekly and os.path.exists("supertrend_signals.csv") else None
+    )
 
     daily_count = len(daily_df) if daily_df is not None else 0
     weekly_count = len(weekly_df) if weekly_df is not None else 0
@@ -1513,10 +1543,17 @@ if current_view == "today":
                         time_part = f" -- {event['time']}" if "time" in event else ""
                         st.markdown(f"- 📅 {event['name']}{time_part}")
 
-                opportunities = build_opportunities_today(holdings, watchlist_items)
+                weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
+                last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
+                weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
+                if weekly_is_new:
+                    database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
+
+                opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
+                weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
                 st.write(
                     f"- 🔍 **{opportunities['total_signals']}** signal(s) found "
-                    f"({opportunities['daily_signals']} daily, {opportunities['weekly_signals']} weekly) -- "
+                    f"({opportunities['daily_signals']} daily{weekly_part}) -- "
                     f"**{opportunities['in_portfolio_count']}** relate to your portfolio, "
                     f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
                     f"**{opportunities['new_opportunities_count']}** are new ideas."

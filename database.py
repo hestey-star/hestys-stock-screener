@@ -304,6 +304,33 @@ def reset_risk_profile(user_email: str) -> None:
     set_risk_profile(user_email, **DEFAULT_RISK_PROFILE)
 
 
+def get_last_seen_weekly_signals_date(user_email: str) -> str:
+    """Geeft de datum terug waarop deze gebruiker de weekly-signalen voor het laatst zag (of None)."""
+    client = get_supabase_client()
+    response = (
+        client.table("user_preferences")
+        .select("last_seen_weekly_signals_date")
+        .eq("user_email", user_email)
+        .execute()
+    )
+    if response.data:
+        return response.data[0].get("last_seen_weekly_signals_date")
+    return None
+
+
+def set_last_seen_weekly_signals_date(user_email: str, date_str: str) -> None:
+    """
+    Markeert dat deze gebruiker de weekly-signalen van 'date_str' heeft
+    gezien -- upsert, want de rij bestaat mogelijk nog niet als de
+    gebruiker nog nooit eerdere voorkeuren heeft opgeslagen.
+    """
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": user_email,
+        "last_seen_weekly_signals_date": date_str,
+    }, on_conflict="user_email").execute()
+
+
 def save_score_snapshot(user_email: str, score: float) -> None:
     """
     Slaat de Portfolio Health Score van vandaag op -- idempotent (overschrijft

@@ -106,3 +106,9 @@ create table portfolio_transactions (
 -- ticker automatisch herkent en hergebruikt, zonder opnieuw te moeten
 -- zoeken/kiezen.
 alter table portfolio_holdings add column isin text;
+
+-- Houdt bij op welke datum de gebruiker de wekelijkse signalen voor het
+-- laatst zag -- zodat 'Today's radar' het aantal weekly-signalen alleen
+-- toont op de dag dat de wekelijkse scan draaide (of de eerstvolgende
+-- keer dat de gebruiker de site daarna opent), niet elke dag opnieuw.
+alter table user_preferences add column last_seen_weekly_signals_date date;
