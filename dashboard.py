@@ -521,17 +521,33 @@ def analyze_risk(holdings: list, infos: dict) -> list:
     return findings
 
 
-def analyze_dividend(holdings: list, infos: dict) -> list:
-    """Dividend-kaart: geschat jaarlijks dividend + aankomende ex-dividend-data."""
+def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR") -> list:
+    """
+    Dividend-kaart: geschat jaarlijks dividend + aankomende ex-dividend-data.
+    Rekent elke positie's dividend (dat yfinance in de EIGEN valuta van die
+    beurs teruggeeft, bv. USD voor een Amerikaans aandeel) om naar 1
+    consistente weergave-valuta, i.p.v. bedragen in verschillende valuta
+    zomaar bij elkaar op te tellen (wat een betekenisloos getal zou geven).
+    """
     findings = []
     total_annual_dividend = 0.0
+    conversion_failed = False
     upcoming = []
     for h in holdings:
         info = infos.get(h["ticker"], {})
         shares = h.get("shares") or 0
         dividend_rate = info.get("dividendRate")
         if dividend_rate and shares:
-            total_annual_dividend += dividend_rate * shares
+            native_currency = info.get("currency", display_currency)
+            native_amount = dividend_rate * shares
+            if native_currency == display_currency:
+                total_annual_dividend += native_amount
+            else:
+                fx_rate = get_fx_rate(native_currency, display_currency)
+                if fx_rate is not None:
+                    total_annual_dividend += native_amount * fx_rate
+                else:
+                    conversion_failed = True
         ex_div = info.get("exDividendDate")
         if ex_div:
             try:
@@ -540,10 +556,14 @@ def analyze_dividend(holdings: list, infos: dict) -> list:
             except Exception:
                 pass
 
+    currency_symbol = "€" if display_currency == "EUR" else ("$" if display_currency == "USD" else display_currency + " ")
     if total_annual_dividend > 0:
+        underestimate_note = (
+            " (couldn't convert every position's currency, so this may be a slight underestimate)"
+            if conversion_failed else ""
+        )
         findings.append(
-            f"💰 Estimated annual dividend income: ~{total_annual_dividend:,.0f} "
-            f"(sum of each position's own currency, not converted -- treat as an approximation)."
+            f"💰 Estimated annual dividend income: ~{currency_symbol}{total_annual_dividend:,.0f}{underestimate_note}."
         )
         if upcoming:
             upcoming.sort(key=lambda x: x[1])
