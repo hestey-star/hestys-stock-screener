@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import datetime, timezone, timedelta, date
 
 import numpy as np
@@ -237,10 +238,30 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 
 
 def file_last_modified(path: str) -> str:
+    """
+    Geeft het tijdstip terug waarop dit bestand voor het laatst is
+    BIJGEWERKT DOOR DE SCAN ZELF (git-commit-tijd, in UTC) -- niet het
+    Streamlit-servers-eigen bestandssysteem-tijdstip (os.path.getmtime),
+    want dat weerspiegelt alleen wanneer Streamlit Cloud het bestand voor
+    het laatst binnenkreeg bij een eigen (re)deploy, wat kan afwijken van
+    wanneer de scan daadwerkelijk draaide -- verwarrend bij het checken of
+    de dagelijkse/wekelijkse mail wel op tijd is gegaan.
+    """
     if not os.path.exists(path):
         return "never"
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M UTC", "--", path],
+            capture_output=True, text=True, timeout=5,
+        )
+        commit_time = result.stdout.strip()
+        if commit_time:
+            return commit_time
+    except Exception:
+        pass
+    # Terugval als git niet beschikbaar/succesvol is in deze omgeving
     ts = os.path.getmtime(path)
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") + " (server time, not scan time)"
 
 
 def load_screener_data(csv_file: str = "supertrend_signals.csv"):

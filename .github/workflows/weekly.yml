@@ -2,14 +2,18 @@ name: Wekelijkse screener en portfolio-mails
 
 on:
   schedule:
-    # Zaterdag:
-    # 06:00 UTC = scan + mail draaien (~07:00 CET winter / ~08:00 CEST zomer)
-    # 06:30 UTC = VANGNET -- als GitHub's planner de 06:00-tick een keer
+    # Zaterdag. LET OP: BEWUST niet op :00/:30 -- zie de toelichting in
+    # daily.yml (GitHub's eigen documentatie waarschuwt dat het hele uur
+    # het drukste moment is op heel GitHub Actions, met kans op vertraging
+    # of zelfs overslaan van de run).
+    #
+    # 06:07 UTC = scan + mail draaien (~07:07 CET winter / ~08:07 CEST zomer)
+    # 06:37 UTC = VANGNET -- als GitHub's planner de 06:07-tick een keer
     #             mist (komt voor, 'best effort'-planning), proberen we
     #             het hier nog een keer. Slaat zichzelf over als de
-    #             06:00-run al gelukt is (voorkomt een dubbele mail).
-    - cron: "0 6 * * 6"
-    - cron: "30 6 * * 6"
+    #             06:07-run al gelukt is (voorkomt een dubbele mail).
+    - cron: "7 6 * * 6"
+    - cron: "37 6 * * 6"
   workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
 
 jobs:
@@ -20,6 +24,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # volledige geschiedenis nodig om de laatste commit-datum te checken
+
+      - name: Diagnose -- welke trigger vuurde, en hoe laat kwam de run daadwerkelijk binnen
+        run: |
+          echo "Trigger event: ${{ github.event_name }}"
+          echo "Schedule-expressie (indien van toepassing): ${{ github.event.schedule }}"
+          echo "Werkelijke starttijd (UTC): $(date -u)"
 
       - name: Python installeren
         uses: actions/setup-python@v5
@@ -34,7 +44,7 @@ jobs:
         run: |
           LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals.csv 2>/dev/null || echo "never")
           TODAY=$(date -u +%Y-%m-%d)
-          if [ "$LAST_COMMIT_DATE" = "$TODAY" ] && [ "${{ github.event.schedule }}" = "30 6 * * 6" ]; then
+          if [ "$LAST_COMMIT_DATE" = "$TODAY" ] && [ "${{ github.event.schedule }}" = "37 6 * * 6" ]; then
             echo "already_done_today=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_done_today=false" >> "$GITHUB_OUTPUT"
