@@ -1539,6 +1539,18 @@ if current_view == "today":
                     emoji = "🟢" if s["earnings_beat"] else "🔴"
                     st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})")
 
+                if holdings:
+                    from portfolio_watch import check_holding
+                    with st.spinner("Checking for trend flips..."):
+                        flipped = []
+                        for h in holdings:
+                            result = check_holding(h["naam"], h["ticker"])
+                            if result and result.get("recent_gewijzigd"):
+                                flipped.append(result)
+                    for f in flipped[:3]:
+                        emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
+                        st.markdown(f"- {emoji} **{f['naam']}** just flipped to {f['status']}")
+
                 st.markdown(
                     'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
                     unsafe_allow_html=True,
