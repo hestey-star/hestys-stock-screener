@@ -1456,11 +1456,25 @@ if current_view == "today":
     st.markdown("### Today")
 
     if not st.user.is_logged_in:
-        st.markdown("#### Real signals, not hype. Your real return, tracked.")
-        st.write(
-            "Hesty's scans global markets for 3 specially-built stock signals, tracks your "
-            "actual portfolio return (not just paper gains), and gives you one clear briefing "
-            "every morning -- free to explore, no account needed to start."
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+                        padding: 1.5rem 1.75rem; margin: 0.5rem 0 1.25rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    Your personal investment assistant
+                </div>
+                <div style="color:#EAEDF1; font-size:1.4rem; font-weight:700; margin-top:6px; line-height:1.35;">
+                    Real signals, not hype.<br>Your real return, tracked.
+                </div>
+                <div style="color:#8992A3; font-size:0.95rem; margin-top:10px; line-height:1.6; max-width: 560px;">
+                    Hesty's scans global markets for 3 specially-built stock signals, tracks your
+                    actual portfolio return (not just paper gains), and gives you one clear briefing
+                    every morning -- free to explore, no account needed to start.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
         st.markdown("#### Start exploring")
         st.write(
@@ -1654,27 +1668,6 @@ elif current_view == "discover":
         unsafe_allow_html=True,
     )
 
-    # --- Daily Top Movers (na de introductie hierboven -- dit is de enige echt DAGELIJKSE check hier) ---
-    with st.expander("📊 Daily Top Movers", expanded=True):
-        if os.path.exists("top_movers.csv"):
-            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
-            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-            mcol1, mcol2 = st.columns(2)
-            with mcol1:
-                st.markdown("Top gainers")
-                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-            with mcol2:
-                st.markdown("Top losers")
-                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-        else:
-            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
-
     def _email_pref_link(label: str):
         """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
         st.markdown(
@@ -1708,7 +1701,7 @@ elif current_view == "discover":
     _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
     # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-    with st.expander("📡 Momentocrats", expanded=True):
+    with st.expander("📡 Momentocrats", expanded=False):
         st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
         timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
         csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
@@ -1864,6 +1857,28 @@ elif current_view == "discover":
         """,
         unsafe_allow_html=True,
     )
+
+    # --- Daily Top Movers (verplaatst naar hier -- dit is marktbrede data,
+    # geen 'signature signal', dus hoort thuis bij de andere market-context-items) ---
+    with st.expander("📊 Daily Top Movers", expanded=False):
+        if os.path.exists("top_movers.csv"):
+            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
+            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
+                st.markdown("Top gainers")
+                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+            with mcol2:
+                st.markdown("Top losers")
+                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+        else:
+            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):
