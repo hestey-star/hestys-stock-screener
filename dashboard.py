@@ -3009,7 +3009,64 @@ elif current_view == "support":
                 else:
                     st.error("Something went wrong sending your message -- please try again later.")
 
+elif current_view == "privacy":
+    st.markdown("### Privacy")
+    st.caption("Plain language, not a legal document -- if you have questions beyond this, "
+               "just ask via Support.")
+
+    st.markdown("#### What we collect")
+    st.write(
+        "When you log in (via Google or Microsoft), we get your email address and name. "
+        "Beyond that, we only store what you actively enter: the positions and watchlist "
+        "items you add, any buy/sell transactions you log (or import from a broker), your "
+        "risk profile answers, your email preferences, and your cash amount if you fill "
+        "one in."
+    )
+
+    st.markdown("#### Why we collect it")
+    st.write(
+        "Purely to show you your own data back (My Portfolio, Analyze, your personalized "
+        "Today briefing), and to send you the daily/weekly emails you've opted into. "
+        "Nothing here is used to build a profile of you for advertising -- there are no ads "
+        "on Hesty's, and there never will be."
+    )
+
+    st.markdown("#### Who can see it")
+    st.write(
+        "Only you, when logged into your own account. The only other people with access "
+        "are the ones who run Hesty's, and only when needed to fix a bug or help with a "
+        "support question -- never to look around otherwise."
+    )
+
+    st.markdown("#### Third parties involved")
+    st.write(
+        "Supabase hosts our database. Google or Microsoft handle the login itself (we "
+        "never see your password). Stripe will handle payments once Premium is actually "
+        "for sale. Market data (prices, company info) comes from Yahoo Finance -- no "
+        "personal data is sent there, just ticker symbols."
+    )
+
+    st.markdown("#### Your control over it")
+    st.write(
+        "You can remove any position, watchlist item, or transaction yourself at any time. "
+        "Want your entire account and its data deleted? Reach out via "
+    )
+    st.markdown(
+        '<a href="?view=support" class="inline-link" target="_self">Support</a> and we\'ll take care of it.',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### Cookies")
+    st.write(
+        "A login session cookie is used to keep you signed in -- that's required for "
+        "Google/Microsoft login to work at all. We don't use tracking or advertising cookies."
+    )
+
 st.divider()
 st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "
            "you research faster. It's not an automated trading strategy, and nothing here is "
            "personalized financial advice.")
+st.markdown(
+    '<a href="?view=privacy" class="inline-link" target="_self">Privacy</a>',
+    unsafe_allow_html=True,
+)
