@@ -1456,9 +1456,12 @@ if current_view == "today":
     st.markdown("### Today")
 
     if not st.user.is_logged_in:
-        st.write("Here are your daily points that deserve your attention.")
-        st.info("Log in (top right), then add positions under My Portfolio or your Watchlist "
-                 "to get personal signals and news here.")
+        st.markdown("#### Real signals, not hype. Your real return, tracked.")
+        st.write(
+            "Hesty's scans global markets for 3 specially-built stock signals, tracks your "
+            "actual portfolio return (not just paper gains), and gives you one clear briefing "
+            "every morning -- free to explore, no account needed to start."
+        )
         st.markdown("#### Start exploring")
         st.write(
             "Discover is fully public: 3 specially-built stock signals (Momentocrats, "
@@ -1469,6 +1472,8 @@ if current_view == "today":
             '<a href="?view=discover" class="button-link" target="_self">Explore Discover &rarr;</a>',
             unsafe_allow_html=True,
         )
+        st.info("Log in (top right) once you're ready, then add positions under My Portfolio or "
+                "your Watchlist to get personal signals and news here too.")
     else:
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
@@ -1628,27 +1633,6 @@ if current_view == "today":
 elif current_view == "discover":
     st.markdown("### Discover")
 
-    # --- Daily Top Movers (bovenaan -- dit is de enige echt DAGELIJKSE check hier) ---
-    with st.expander("📊 Daily Top Movers", expanded=True):
-        if os.path.exists("top_movers.csv"):
-            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
-            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-            mcol1, mcol2 = st.columns(2)
-            with mcol1:
-                st.markdown("Top gainers")
-                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-            with mcol2:
-                st.markdown("Top losers")
-                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-        else:
-            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
-
     st.markdown(
         """
         <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
@@ -1669,6 +1653,27 @@ elif current_view == "discover":
         """,
         unsafe_allow_html=True,
     )
+
+    # --- Daily Top Movers (na de introductie hierboven -- dit is de enige echt DAGELIJKSE check hier) ---
+    with st.expander("📊 Daily Top Movers", expanded=True):
+        if os.path.exists("top_movers.csv"):
+            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
+            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
+                st.markdown("Top gainers")
+                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+            with mcol2:
+                st.markdown("Top losers")
+                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                )
+                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+        else:
+            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
     def _email_pref_link(label: str):
         """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
