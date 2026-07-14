@@ -628,7 +628,7 @@ def build_daily_portfolio_stats(holdings: list):
         if not shares:
             continue
         try:
-            hist = yf.Ticker(h["ticker"]).history(period="5d")
+            hist = get_cached_ticker_history(h["ticker"], period="5d")
             if len(hist) < 2:
                 continue
             price_today = float(hist["Close"].iloc[-1])
@@ -721,6 +721,26 @@ THEME_ETFS = {
     "Robotics & AI": "BOTZ", "Clean Energy": "ICLN", "Cybersecurity": "CIBR",
     "Semiconductors": "SMH", "Genomics & Biotech": "ARKG",
 }
+
+
+def render_section_banner(title: str):
+    """
+    Dikke, opvallende sectie-banner (i.p.v. een dun lijntje) om groepen
+    kaarten van elkaar te onderscheiden -- gebruikt op zowel Discover
+    ('The Bigger Picture') als Analyze ('Risk & Diversification', 'Income').
+    """
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+                    border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+                    padding: 0.85rem 1.25rem; margin: 1.5rem 0 1rem 0;">
+            <div style="color:#1FAE96; font-weight:700; font-size:0.8rem; letter-spacing:1.5px; text-transform:uppercase;">
+                {title}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def build_theme_rotation(period: str = "1mo") -> list:
@@ -1159,7 +1179,8 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
 
         if shares_before_window > 0.0001:
             try:
-                history = yf.Ticker(h["ticker"]).history(
+                history = get_cached_ticker_history(
+                    h["ticker"],
                     start=(window_start - timedelta(days=7)).isoformat(),
                     end=(window_start + timedelta(days=7)).isoformat(),
                 )
@@ -1297,7 +1318,7 @@ def build_correlation_matrix_chart(holdings: list):
     price_series = {}
     for h in holdings:
         try:
-            hist = yf.Ticker(h["ticker"]).history(period="6mo")
+            hist = get_cached_ticker_history(h["ticker"], period="6mo")
             if len(hist) >= 20:
                 price_series[h["naam"]] = hist["Close"].pct_change().dropna()
         except Exception:
@@ -1847,18 +1868,7 @@ elif current_view == "discover":
         st.divider()
         _email_pref_link("Want this weekly by email?")
 
-    st.markdown(
-        """
-        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
-            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
-                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
-                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
-                             position: relative; top: -0.6em;">The Bigger Picture</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_section_banner("The Bigger Picture")
 
     # --- Daily Top Movers (verplaatst naar hier -- dit is marktbrede data,
     # geen 'signature signal', dus hoort thuis bij de andere market-context-items) ---
@@ -2502,11 +2512,23 @@ elif current_view == "analyze":
         total_invested = 0.0
         total_pnl = 0.0
         earliest_date = None
+        excluded_no_price = []
         for h in all_holdings_incl_closed:
             transactions = database.get_transactions_for_holding(user_email, h["id"])
             if not transactions:
                 continue
             current_price = infos.get(h["ticker"], {}).get("currentPrice") or infos.get(h["ticker"], {}).get("regularMarketPrice")
+            if current_price is None:
+                # Terugval: niet elk aandeel heeft deze velden betrouwbaar gevuld in
+                # yfinance's .info (bekende inconsistentie) -- koersgeschiedenis is
+                # universeler beschikbaar. Zonder dit zou zo'n positie stilzwijgend
+                # (en zonder duidelijke reden) uit Performance verdwijnen.
+                try:
+                    fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
+                    if fallback_hist is not None and not fallback_hist.empty:
+                        current_price = float(fallback_hist["Close"].iloc[-1])
+                except Exception:
+                    pass
             perf = compute_holding_performance(transactions, current_price)
             if perf:
                 is_closed = perf["shares_held"] <= 0.0001
@@ -2517,6 +2539,15 @@ elif current_view == "analyze":
                 for t in transactions:
                     if earliest_date is None or t["transaction_date"] < earliest_date:
                         earliest_date = t["transaction_date"]
+            elif current_price is None:
+                # Zelfs de terugval kon geen prijs vinden -- transparant melden
+                # i.p.v. deze positie stilzwijgend uit het totaal te laten vallen.
+                excluded_no_price.append(h["naam"])
+
+        if excluded_no_price:
+            st.caption(f"⚠️ Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
+                       f"excluded from the totals below until that's available again.")
+
 
         if performance_rows:
             overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
@@ -2572,18 +2603,7 @@ elif current_view == "analyze":
             st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
                        "to start tracking your return.")
 
-    st.markdown(
-        """
-        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
-            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
-                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
-                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
-                             position: relative; top: -0.6em;">Risk &amp; Diversification</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_section_banner("Risk &amp; Diversification")
 
     # --- Concentratie Risk ---
     with st.expander("🎯 Concentration Risk", expanded=True):
@@ -2645,18 +2665,7 @@ elif current_view == "analyze":
         else:
             st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
 
-    st.markdown(
-        """
-        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
-            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
-                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
-                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
-                             position: relative; top: -0.6em;">Income</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_section_banner("Income")
 
     # --- Dividend ---
     with st.expander("💰 Dividend"):
