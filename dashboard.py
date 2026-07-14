@@ -1443,11 +1443,7 @@ with login_col:
         )
         st.button("Log out", on_click=st.logout, key="header_logout")
     else:
-        login_gcol, login_mcol = st.columns(2)
-        with login_gcol:
-            st.button("Google", on_click=st.login, args=("google",), key="header_login_google", type="primary")
-        with login_mcol:
-            st.button("Microsoft", on_click=st.login, args=("microsoft",), key="header_login_microsoft")
+        st.button("Log in", on_click=st.login, args=("google",), key="header_login_google", type="primary")
 
 # ============================================================
 # VIEW: TODAY
@@ -1596,16 +1592,22 @@ if current_view == "today":
                     st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})")
 
                 if holdings:
-                    from portfolio_watch import check_holding
-                    with st.spinner("Checking for trend flips..."):
-                        flipped = []
-                        for h in holdings:
-                            result = check_holding(h["naam"], h["ticker"])
-                            if result and result.get("recent_gewijzigd"):
-                                flipped.append(result)
-                    for f in flipped[:3]:
-                        emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                        st.markdown(f"- {emoji} **{f['naam']}** just flipped to {f['status']}")
+                    weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
+                    weekly_scan_within_days = (
+                        weekly_scan_recent_date is not None
+                        and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
+                    )
+                    if weekly_scan_within_days:
+                        from portfolio_watch import check_holding
+                        with st.spinner("Checking for trend flips..."):
+                            flipped = []
+                            for h in holdings:
+                                result = check_holding(h["naam"], h["ticker"])
+                                if result and result.get("recent_gewijzigd"):
+                                    flipped.append(result)
+                        for f in flipped[:3]:
+                            emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
+                            st.markdown(f"- {emoji} **{f['naam']}** just flipped to {f['status']}")
 
                 st.markdown(
                     'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
@@ -2477,7 +2479,6 @@ elif current_view == "analyze":
         st.stop()
 
     import database
-    from portfolio_watch import check_holding
 
     user_email = st.user.email
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
@@ -2630,52 +2631,6 @@ elif current_view == "analyze":
                 st.caption("Add at least 2 positions to see a correlation matrix.")
         else:
             st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
-
-    # --- Weekly Trend Status (voorheen ook 'Performance' genoemd -- hernoemd om verwarring
-    # met de nieuwe rendement-kaart hierboven te voorkomen) ---
-    with st.expander("📊 Weekly Trend Status"):
-        with st.spinner("Checking trend status..."):
-            trend_results = []
-            for holding in holdings:
-                result = check_holding(holding["naam"], holding["ticker"])
-                if result:
-                    trend_results.append(result)
-
-        if trend_results:
-            df_trend = pd.DataFrame(trend_results)
-            changed = df_trend[df_trend["recent_gewijzigd"] == True]  # noqa: E712
-            if len(changed) > 0:
-                st.warning(f"🔄 {len(changed)} position(s) just flipped trend: "
-                           + ", ".join(f"{r['naam']} ({r['status']})" for _, r in changed.iterrows()))
-
-            def _format_weeks(value):
-                return "-" if value is None else f"{value:.0f}"
-
-            df_display = pd.DataFrame([
-                {
-                    "Name": r["naam"],
-                    "Ticker": r["ticker"],
-                    "Weekly Trend": r["status"],
-                    "Just Flipped": "🔄 Yes" if r["recent_gewijzigd"] else "",
-                    "Weeks in Trend": _format_weeks(r["weken_in_trend"]),
-                }
-                for r in trend_results
-            ])
-
-            def _highlight_status(row):
-                color = "#1B3A2E" if row["Weekly Trend"] == "BULLISH" else (
-                    "#3A1F1D" if row["Weekly Trend"] == "BEARISH" else "#332B14"
-                )
-                return [f"background-color: {color}"] * len(row)
-
-            st.caption("Weekly Supertrend status per position.")
-            st.dataframe(
-                df_display.style.apply(_highlight_status, axis=1),
-                width="content",
-                height=min(38 * (len(df_display) + 1), 300),
-            )
-        else:
-            st.caption("No trend data available for your tracked positions.")
 
     # --- Dividend ---
     with st.expander("💰 Dividend"):
