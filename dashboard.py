@@ -830,20 +830,32 @@ def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 
 # Fed/ECB-kalenders. Bijwerken zodra een nieuw jaar bekend wordt gemaakt
 # (meestal 1x per jaar, eind vorig jaar/begin dit jaar).
 MACRO_EVENTS_2026 = [
+    {"date": "2026-01-13", "name": "US CPI (Dec 2025 data)", "time": "14:30 CET"},
     {"date": "2026-01-28", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-02-13", "name": "US CPI (Jan 2026 data)", "time": "14:30 CET"},
+    {"date": "2026-03-11", "name": "US CPI (Feb 2026 data)", "time": "14:30 CET"},
     {"date": "2026-03-18", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
     {"date": "2026-03-19", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-04-10", "name": "US CPI (Mar 2026 data)", "time": "14:30 CET"},
     {"date": "2026-04-29", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
     {"date": "2026-04-30", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-05-12", "name": "US CPI (Apr 2026 data)", "time": "14:30 CET"},
+    {"date": "2026-06-10", "name": "US CPI (May 2026 data)", "time": "14:30 CET"},
     {"date": "2026-06-11", "name": "ECB rate decision", "time": "14:15 CET"},
     {"date": "2026-06-17", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-07-14", "name": "US CPI (Jun 2026 data)", "time": "14:30 CET"},
     {"date": "2026-07-23", "name": "ECB rate decision", "time": "14:15 CET"},
     {"date": "2026-07-29", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-08-12", "name": "US CPI (Jul 2026 data)", "time": "14:30 CET"},
     {"date": "2026-09-10", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-09-11", "name": "US CPI (Aug 2026 data)", "time": "14:30 CET"},
     {"date": "2026-09-16", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-10-14", "name": "US CPI (Sep 2026 data)", "time": "14:30 CET"},
     {"date": "2026-10-28", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
     {"date": "2026-10-29", "name": "ECB rate decision", "time": "14:15 CET"},
+    {"date": "2026-11-10", "name": "US CPI (Oct 2026 data)", "time": "14:30 CET"},
     {"date": "2026-12-09", "name": "FOMC meeting (rate decision)", "time": "20:00 CET"},
+    {"date": "2026-12-10", "name": "US CPI (Nov 2026 data)", "time": "14:30 CET"},
     {"date": "2026-12-17", "name": "ECB rate decision", "time": "14:15 CET"},
 ]
 
