@@ -2572,6 +2572,19 @@ elif current_view == "analyze":
             st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
                        "to start tracking your return.")
 
+    st.markdown(
+        """
+        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
+            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
+                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
+                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
+                             position: relative; top: -0.6em;">Risk &amp; Diversification</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # --- Concentratie Risk ---
     with st.expander("🎯 Concentration Risk", expanded=True):
         for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
@@ -2631,6 +2644,19 @@ elif current_view == "analyze":
                 st.caption("Add at least 2 positions to see a correlation matrix.")
         else:
             st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
+
+    st.markdown(
+        """
+        <div style="text-align:center; margin: 1.5rem 0 1rem 0;">
+            <div style="border-top: 1px solid rgba(31,174,150,0.3); position: relative;">
+                <span style="background:#101825; color:#8992A3; font-size:0.7rem; font-weight:600;
+                             letter-spacing:1.5px; text-transform:uppercase; padding: 0 12px;
+                             position: relative; top: -0.6em;">Income</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --- Dividend ---
     with st.expander("💰 Dividend"):
