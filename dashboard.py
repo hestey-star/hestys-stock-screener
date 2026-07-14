@@ -1443,7 +1443,7 @@ with login_col:
         )
         st.button("Log out", on_click=st.logout, key="header_logout")
     else:
-        st.button("Log in", on_click=st.login, args=("google",), key="header_login_google", type="primary")
+        st.button("Log in", on_click=st.login, key="header_login_google", type="primary")
 
 # ============================================================
 # VIEW: TODAY
