@@ -604,18 +604,20 @@ def analyze_risk(holdings: list, infos: dict) -> list:
     return findings
 
 
-def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR") -> list:
+def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR") -> dict:
     """
-    Dividend-kaart: geschat jaarlijks dividend + aankomende ex-dividend-data.
-    Rekent elke positie's dividend (dat yfinance in de EIGEN valuta van die
-    beurs teruggeeft, bv. USD voor een Amerikaans aandeel) om naar 1
-    consistente weergave-valuta, i.p.v. bedragen in verschillende valuta
-    zomaar bij elkaar op te tellen (wat een betekenisloos getal zou geven).
+    Dividend-kaart: geschat jaarlijks dividend + aankomende ex-dividend-data,
+    plus een per-positie-uitsplitsing (bedrag in de weergave-valuta en
+    dividendrendement %). Rekent elke positie's dividend (dat yfinance in de
+    EIGEN valuta van die beurs teruggeeft, bv. USD voor een Amerikaans
+    aandeel) om naar 1 consistente weergave-valuta, i.p.v. bedragen in
+    verschillende valuta zomaar bij elkaar op te tellen.
     """
     findings = []
     total_annual_dividend = 0.0
     conversion_failed = False
     upcoming = []
+    per_position = []
     for h in holdings:
         info = infos.get(h["ticker"], {})
         shares = h.get("shares") or 0
@@ -623,14 +625,37 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
         if dividend_rate and shares:
             native_currency = info.get("currency", display_currency)
             native_amount = dividend_rate * shares
+            converted_amount = None
             if native_currency == display_currency:
-                total_annual_dividend += native_amount
+                converted_amount = native_amount
             else:
                 fx_rate = get_fx_rate(native_currency, display_currency)
                 if fx_rate is not None:
-                    total_annual_dividend += native_amount * fx_rate
+                    converted_amount = native_amount * fx_rate
                 else:
                     conversion_failed = True
+            if converted_amount is not None:
+                total_annual_dividend += converted_amount
+
+            # Dividendrendement = jaarlijks dividend per aandeel / huidige koers.
+            # Zelfde robuuste prijs-terugval als bij Performance (sommige
+            # effecten missen currentPrice/regularMarketPrice in .info).
+            current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+            if current_price is None:
+                try:
+                    fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
+                    if fallback_hist is not None and not fallback_hist.empty:
+                        current_price = float(fallback_hist["Close"].iloc[-1])
+                except Exception:
+                    pass
+            yield_pct = (dividend_rate / current_price * 100) if current_price else None
+
+            per_position.append({
+                "naam": h["naam"],
+                "ticker": h["ticker"],
+                "annual_dividend": converted_amount,
+                "yield_pct": yield_pct,
+            })
         ex_div = info.get("exDividendDate")
         if ex_div:
             try:
@@ -655,7 +680,8 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
     else:
         findings.append("No dividend-paying positions detected (or data unavailable).")
 
-    return findings
+    per_position.sort(key=lambda p: p["annual_dividend"] or 0, reverse=True)
+    return {"findings": findings, "per_position": per_position, "currency_symbol": currency_symbol}
 
 
 def build_daily_portfolio_stats(holdings: list):
@@ -2691,8 +2717,24 @@ elif current_view == "analyze":
     # --- Dividend ---
     with st.expander("💰 Dividend"):
         if is_premium:
-            for finding in analyze_dividend(holdings, infos):
+            dividend_result = analyze_dividend(holdings, infos)
+            for finding in dividend_result["findings"]:
                 st.markdown(f"- {finding}")
+            if dividend_result["per_position"]:
+                if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
+                    df_div = pd.DataFrame(dividend_result["per_position"])
+                    symbol = dividend_result["currency_symbol"]
+                    df_display = pd.DataFrame({
+                        "Name": df_div["naam"],
+                        "Ticker": df_div["ticker"],
+                        "Annual Dividend": df_div["annual_dividend"].apply(
+                            lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
+                        ),
+                        "Yield": df_div["yield_pct"].apply(
+                            lambda v: f"{v:.2f}%" if v is not None else "-"
+                        ),
+                    })
+                    st.dataframe(df_display, width="content", hide_index=True)
         else:
             st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
 
