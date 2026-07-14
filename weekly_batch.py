@@ -33,8 +33,21 @@ def get_supabase_client():
     return create_client(url, key)
 
 
+def get_real_email(email_hash: str) -> str:
+    """
+    Zoekt het echte, verstuurbare e-mailadres op bij een hash -- nodig
+    omdat portfolio_holdings/user_preferences alleen de hash kennen, niet
+    het leesbare adres zelf (zie database.py's module-docstring).
+    """
+    client = get_supabase_client()
+    response = client.table("user_identity").select("email").eq("email_hash", email_hash).execute()
+    if response.data:
+        return response.data[0]["email"]
+    return None
+
+
 def get_all_users_with_holdings() -> dict:
-    """Geeft alle gebruikers en hun posities terug, gegroepeerd per e-mailadres."""
+    """Geeft alle gebruikers en hun posities terug, gegroepeerd per (gehasht) e-mailadres."""
     client = get_supabase_client()
     response = client.table("portfolio_holdings").select("*").execute()
 
@@ -45,7 +58,7 @@ def get_all_users_with_holdings() -> dict:
 
 
 def get_all_preferences() -> dict:
-    """Geeft de e-mail-voorkeuren van ALLE gebruikers terug die ooit iets hebben ingesteld."""
+    """Geeft de e-mail-voorkeuren van ALLE gebruikers terug (sleutel = gehasht e-mailadres)."""
     client = get_supabase_client()
     response = client.table("user_preferences").select("*").execute()
     return {row["user_email"]: row for row in response.data}
@@ -176,7 +189,7 @@ def run_weekly_signals_emails(preferences: dict) -> None:
                 df = df.sort_values(config["sort_by"], ascending=config["sort_asc"])
                 csv_cache[key] = df
 
-    for user_email, prefs in preferences.items():
+    for user_email_hash, prefs in preferences.items():
         sections = []
         for key, config in SIGNAL_TYPES.items():
             if not prefs.get(config["pref_key"]):
@@ -191,12 +204,17 @@ def run_weekly_signals_emails(preferences: dict) -> None:
         if not sections:
             continue
 
+        real_email = get_real_email(user_email_hash)
+        if not real_email:
+            print(f"  Kon geen e-mailadres vinden voor hash {user_email_hash[:12]}... -- overgeslagen.")
+            continue
+
         is_premium = bool(prefs.get("is_premium", False))
-        print(f"  {user_email} ({'premium' if is_premium else 'free'}): {', '.join(s['title'] for s in sections)}")
+        print(f"  {real_email} ({'premium' if is_premium else 'free'}): {', '.join(s['title'] for s in sections)}")
         text_body, html_body = build_weekly_signals_email(sections, is_premium=is_premium)
         total_signals = sum(len(s["df"]) for s in sections)
         subject = f"Hesty's Weekly: {total_signals} new signal(s) this week"
-        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
+        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
 
 
 def run_portfolio_emails(preferences: dict) -> None:
@@ -209,13 +227,18 @@ def run_portfolio_emails(preferences: dict) -> None:
     users = get_all_users_with_holdings()
     print(f"{len(users)} gebruiker(s) gevonden met een portfolio.")
 
-    for user_email, holdings in users.items():
-        user_prefs = preferences.get(user_email, {})
+    for user_email_hash, holdings in users.items():
+        user_prefs = preferences.get(user_email_hash, {})
         if not user_prefs.get("wants_portfolio_email", True):
-            print(f"\n--- {user_email}: heeft de portfolio-mail uitgezet, overgeslagen ---")
+            print(f"\n--- {user_email_hash[:12]}...: heeft de portfolio-mail uitgezet, overgeslagen ---")
             continue
 
-        print(f"\n--- {user_email} ({len(holdings)} positie(s)) ---")
+        real_email = get_real_email(user_email_hash)
+        if not real_email:
+            print(f"\n--- {user_email_hash[:12]}...: geen e-mailadres gevonden, overgeslagen ---")
+            continue
+
+        print(f"\n--- {real_email} ({len(holdings)} positie(s)) ---")
         results = []
         for holding in holdings:
             result = check_holding(holding["naam"], holding["ticker"])
@@ -234,7 +257,7 @@ def run_portfolio_emails(preferences: dict) -> None:
             if n_changed > 0 else "Portfolio Watch: geen wijzigingen"
         )
 
-        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
+        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
 
 
 if __name__ == "__main__":

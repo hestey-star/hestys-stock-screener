@@ -27,6 +27,7 @@ load_dotenv()
 
 import screener_daily
 from emailer import send_email
+from user_hashing import hash_email
 
 VALID_REGIONS = ["EU", "US_East", "US_West"]
 
@@ -38,20 +39,47 @@ def get_supabase_client():
 
 
 def get_all_preferences() -> dict:
-    """Geeft de e-mail-voorkeuren van ALLE gebruikers terug die ooit iets hebben ingesteld."""
+    """Geeft de e-mail-voorkeuren van ALLE gebruikers terug (sleutel = gehasht e-mailadres)."""
     client = get_supabase_client()
     response = client.table("user_preferences").select("*").execute()
     return {row["user_email"]: row for row in response.data}
 
 
+def get_real_email(email_hash: str) -> str:
+    """
+    Zoekt het echte, verstuurbare e-mailadres op bij een hash -- nodig
+    omdat user_preferences (en dus 'opted_in' hieronder) alleen de hash
+    kent, niet het leesbare adres zelf (zie database.py's module-docstring
+    voor de reden hierachter).
+    """
+    client = get_supabase_client()
+    response = client.table("user_identity").select("email").eq("email_hash", email_hash).execute()
+    if response.data:
+        return response.data[0]["email"]
+    return None
+
+
 def run_daily_screener_emails_for_region(preferences: dict, region: str) -> None:
     """Stuurt de dagelijkse screener-mail naar gebruikers die in DEZE regio zitten en opt-in zijn."""
     print(f"\n=== Dagelijkse screener-mails versturen voor regio: {region} ===")
-    opted_in = [
-        email for email, prefs in preferences.items()
+    opted_in_hashes = [
+        email_hash for email_hash, prefs in preferences.items()
         if prefs.get("wants_daily_email") and prefs.get("email_region", "EU") == region
     ]
-    print(f"{len(opted_in)} gebruiker(s) in regio {region} willen de dagelijkse screener-mail ontvangen.")
+    print(f"{len(opted_in_hashes)} gebruiker(s) in regio {region} willen de dagelijkse screener-mail ontvangen.")
+
+    if not opted_in_hashes:
+        return
+
+    # Echte adressen opzoeken -- pas hier, vlak vóór het versturen, nodig
+    # (de rest van de database kent alleen de hash, zie database.py).
+    opted_in = []
+    for email_hash in opted_in_hashes:
+        real_email = get_real_email(email_hash)
+        if real_email:
+            opted_in.append(real_email)
+        else:
+            print(f"  Kon geen e-mailadres vinden voor hash {email_hash[:12]}... -- overgeslagen.")
 
     if not opted_in:
         return

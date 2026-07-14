@@ -1457,6 +1457,8 @@ with header_col:
 with login_col:
     st.markdown("<div style='height: 1.4rem'></div>", unsafe_allow_html=True)  # verticaal uitlijnen met het logo
     if st.user.is_logged_in:
+        import database as _database_for_identity
+        _database_for_identity.ensure_user_identity(st.user.email, st.user.name)
         st.markdown(
             f'<a href="?view=settings" class="account-link {" active" if current_view == "settings" else ""}" '
             f'target="_self">&#9881; {st.user.name}</a>',
@@ -3033,9 +3035,10 @@ elif current_view == "privacy":
 
     st.markdown("#### Who can see it")
     st.write(
-        "Only you, when logged into your own account. The only other people with access "
-        "are the ones who run Hesty's, and only when needed to fix a bug or help with a "
-        "support question -- never to look around otherwise."
+        "Only you, when logged into your own account. Your portfolio and transaction data "
+        "is stored under a one-way, anonymized identifier -- not your readable email address "
+        "-- so it isn't casually linked to your identity just by looking at the database. "
+        "We only ever look at anything ourselves to fix a bug or help with a support question."
     )
 
     st.markdown("#### Third parties involved")

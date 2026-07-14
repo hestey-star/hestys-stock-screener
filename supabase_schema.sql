@@ -112,3 +112,16 @@ alter table portfolio_holdings add column isin text;
 -- toont op de dag dat de wekelijkse scan draaide (of de eerstvolgende
 -- keer dat de gebruiker de site daarna opent), niet elke dag opnieuw.
 alter table user_preferences add column last_seen_weekly_signals_date date;
+
+-- Koppelt een gehasht e-mailadres terug aan het ECHTE, verstuurbare adres
+-- -- de rest van de database (portfolio_holdings, portfolio_transactions,
+-- user_preferences, portfolio_score_history) slaat alleen de HASH op, niet
+-- het leesbare e-mailadres zelf. Deze tabel is puur nodig om daadwerkelijk
+-- mail te kunnen versturen (de dagelijkse/wekelijkse batch-scripts zoeken
+-- hier het echte adres op, vlak vóór het versturen).
+create table user_identity (
+    email_hash text primary key,
+    email text not null,
+    name text,
+    updated_at timestamp with time zone default now()
+);
