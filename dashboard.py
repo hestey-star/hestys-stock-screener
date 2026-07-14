@@ -428,6 +428,47 @@ def get_cached_ticker_history(ticker: str, period: str = None, start: str = None
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_cached_ticker_dividends(ticker: str):
+    """Cachet yfinance's .dividends (historische, per-share dividendbetalingen) per ticker voor 5 minuten."""
+    try:
+        return yf.Ticker(ticker).dividends
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+def get_annual_dividend_rate(ticker: str, info: dict):
+    """
+    Geeft het geschatte jaarlijkse dividend per aandeel terug, met 2
+    terugvallen -- nodig omdat 'dividendRate' in yfinance's .info voor
+    sommige effecten (vooral ETF's, zoals TDIV) niet betrouwbaar gevuld
+    is, ook al keren ze wel degelijk dividend uit:
+    1. info['dividendRate'] -- werkt betrouwbaar voor de meeste aandelen
+    2. info['trailingAnnualDividendRate'] -- vaak wel gevuld voor ETF's
+       als 'dividendRate' leeg is
+    3. Som van de daadwerkelijke dividendbetalingen van de laatste 12
+       maanden (uit de koersgeschiedenis) -- de meest betrouwbare,
+       universele terugval, want gebaseerd op wat er al daadwerkelijk is
+       uitgekeerd i.p.v. een (soms ontbrekende) vooruitkijkende schatting.
+    """
+    rate = info.get("dividendRate")
+    if rate:
+        return rate
+    rate = info.get("trailingAnnualDividendRate")
+    if rate:
+        return rate
+    try:
+        dividends = get_cached_ticker_dividends(ticker)
+        if dividends is not None and not dividends.empty:
+            cutoff = pd.Timestamp.now(tz=dividends.index.tz) - pd.Timedelta(days=365)
+            recent = dividends[dividends.index >= cutoff]
+            if not recent.empty:
+                return float(recent.sum())
+    except Exception:
+        pass
+    return None
+
+
 def get_tickers_info(holdings: list) -> dict:
     """Haalt 1x per ticker de yfinance-info op (via de 5-min-cache), voor hergebruik door meerdere analyses."""
     infos = {}
@@ -578,7 +619,7 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
     for h in holdings:
         info = infos.get(h["ticker"], {})
         shares = h.get("shares") or 0
-        dividend_rate = info.get("dividendRate")
+        dividend_rate = get_annual_dividend_rate(h["ticker"], info)
         if dividend_rate and shares:
             native_currency = info.get("currency", display_currency)
             native_amount = dividend_rate * shares
