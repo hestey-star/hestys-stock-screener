@@ -660,7 +660,11 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
         if ex_div:
             try:
                 date_str = pd.Timestamp(ex_div, unit="s").date()
-                upcoming.append((h["naam"], date_str))
+                # yfinance's exDividendDate is soms de MEEST RECENTE (al
+                # gepasseerde) datum i.p.v. een daadwerkelijk toekomstige --
+                # alleen tonen als 'ie ook echt nog moet komen.
+                if date_str >= datetime.now().date():
+                    upcoming.append((h["naam"], date_str))
             except Exception:
                 pass
 
@@ -2734,7 +2738,10 @@ elif current_view == "analyze":
                             lambda v: f"{v:.2f}%" if v is not None else "-"
                         ),
                     })
-                    st.dataframe(df_display, width="content", hide_index=True)
+                    st.dataframe(
+                        df_display, width=480, hide_index=True,
+                        height=min(38 * (len(df_display) + 1), 300),
+                    )
         else:
             st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
 
