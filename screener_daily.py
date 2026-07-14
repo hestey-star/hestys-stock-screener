@@ -18,6 +18,8 @@ from __future__ import annotations
 import pandas as pd
 import yfinance as yf
 
+from macro_events import get_todays_macro_events
+
 from indicators import supertrend, ema, volume_ratio
 from screener import (
     FALLBACK_TICKERS, BENCHMARKS, DEFAULT_BENCHMARK,
@@ -202,16 +204,38 @@ def check_ticker_daily(ticker: str, benchmark_returns: dict, df: pd.DataFrame = 
     return result
 
 
+def _get_macro_teaser_text() -> str:
+    """
+    Geeft 1 korte teaser-regel terug als er vandaag een macro-event is
+    (CPI/FOMC/ECB), anders None -- bewust maar 1 regel, alleen op de
+    dagen dat het er toe doet, geen volledige kalender (dat zou de mail
+    te vol maken en de prikkel om naar de site te gaan verminderen).
+    """
+    events = get_todays_macro_events(max_items=1)
+    if not events:
+        return None
+    e = events[0]
+    return f"Also today: {e['name']} ({e['time']})"
+
+
 def build_no_signals_email_daily() -> tuple:
     """Korte, warme mail voor een dag zonder signalen -- houdt het dagelijkse contactmoment in stand."""
+    macro_teaser = _get_macro_teaser_text()
+    macro_line_text = f"\n{macro_teaser}\n" if macro_teaser else ""
+    macro_line_html = (
+        f'<p style="margin-top:12px; font-size:13px; color:#1FAE96; font-weight:600;">📅 {macro_teaser}</p>'
+        if macro_teaser else ""
+    )
+
     text_body = (
         "Good morning from Hesty's\n\n"
-        "No bullish flips showed up on today's scan -- a quiet day on that front.\n\n"
+        "No bullish flips showed up on today's scan -- a quiet day on that front.\n"
+        f"{macro_line_text}\n"
         "Check Discover for sector rotation and top movers, or Analyse for your own portfolio.\n\n"
         "-- Hesty's, your personal investment assistant\n\n"
         "This is a screener, not investment advice."
     )
-    html_body = """
+    html_body = f"""
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
             <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
@@ -221,6 +245,7 @@ def build_no_signals_email_daily() -> tuple:
             <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">
                 No bullish flips showed up on today's scan -- a quiet day on that front.
             </p>
+            {macro_line_html}
             <p style="margin-top:16px; font-size:14px; color:#5B6472; line-height:1.5;">
                 Check <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
                 for sector rotation and top movers, or
@@ -247,12 +272,17 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
         f"{n} stock{'s' if n != 1 else ''} just flipped bullish on today's scan. "
         f"{top_pick['ticker']} leads with the highest score ({top_pick['score']})."
     )
+    macro_teaser = _get_macro_teaser_text()
 
     # --- Tekst-versie ---
     text_lines = [
         "Good morning from Hesty's",
         "",
         intro_line,
+    ]
+    if macro_teaser:
+        text_lines.append(macro_teaser)
+    text_lines += [
         "",
         "Today's signals (highest score first):",
     ]
@@ -286,6 +316,11 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
         for _, r in df_hits.iterrows()
     )
 
+    macro_line_html = (
+        f'<p style="margin-top:8px; font-size:13px; color:#1FAE96; font-weight:600;">📅 {macro_teaser}</p>'
+        if macro_teaser else ""
+    )
+
     html_body = f"""
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
@@ -294,6 +329,7 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">{intro_line}</p>
+            {macro_line_html}
             <table style="width:100%; border-collapse:collapse; margin-top:16px;">
                 <tr style="border-bottom:2px solid #101825;">
                     <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Score</th>
