@@ -927,19 +927,34 @@ def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> li
 
 
 def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -> list:
-    """Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente 'max_items' items terug."""
+    """
+    Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente
+    'max_items' items terug. Dedupliceert op artikel-URL -- 1 artikel dat
+    toevallig meerdere van je posities noemt (bv. een brede markt-roundup)
+    moet 1x verschijnen, niet 1x per positie die het noemt. Als hetzelfde
+    artikel voor meerdere posities gevonden wordt, worden hun namen
+    gecombineerd i.p.v. willekeurig de eerste te tonen.
+    """
     import screener as _screener  # lokale import: voorkomt een cirkelverwijzing bij module-laadtijd
 
-    all_news = []
+    news_by_link: dict = {}
+    link_order = []
     for item in holdings_and_watchlist:
         try:
             news_items = _screener.get_recent_news(item["ticker"], max_items=3, days_back=3)
         except Exception:
             news_items = []
         for n in news_items:
-            n["naam"] = item["naam"]
-            all_news.append(n)
+            link = n.get("link")
+            if link in news_by_link:
+                if item["naam"] not in news_by_link[link]["naam"]:
+                    news_by_link[link]["naam"] += f", {item['naam']}"
+            else:
+                n["naam"] = item["naam"]
+                news_by_link[link] = n
+                link_order.append(link)
 
+    all_news = [news_by_link[link] for link in link_order]
     all_news.sort(key=lambda x: x["published"], reverse=True)
     return all_news[:max_items]
 
