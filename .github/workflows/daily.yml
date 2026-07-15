@@ -56,32 +56,45 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
-      - name: Regio bepalen en of de scan/mail vandaag al gelukt is
+      - name: Regio bepalen, en of de scan/mail vandaag al gelukt zijn
         id: determine
         run: |
           if [ "${{ github.event.schedule }}" = "7 5 * * 1-5" ] || [ "${{ github.event.schedule }}" = "37 5 * * 1-5" ]; then
-            echo "region=EU" >> "$GITHUB_OUTPUT"
+            REGION="EU"
           elif [ "${{ github.event.schedule }}" = "7 12 * * 1-5" ]; then
-            echo "region=US_East" >> "$GITHUB_OUTPUT"
+            REGION="US_East"
           elif [ "${{ github.event.schedule }}" = "7 15 * * 1-5" ]; then
-            echo "region=US_West" >> "$GITHUB_OUTPUT"
+            REGION="US_West"
           else
-            echo "region=${{ github.event.inputs.region }}" >> "$GITHUB_OUTPUT"
+            REGION="${{ github.event.inputs.region }}"
+          fi
+          echo "region=$REGION" >> "$GITHUB_OUTPUT"
+
+          TODAY=$(date -u +%Y-%m-%d)
+
+          # Scan-check (alleen relevant voor EU): is de scan van VANDAAG
+          # al gecommit? Voorkomt een dubbele scan, niet meer dan dat.
+          LAST_SCAN_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals_daily.csv 2>/dev/null || echo "never")
+          if [ "$LAST_SCAN_DATE" = "$TODAY" ]; then
+            echo "eu_scan_already_done_today=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "eu_scan_already_done_today=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # Vangnet-check: is de EU-scan van VANDAAG al gecommit? Zo ja, dan
-          # is de 05:07-run (of een eerdere vangnet-poging) al gelukt, en
-          # slaan we een 2e scan/mail voor vandaag over (voorkomt dubbele mail).
-          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals_daily.csv 2>/dev/null || echo "never")
-          TODAY=$(date -u +%Y-%m-%d)
-          if [ "$LAST_COMMIT_DATE" = "$TODAY" ]; then
-            echo "eu_already_done_today=true" >> "$GITHUB_OUTPUT"
+          # Mail-check (PER REGIO, LOS van de scan-status): is de mail voor
+          # DEZE regio vandaag al succesvol geprobeerd? Bewust een APARTE
+          # markering -- anders zou een mislukte verzending (bv. door een
+          # tijdelijk probleem) nooit meer een nieuwe kans krijgen zodra de
+          # scan zelf al was gelukt (precies het bugje dat we hiermee fixen).
+          LAST_EMAIL_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- ".email_sent_markers/$REGION.txt" 2>/dev/null || echo "never")
+          if [ "$LAST_EMAIL_DATE" = "$TODAY" ]; then
+            echo "mail_already_sent_today=true" >> "$GITHUB_OUTPUT"
           else
-            echo "eu_already_done_today=false" >> "$GITHUB_OUTPUT"
+            echo "mail_already_sent_today=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Dagelijkse scan draaien (EU, alleen als dat vandaag nog niet gelukt is)
-        if: steps.determine.outputs.region == 'EU' && steps.determine.outputs.eu_already_done_today == 'false'
+        if: steps.determine.outputs.region == 'EU' && steps.determine.outputs.eu_scan_already_done_today == 'false'
         run: python daily_batch.py
         env:
           EMAIL_SMTP_SERVER: smtp.gmail.com
@@ -89,9 +102,12 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
-      - name: Mail versturen voor deze regio
-        if: steps.determine.outputs.region != 'EU' || steps.determine.outputs.eu_already_done_today == 'false'
-        run: python daily_email_dispatch.py ${{ steps.determine.outputs.region }}
+      - name: Mail versturen voor deze regio (alleen als dat vandaag nog niet gelukt is)
+        if: steps.determine.outputs.mail_already_sent_today == 'false'
+        run: |
+          python daily_email_dispatch.py ${{ steps.determine.outputs.region }}
+          mkdir -p .email_sent_markers
+          date -u +%Y-%m-%d > ".email_sent_markers/${{ steps.determine.outputs.region }}.txt"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -100,12 +116,12 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
 
-      - name: Bijgewerkte bestanden committen en pushen (alleen na een EU-scan)
-        if: steps.determine.outputs.region == 'EU' && steps.determine.outputs.eu_already_done_today == 'false'
+      - name: Bijgewerkte bestanden committen en pushen
+        if: steps.determine.outputs.eu_scan_already_done_today == 'false' || steps.determine.outputs.mail_already_sent_today == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add supertrend_signals_daily.csv top_movers.csv
+          git add supertrend_signals_daily.csv top_movers.csv .email_sent_markers/ 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Automatische dagelijkse update"
           git pull --rebase origin main
           git push
