@@ -46,6 +46,8 @@ Daarom gebruikt deze kalender **EU-actieve uren** (ochtend/overlap-venster/avond
 
 De reply-ronde (Slot B) staat niet apart in elke dagtabel — het is een vast dagelijks blok, elke werkdag hetzelfde, tenzij anders vermeld.
 
+**Diversiteitsregel:** max. 2 posts per dag over hetzelfde onderwerp. Op macro-dagen (CPI/FOMC) vullen Slot A en Slot B dat onderwerp al — Slot C (19:45) gaat dan altijd over iets anders (reserve-idee, ander signaal, andere pijler), tenzij Slot C toevallig samenvalt met het daadwerkelijke moment van nieuws (zoals bij het FOMC-besluit op 29/7, 20:00 CEST). Herhaling van hetzelfde onderwerp binnen één dag verzwakt de account-autoriteit en voelt voor volgers als ruis, niet als service.
+
 ---
 
 ## Week 1: 13 - 17 juli — "Waarom écht rendement er toe doet"
@@ -56,7 +58,7 @@ De reply-ronde (Slot B) staat niet apart in elke dagtabel — het is een vast da
 | Ma 13/7 | 19:45 | C | Échte rendement | Vraag-variant | "Weet je uit je hoofd wat je échte rendement is, of alleen je grootste winnaar?" — engagement-vraag. |
 | Di 14/7 | 07:45 | A | Macro-moment | CPI-teaser | "Vandaag om 14:30 CEST komt de Amerikaanse CPI binnen — dat zie je terug op je Today-pagina." |
 | Di 14/7 | 14:35 | **B (i.p.v. reply-ronde)** | Macro-moment | CPI-reactie | Korte, nuchtere duiding zodra het cijfer binnen is. Geen voorspelling, wel context. Link naar Today in eerste reply. |
-| Di 14/7 | 19:45 | C | Macro-moment | Vervolg | Korte follow-up/vraag: hoe reageerden lezers op het cijfer, wat viel op. |
+| Di 14/7 | 19:45 | C | Signaal-educatie (reserve) | Poll: welk signaal past bij jou | "Real signals, not hype. Your real return, tracked. Which one matches how you invest — swing trades (Momentocrats), long-term quality (Snowballers), or higher-risk growth (Rocket List)?" — bewust géén 3e CPI-post, om herhaling te vermijden. |
 | Wo 15/7 | 07:45 | A | Signaal-educatie | Momentocrats | Wat is een Momentocrat-signaal, voor wie (swing trades, dagen-weken), waarom kwaliteit + momentum samen meer zeggen dan momentum alleen. |
 | Wo 15/7 | 19:45 | C | Signaal-educatie | Vraag-variant | "Swing trade of lange termijn — wat past bij jou?" |
 | Do 16/7 | 07:45 | A | Productfeature | DEGIRO-import | "Je DEGIRO-transacties importeren duurde eerst handwerk. Nu herkent Hesty's je tickers automatisch — en importeert niet dubbel als je het nog een keer doet." |
@@ -130,3 +132,26 @@ De reply-ronde (Slot B) staat niet apart in elke dagtabel — het is een vast da
 
 ## Grok-combinatie (optioneel, per dag)
 Voor elke macro-moment-post: geef Grok kort de vraag "wat leeft er nu op X rond [CPI/FOMC/aandelenmarkt]" en combineer die actualiteit met het bijpassende stuk uit deze kalender — dat geeft de post net wat meer haak zonder van de brand voice af te wijken.
+
+---
+
+## Wekelijkse groei-tracker (elke zondag, 20:00 CEST)
+
+Vaste check-in aan het einde van elke week, vóór de nieuwe week begint. Vergelijk steeds met de vorige meting — het gaat om de trend, niet om het absolute getal na 1 week.
+
+**Wat we bijhouden:**
+- Volgers (X)
+- Following (X) — voor de ratio
+- Unieke bezoekers website
+- Ingelogde accounts
+- Best presterende post van de week (welke, waarom volgens jou)
+- 1 aanpassing voor komende week (op basis van wat wel/niet werkte)
+
+| Week van | Volgers | Following | Website-bezoekers | Ingelogd | Best presterende post | Aanpassing komende week |
+|---|---|---|---|---|---|---|
+| 15/7 (nulmeting) | 11 | 42 | 24 | 0 | — | — |
+
+**Let op bij het lezen van de cijfers:**
+- Volgers-ratio (42 following / 11 volgers) is nu nog scheef — dat is normaal in de opbouwfase, maar op termijn is het de moeite waard om te kijken of alle 42 nog relevant zijn (ontvolgen wat niet meer bijdraagt oogt voor nieuwe bezoekers professioneler).
+- 1 week is te weinig om conclusies te trekken over wat werkt — pas na 3-4 metingen wordt een trend zichtbaar. Zie de eerste paar zondagen als nulmetingen, niet als oordeel over de strategie.
+- Kijk zoveel mogelijk ook naar impressies/profielbezoeken per post (niet alleen volgers-eindstand) — dat laat sneller zien of het account uit de lage-vertrouwen-zone van het algoritme groeit, ook voordat dat in volgers-aantal zichtbaar wordt.

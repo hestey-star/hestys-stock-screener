@@ -885,13 +885,14 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     return results
 
 
-def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 60) -> list:
+def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 21) -> list:
     """
     Licht signalen met een opvallende recente winst-verrassing uit de
     bestaande screener-CSV's (dagelijks + wekelijks) -- geen nieuwe
     data-ophaal nodig, dit zit al in de bestaande scores verwerkt.
-    Alleen relevant tijdens 'earnings season' -- oude verrassingen
-    (bv. van jaren geleden) worden genegeerd.
+    Alleen relevant tijdens 'earnings season' -- 21 dagen (~3 weken) dekt
+    de kern van een kwartaal-rapportageperiode, zonder maanden later nog
+    stale verrassingen te tonen (bedrijven rapporteren maar 1x per kwartaal).
     """
     results = []
     for csv_file in ["supertrend_signals_daily.csv", "supertrend_signals.csv"]:
