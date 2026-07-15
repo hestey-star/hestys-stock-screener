@@ -477,6 +477,24 @@ def get_tickers_info(holdings: list) -> dict:
     return infos
 
 
+def get_concentration_alert(holdings: list, max_position_pct: float = 25.0):
+    """
+    Korte, 1-regelige concentratie-waarschuwing voor Today's radar -- geeft
+    None terug als alles binnen je eigen doel-grens zit (geen ruis op
+    normale dagen). Hergebruikt dezelfde logica als Analyze's Concentration
+    Risk-kaart, maar dan alleen de 'is er iets mis'-check, niet de volledige
+    uitleg/rebalancing-tip.
+    """
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+    if total_value <= 0:
+        return None
+    largest = max(holdings, key=lambda h: h.get("position_value") or 0)
+    largest_pct = (largest.get("position_value") or 0) / total_value * 100
+    if largest_pct > max_position_pct:
+        return f"⚖️ **{largest['naam']}** is now {largest_pct:.0f}% of your portfolio, above your {max_position_pct:.0f}% target."
+    return None
+
+
 def analyze_concentration(holdings: list, max_position_pct: float = 25.0) -> list:
     """Concentratie Risk-kaart: grootste positie vs. jouw eigen doel-max, + rebalancing-tip."""
     findings = []
@@ -914,6 +932,32 @@ def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 
 from macro_events import MACRO_EVENTS_2026, get_todays_macro_events
 
 
+def get_upcoming_ex_dividend_dates(holdings: list, infos: dict, days_ahead: int = 5, max_items: int = 3) -> list:
+    """
+    Checkt of een van je HUIDIGE posities binnen 'days_ahead' dagen
+    ex-dividend gaat -- zelfde 'alleen daadwerkelijk toekomstige datums'-
+    filtering als Analyze's Dividend-kaart (yfinance's exDividendDate is
+    soms de meest recente, al-gepasseerde datum i.p.v. een toekomstige).
+    """
+    today = datetime.now().date()
+    results = []
+    for h in holdings:
+        info = infos.get(h["ticker"], {})
+        ex_div = info.get("exDividendDate")
+        if not ex_div:
+            continue
+        try:
+            ex_div_date = pd.Timestamp(ex_div, unit="s").date()
+            days_until = (ex_div_date - today).days
+            if 0 <= days_until <= days_ahead:
+                results.append({"naam": h["naam"], "ticker": h["ticker"],
+                                 "ex_div_date": ex_div_date, "days_until": days_until})
+        except Exception:
+            continue
+    results.sort(key=lambda r: r["days_until"])
+    return results[:max_items]
+
+
 def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> list:
     """
     Checkt of een van je posities/watchlist-items VANDAAG earnings rapporteert
@@ -934,6 +978,61 @@ def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> li
             continue
         if len(results) >= max_items:
             break
+    return results[:max_items]
+
+
+def get_upcoming_portfolio_earnings(tracked_items: list, days_ahead: int = 5, max_items: int = 3) -> list:
+    """
+    Checkt of een van je posities/watchlist-items binnen 'days_ahead' dagen
+    earnings rapporteert (VANDAAG zelf niet meegeteld -- dat toont
+    get_todays_portfolio_earnings al apart). Geeft een korte vooraankondiging,
+    zodat je niet pas op de dag zelf verrast wordt.
+    """
+    today = datetime.now().date()
+    results = []
+    for item in tracked_items:
+        try:
+            dates_df = yf.Ticker(item["ticker"]).get_earnings_dates(limit=8)
+            if dates_df is None or dates_df.empty:
+                continue
+            for earnings_date in dates_df.index:
+                days_until = (earnings_date.date() - today).days
+                if 1 <= days_until <= days_ahead:
+                    results.append({"naam": item["naam"], "ticker": item["ticker"],
+                                     "earnings_date": earnings_date.date(), "days_until": days_until})
+                    break
+        except Exception:
+            continue
+    results.sort(key=lambda r: r["days_until"])
+    return results[:max_items]
+
+
+def get_52_week_records(holdings: list, infos: dict, max_items: int = 3) -> list:
+    """
+    Checkt of een van je posities vandaag een nieuwe 52-weken-hoogte of
+    -laagte heeft geraakt. yfinance's fiftyTwoWeekHigh/Low weerspiegelen
+    het ROLLENDE 52-weken-record t/m de laatste koers -- als de huidige
+    prijs daaraan gelijk is (of eroverheen), is vandaag het nieuwe record.
+    """
+    results = []
+    for h in holdings:
+        info = infos.get(h["ticker"], {})
+        high_52wk = info.get("fiftyTwoWeekHigh")
+        low_52wk = info.get("fiftyTwoWeekLow")
+        current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+        if current_price is None:
+            try:
+                fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
+                if fallback_hist is not None and not fallback_hist.empty:
+                    current_price = float(fallback_hist["Close"].iloc[-1])
+            except Exception:
+                continue
+        if current_price is None:
+            continue
+        if high_52wk and current_price >= high_52wk:
+            results.append({"naam": h["naam"], "ticker": h["ticker"], "type": "high"})
+        elif low_52wk and current_price <= low_52wk:
+            results.append({"naam": h["naam"], "ticker": h["ticker"], "type": "low"})
     return results[:max_items]
 
 
@@ -1648,6 +1747,7 @@ if current_view == "today":
                 macro_events = get_todays_macro_events(max_items=3)
                 with st.spinner("Checking today's radar..."):
                     earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
+                    infos = get_tickers_info(holdings) if holdings else {}
                 todays_events = macro_events + [
                     {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
                 ]
@@ -1655,6 +1755,35 @@ if current_view == "today":
                     for event in todays_events[:3]:
                         time_part = f" -- {event['time']}" if "time" in event else ""
                         st.markdown(f"- 📅 {event['name']}{time_part}")
+
+                # Aankomende earnings deze week -- niet alleen vandaag, ook een
+                # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
+                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, days_ahead=5, max_items=3)
+                for e in upcoming_earnings:
+                    day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
+                    st.markdown(f"- 📆 **{e['naam']}** ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).")
+
+                # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
+                # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
+                if holdings:
+                    risk_profile = database.get_risk_profile(user_email)
+                    concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
+                    if concentration_alert:
+                        st.markdown(f"- {concentration_alert}")
+
+                # Aankomende ex-dividend-data voor je HUIDIGE posities.
+                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
+                for d in upcoming_ex_div:
+                    day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
+                    st.markdown(f"- 💰 **{d['naam']}** goes ex-dividend {day_word} ({d['ex_div_date']}).")
+
+                # 52-weken-record -- een leuk, opvallend signaal als een van je
+                # posities vandaag een nieuwe hoogte/laagte raakt.
+                records_52wk = get_52_week_records(holdings, infos, max_items=3) if holdings else []
+                for r in records_52wk:
+                    emoji = "🚀" if r["type"] == "high" else "📉"
+                    label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
+                    st.markdown(f"- {emoji} **{r['naam']}** ({r['ticker']}) just hit a {label}.")
 
                 weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
                 last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
