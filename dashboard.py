@@ -704,6 +704,13 @@ def build_daily_portfolio_stats(holdings: list):
                 continue
             price_today = float(hist["Close"].iloc[-1])
             price_yesterday = float(hist["Close"].iloc[-2])
+            # Sommige dagen ontbreekt een koers (bv. rond een feestdag/data-gat) --
+            # yfinance geeft dan NaN terug. Zonder deze check zou 1 NaN de HELE
+            # portfolio-som NaN maken (NaN + iets = NaN), en 'total_value_yesterday
+            # <= 0' vangt dat niet af (NaN-vergelijkingen zijn altijd False in
+            # Python) -- vandaar dat '+nan%' anders alsnog getoond zou worden.
+            if pd.isna(price_today) or pd.isna(price_yesterday) or price_yesterday <= 0:
+                continue
             change_pct = (price_today / price_yesterday - 1) * 100
             performers.append({"naam": h["naam"], "change_pct": change_pct})
             total_value_today += shares * price_today
@@ -715,6 +722,10 @@ def build_daily_portfolio_stats(holdings: list):
         return None
 
     portfolio_change_pct = (total_value_today / total_value_yesterday - 1) * 100
+    if pd.isna(portfolio_change_pct):
+        # Laatste veiligheidsnet -- zou niet meer moeten gebeuren dankzij de
+        # check hierboven, maar voorkomt sowieso ooit weer een '+nan%'.
+        return None
     best = max(performers, key=lambda p: p["change_pct"])
     worst = min(performers, key=lambda p: p["change_pct"])
 
