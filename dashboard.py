@@ -2086,15 +2086,27 @@ elif current_view == "portfolio":
                 sym = "€" if holding.get("value_currency") == "EUR" else "$"
                 return f"{sym}{value:,.0f}" if value else "-"
 
+            def _format_price(holding):
+                """Huidige prijs per aandeel/eenheid -- afgeleid uit de al-opgeslagen
+                positiewaarde (waarde / aantal), dus geen extra live-aanroep nodig en
+                consistent met het laatste 'Update portfolio value'-moment."""
+                value = holding.get("position_value")
+                shares = holding.get("shares")
+                if not value or not shares:
+                    return "-"
+                sym = "€" if holding.get("value_currency") == "EUR" else "$"
+                return f"{sym}{value / shares:,.2f}"
+
             rows_html = "".join(
                 f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
-                f'<td>{h.get("shares") or "-"}</td><td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
+                f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
+                f'<td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
                 for h in holdings
             )
             st.markdown(
                 f"""
                 <table class="positions-table">
-                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Value</th><th>% of portfolio</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Value</th><th>% of portfolio</th></tr></thead>
                     <tbody>{rows_html}</tbody>
                 </table>
                 """,
