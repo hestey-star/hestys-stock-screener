@@ -1588,13 +1588,6 @@ def create_billing_portal_session(customer_id: str):
 #     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
 current_view = st.query_params.get("view", "today")
 
-# Achterwaartse compatibiliteit: oude '?view=portfolio'-links (bv. in
-# opgeslagen bladwijzers, van vóór de herstructurering) blijven werken --
-# 'My Portfolio' is nu een tabblad ONDER Analyze, geen los top-niveau meer.
-if current_view == "portfolio":
-    current_view = "analyze"
-    st.query_params["subview"] = "portfolio"
-
 
 def _nav_class(view_name: str) -> str:
     return "nav-link active" if current_view == view_name else "nav-link"
@@ -1626,7 +1619,8 @@ with header_col:
             <div class="nav-bar">
                 <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
                 <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
-                <a href="?view=analyze" class="{_nav_class_any(['analyze', 'portfolio'])}" target="_self">Analyze</a>
+                <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
+                <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
                 <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
                 <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
             </div>
@@ -1742,7 +1736,7 @@ if current_view == "today":
                         st.metric("Worst today", "n/a")
 
                 st.markdown(
-                    '<a href="?view=analyze&subview=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
+                    '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
                     unsafe_allow_html=True,
                 )
                 st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
@@ -2162,6 +2156,551 @@ elif current_view == "discover":
 # ============================================================
 # VIEW: MY PORTFOLIO (personal, login required)
 # ============================================================
+elif current_view == "portfolio":
+    if not st.user.is_logged_in:
+        st.markdown(
+            '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
+            unsafe_allow_html=True,
+        )
+        st.info("Log in (top right) to track your own positions. No one else can see what you add.")
+        st.stop()
+
+    import database
+    from portfolio_watch import check_holding
+
+    user_email = st.user.email
+    st.markdown(
+        '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
+        unsafe_allow_html=True,
+    )
+    st.subheader(f"Welcome, {st.user.name}")
+
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
+    holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
+    is_premium = database.is_premium_user(user_email)
+
+    if not holdings:
+        st.info("You haven't added any positions yet -- add your first one under 'Manage' below.")
+
+    # ============================================================
+    # 1. OVERVIEW -- totaal, valuta, pie chart, en de tabel, samen in 1 vak
+    # ============================================================
+    if holdings:
+        with st.container(border=True):
+            st.markdown("**Overview**")
+            display_currency = st.selectbox("Display currency", ["EUR", "USD"], key="display_currency")
+
+            total_value = sum(h.get("position_value") or 0 for h in holdings)
+            stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
+            currency_symbol = "€" if display_currency == "EUR" else "$"
+            cash_value = database.get_cash_value(user_email)
+
+            if total_value > 0 and stored_currency == display_currency:
+                st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f} "
+                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
+                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
+            elif total_value > 0:
+                st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
+                st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency}) "
+                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
+                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
+            else:
+                st.caption("Click 'Update portfolio value' to fetch current prices.")
+
+            if st.button("Update portfolio value"):
+                with st.spinner("Fetching current prices and exchange rates..."):
+                    success, message = refresh_portfolio_values(holdings, user_email, display_currency)
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.warning(message)
+
+            def _format_pct(holding):
+                if total_value <= 0:
+                    return "-"
+                value = holding.get("position_value") or 0
+                return f"{value / total_value * 100:.0f}%"
+
+            def _format_value(holding):
+                value = holding.get("position_value")
+                sym = "€" if holding.get("value_currency") == "EUR" else "$"
+                return f"{sym}{value:,.0f}" if value else "-"
+
+            def _format_price(holding):
+                """Huidige prijs per aandeel/eenheid -- afgeleid uit de al-opgeslagen
+                positiewaarde (waarde / aantal), dus geen extra live-aanroep nodig en
+                consistent met het laatste 'Update portfolio value'-moment."""
+                value = holding.get("position_value")
+                shares = holding.get("shares")
+                if not value or not shares:
+                    return "-"
+                sym = "€" if holding.get("value_currency") == "EUR" else "$"
+                return f"{sym}{value / shares:,.2f}"
+
+            rows_html = "".join(
+                f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
+                f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
+                f'<td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
+                for h in holdings
+            )
+            st.markdown(
+                f"""
+                <table class="positions-table">
+                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Value</th><th>% of portfolio</th></tr></thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # ============================================================
+    # 3. MANAGE
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("**Manage**")
+
+        # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
+        with st.expander("Import from a broker", expanded=False):
+            st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
+                       "(CSV) to import your full buy/sell history in one go, instead of "
+                       "logging each one by hand.")
+            st.caption("Using a different broker?")
+            st.markdown(
+                '<a href="?view=support" class="button-link" target="_self">Go to Support &rarr;</a>',
+                unsafe_allow_html=True,
+            )
+            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
+
+            already_imported = st.session_state.get("degiro_imported_filenames", set())
+
+            if degiro_file is not None and degiro_file.name in already_imported:
+                st.success(f"✅ '{degiro_file.name}' was already imported.")
+                if st.button("Process this file again anyway"):
+                    already_imported.discard(degiro_file.name)
+                    st.session_state["degiro_imported_filenames"] = already_imported
+                    st.session_state.pop("degiro_parsed_filename", None)
+                    st.rerun()
+            elif degiro_file is not None:
+                if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
+                    # Nieuw bestand -- opnieuw parsen en de matches resetten
+                    with st.spinner("Reading your file..."):
+                        parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
+                    st.session_state["degiro_parsed_filename"] = degiro_file.name
+                    st.session_state["degiro_grouped"] = parse_result["grouped"]
+                    st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
+                    ticker_matches = {}
+                    ticker_candidates = {}
+                    # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
+                    # import) -- geen nieuwe zoekopdracht nodig, geen keuzelijst opnieuw.
+                    existing_isin_to_ticker = {
+                        h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
+                    }
+                    with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
+                        for key, group in parse_result["grouped"].items():
+                            remembered_ticker = existing_isin_to_ticker.get(group.get("isin"))
+                            if remembered_ticker:
+                                ticker_matches[key] = remembered_ticker
+                                ticker_candidates[key] = [{
+                                    "symbol": remembered_ticker, "name": group["product"], "exchange": "remembered",
+                                }]
+                            else:
+                                candidates = get_ticker_candidates(group["product"], group.get("isin"))
+                                ticker_candidates[key] = candidates
+                                ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
+                    st.session_state["degiro_ticker_matches"] = ticker_matches
+                    st.session_state["degiro_ticker_candidates"] = ticker_candidates
+
+                degiro_grouped = st.session_state["degiro_grouped"]
+                degiro_skipped = st.session_state["degiro_skipped"]
+
+                total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
+                st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
+                if degiro_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
+                    more = "..." if len(degiro_skipped) > 5 else ""
+                    st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                unmatched_keys = [
+                    key for key, group in degiro_grouped.items()
+                    if not st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                ]
+                if unmatched_keys:
+                    unmatched_lines = "\n".join(
+                        f"- **{degiro_grouped[key]['product']}**"
+                        + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
+                        for key in unmatched_keys
+                    )
+                    st.warning(f"⚠️ **{len(unmatched_keys)} security/securities need your attention** "
+                               f"-- no ticker could be auto-matched. Fill these in manually below, "
+                               f"or they'll be skipped:\n\n{unmatched_lines}")
+
+                st.markdown("**Review the ticker for each security** (auto-suggested -- please "
+                             "double-check and correct if wrong before importing). "
+                             "Unmatched ones are shown first:")
+                sorted_items = sorted(
+                    degiro_grouped.items(),
+                    key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
+                )
+                for key, group in sorted_items:
+                    dcol1, dcol2 = st.columns([3, 2])
+                    with dcol1:
+                        prefix = "⚠️ " if key in unmatched_keys else ""
+                        st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)")
+                    with dcol2:
+                        candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
+                        if len(candidates) >= 2:
+                            # Meerdere beursnoteringen gevonden (bv. hetzelfde ETF op meerdere
+                            # beurzen) -- laat kiezen met naam + beurs erbij, i.p.v. blind te gokken.
+                            options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
+                            options.append("Other (type manually)")
+                            current_symbol = st.session_state["degiro_ticker_matches"].get(key, "")
+                            default_index = next(
+                                (i for i, c in enumerate(candidates) if c["symbol"] == current_symbol),
+                                len(options) - 1,
+                            )
+                            chosen_label = st.selectbox(
+                                "Ticker", options, index=default_index,
+                                key=f"degiro_choice_{key}", label_visibility="collapsed",
+                            )
+                            if chosen_label == "Other (type manually)":
+                                manual_default = current_symbol if current_symbol not in [c["symbol"] for c in candidates] else ""
+                                manual_ticker = st.text_input(
+                                    "Manual ticker", value=manual_default, key=f"degiro_manual_{key}",
+                                    label_visibility="collapsed", placeholder="type ticker",
+                                )
+                                st.session_state["degiro_ticker_matches"][key] = manual_ticker
+                            else:
+                                chosen_symbol = candidates[options.index(chosen_label)]["symbol"]
+                                st.session_state["degiro_ticker_matches"][key] = chosen_symbol
+                        else:
+                            current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
+                            new_ticker = st.text_input(
+                                "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
+                                label_visibility="collapsed", placeholder="leave empty to skip",
+                            )
+                            st.session_state["degiro_ticker_matches"][key] = new_ticker
+
+                ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
+                st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
+                           f"the rest will be skipped.")
+
+                if st.button("Import all matched transactions", type="primary"):
+                    imported_positions = 0
+                    imported_transactions = 0
+                    imported_duplicates_skipped = 0
+                    all_holdings_for_import = database.get_user_holdings(user_email)
+                    to_import = [
+                        (key, group) for key, group in degiro_grouped.items()
+                        if st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                    ]
+
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+
+                    for i, (key, group) in enumerate(to_import):
+                        ticker = st.session_state["degiro_ticker_matches"][key].strip()
+                        status_text.markdown(f"📥 **Importing {group['product']}...** ({i + 1} of {len(to_import)})")
+
+                        # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
+                        # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
+                        # had, per ongeluk een dubbele, nieuwe positie aanmaken i.p.v. de
+                        # bestaande (met z'n geschiedenis) te hergebruiken.
+                        existing = next((h for h in all_holdings_for_import if h["ticker"] == ticker), None)
+                        if existing:
+                            holding_id = existing["id"]
+                            existing_manual_shares = existing.get("shares") or 0.0
+                            existing_tx = database.get_transactions_for_holding(user_email, holding_id)
+                            if not existing_tx and existing_manual_shares > 0:
+                                # Zelfde inhaal-logica als bij 'Log a transaction': bestaande
+                                # handmatige shares vastleggen tegen de huidige prijs, vandaag.
+                                try:
+                                    backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+                                except Exception:
+                                    backfill_price = group["transactions"][0]["price"]
+                                database.add_transaction(
+                                    user_email, holding_id, "buy",
+                                    shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                                    transaction_date=datetime.now().date().isoformat(),
+                                )
+                        else:
+                            holding_id = database.add_holding(
+                                user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
+                            )
+                            imported_positions += 1
+
+                        already_logged = database.get_transactions_for_holding(user_email, holding_id)
+
+                        def _is_duplicate(new_tx, existing_list):
+                            return any(
+                                existing["transaction_type"] == new_tx["transaction_type"]
+                                and existing["transaction_date"] == new_tx["transaction_date"]
+                                and abs(existing["shares"] - new_tx["shares"]) < 0.0001
+                                and abs(existing["price"] - new_tx["price"]) < 0.0001
+                                for existing in existing_list
+                            )
+
+                        skipped_duplicates = 0
+                        for t in group["transactions"]:
+                            if _is_duplicate(t, already_logged):
+                                skipped_duplicates += 1
+                                continue
+                            database.add_transaction(
+                                user_email, holding_id, t["transaction_type"],
+                                shares=t["shares"], price=t["price"], fee=t["fee"],
+                                transaction_date=t["transaction_date"],
+                            )
+                            imported_transactions += 1
+
+                        if skipped_duplicates:
+                            imported_duplicates_skipped += skipped_duplicates
+
+                        sync_holding_shares_from_transactions(holding_id, user_email)
+                        progress_bar.progress((i + 1) / len(to_import))
+
+                    status_text.empty()
+                    progress_bar.empty()
+
+                    dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
+                    st.success(f"Imported {imported_transactions} transactions across "
+                               f"{imported_positions} new position(s)!{dup_txt}")
+                    already_imported.add(degiro_file.name)
+                    st.session_state["degiro_imported_filenames"] = already_imported
+                    for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
+                                       "degiro_ticker_matches", "degiro_ticker_candidates"]:
+                        st.session_state.pop(state_key, None)
+                    st.rerun()
+
+        # --- Log a transaction (werkt ook zonder bestaande posities -- een
+        # nieuwe positie kan direct via een eerste 'Log a buy' worden
+        # aangemaakt) ---
+        with st.expander("Log a transaction", expanded=False):
+            st.caption("Log your actual buys and sells to see your real return under Analyze. "
+                       "Optional -- positions without transactions logged just won't show a return.")
+
+            position_mode_options = (
+                ["Existing position", "New position"] if holdings else ["New position"]
+            )
+            tx_position_mode = st.radio(
+                "Position", position_mode_options, horizontal=True,
+                key="tx_position_mode", label_visibility="collapsed",
+            )
+
+            tx_holding = None
+            new_position_symbol = None
+            new_position_name = None
+
+            if tx_position_mode == "Existing position":
+                tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+                tx_label = st.selectbox(
+                    "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
+                )
+                tx_holding = tx_holding_options[tx_label]
+                tx_type = st.radio(
+                    "Type", ["Buy", "Sell"], horizontal=True, key="tx_type_radio",
+                )
+                is_buy = tx_type == "Buy"
+            else:
+                # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
+                is_buy = True
+                tx_search_query = st.text_input(
+                    "Search for the company/asset you bought", key="tx_search_query",
+                )
+                if tx_search_query:
+                    try:
+                        tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
+                    except Exception as exc:
+                        tx_search_results = []
+                        st.caption(f"Search failed: {exc}")
+                    if tx_search_results:
+                        tx_options = {}
+                        for r in tx_search_results:
+                            name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                            label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                            tx_options[label] = r
+                        tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
+                        tx_chosen = tx_options[tx_chosen_label]
+                        new_position_symbol = tx_chosen.get("symbol")
+                        new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
+                    else:
+                        st.caption("No results found for this search -- try a different name.")
+
+            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+            with tcol1:
+                tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
+            with tcol2:
+                tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
+            with tcol3:
+                tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
+            with tcol4:
+                tx_date = st.date_input("Date", key="tx_date_input")
+
+            can_save = (tx_holding is not None) or (new_position_symbol is not None)
+
+            if can_save and st.button("Save transaction", type="primary"):
+                if tx_shares <= 0 or tx_price <= 0:
+                    st.error("Shares and price must both be greater than 0.")
+                else:
+                    if tx_position_mode == "New position":
+                        if len(holdings) >= 10 and not is_premium:
+                            st.error(
+                                "You've reached the free plan limit of 10 tracked positions. "
+                                "Upgrade to Premium for unlimited tracking."
+                            )
+                        else:
+                            new_id = database.add_holding(user_email, new_position_name, new_position_symbol, shares=None)
+                            database.add_transaction(
+                                user_email, new_id, "buy",
+                                shares=tx_shares, price=tx_price, fee=tx_fee,
+                                transaction_date=tx_date.isoformat(),
+                            )
+                            sync_holding_shares_from_transactions(new_id, user_email)
+                            st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
+                            st.rerun()
+                    else:
+                        existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
+                        existing_manual_shares = tx_holding.get("shares") or 0.0
+                        if not existing_tx and existing_manual_shares > 0:
+                            # Eerste transactie voor deze positie, en er stond al een handmatig
+                            # aantal shares -- die vangen we automatisch op als een 'gekocht
+                            # tegen de huidige prijs, vandaag'-transactie (simpele standaard,
+                            # geen keuzemenu nodig; later aanpasbaar als je de echte
+                            # historische aankoopprijs nog weet).
+                            try:
+                                backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
+                            except Exception:
+                                backfill_price = tx_price  # fallback als de live prijs niet op te halen is
+                            database.add_transaction(
+                                user_email, tx_holding["id"], "buy",
+                                shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                                transaction_date=datetime.now().date().isoformat(),
+                            )
+                            existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
+                            st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
+                                    f"bought at today's price (€{backfill_price:.2f}) -- edit this later if "
+                                    f"you remember the actual original purchase price.")
+
+                        database.add_transaction(
+                            user_email, tx_holding["id"], "buy" if is_buy else "sell",
+                            shares=tx_shares, price=tx_price, fee=tx_fee,
+                            transaction_date=tx_date.isoformat(),
+                        )
+                        shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+
+                        # Bij een verkoop naar ~0 shares: de positie NIET verwijderen (dat zou
+                        # via de cascade ook de transactiegeschiedenis wissen, en dus je
+                        # gerealiseerde winst/verlies uit Performance laten verdwijnen) --
+                        # 'ie blijft gewoon bestaan met 0 shares, verborgen uit My Portfolio
+                        # via filter_active_holdings(), maar telt nog mee bij Performance.
+                        if not is_buy and shares_after <= 0.001:
+                            st.success(f"Sell logged -- {tx_holding['naam']} is now fully closed. "
+                                       f"Its history still counts toward your Performance stats.")
+                            st.rerun()
+
+                        st.success("Transaction saved!")
+                        st.rerun()
+
+            if tx_holding is not None:
+                tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
+                if tx_history:
+                    if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
+                        for t in tx_history:
+                            hcol1, hcol2 = st.columns([5, 1])
+                            with hcol1:
+                                emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
+                                st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
+                                           f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
+                            with hcol2:
+                                if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                    database.delete_transaction(t["id"], user_email)
+                                    remaining = [x for x in tx_history if x["id"] != t["id"]]
+                                    if not remaining:
+                                        # Geen transacties meer over voor deze positie -- voorkomt een
+                                        # 'verweesde' positie zonder shares en zonder geschiedenis.
+                                        database.delete_holding(tx_holding["id"], user_email)
+                                        st.success("Transaction deleted -- this position had no other "
+                                                   "transactions left, so it was removed too.")
+                                    else:
+                                        sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+                                        st.success("Transaction deleted.")
+                                    st.rerun()
+
+    # ============================================================
+    # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
+    # ============================================================
+    with st.expander("Watchlist", expanded=False):
+        st.caption("Track tickers you don't own yet -- they'll show up with personalized "
+                   "signals and news on the Today page.")
+
+        watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
+
+        if watchlist_items:
+            rows_html = "".join(
+                f'<tr><td>{w["naam"]}</td><td><code>{w["ticker"]}</code></td></tr>'
+                for w in watchlist_items
+            )
+            st.markdown(
+                f"""
+                <table class="positions-table">
+                    <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("Your watchlist is empty.")
+
+        st.markdown("**Add to watchlist**")
+        watchlist_search = st.text_input(
+            "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+        )
+        w_selected_symbol = None
+        w_selected_name = None
+        if watchlist_search:
+            try:
+                w_search_results = yf.Search(watchlist_search, max_results=8).quotes
+            except Exception as exc:
+                w_search_results = []
+                st.caption(f"Search failed: {exc}")
+            if w_search_results:
+                w_options = {}
+                for r in w_search_results:
+                    name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                    label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                    w_options[label] = r
+                w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
+                w_chosen = w_options[w_chosen_label]
+                w_selected_symbol = w_chosen.get("symbol")
+                w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
+            else:
+                st.caption("No results found for this search -- try a different name.")
+
+        if w_selected_symbol and st.button("Add to watchlist", type="primary"):
+            database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
+            st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
+            st.rerun()
+
+        if watchlist_items:
+            st.markdown("**Remove from watchlist**")
+            w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
+            wcol1, wcol2 = st.columns([4, 1])
+            with wcol1:
+                w_to_remove = st.selectbox(
+                    "Item to remove", list(w_remove_options.keys()),
+                    key="watchlist_remove_select", label_visibility="collapsed",
+                )
+            with wcol2:
+                if st.button("Remove", key="watchlist_remove_btn"):
+                    database.delete_holding(w_remove_options[w_to_remove], user_email)
+                    st.rerun()
+
+    st.caption("Manage email preferences and cash amount under Settings. "
+               "You'll also automatically receive a weekly email with this update, "
+               "at the address you're logged in with.")
+
+
 elif current_view == "analyze":
     st.markdown("### Analyze")
 
@@ -2182,550 +2721,13 @@ elif current_view == "analyze":
         f"""
         <div class="nav-bar" style="margin-bottom: 1.25rem;">
             <a href="?view=analyze&subview=performance" class="{_subnav_class('performance')}" target="_self">Performance &amp; Risk</a>
-            <a href="?view=analyze&subview=portfolio" class="{_subnav_class('portfolio')}" target="_self">My Portfolio</a>
             <a href="?view=analyze&subview=deepdives" class="{_subnav_class('deepdives')}" target="_self">Deep-dives</a>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    if current_subview == "portfolio":
-        import database
-        from portfolio_watch import check_holding
-
-        user_email = st.user.email
-        st.markdown(
-            '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
-            unsafe_allow_html=True,
-        )
-        st.subheader(f"Welcome, {st.user.name}")
-
-        holdings = filter_active_holdings(database.get_user_holdings(user_email))
-        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
-        is_premium = database.is_premium_user(user_email)
-
-        if not holdings:
-            st.info("You haven't added any positions yet -- add your first one under 'Manage' below.")
-
-        # ============================================================
-        # 1. OVERVIEW -- totaal, valuta, pie chart, en de tabel, samen in 1 vak
-        # ============================================================
-        if holdings:
-            with st.container(border=True):
-                st.markdown("**Overview**")
-                display_currency = st.selectbox("Display currency", ["EUR", "USD"], key="display_currency")
-
-                total_value = sum(h.get("position_value") or 0 for h in holdings)
-                stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
-                currency_symbol = "€" if display_currency == "EUR" else "$"
-                cash_value = database.get_cash_value(user_email)
-
-                if total_value > 0 and stored_currency == display_currency:
-                    st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f} "
-                                f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                                f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
-                elif total_value > 0:
-                    st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
-                    st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency}) "
-                                f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                                f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
-                else:
-                    st.caption("Click 'Update portfolio value' to fetch current prices.")
-
-                if st.button("Update portfolio value"):
-                    with st.spinner("Fetching current prices and exchange rates..."):
-                        success, message = refresh_portfolio_values(holdings, user_email, display_currency)
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.warning(message)
-
-                def _format_pct(holding):
-                    if total_value <= 0:
-                        return "-"
-                    value = holding.get("position_value") or 0
-                    return f"{value / total_value * 100:.0f}%"
-
-                def _format_value(holding):
-                    value = holding.get("position_value")
-                    sym = "€" if holding.get("value_currency") == "EUR" else "$"
-                    return f"{sym}{value:,.0f}" if value else "-"
-
-                def _format_price(holding):
-                    """Huidige prijs per aandeel/eenheid -- afgeleid uit de al-opgeslagen
-                    positiewaarde (waarde / aantal), dus geen extra live-aanroep nodig en
-                    consistent met het laatste 'Update portfolio value'-moment."""
-                    value = holding.get("position_value")
-                    shares = holding.get("shares")
-                    if not value or not shares:
-                        return "-"
-                    sym = "€" if holding.get("value_currency") == "EUR" else "$"
-                    return f"{sym}{value / shares:,.2f}"
-
-                rows_html = "".join(
-                    f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
-                    f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
-                    f'<td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
-                    for h in holdings
-                )
-                st.markdown(
-                    f"""
-                    <table class="positions-table">
-                        <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Value</th><th>% of portfolio</th></tr></thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        # ============================================================
-        # 3. MANAGE
-        # ============================================================
-        with st.container(border=True):
-            st.markdown("**Manage**")
-
-            # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-            with st.expander("Import from a broker", expanded=False):
-                st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
-                           "(CSV) to import your full buy/sell history in one go, instead of "
-                           "logging each one by hand.")
-                st.caption("Using a different broker?")
-                st.markdown(
-                    '<a href="?view=support" class="button-link" target="_self">Go to Support &rarr;</a>',
-                    unsafe_allow_html=True,
-                )
-                degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
-
-                already_imported = st.session_state.get("degiro_imported_filenames", set())
-
-                if degiro_file is not None and degiro_file.name in already_imported:
-                    st.success(f"✅ '{degiro_file.name}' was already imported.")
-                    if st.button("Process this file again anyway"):
-                        already_imported.discard(degiro_file.name)
-                        st.session_state["degiro_imported_filenames"] = already_imported
-                        st.session_state.pop("degiro_parsed_filename", None)
-                        st.rerun()
-                elif degiro_file is not None:
-                    if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
-                        # Nieuw bestand -- opnieuw parsen en de matches resetten
-                        with st.spinner("Reading your file..."):
-                            parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
-                        st.session_state["degiro_parsed_filename"] = degiro_file.name
-                        st.session_state["degiro_grouped"] = parse_result["grouped"]
-                        st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
-                        ticker_matches = {}
-                        ticker_candidates = {}
-                        # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
-                        # import) -- geen nieuwe zoekopdracht nodig, geen keuzelijst opnieuw.
-                        existing_isin_to_ticker = {
-                            h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
-                        }
-                        with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
-                            for key, group in parse_result["grouped"].items():
-                                remembered_ticker = existing_isin_to_ticker.get(group.get("isin"))
-                                if remembered_ticker:
-                                    ticker_matches[key] = remembered_ticker
-                                    ticker_candidates[key] = [{
-                                        "symbol": remembered_ticker, "name": group["product"], "exchange": "remembered",
-                                    }]
-                                else:
-                                    candidates = get_ticker_candidates(group["product"], group.get("isin"))
-                                    ticker_candidates[key] = candidates
-                                    ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
-                        st.session_state["degiro_ticker_matches"] = ticker_matches
-                        st.session_state["degiro_ticker_candidates"] = ticker_candidates
-
-                    degiro_grouped = st.session_state["degiro_grouped"]
-                    degiro_skipped = st.session_state["degiro_skipped"]
-
-                    total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
-                    st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
-                    if degiro_skipped:
-                        reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
-                        more = "..." if len(degiro_skipped) > 5 else ""
-                        st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
-                                   f"{reasons_preview}{more}")
-
-                    unmatched_keys = [
-                        key for key, group in degiro_grouped.items()
-                        if not st.session_state["degiro_ticker_matches"].get(key, "").strip()
-                    ]
-                    if unmatched_keys:
-                        unmatched_lines = "\n".join(
-                            f"- **{degiro_grouped[key]['product']}**"
-                            + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
-                            for key in unmatched_keys
-                        )
-                        st.warning(f"⚠️ **{len(unmatched_keys)} security/securities need your attention** "
-                                   f"-- no ticker could be auto-matched. Fill these in manually below, "
-                                   f"or they'll be skipped:\n\n{unmatched_lines}")
-
-                    st.markdown("**Review the ticker for each security** (auto-suggested -- please "
-                                 "double-check and correct if wrong before importing). "
-                                 "Unmatched ones are shown first:")
-                    sorted_items = sorted(
-                        degiro_grouped.items(),
-                        key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
-                    )
-                    for key, group in sorted_items:
-                        dcol1, dcol2 = st.columns([3, 2])
-                        with dcol1:
-                            prefix = "⚠️ " if key in unmatched_keys else ""
-                            st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)")
-                        with dcol2:
-                            candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
-                            if len(candidates) >= 2:
-                                # Meerdere beursnoteringen gevonden (bv. hetzelfde ETF op meerdere
-                                # beurzen) -- laat kiezen met naam + beurs erbij, i.p.v. blind te gokken.
-                                options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
-                                options.append("Other (type manually)")
-                                current_symbol = st.session_state["degiro_ticker_matches"].get(key, "")
-                                default_index = next(
-                                    (i for i, c in enumerate(candidates) if c["symbol"] == current_symbol),
-                                    len(options) - 1,
-                                )
-                                chosen_label = st.selectbox(
-                                    "Ticker", options, index=default_index,
-                                    key=f"degiro_choice_{key}", label_visibility="collapsed",
-                                )
-                                if chosen_label == "Other (type manually)":
-                                    manual_default = current_symbol if current_symbol not in [c["symbol"] for c in candidates] else ""
-                                    manual_ticker = st.text_input(
-                                        "Manual ticker", value=manual_default, key=f"degiro_manual_{key}",
-                                        label_visibility="collapsed", placeholder="type ticker",
-                                    )
-                                    st.session_state["degiro_ticker_matches"][key] = manual_ticker
-                                else:
-                                    chosen_symbol = candidates[options.index(chosen_label)]["symbol"]
-                                    st.session_state["degiro_ticker_matches"][key] = chosen_symbol
-                            else:
-                                current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
-                                new_ticker = st.text_input(
-                                    "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
-                                    label_visibility="collapsed", placeholder="leave empty to skip",
-                                )
-                                st.session_state["degiro_ticker_matches"][key] = new_ticker
-
-                    ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
-                    st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
-                               f"the rest will be skipped.")
-
-                    if st.button("Import all matched transactions", type="primary"):
-                        imported_positions = 0
-                        imported_transactions = 0
-                        imported_duplicates_skipped = 0
-                        all_holdings_for_import = database.get_user_holdings(user_email)
-                        to_import = [
-                            (key, group) for key, group in degiro_grouped.items()
-                            if st.session_state["degiro_ticker_matches"].get(key, "").strip()
-                        ]
-
-                        progress_bar = st.progress(0.0)
-                        status_text = st.empty()
-
-                        for i, (key, group) in enumerate(to_import):
-                            ticker = st.session_state["degiro_ticker_matches"][key].strip()
-                            status_text.markdown(f"📥 **Importing {group['product']}...** ({i + 1} of {len(to_import)})")
-
-                            # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
-                            # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
-                            # had, per ongeluk een dubbele, nieuwe positie aanmaken i.p.v. de
-                            # bestaande (met z'n geschiedenis) te hergebruiken.
-                            existing = next((h for h in all_holdings_for_import if h["ticker"] == ticker), None)
-                            if existing:
-                                holding_id = existing["id"]
-                                existing_manual_shares = existing.get("shares") or 0.0
-                                existing_tx = database.get_transactions_for_holding(user_email, holding_id)
-                                if not existing_tx and existing_manual_shares > 0:
-                                    # Zelfde inhaal-logica als bij 'Log a transaction': bestaande
-                                    # handmatige shares vastleggen tegen de huidige prijs, vandaag.
-                                    try:
-                                        backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
-                                    except Exception:
-                                        backfill_price = group["transactions"][0]["price"]
-                                    database.add_transaction(
-                                        user_email, holding_id, "buy",
-                                        shares=existing_manual_shares, price=backfill_price, fee=0.0,
-                                        transaction_date=datetime.now().date().isoformat(),
-                                    )
-                            else:
-                                holding_id = database.add_holding(
-                                    user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
-                                )
-                                imported_positions += 1
-
-                            already_logged = database.get_transactions_for_holding(user_email, holding_id)
-
-                            def _is_duplicate(new_tx, existing_list):
-                                return any(
-                                    existing["transaction_type"] == new_tx["transaction_type"]
-                                    and existing["transaction_date"] == new_tx["transaction_date"]
-                                    and abs(existing["shares"] - new_tx["shares"]) < 0.0001
-                                    and abs(existing["price"] - new_tx["price"]) < 0.0001
-                                    for existing in existing_list
-                                )
-
-                            skipped_duplicates = 0
-                            for t in group["transactions"]:
-                                if _is_duplicate(t, already_logged):
-                                    skipped_duplicates += 1
-                                    continue
-                                database.add_transaction(
-                                    user_email, holding_id, t["transaction_type"],
-                                    shares=t["shares"], price=t["price"], fee=t["fee"],
-                                    transaction_date=t["transaction_date"],
-                                )
-                                imported_transactions += 1
-
-                            if skipped_duplicates:
-                                imported_duplicates_skipped += skipped_duplicates
-
-                            sync_holding_shares_from_transactions(holding_id, user_email)
-                            progress_bar.progress((i + 1) / len(to_import))
-
-                        status_text.empty()
-                        progress_bar.empty()
-
-                        dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
-                        st.success(f"Imported {imported_transactions} transactions across "
-                                   f"{imported_positions} new position(s)!{dup_txt}")
-                        already_imported.add(degiro_file.name)
-                        st.session_state["degiro_imported_filenames"] = already_imported
-                        for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
-                                           "degiro_ticker_matches", "degiro_ticker_candidates"]:
-                            st.session_state.pop(state_key, None)
-                        st.rerun()
-
-            # --- Log a transaction (werkt ook zonder bestaande posities -- een
-            # nieuwe positie kan direct via een eerste 'Log a buy' worden
-            # aangemaakt) ---
-            with st.expander("Log a transaction", expanded=False):
-                st.caption("Log your actual buys and sells to see your real return under Analyze. "
-                           "Optional -- positions without transactions logged just won't show a return.")
-
-                position_mode_options = (
-                    ["Existing position", "New position"] if holdings else ["New position"]
-                )
-                tx_position_mode = st.radio(
-                    "Position", position_mode_options, horizontal=True,
-                    key="tx_position_mode", label_visibility="collapsed",
-                )
-
-                tx_holding = None
-                new_position_symbol = None
-                new_position_name = None
-
-                if tx_position_mode == "Existing position":
-                    tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
-                    tx_label = st.selectbox(
-                        "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
-                    )
-                    tx_holding = tx_holding_options[tx_label]
-                    tx_type = st.radio(
-                        "Type", ["Buy", "Sell"], horizontal=True, key="tx_type_radio",
-                    )
-                    is_buy = tx_type == "Buy"
-                else:
-                    # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
-                    is_buy = True
-                    tx_search_query = st.text_input(
-                        "Search for the company/asset you bought", key="tx_search_query",
-                    )
-                    if tx_search_query:
-                        try:
-                            tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
-                        except Exception as exc:
-                            tx_search_results = []
-                            st.caption(f"Search failed: {exc}")
-                        if tx_search_results:
-                            tx_options = {}
-                            for r in tx_search_results:
-                                name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                                label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                                tx_options[label] = r
-                            tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
-                            tx_chosen = tx_options[tx_chosen_label]
-                            new_position_symbol = tx_chosen.get("symbol")
-                            new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
-                        else:
-                            st.caption("No results found for this search -- try a different name.")
-
-                tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-                with tcol1:
-                    tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
-                with tcol2:
-                    tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
-                with tcol3:
-                    tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
-                with tcol4:
-                    tx_date = st.date_input("Date", key="tx_date_input")
-
-                can_save = (tx_holding is not None) or (new_position_symbol is not None)
-
-                if can_save and st.button("Save transaction", type="primary"):
-                    if tx_shares <= 0 or tx_price <= 0:
-                        st.error("Shares and price must both be greater than 0.")
-                    else:
-                        if tx_position_mode == "New position":
-                            if len(holdings) >= 10 and not is_premium:
-                                st.error(
-                                    "You've reached the free plan limit of 10 tracked positions. "
-                                    "Upgrade to Premium for unlimited tracking."
-                                )
-                            else:
-                                new_id = database.add_holding(user_email, new_position_name, new_position_symbol, shares=None)
-                                database.add_transaction(
-                                    user_email, new_id, "buy",
-                                    shares=tx_shares, price=tx_price, fee=tx_fee,
-                                    transaction_date=tx_date.isoformat(),
-                                )
-                                sync_holding_shares_from_transactions(new_id, user_email)
-                                st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
-                                st.rerun()
-                        else:
-                            existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
-                            existing_manual_shares = tx_holding.get("shares") or 0.0
-                            if not existing_tx and existing_manual_shares > 0:
-                                # Eerste transactie voor deze positie, en er stond al een handmatig
-                                # aantal shares -- die vangen we automatisch op als een 'gekocht
-                                # tegen de huidige prijs, vandaag'-transactie (simpele standaard,
-                                # geen keuzemenu nodig; later aanpasbaar als je de echte
-                                # historische aankoopprijs nog weet).
-                                try:
-                                    backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
-                                except Exception:
-                                    backfill_price = tx_price  # fallback als de live prijs niet op te halen is
-                                database.add_transaction(
-                                    user_email, tx_holding["id"], "buy",
-                                    shares=existing_manual_shares, price=backfill_price, fee=0.0,
-                                    transaction_date=datetime.now().date().isoformat(),
-                                )
-                                existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
-                                st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
-                                        f"bought at today's price (€{backfill_price:.2f}) -- edit this later if "
-                                        f"you remember the actual original purchase price.")
-
-                            database.add_transaction(
-                                user_email, tx_holding["id"], "buy" if is_buy else "sell",
-                                shares=tx_shares, price=tx_price, fee=tx_fee,
-                                transaction_date=tx_date.isoformat(),
-                            )
-                            shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-
-                            # Bij een verkoop naar ~0 shares: de positie NIET verwijderen (dat zou
-                            # via de cascade ook de transactiegeschiedenis wissen, en dus je
-                            # gerealiseerde winst/verlies uit Performance laten verdwijnen) --
-                            # 'ie blijft gewoon bestaan met 0 shares, verborgen uit My Portfolio
-                            # via filter_active_holdings(), maar telt nog mee bij Performance.
-                            if not is_buy and shares_after <= 0.001:
-                                st.success(f"Sell logged -- {tx_holding['naam']} is now fully closed. "
-                                           f"Its history still counts toward your Performance stats.")
-                                st.rerun()
-
-                            st.success("Transaction saved!")
-                            st.rerun()
-
-                if tx_holding is not None:
-                    tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
-                    if tx_history:
-                        if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
-                            for t in tx_history:
-                                hcol1, hcol2 = st.columns([5, 1])
-                                with hcol1:
-                                    emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
-                                    st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
-                                               f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
-                                with hcol2:
-                                    if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
-                                        database.delete_transaction(t["id"], user_email)
-                                        remaining = [x for x in tx_history if x["id"] != t["id"]]
-                                        if not remaining:
-                                            # Geen transacties meer over voor deze positie -- voorkomt een
-                                            # 'verweesde' positie zonder shares en zonder geschiedenis.
-                                            database.delete_holding(tx_holding["id"], user_email)
-                                            st.success("Transaction deleted -- this position had no other "
-                                                       "transactions left, so it was removed too.")
-                                        else:
-                                            sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-                                            st.success("Transaction deleted.")
-                                        st.rerun()
-
-        # ============================================================
-        # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
-        # ============================================================
-        with st.expander("Watchlist", expanded=False):
-            st.caption("Track tickers you don't own yet -- they'll show up with personalized "
-                       "signals and news on the Today page.")
-
-            watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
-
-            if watchlist_items:
-                rows_html = "".join(
-                    f'<tr><td>{w["naam"]}</td><td><code>{w["ticker"]}</code></td></tr>'
-                    for w in watchlist_items
-                )
-                st.markdown(
-                    f"""
-                    <table class="positions-table">
-                        <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption("Your watchlist is empty.")
-
-            st.markdown("**Add to watchlist**")
-            watchlist_search = st.text_input(
-                "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
-            )
-            w_selected_symbol = None
-            w_selected_name = None
-            if watchlist_search:
-                try:
-                    w_search_results = yf.Search(watchlist_search, max_results=8).quotes
-                except Exception as exc:
-                    w_search_results = []
-                    st.caption(f"Search failed: {exc}")
-                if w_search_results:
-                    w_options = {}
-                    for r in w_search_results:
-                        name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                        label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                        w_options[label] = r
-                    w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
-                    w_chosen = w_options[w_chosen_label]
-                    w_selected_symbol = w_chosen.get("symbol")
-                    w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
-                else:
-                    st.caption("No results found for this search -- try a different name.")
-
-            if w_selected_symbol and st.button("Add to watchlist", type="primary"):
-                database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
-                st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
-                st.rerun()
-
-            if watchlist_items:
-                st.markdown("**Remove from watchlist**")
-                w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
-                wcol1, wcol2 = st.columns([4, 1])
-                with wcol1:
-                    w_to_remove = st.selectbox(
-                        "Item to remove", list(w_remove_options.keys()),
-                        key="watchlist_remove_select", label_visibility="collapsed",
-                    )
-                with wcol2:
-                    if st.button("Remove", key="watchlist_remove_btn"):
-                        database.delete_holding(w_remove_options[w_to_remove], user_email)
-                        st.rerun()
-
-        st.caption("Manage email preferences and cash amount under Settings. "
-                   "You'll also automatically receive a weekly email with this update, "
-                   "at the address you're logged in with.")
-
-    elif current_subview == "deepdives":
+    if current_subview == "deepdives":
         import database
 
         user_email = st.user.email
@@ -2825,6 +2827,10 @@ elif current_view == "analyze":
                             st.markdown(f"**Positiegrootte-plan**: {version['position_sizing_plan']}")
                         if version.get("sell_criteria"):
                             st.markdown(f"**Verkoop-criteria**: {version['sell_criteria']}")
+                        if st.button("🗑️ Deze versie verwijderen", key=f"dd_delete_{version['id']}"):
+                            database.delete_deep_dive(version["id"], user_email)
+                            st.success("Versie verwijderd.")
+                            st.rerun()
                         st.divider()
     else:
         import database
