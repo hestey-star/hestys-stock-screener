@@ -427,3 +427,74 @@ def get_all_users_with_holdings() -> dict[str, list[dict]]:
     for row in response.data:
         grouped.setdefault(row["user_email"], []).append(row)
     return grouped
+
+
+def add_deep_dive(
+    user_email: str, ticker: str, naam: str,
+    business_overview: str = None, investment_thesis: str = None,
+    bear_case: str = None, valuation_view: str = None,
+    interested_price: float = None, catalysts: str = None,
+    position_sizing_plan: str = None, sell_criteria: str = None,
+    conclusion: str = None,
+) -> int:
+    """
+    Slaat een NIEUWE versie van een deep-dive op (nooit overschrijven --
+    elke keer een nieuwe rij, zodat je kijk-verandering over tijd
+    zichtbaar blijft). Geeft de nieuwe id terug.
+    """
+    client = get_supabase_client()
+    response = client.table("deep_dives").insert({
+        "user_email": hash_email(user_email),
+        "ticker": ticker,
+        "naam": naam,
+        "business_overview": business_overview,
+        "investment_thesis": investment_thesis,
+        "bear_case": bear_case,
+        "valuation_view": valuation_view,
+        "interested_price": interested_price,
+        "catalysts": catalysts,
+        "position_sizing_plan": position_sizing_plan,
+        "sell_criteria": sell_criteria,
+        "conclusion": conclusion,
+    }).execute()
+    return response.data[0]["id"]
+
+
+def get_deep_dives_for_ticker(user_email: str, ticker: str) -> list:
+    """Geeft alle versies voor 1 ticker terug, meest recente eerst."""
+    client = get_supabase_client()
+    response = (
+        client.table("deep_dives")
+        .select("*")
+        .eq("user_email", hash_email(user_email))
+        .eq("ticker", ticker)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return response.data or []
+
+
+def get_all_deep_dive_tickers(user_email: str) -> list:
+    """
+    Geeft 1 samenvattend overzicht terug -- per ticker de MEEST RECENTE
+    versie (voor de overzichtslijst), gesorteerd op laatst bijgewerkt.
+    """
+    client = get_supabase_client()
+    response = (
+        client.table("deep_dives")
+        .select("*")
+        .eq("user_email", hash_email(user_email))
+        .order("created_at", desc=True)
+        .execute()
+    )
+    latest_per_ticker = {}
+    for row in (response.data or []):
+        if row["ticker"] not in latest_per_ticker:
+            latest_per_ticker[row["ticker"]] = row
+    return sorted(latest_per_ticker.values(), key=lambda r: r["created_at"], reverse=True)
+
+
+def delete_deep_dive(deep_dive_id: int, user_email: str) -> None:
+    """Verwijdert 1 specifieke versie (bv. per ongeluk aangemaakt)."""
+    client = get_supabase_client()
+    client.table("deep_dives").delete().eq("id", deep_dive_id).eq("user_email", hash_email(user_email)).execute()

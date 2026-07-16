@@ -125,3 +125,24 @@ create table user_identity (
     name text,
     updated_at timestamp with time zone default now()
 );
+
+-- Deep-dives: 1 rij per VERSIE (niet per aandeel) -- zo bouw je een
+-- geschiedenis op van hoe je kijk op een aandeel is veranderd, i.p.v. een
+-- enkele, telkens overschreven notitie. Alle rijen voor dezelfde ticker
+-- (van dezelfde gebruiker) vormen samen de "geschiedenis" van dat aandeel.
+create table deep_dives (
+    id bigint generated always as identity primary key,
+    user_email text not null,
+    ticker text not null,
+    naam text not null,
+    created_at timestamp with time zone default now(),
+    business_overview text,
+    investment_thesis text,
+    bear_case text,
+    valuation_view text,
+    interested_price numeric,
+    catalysts text,
+    position_sizing_plan text,
+    sell_criteria text,
+    conclusion text check (conclusion in ('Buy', 'Watch', 'Pass'))
+);
