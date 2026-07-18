@@ -1,0 +1,10 @@
+ticker,prijs_nu,roic_pct,roic_trend,fair_value,afwijking_fair_value_pct,volatiliteit_pct
+ISRG,345.42,15.3,stijgend,549.66,-37.2,30.0
+CPRT,27.61,19.5,stijgend,40.9,-32.5,25.8
+HAS,81.55,26.0,stijgend,109.71,-25.7,26.5
+IDXX,567.44,42.5,stijgend,708.43,-19.9,22.7
+AOS,58.85,29.1,stijgend,70.45,-16.5,26.7
+MA,543.6,90.5,stijgend,643.84,-15.6,20.8
+EW,85.73,15.1,stijgend,98.8,-13.2,28.0
+BVI.PA,27.37,20.5,stijgend,31.47,-12.9,26.5
+COST,940.87,33.6,stijgend,1076.91,-12.6,21.3
