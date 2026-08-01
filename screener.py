@@ -548,6 +548,15 @@ def check_ticker_rocket(ticker: str, df: pd.DataFrame, benchmark_returns: dict) 
         g for g in [info.get("revenueGrowth"), info.get("earningsGrowth")] if g is not None
     ]
     growth = max(growth_candidates) if growth_candidates else None
+    # Groei-percentages ver boven de 300% zijn vrijwel altijd een reken-
+    # artefact, niet een echte prestatie -- als de vergelijkingsbasis
+    # (vorige periode) bijna nul was, geeft een op zich normale absolute
+    # toename een wiskundig 'correcte' maar praktisch betekenisloze,
+    # extreme %. Zo'n waarde behandelen we als onbetrouwbaar i.p.v. als
+    # een echt signaal (zag dit bv. bij AFL, dat wekenlang exact +3860%
+    # bleef tonen).
+    if growth is not None and growth > 3.0:
+        growth = None
     if growth is None or growth < 0.20:
         return None
 
