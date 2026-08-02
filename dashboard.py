@@ -2053,6 +2053,18 @@ elif current_view == "discover":
                               .background_gradient(subset=["Score"], cmap="Greens")
                               .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
                 width="stretch",
+                column_config={
+                    "Score": st.column_config.NumberColumn(
+                        "Score",
+                        help=(
+                            "Out of 10, built from 6 weighted parts: freshness of the flip (max 1.5), "
+                            "ROIC level + trend (max 1.5), relative strength vs. the index (max 2.5), "
+                            "volume confirmation (max 1.0), recent earnings surprise (max 1.5), and how "
+                            "far below the analyst price target it trades (max 2.0). Missing data counts "
+                            "as neutral (half the max) for that part."
+                        ),
+                    ),
+                },
                 height=500,
             )
             st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
@@ -2156,7 +2168,11 @@ elif current_view == "discover":
     with optin_col1:
         optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
     with optin_col2:
-        optin_region = st.selectbox("Region", ["EU", "US_East", "US_West"], key="discover_optin_region", label_visibility="collapsed")
+        optin_region = st.selectbox(
+            "Region", ["EU", "US_East", "US_West"],
+            format_func=lambda x: x.replace("_", " "),
+            key="discover_optin_region", label_visibility="collapsed",
+        )
     with optin_col3:
         optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
 
