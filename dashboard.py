@@ -2155,7 +2155,7 @@ elif current_view == "discover":
                 📬 Free daily email
             </div>
             <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
-                Get today's new bullish signals emailed to you every weekday morning.
+                In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
             </div>
             <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
                 Just your email -- no account needed.
