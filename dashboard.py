@@ -1655,7 +1655,7 @@ with header_col:
     st.markdown(
         f"""
         <div class="app-header">
-            <a href="?view=today" class="app-header-top" target="_self">
+            <a href="?view={_default_view}" class="app-header-top" target="_self">
                 <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                     <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
                           stroke-width="2.5" transform="rotate(45 24 24)"/>
