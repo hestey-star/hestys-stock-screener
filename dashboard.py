@@ -1663,8 +1663,8 @@ with header_col:
                 </div>
             </a>
             <div class="nav-bar">
-                <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
                 <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
+                <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
                 <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
                 <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
                 <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
