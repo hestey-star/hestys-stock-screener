@@ -1037,6 +1037,46 @@ def get_52_week_records(holdings: list, infos: dict, max_items: int = 3) -> list
     return results[:max_items]
 
 
+def send_subscription_confirmation_email(email: str, confirmation_token: str) -> None:
+    """
+    Stuurt de dubbele-opt-in-bevestigingsmail voor de niet-ingelogde
+    e-mail-aanmelding, in dezelfde huisstijl (donkere header + teal-
+    accent) als de bestaande dagelijkse/wekelijkse mails.
+    """
+    confirm_url = f"https://hestys.streamlit.app/?view=confirm&token={confirmation_token}"
+    text_body = (
+        "Bevestig je aanmelding voor Hesty's Daily\n\n"
+        "Nog 1 stap: klik op de link hieronder om te bevestigen dat dit jouw e-mailadres is.\n\n"
+        f"{confirm_url}\n\n"
+        "Heb je dit niet zelf aangevraagd? Dan kan je deze mail gewoon negeren.\n\n"
+        "-- Hesty's, your personal investment assistant"
+    )
+    html_body = f"""
+    <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
+        <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
+            <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Bevestig je aanmelding</div>
+        </div>
+        <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">
+                Nog 1 stap: klik op de knop hieronder om te bevestigen dat dit jouw e-mailadres is.
+            </p>
+            <p style="margin-top:20px;">
+                <a href="{confirm_url}" style="background:#1FAE96; color:#ffffff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600; display:inline-block;">Bevestig aanmelding</a>
+            </p>
+            <p style="margin-top:24px; font-size:13px; color:#9AA1AC;">
+                Heb je dit niet zelf aangevraagd? Dan kan je deze mail gewoon negeren.
+            </p>
+            <p style="margin-top:20px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
+        </div>
+    </div>
+    """
+    send_email(
+        subject="Bevestig je aanmelding voor Hesty's Daily",
+        body_text=text_body, body_html=html_body, to_email=email,
+    )
+
+
 def get_top_news_for_tickers(holdings_and_watchlist: list, max_items: int = 3) -> list:
     """
     Haalt nieuws op voor alle meegegeven tickers, en geeft de meest recente
@@ -1586,7 +1626,13 @@ def create_billing_portal_session(customer_id: str):
 
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
 #     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
-current_view = st.query_params.get("view", "today")
+# --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
+#     betekent: nog geen tabblad gekozen -- dan is de standaardpagina
+#     afhankelijk van of je bent ingelogd. Niet ingelogd -> Discover (toont
+#     meteen echte waarde aan een nieuwe bezoeker, geen account nodig).
+#     Wel ingelogd -> Today (de gepersonaliseerde, dagelijkse pagina). ---
+_default_view = "today" if st.user.is_logged_in else "discover"
+current_view = st.query_params.get("view", _default_view)
 
 
 def _nav_class(view_name: str) -> str:
@@ -1656,32 +1702,32 @@ if current_view == "today":
                         border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
                         padding: 1.5rem 1.75rem; margin: 0.5rem 0 1.25rem 0;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    Your personal investment assistant
+                    What you're missing
                 </div>
                 <div style="color:#EAEDF1; font-size:1.4rem; font-weight:700; margin-top:6px; line-height:1.35;">
-                    Real signals, not hype.<br>Your real return, tracked.
+                    Your own, personalized morning briefing.
                 </div>
                 <div style="color:#8992A3; font-size:0.95rem; margin-top:10px; line-height:1.6; max-width: 560px;">
-                    Hesty's scans global markets for 3 specially-built stock signals, tracks your
-                    actual portfolio return (not just paper gains), and gives you one clear briefing
-                    every morning -- free to explore, no account needed to start.
+                    Log in and add your positions to get a Today page built around YOUR portfolio:
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.markdown("#### Start exploring")
-        st.write(
-            "Discover is fully public: 3 specially-built stock signals (Momentocrats, "
-            "Snowballers, Rocket List), plus sector rotation and more -- free to browse "
-            "right now, no login required."
+        st.markdown(
+            "- 📊 Your real return vs. yesterday, and your best/worst performer today\n"
+            "- 📆 Earnings coming up this week for your positions -- not just on the day itself\n"
+            "- ⚖️ A heads-up if a position outgrows your own risk target\n"
+            "- 💰 Upcoming ex-dividend dates for what you actually hold\n"
+            "- 🚀 A ping when one of your positions hits a new 52-week high or low\n"
+            "- 📰 News, filtered to just the tickers you care about"
         )
         st.markdown(
-            '<a href="?view=discover" class="button-link" target="_self">Explore Discover &rarr;</a>',
+            '<a href="?view=discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
             unsafe_allow_html=True,
         )
         st.info("Log in (top right) once you're ready, then add positions under My Portfolio or "
-                "your Watchlist to get personal signals and news here too.")
+                "your Watchlist to unlock this.")
     else:
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
@@ -2074,6 +2120,47 @@ elif current_view == "discover":
 
         st.divider()
         _email_pref_link("Want this weekly by email?")
+
+    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
+    #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
+    #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
+    #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
+    #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
+    import database as _database_for_optin
+
+    st.markdown(
+        """
+        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+                    border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+                    padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
+            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                📬 Free daily email
+            </div>
+            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
+                Get today's new bullish signals emailed to you every weekday morning.
+            </div>
+            <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
+                Just your email -- no account needed.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
+    with optin_col1:
+        optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
+    with optin_col2:
+        optin_region = st.selectbox("Region", ["EU", "US_East", "US_West"], key="discover_optin_region", label_visibility="collapsed")
+    with optin_col3:
+        optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
+
+    if optin_submitted:
+        if not optin_email or "@" not in optin_email:
+            st.error("Please enter a valid email address.")
+        else:
+            confirmation_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+            send_subscription_confirmation_email(optin_email, confirmation_token)
+            st.success("Almost there! Check your inbox to confirm your subscription.")
 
     render_section_banner("The Bigger Picture")
 
@@ -3446,6 +3533,34 @@ elif current_view == "privacy":
             "A login session cookie is used to keep you signed in -- that's required for "
             "Google/Microsoft login to work at all. We don't use tracking or advertising cookies."
         )
+
+elif current_view == "confirm":
+    import database as _database_for_confirm
+
+    st.markdown("### Confirm your subscription")
+    token = st.query_params.get("token", "")
+    if not token:
+        st.error("Missing confirmation link. Please use the link from your email.")
+    elif _database_for_confirm.confirm_email_subscriber(token):
+        st.success("✅ You're all set! You'll get today's new bullish signals in your inbox every weekday morning.")
+        st.markdown(
+            '<a href="?view=discover" class="button-link" target="_self">Back to Discover &rarr;</a>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.error("This confirmation link is invalid or has already been used.")
+
+elif current_view == "unsubscribe":
+    import database as _database_for_unsubscribe
+
+    st.markdown("### Unsubscribe")
+    token = st.query_params.get("token", "")
+    if not token:
+        st.error("Missing unsubscribe link. Please use the link from your email.")
+    elif _database_for_unsubscribe.unsubscribe_email_subscriber(token):
+        st.success("You've been unsubscribed. Sorry to see you go!")
+    else:
+        st.info("This link is invalid or you're already unsubscribed.")
 
 st.divider()
 st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "

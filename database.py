@@ -498,3 +498,61 @@ def delete_deep_dive(deep_dive_id: int, user_email: str) -> None:
     """Verwijdert 1 specifieke versie (bv. per ongeluk aangemaakt)."""
     client = get_supabase_client()
     client.table("deep_dives").delete().eq("id", deep_dive_id).eq("user_email", hash_email(user_email)).execute()
+
+
+def add_email_subscriber(email: str, region: str) -> str:
+    """
+    Meldt een e-mailadres aan voor de dagelijkse mail, ZONDER account.
+    Slaat een ONBEVESTIGDE rij op met een uniek bevestigingstoken, en
+    geeft dat token terug (voor de bevestigingsmail). Als het adres al
+    bestaat (bv. iemand vult 2x hetzelfde adres in), wordt de bestaande
+    rij bijgewerkt (nieuwe regio, nieuw token) i.p.v. een dubbele rij.
+    """
+    import secrets
+    client = get_supabase_client()
+    confirmation_token = secrets.token_urlsafe(32)
+    unsubscribe_token = secrets.token_urlsafe(32)
+    client.table("email_subscribers").upsert({
+        "email": email.strip().lower(),
+        "email_region": region,
+        "confirmed": False,
+        "confirmation_token": confirmation_token,
+        "unsubscribe_token": unsubscribe_token,
+    }, on_conflict="email").execute()
+    return confirmation_token
+
+
+def confirm_email_subscriber(confirmation_token: str) -> bool:
+    """Bevestigt een e-mail-abonnement via het token uit de bevestigingsmail. Geeft False terug als het token onbekend is."""
+    client = get_supabase_client()
+    response = client.table("email_subscribers").select("id").eq("confirmation_token", confirmation_token).execute()
+    if not response.data:
+        return False
+    client.table("email_subscribers").update({
+        "confirmed": True,
+        "confirmed_at": datetime.now().isoformat(),
+    }).eq("confirmation_token", confirmation_token).execute()
+    return True
+
+
+def unsubscribe_email_subscriber(unsubscribe_token: str) -> bool:
+    """Meldt een e-mailadres af via het token uit de mail zelf. Geeft False terug als het token onbekend is."""
+    client = get_supabase_client()
+    response = client.table("email_subscribers").select("id").eq("unsubscribe_token", unsubscribe_token).execute()
+    if not response.data:
+        return False
+    client.table("email_subscribers").delete().eq("unsubscribe_token", unsubscribe_token).execute()
+    return True
+
+
+def get_confirmed_email_subscribers(region: str) -> list:
+    """Geeft alle BEVESTIGDE, niet-ingelogde abonnees voor deze regio terug (email + unsubscribe_token)."""
+    client = get_supabase_client()
+    response = (
+        client.table("email_subscribers")
+        .select("email, unsubscribe_token")
+        .eq("email_region", region)
+        .eq("confirmed", True)
+        .execute()
+    )
+    return response.data or []

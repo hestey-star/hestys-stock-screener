@@ -59,29 +59,71 @@ def get_real_email(email_hash: str) -> str:
     return None
 
 
+def get_confirmed_email_subscribers(region: str) -> list:
+    """Geeft alle BEVESTIGDE, niet-ingelogde abonnees voor deze regio terug (email + unsubscribe_token)."""
+    client = get_supabase_client()
+    response = (
+        client.table("email_subscribers")
+        .select("email, unsubscribe_token")
+        .eq("email_region", region)
+        .eq("confirmed", True)
+        .execute()
+    )
+    return response.data or []
+
+
+def _append_unsubscribe_footer(text_body: str, html_body: str, unsubscribe_token: str) -> tuple:
+    """
+    Voegt een persoonlijke uitschrijflink toe -- alleen voor niet-
+    ingelogde abonnees (login-gekoppelde gebruikers beheren hun
+    voorkeur via Settings, die hebben geen los token nodig).
+    """
+    unsubscribe_url = f"https://hestys.streamlit.app/?view=unsubscribe&token={unsubscribe_token}"
+    text_with_footer = text_body + f"\n\nUnsubscribe: {unsubscribe_url}"
+    html_with_footer = html_body + (
+        f'<p style="max-width:600px; margin:12px auto 0 auto; text-align:center; '
+        f'font-size:11px; color:#9AA1AC;">'
+        f'<a href="{unsubscribe_url}" style="color:#9AA1AC;">Unsubscribe</a></p>'
+    )
+    return text_with_footer, html_with_footer
+
+
 def run_daily_screener_emails_for_region(preferences: dict, region: str) -> None:
-    """Stuurt de dagelijkse screener-mail naar gebruikers die in DEZE regio zitten en opt-in zijn."""
+    """
+    Stuurt de dagelijkse screener-mail naar gebruikers die in DEZE regio
+    zitten en opt-in zijn -- combineert 2 bronnen (login-gekoppelde
+    voorkeuren EN niet-ingelogde abonnees), en dedupliceert op e-mailadres
+    zodat iemand die toevallig via BEIDE routes is aangemeld niet 2x mail
+    krijgt. Bij overlap wint de login-gekoppelde versie (geen los
+    uitschrijf-token nodig, die persoon beheert het via Settings).
+    """
     print(f"\n=== Dagelijkse screener-mails versturen voor regio: {region} ===")
+
+    # --- Bron 1: login-gekoppelde gebruikers ---
     opted_in_hashes = [
         email_hash for email_hash, prefs in preferences.items()
         if prefs.get("wants_daily_email") and prefs.get("email_region", "EU") == region
     ]
-    print(f"{len(opted_in_hashes)} gebruiker(s) in regio {region} willen de dagelijkse screener-mail ontvangen.")
-
-    if not opted_in_hashes:
-        return
-
-    # Echte adressen opzoeken -- pas hier, vlak vóór het versturen, nodig
-    # (de rest van de database kent alleen de hash, zie database.py).
-    opted_in = []
+    logged_in_recipients = {}  # lowercased e-mail -> None (geen los token nodig)
     for email_hash in opted_in_hashes:
         real_email = get_real_email(email_hash)
         if real_email:
-            opted_in.append(real_email)
+            logged_in_recipients[real_email.strip().lower()] = None
         else:
             print(f"  Kon geen e-mailadres vinden voor hash {email_hash[:12]}... -- overgeslagen.")
 
-    if not opted_in:
+    # --- Bron 2: niet-ingelogde, bevestigde abonnees ---
+    no_login_subs = get_confirmed_email_subscribers(region)
+    no_login_recipients = {
+        sub["email"].strip().lower(): sub["unsubscribe_token"] for sub in no_login_subs
+    }
+
+    # --- Dedupliceren: bij overlap wint de login-gekoppelde versie (geen token) ---
+    all_recipients = {**no_login_recipients, **logged_in_recipients}
+    print(f"{len(logged_in_recipients)} ingelogde gebruiker(s), {len(no_login_recipients)} niet-ingelogde "
+          f"abonnee(s) in regio {region} -- {len(all_recipients)} unieke ontvanger(s) na deduplicatie.")
+
+    if not all_recipients:
         return
 
     if not os.path.exists("supertrend_signals_daily.csv"):
@@ -91,17 +133,18 @@ def run_daily_screener_emails_for_region(preferences: dict, region: str) -> None
     df_hits = pd.read_csv("supertrend_signals_daily.csv")
     if df_hits.empty:
         print("Geen signalen vandaag -- toch een korte, warme mail versturen (dagelijks contactmoment).")
-        text_body, html_body = screener_daily.build_no_signals_email_daily()
+        base_text, base_html = screener_daily.build_no_signals_email_daily()
         subject = "Hesty's Daily: a quiet day, no new signals"
-        for user_email in opted_in:
-            send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
-        return
+    else:
+        base_text, base_html = screener_daily.build_email_body_daily(df_hits)
+        subject = f"Hesty's Daily: {len(df_hits)} new signal(s) today"
 
-    text_body, html_body = screener_daily.build_email_body_daily(df_hits)
-    subject = f"Hesty's Daily: {len(df_hits)} new signal(s) today"
-
-    for user_email in opted_in:
-        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=user_email)
+    for email, unsubscribe_token in all_recipients.items():
+        if unsubscribe_token:
+            text_body, html_body = _append_unsubscribe_footer(base_text, base_html, unsubscribe_token)
+        else:
+            text_body, html_body = base_text, base_html
+        send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=email)
 
 
 if __name__ == "__main__":
