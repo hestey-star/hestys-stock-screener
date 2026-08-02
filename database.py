@@ -500,13 +500,14 @@ def delete_deep_dive(deep_dive_id: int, user_email: str) -> None:
     client.table("deep_dives").delete().eq("id", deep_dive_id).eq("user_email", hash_email(user_email)).execute()
 
 
-def add_email_subscriber(email: str, region: str) -> str:
+def add_email_subscriber(email: str, region: str) -> tuple:
     """
     Meldt een e-mailadres aan voor de dagelijkse mail, ZONDER account.
-    Slaat een ONBEVESTIGDE rij op met een uniek bevestigingstoken, en
-    geeft dat token terug (voor de bevestigingsmail). Als het adres al
-    bestaat (bv. iemand vult 2x hetzelfde adres in), wordt de bestaande
-    rij bijgewerkt (nieuwe regio, nieuw token) i.p.v. een dubbele rij.
+    Slaat een ONBEVESTIGDE rij op met een uniek bevestigings- en
+    uitschrijftoken, en geeft BEIDE terug (voor de bevestigingsmail,
+    die ook meteen een uitschrijflink bevat). Als het adres al bestaat
+    (bv. iemand vult 2x hetzelfde adres in), wordt de bestaande rij
+    bijgewerkt (nieuwe regio, nieuwe tokens) i.p.v. een dubbele rij.
     """
     import secrets
     client = get_supabase_client()
@@ -519,7 +520,7 @@ def add_email_subscriber(email: str, region: str) -> str:
         "confirmation_token": confirmation_token,
         "unsubscribe_token": unsubscribe_token,
     }, on_conflict="email").execute()
-    return confirmation_token
+    return confirmation_token, unsubscribe_token
 
 
 def confirm_email_subscriber(confirmation_token: str) -> bool:

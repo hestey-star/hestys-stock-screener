@@ -1037,42 +1037,48 @@ def get_52_week_records(holdings: list, infos: dict, max_items: int = 3) -> list
     return results[:max_items]
 
 
-def send_subscription_confirmation_email(email: str, confirmation_token: str) -> None:
+def send_subscription_confirmation_email(email: str, confirmation_token: str, unsubscribe_token: str) -> None:
     """
     Stuurt de dubbele-opt-in-bevestigingsmail voor de niet-ingelogde
     e-mail-aanmelding, in dezelfde huisstijl (donkere header + teal-
-    accent) als de bestaande dagelijkse/wekelijkse mails.
+    accent) als de bestaande dagelijkse/wekelijkse mails. Bevat ook
+    meteen een uitschrijflink, zodat iemand die per ongeluk bevestigt
+    niet hoeft te wachten op de eerste dagelijkse mail om zich weer af
+    te melden.
     """
     confirm_url = f"https://hestys.streamlit.app/?view=confirm&token={confirmation_token}"
+    unsubscribe_url = f"https://hestys.streamlit.app/?view=unsubscribe&token={unsubscribe_token}"
     text_body = (
-        "Bevestig je aanmelding voor Hesty's Daily\n\n"
-        "Nog 1 stap: klik op de link hieronder om te bevestigen dat dit jouw e-mailadres is.\n\n"
+        "Confirm your subscription to Hesty's Daily\n\n"
+        "One more step: click the link below to confirm this is your email address.\n\n"
         f"{confirm_url}\n\n"
-        "Heb je dit niet zelf aangevraagd? Dan kan je deze mail gewoon negeren.\n\n"
+        "Didn't request this? You can safely ignore this email, or unsubscribe here:\n"
+        f"{unsubscribe_url}\n\n"
         "-- Hesty's, your personal investment assistant"
     )
     html_body = f"""
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
             <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
-            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Bevestig je aanmelding</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Confirm your subscription</div>
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">
-                Nog 1 stap: klik op de knop hieronder om te bevestigen dat dit jouw e-mailadres is.
+                One more step: click the button below to confirm this is your email address.
             </p>
             <p style="margin-top:20px;">
-                <a href="{confirm_url}" style="background:#1FAE96; color:#ffffff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600; display:inline-block;">Bevestig aanmelding</a>
+                <a href="{confirm_url}" style="background:#1FAE96; color:#ffffff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:600; display:inline-block;">Confirm subscription</a>
             </p>
             <p style="margin-top:24px; font-size:13px; color:#9AA1AC;">
-                Heb je dit niet zelf aangevraagd? Dan kan je deze mail gewoon negeren.
+                Didn't request this? You can safely ignore this email, or
+                <a href="{unsubscribe_url}" style="color:#9AA1AC;">unsubscribe here</a>.
             </p>
             <p style="margin-top:20px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
         </div>
     </div>
     """
     send_email(
-        subject="Bevestig je aanmelding voor Hesty's Daily",
+        subject="Confirm your subscription to Hesty's Daily",
         body_text=text_body, body_html=html_body, to_email=email,
     )
 
@@ -2158,8 +2164,8 @@ elif current_view == "discover":
         if not optin_email or "@" not in optin_email:
             st.error("Please enter a valid email address.")
         else:
-            confirmation_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
-            send_subscription_confirmation_email(optin_email, confirmation_token)
+            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+            send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
             st.success("Almost there! Check your inbox to confirm your subscription.")
 
     render_section_banner("The Bigger Picture")
