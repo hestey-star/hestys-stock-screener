@@ -1406,13 +1406,23 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
                     end=(window_start + timedelta(days=7)).isoformat(),
                 )
                 if history is not None and not history.empty:
-                    price_at_start = float(history["Close"].iloc[0])
-                    starting_value += shares_before_window * price_at_start
-                    any_starting_data = True
+                    # Zelfde soort probleem als eerder bij de dagelijkse scan:
+                    # de EERSTE rij in deze historische periode kan NaN zijn
+                    # (bv. een data-gat rond een feestdag, jaren geleden) --
+                    # pak dan de eerstvolgende GELDIGE koers i.p.v. blindelings
+                    # de allereerste rij te gebruiken, anders vergiftigt die
+                    # ene NaN de hele berekening (het 'nan%'-symptoom).
+                    valid_closes = history["Close"].dropna()
+                    if not valid_closes.empty:
+                        price_at_start = float(valid_closes.iloc[0])
+                        starting_value += shares_before_window * price_at_start
+                        any_starting_data = True
             except Exception:
                 pass
 
-        ending_value += h.get("position_value") or 0.0
+        position_value = h.get("position_value") or 0.0
+        if not pd.isna(position_value):
+            ending_value += position_value
 
     if not any_starting_data and net_contributions == 0:
         return None  # niks om over te rapporteren -- geen posities van vóór deze periode, geen nieuwe inleg
@@ -1422,7 +1432,12 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
         return None
 
     gain = ending_value - starting_value - net_contributions
-    return {"return_pct": gain / denominator * 100, "gain": gain}
+    return_pct = gain / denominator * 100
+    if pd.isna(return_pct) or pd.isna(gain):
+        # Laatste veiligheidsnet -- zou niet meer moeten gebeuren dankzij de
+        # checks hierboven, maar voorkomt sowieso ooit weer een '+nan%'.
+        return None
+    return {"return_pct": return_pct, "gain": gain}
 
 
 def compute_holding_performance(transactions: list, current_price: float = None) -> dict:
