@@ -30,10 +30,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SMTP_SERVER = os.getenv("EMAIL_SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("EMAIL_SMTP_PORT", "587"))
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "")
-EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD", "")
+# De site zelf (dashboard.py, draaiend op Streamlit Cloud) krijgt zijn
+# instellingen via Streamlit's EIGEN secrets-mechanisme (st.secrets), niet
+# via environment-variabelen -- dat is een compleet andere plek dan waar de
+# losse GitHub Actions-scripts (daily_batch.py e.d.) hun instellingen
+# vandaan halen. Zonder deze fallback bleef EMAIL_ADDRESS/EMAIL_APP_PASSWORD
+# stil leeg zodra de site zelf een mail probeerde te versturen (bv. de
+# e-mail-opt-in-bevestiging) -- geen crash, gewoon stilzwijgend niet
+# verstuurd. Nu wordt EERST Streamlit Secrets geprobeerd, en pas als dat
+# niet beschikbaar/ingevuld is, wordt teruggevallen op de env-variabele
+# (hoe het al werkte voor de GitHub Actions-scripts).
+try:
+    import streamlit as _st
+except ImportError:
+    _st = None
+
+
+def _get_config(env_key: str, secrets_key: str, default: str = "") -> str:
+    if _st is not None:
+        try:
+            value = _st.secrets["email"][secrets_key]
+            if value:
+                return str(value)
+        except Exception:
+            pass
+    return os.getenv(env_key, default)
+
+
+SMTP_SERVER = _get_config("EMAIL_SMTP_SERVER", "smtp_server", "smtp.gmail.com")
+SMTP_PORT = int(_get_config("EMAIL_SMTP_PORT", "smtp_port", "587"))
+EMAIL_ADDRESS = _get_config("EMAIL_ADDRESS", "address", "")
+EMAIL_APP_PASSWORD = _get_config("EMAIL_APP_PASSWORD", "app_password", "")
 
 # EMAIL_TO mag 1 adres zijn, of meerdere gescheiden door een komma, bv.:
 #   EMAIL_TO=jouw@gmail.com,vriend@gmail.com
