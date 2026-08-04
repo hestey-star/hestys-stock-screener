@@ -52,6 +52,13 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
     else:
         df.columns = [c.lower() for c in df.columns]
     df = df[["open", "high", "low", "close", "volume"]]
+    # yfinance geeft soms een 'vandaag'-rij terug voordat de beurs een
+    # geldige slotkoers heeft (bv. vroeg op de ochtend, vlak na het
+    # openen van de scan) -- die rij heeft dan NaN in 'close'. Zonder
+    # deze filter zou die NaN als 'prijs_nu' gebruikt worden, en
+    # (aangezien score ook op de laatste koers steunt) ook de score
+    # zelf NaN maken -- precies wat een 'nan' overal in de mail geeft.
+    df = df[df["close"].notna()]
     return df
 
 
