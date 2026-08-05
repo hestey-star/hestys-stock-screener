@@ -431,6 +431,15 @@ def get_earnings_surprise(ticker: str) -> dict:
         latest = df.iloc[0]
 
         surprise_pct = float(latest[surprise_col]) if surprise_col and pd.notna(latest[surprise_col]) else None
+        # Zelfde soort near-zero-basis-vertekening als bij de Rocket List-
+        # groei-bug (AFL): als de geschatte winst per aandeel heel dicht bij
+        # nul lag, geeft yfinance's eigen 'Surprise(%)'-veld een wiskundig
+        # 'correcte' maar praktisch betekenisloze, extreme %. Waarden boven
+        # de 150% zijn voor een gevestigd, zwaar-gevolgd bedrijf vrijwel
+        # zeker zo'n vertekening, geen echte verrassing -- behandelen we
+        # als onbekend i.p.v. als een misleidend groot getal te tonen.
+        if surprise_pct is not None and abs(surprise_pct) > 150:
+            surprise_pct = None
         beat = (surprise_pct is not None and surprise_pct > 0)
 
         return {"surprise_pct": surprise_pct, "beat": beat, "earnings_date": df.index[0]}
