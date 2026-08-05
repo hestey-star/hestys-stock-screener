@@ -432,6 +432,7 @@ def get_all_users_with_holdings() -> dict[str, list[dict]]:
 def add_deep_dive(
     user_email: str, ticker: str, naam: str,
     business_overview: str = None, investment_thesis: str = None,
+    management_assessment: str = None,
     bear_case: str = None, valuation_view: str = None,
     interested_price: float = None, catalysts: str = None,
     position_sizing_plan: str = None, sell_criteria: str = None,
@@ -449,6 +450,7 @@ def add_deep_dive(
         "naam": naam,
         "business_overview": business_overview,
         "investment_thesis": investment_thesis,
+        "management_assessment": management_assessment,
         "bear_case": bear_case,
         "valuation_view": valuation_view,
         "interested_price": interested_price,

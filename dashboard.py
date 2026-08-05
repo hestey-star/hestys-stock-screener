@@ -2883,6 +2883,9 @@ elif current_view == "analyze":
             st.markdown("**Investeringsthese** -- waarom dit een goede investering kan zijn")
             dd_thesis = st.text_area("Investeringsthese", label_visibility="collapsed", key="dd_thesis", height=80)
 
+            st.markdown("**Management/CEO** -- beoordeel het management en de CEO")
+            dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
+
             st.markdown("**Bear case / risico's** -- wat er mis kan gaan")
             dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
 
@@ -2912,6 +2915,7 @@ elif current_view == "analyze":
                         user_email, dd_ticker, dd_naam,
                         business_overview=dd_business or None,
                         investment_thesis=dd_thesis or None,
+                        management_assessment=dd_management or None,
                         bear_case=dd_bear or None,
                         valuation_view=dd_valuation or None,
                         interested_price=dd_interested_price or None,
@@ -2939,6 +2943,8 @@ elif current_view == "analyze":
                             st.markdown(f"**Bedrijfsoverzicht**: {version['business_overview']}")
                         if version.get("investment_thesis"):
                             st.markdown(f"**Investeringsthese**: {version['investment_thesis']}")
+                        if version.get("management_assessment"):
+                            st.markdown(f"**Management/CEO**: {version['management_assessment']}")
                         if version.get("bear_case"):
                             st.markdown(f"**Bear case**: {version['bear_case']}")
                         if version.get("valuation_view"):

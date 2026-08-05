@@ -138,6 +138,7 @@ create table deep_dives (
     created_at timestamp with time zone default now(),
     business_overview text,
     investment_thesis text,
+    management_assessment text,
     bear_case text,
     valuation_view text,
     interested_price numeric,
@@ -145,21 +146,6 @@ create table deep_dives (
     position_sizing_plan text,
     sell_criteria text,
     conclusion text check (conclusion in ('Buy', 'Watch', 'Pass'))
-);
-
--- Niet-ingelogde e-mail-abonnees voor de gratis dagelijkse mail (Discover-
--- pagina) -- volledig los van de bestaande, login-gekoppelde voorkeuren.
--- Double opt-in: pas na het klikken op de bevestigingslink (confirmed=true)
--- gaat de mail daadwerkelijk naar dit adres.
-create table email_subscribers (
-    id bigint generated always as identity primary key,
-    email text not null,
-    region text not null check (region in ('EU', 'US_East', 'US_West')),
-    confirmed boolean not null default false,
-    confirmation_token text not null unique,
-    unsubscribe_token text not null unique,
-    created_at timestamp with time zone default now(),
-    confirmed_at timestamp with time zone
 );
 
 -- Niet-ingelogde e-mail-abonnees voor de dagelijkse mail (laagdrempelig,
@@ -176,4 +162,4 @@ create table email_subscribers (
     subscribed_at timestamp with time zone default now(),
     confirmed_at timestamp with time zone
 );
-create unique index email_subscribers_email_unique on email_subscribers (lower(email));
+alter table email_subscribers add constraint email_subscribers_email_unique unique (email);
