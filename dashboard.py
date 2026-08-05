@@ -903,6 +903,120 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     return results
 
 
+def _render_deep_dive_version(version: dict, user_email: str):
+    """
+    Toont 1 versie van een deep-dive, met een 'Edit'-knop die overschakelt
+    naar een voorgevuld bewerk-formulier -- voor het corrigeren van een
+    typefout of het aanvullen van 1 onderdeel, ZONDER dat je alle andere
+    velden opnieuw moet uitschrijven (dat zou nodig zijn als je in plaats
+    daarvan een hele nieuwe versie zou toevoegen).
+    """
+    import database
+
+    version_id = version["id"]
+    edit_key = f"dd_editing_{version_id}"
+    is_editing = st.session_state.get(edit_key, False)
+
+    st.markdown(f"##### {version['created_at'][:10]} -- {version['conclusion']}")
+
+    snapshot_parts = []
+    if version.get("price_at_creation"):
+        snapshot_parts.append(f"Price: €{version['price_at_creation']:.2f}")
+    if version.get("fifty_two_week_high_at_creation") and version.get("fifty_two_week_low_at_creation"):
+        snapshot_parts.append(
+            f"52wk: €{version['fifty_two_week_low_at_creation']:.2f}-€{version['fifty_two_week_high_at_creation']:.2f}"
+        )
+    if version.get("market_cap_at_creation"):
+        snapshot_parts.append(f"Market cap: €{version['market_cap_at_creation'] / 1e9:.1f}B")
+    if version.get("sector_at_creation"):
+        snapshot_parts.append(f"Sector: {version['sector_at_creation']}")
+    if version.get("dividend_yield_at_creation"):
+        snapshot_parts.append(f"Dividend: {version['dividend_yield_at_creation']:.2f}%")
+    if version.get("in_own_signals_at_creation"):
+        snapshot_parts.append(f"In your own signals: {version['in_own_signals_at_creation']}")
+    if version.get("sector_rotation_pct_at_creation") is not None:
+        snapshot_parts.append(f"Sector rotation (1m): {version['sector_rotation_pct_at_creation']:+.1f}%")
+    if snapshot_parts:
+        st.caption(" · ".join(snapshot_parts))
+
+    if not is_editing:
+        if version.get("business_overview"):
+            st.markdown(f"**Business overview**: {version['business_overview']}")
+        if version.get("investment_thesis"):
+            st.markdown(f"**Investment thesis**: {version['investment_thesis']}")
+        if version.get("management_assessment"):
+            st.markdown(f"**Management/CEO**: {version['management_assessment']}")
+        if version.get("bear_case"):
+            st.markdown(f"**Bear case**: {version['bear_case']}")
+        if version.get("valuation_view"):
+            st.markdown(f"**Valuation**: {version['valuation_view']}")
+        if version.get("interested_price"):
+            st.markdown(f"**Interested from**: €{version['interested_price']:.2f}")
+        if version.get("catalysts"):
+            st.markdown(f"**Catalysts**: {version['catalysts']}")
+        if version.get("position_sizing_plan"):
+            st.markdown(f"**Position sizing plan**: {version['position_sizing_plan']}")
+        if version.get("sell_criteria"):
+            st.markdown(f"**Sell criteria**: {version['sell_criteria']}")
+
+        edit_col, delete_col = st.columns(2)
+        with edit_col:
+            if st.button("✏️ Edit", key=f"dd_edit_btn_{version_id}"):
+                st.session_state[edit_key] = True
+                st.rerun()
+        with delete_col:
+            if st.button("🗑️ Delete", key=f"dd_delete_{version_id}"):
+                database.delete_deep_dive(version_id, user_email)
+                st.success("Version deleted.")
+                st.rerun()
+    else:
+        edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}")
+        edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}")
+        edit_management = st.text_area("Management/CEO", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}")
+        edit_bear = st.text_area("Bear case", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}")
+        edit_valuation = st.text_area("Valuation", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}")
+        edit_interested_price = st.number_input(
+            "Interested from price", min_value=0.0, step=0.01,
+            value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
+        )
+        edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
+        edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}")
+        edit_sell_criteria = st.text_area("Sell criteria", value=version.get("sell_criteria") or "", key=f"dd_edit_sell_{version_id}")
+        conclusion_options = ["Watch", "Buy", "Pass"]
+        current_conclusion_index = (
+            conclusion_options.index(version["conclusion"]) if version.get("conclusion") in conclusion_options else 0
+        )
+        edit_conclusion = st.selectbox(
+            "Conclusion", conclusion_options, index=current_conclusion_index, key=f"dd_edit_conclusion_{version_id}"
+        )
+
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            if st.button("💾 Save changes", type="primary", key=f"dd_save_edit_{version_id}"):
+                database.update_deep_dive(
+                    version_id, user_email,
+                    business_overview=edit_business or None,
+                    investment_thesis=edit_thesis or None,
+                    management_assessment=edit_management or None,
+                    bear_case=edit_bear or None,
+                    valuation_view=edit_valuation or None,
+                    interested_price=edit_interested_price or None,
+                    catalysts=edit_catalysts or None,
+                    position_sizing_plan=edit_sizing or None,
+                    sell_criteria=edit_sell_criteria or None,
+                    conclusion=edit_conclusion,
+                )
+                st.session_state[edit_key] = False
+                st.success("Version updated.")
+                st.rerun()
+        with cancel_col:
+            if st.button("Cancel", key=f"dd_cancel_edit_{version_id}"):
+                st.session_state[edit_key] = False
+                st.rerun()
+
+    st.divider()
+
+
 def get_deep_dive_market_snapshot(ticker: str) -> dict:
     """
     Verzamelt automatisch marktdata voor een deep-dive, op het moment van
@@ -2983,53 +3097,67 @@ elif current_view == "analyze":
                     📓 Deep-dives
                 </div>
                 <div style="color:#8992A3; font-size:0.9rem; margin-top:6px; line-height:1.5;">
-                    Log je eigen onderzoek per aandeel -- elke keer dat je 'm bijwerkt, blijft de vorige
-                    versie bewaard, zodat je later precies kan zien hoe je kijk is veranderd.
+                    Log your own research per stock -- every time you update it, the previous
+                    version stays saved, so you can later see exactly how your view has changed.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        with st.expander("➕ Nieuwe deep-dive (of update) toevoegen", expanded=False):
-            dd_ticker = st.text_input("Ticker", placeholder="bv. TSLA", key="dd_ticker_input").strip().upper()
-            dd_naam = st.text_input("Naam", placeholder="bv. Tesla Inc.", key="dd_naam_input")
+        with st.expander("➕ Add a new deep-dive (or update)", expanded=False):
+            dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
-            st.markdown("**Bedrijfsoverzicht** -- wat doet het bedrijf, in je eigen woorden")
-            dd_business = st.text_area("Bedrijfsoverzicht", label_visibility="collapsed", key="dd_business", height=80)
+            # Automatisch de bedrijfsnaam invullen zodra de ticker verandert
+            # (via session_state, VÓÓR het naam-veld zelf wordt aangemaakt) --
+            # scheelt typewerk, en je kan het altijd nog zelf overschrijven.
+            if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
+                st.session_state["dd_last_looked_up_ticker"] = dd_ticker
+                try:
+                    auto_info = get_cached_ticker_info(dd_ticker)
+                    auto_name = auto_info.get("longName") or auto_info.get("shortName")
+                    if auto_name:
+                        st.session_state["dd_naam_input"] = auto_name
+                except Exception:
+                    pass
 
-            st.markdown("**Investeringsthese** -- waarom dit een goede investering kan zijn")
-            dd_thesis = st.text_area("Investeringsthese", label_visibility="collapsed", key="dd_thesis", height=80)
+            dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
 
-            st.markdown("**Management/CEO** -- beoordeel het management en de CEO")
+            st.markdown("**Business overview** -- what does the company do, in your own words")
+            dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
+
+            st.markdown("**Investment thesis** -- why this could be a good investment")
+            dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
+
+            st.markdown("**Management/CEO** -- assess the management and the CEO")
             dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
 
-            st.markdown("**Bear case / risico's** -- wat er mis kan gaan")
+            st.markdown("**Bear case / risks** -- what could go wrong")
             dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
 
-            st.markdown("**Waardering** -- vind je de huidige prijs redelijk, en waarom")
-            dd_valuation = st.text_area("Waardering", label_visibility="collapsed", key="dd_valuation", height=80)
+            st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
+            dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
             dd_interested_price = st.number_input(
-                "Geïnteresseerd vanaf prijs (optioneel)", min_value=0.0, step=0.01, key="dd_interested_price",
-                help="Als ingevuld, en je conclusie is 'Buy', kijken we hier later automatisch naar op Today.",
+                "Interested from price (optional)", min_value=0.0, step=0.01, key="dd_interested_price",
+                help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
             )
 
-            st.markdown("**Katalysatoren** -- welke aankomende gebeurtenissen kunnen de koers bewegen")
-            dd_catalysts = st.text_area("Katalysatoren", label_visibility="collapsed", key="dd_catalysts", height=80)
+            st.markdown("**Catalysts** -- what upcoming events could move the price")
+            dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
 
-            st.markdown("**Positiegrootte-plan** -- hoe groot een positie, en waarom")
-            dd_sizing = st.text_area("Positiegrootte-plan", label_visibility="collapsed", key="dd_sizing", height=80)
+            st.markdown("**Position sizing plan** -- how big a position, and why")
+            dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
 
-            st.markdown("**Verkoop-criteria** -- onder welke voorwaarden stap je eruit")
-            dd_sell_criteria = st.text_area("Verkoop-criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
+            st.markdown("**Sell criteria** -- under what conditions do you exit")
+            dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
 
-            dd_conclusion = st.selectbox("Conclusie", ["Watch", "Buy", "Pass"], key="dd_conclusion")
+            dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
 
-            if st.button("Deze versie opslaan", type="primary", key="dd_save_btn"):
+            if st.button("Save this version", type="primary", key="dd_save_btn"):
                 if not dd_ticker or not dd_naam:
-                    st.error("Vul minimaal een ticker en naam in.")
+                    st.error("Please fill in at least a ticker and name.")
                 else:
-                    with st.spinner("Marktdata ophalen..."):
+                    with st.spinner("Fetching market data..."):
                         market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
                     database.add_deep_dive(
                         user_email, dd_ticker, dd_naam,
@@ -3045,68 +3173,35 @@ elif current_view == "analyze":
                         conclusion=dd_conclusion,
                         market_snapshot=market_snapshot,
                     )
-                    st.success(f"Nieuwe versie voor {dd_ticker} opgeslagen!")
+                    st.success(f"New version for {dd_ticker} saved!")
                     st.rerun()
 
-        st.markdown("**Jouw deep-dives**")
+        st.markdown("**Your deep-dives**")
         dd_overview = database.get_all_deep_dive_tickers(user_email)
         if not dd_overview:
-            st.caption("Nog geen deep-dives gelogd -- voeg er hierboven een toe.")
+            st.caption("No deep-dives logged yet -- add one above.")
         else:
-            for entry in dd_overview:
-                conclusion_emoji = {"Buy": "🟢", "Watch": "🟡", "Pass": "🔴"}.get(entry["conclusion"], "")
-                with st.expander(f"{conclusion_emoji} {entry['naam']} ({entry['ticker']}) -- laatste update: {entry['created_at'][:10]}"):
-                    logo_url = get_company_logo_url(entry["ticker"])
-                    if logo_url:
-                        st.image(logo_url, width=48)
-                    history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
-                    st.caption(f"{len(history)} versie(s) gelogd, meest recente eerst.")
-                    for version in history:
-                        st.markdown(f"##### {version['created_at'][:10]} -- {version['conclusion']}")
+            conclusion_emoji_map = {"Buy": "🟢", "Watch": "🟡", "Pass": "🔴"}
+            dd_tiles_per_row = 4
+            for row_start in range(0, len(dd_overview), dd_tiles_per_row):
+                row_entries = dd_overview[row_start:row_start + dd_tiles_per_row]
+                tile_cols = st.columns(dd_tiles_per_row)
+                for tile_col, entry in zip(tile_cols, row_entries):
+                    with tile_col:
+                        logo_url = get_company_logo_url(entry["ticker"])
+                        if logo_url:
+                            st.image(logo_url, width=40)
+                        conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
+                        st.markdown(f"**{entry['ticker']}** {conclusion_emoji}")
+                        st.caption(f"{entry['naam']}  ·  {entry['created_at'][:10]}")
+                        with st.expander("View history"):
+                            history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
+                            st.caption(f"{len(history)} version(s) logged, most recent first.")
+                            for version in history:
+                                _render_deep_dive_version(version, user_email)
 
-                        snapshot_parts = []
-                        if version.get("price_at_creation"):
-                            snapshot_parts.append(f"Prijs: €{version['price_at_creation']:.2f}")
-                        if version.get("fifty_two_week_high_at_creation") and version.get("fifty_two_week_low_at_creation"):
-                            snapshot_parts.append(
-                                f"52wk: €{version['fifty_two_week_low_at_creation']:.2f}-€{version['fifty_two_week_high_at_creation']:.2f}"
-                            )
-                        if version.get("market_cap_at_creation"):
-                            snapshot_parts.append(f"Marktkap: €{version['market_cap_at_creation'] / 1e9:.1f}B")
-                        if version.get("sector_at_creation"):
-                            snapshot_parts.append(f"Sector: {version['sector_at_creation']}")
-                        if version.get("dividend_yield_at_creation"):
-                            snapshot_parts.append(f"Dividend: {version['dividend_yield_at_creation']:.2f}%")
-                        if version.get("in_own_signals_at_creation"):
-                            snapshot_parts.append(f"In eigen signalen: {version['in_own_signals_at_creation']}")
-                        if version.get("sector_rotation_pct_at_creation") is not None:
-                            snapshot_parts.append(f"Sector-rotatie (1m): {version['sector_rotation_pct_at_creation']:+.1f}%")
-                        if snapshot_parts:
-                            st.caption(" · ".join(snapshot_parts))
+        st.divider()
 
-                        if version.get("business_overview"):
-                            st.markdown(f"**Bedrijfsoverzicht**: {version['business_overview']}")
-                        if version.get("investment_thesis"):
-                            st.markdown(f"**Investeringsthese**: {version['investment_thesis']}")
-                        if version.get("management_assessment"):
-                            st.markdown(f"**Management/CEO**: {version['management_assessment']}")
-                        if version.get("bear_case"):
-                            st.markdown(f"**Bear case**: {version['bear_case']}")
-                        if version.get("valuation_view"):
-                            st.markdown(f"**Waardering**: {version['valuation_view']}")
-                        if version.get("interested_price"):
-                            st.markdown(f"**Geïnteresseerd vanaf**: €{version['interested_price']:.2f}")
-                        if version.get("catalysts"):
-                            st.markdown(f"**Katalysatoren**: {version['catalysts']}")
-                        if version.get("position_sizing_plan"):
-                            st.markdown(f"**Positiegrootte-plan**: {version['position_sizing_plan']}")
-                        if version.get("sell_criteria"):
-                            st.markdown(f"**Verkoop-criteria**: {version['sell_criteria']}")
-                        if st.button("🗑️ Deze versie verwijderen", key=f"dd_delete_{version['id']}"):
-                            database.delete_deep_dive(version["id"], user_email)
-                            st.success("Versie verwijderd.")
-                            st.rerun()
-                        st.divider()
     else:
         import database
 

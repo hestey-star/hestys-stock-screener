@@ -511,6 +511,18 @@ def delete_deep_dive(deep_dive_id: int, user_email: str) -> None:
     client.table("deep_dives").delete().eq("id", deep_dive_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def update_deep_dive(deep_dive_id: int, user_email: str, **fields) -> None:
+    """
+    Werkt EEN BESTAANDE versie bij (i.p.v. een nieuwe toe te voegen) --
+    voor het corrigeren van een typefout, of het aanvullen van een enkel
+    onderdeel zonder alle andere velden opnieuw te moeten uitschrijven.
+    Dit is bewust iets anders dan add_deep_dive(): dat maakt een NIEUWE,
+    aparte 'kijk op dit moment'-versie, dit past de HUIDIGE versie aan.
+    """
+    client = get_supabase_client()
+    client.table("deep_dives").update(fields).eq("id", deep_dive_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def add_email_subscriber(email: str, region: str) -> tuple:
     """
     Meldt een e-mailadres aan voor de dagelijkse mail, ZONDER account.
