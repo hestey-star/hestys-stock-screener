@@ -436,15 +436,21 @@ def add_deep_dive(
     bear_case: str = None, valuation_view: str = None,
     interested_price: float = None, catalysts: str = None,
     position_sizing_plan: str = None, sell_criteria: str = None,
-    conclusion: str = None,
+    conclusion: str = None, market_snapshot: dict = None,
 ) -> int:
     """
     Slaat een NIEUWE versie van een deep-dive op (nooit overschrijven --
     elke keer een nieuwe rij, zodat je kijk-verandering over tijd
     zichtbaar blijft). Geeft de nieuwe id terug.
+
+    'market_snapshot' (optioneel): de automatisch aangeleverde marktdata
+    op het moment van opslaan (prijs, 52wk-hi/lo, marktkap, sector,
+    dividendrendement, signalen-kruisverband, sector-rotatie) -- een
+    'foto op dat moment', zodat oude versies hun eigen, destijds-geldige
+    cijfers bewaren i.p.v. steeds de HUIDIGE cijfers te tonen.
     """
     client = get_supabase_client()
-    response = client.table("deep_dives").insert({
+    row = {
         "user_email": hash_email(user_email),
         "ticker": ticker,
         "naam": naam,
@@ -458,7 +464,10 @@ def add_deep_dive(
         "position_sizing_plan": position_sizing_plan,
         "sell_criteria": sell_criteria,
         "conclusion": conclusion,
-    }).execute()
+    }
+    if market_snapshot:
+        row.update(market_snapshot)
+    response = client.table("deep_dives").insert(row).execute()
     return response.data[0]["id"]
 
 

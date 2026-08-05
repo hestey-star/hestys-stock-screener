@@ -822,6 +822,24 @@ THEME_ETFS = {
     "Semiconductors": "SMH", "Genomics & Biotech": "ARKG",
 }
 
+# yfinance's eigen 'sector'-veld gebruikt ANDERE namen dan onze
+# US_SECTOR_ETFS-lijst (bv. 'Financial Services' i.p.v. 'Financials',
+# 'Healthcare' i.p.v. 'Health Care') -- deze mapping overbrugt dat, zodat
+# een deep-dive's sector-rotatie-context correct kan koppelen.
+YFINANCE_SECTOR_TO_OURS = {
+    "Technology": "Technology",
+    "Financial Services": "Financials",
+    "Energy": "Energy",
+    "Healthcare": "Health Care",
+    "Consumer Cyclical": "Consumer Discretionary",
+    "Consumer Defensive": "Consumer Staples",
+    "Industrials": "Industrials",
+    "Basic Materials": "Materials",
+    "Utilities": "Utilities",
+    "Real Estate": "Real Estate",
+    "Communication Services": "Communication Services",
+}
+
 
 def render_section_banner(title: str):
     """
@@ -883,6 +901,106 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
 
     results.sort(key=lambda x: x["return_pct"], reverse=True)
     return results
+
+
+def get_deep_dive_market_snapshot(ticker: str) -> dict:
+    """
+    Verzamelt automatisch marktdata voor een deep-dive, op het moment van
+    opslaan -- wordt als 'foto op dat moment' bij die versie bewaard, zodat
+    je later kan zien wat de marktsituatie was toen je die versie schreef
+    (in plaats van steeds de HUIDIGE, inmiddels verouderde cijfers te tonen
+    bij een oude versie).
+    """
+    snapshot = {
+        "price_at_creation": None,
+        "fifty_two_week_high_at_creation": None,
+        "fifty_two_week_low_at_creation": None,
+        "market_cap_at_creation": None,
+        "sector_at_creation": None,
+        "dividend_yield_at_creation": None,
+        "in_own_signals_at_creation": None,
+        "sector_rotation_pct_at_creation": None,
+    }
+    try:
+        info = get_cached_ticker_info(ticker)
+    except Exception:
+        info = {}
+
+    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+    if current_price is None:
+        # Zelfde robuuste terugval als bij Performance/Dividend -- sommige
+        # effecten missen deze velden in .info.
+        try:
+            fallback_hist = get_cached_ticker_history(ticker, period="5d")
+            if fallback_hist is not None and not fallback_hist.empty:
+                valid_closes = fallback_hist["Close"].dropna()
+                if not valid_closes.empty:
+                    current_price = float(valid_closes.iloc[-1])
+        except Exception:
+            pass
+
+    snapshot["price_at_creation"] = current_price
+    snapshot["fifty_two_week_high_at_creation"] = info.get("fiftyTwoWeekHigh")
+    snapshot["fifty_two_week_low_at_creation"] = info.get("fiftyTwoWeekLow")
+    snapshot["market_cap_at_creation"] = info.get("marketCap")
+    sector = info.get("sector")
+    snapshot["sector_at_creation"] = sector
+
+    dividend_rate = get_annual_dividend_rate(ticker, info)
+    if dividend_rate and current_price:
+        snapshot["dividend_yield_at_creation"] = round(dividend_rate / current_price * 100, 2)
+
+    # Kruisverband met je eigen signalen (Daily, Momentocrats, Snowballers, Rocket List)
+    own_signals = []
+    signal_files = {
+        "Daily": "supertrend_signals_daily.csv",
+        "Momentocrats": "supertrend_signals.csv",
+        "Snowballers": "snowball_signals.csv",
+        "Rocket List": "rocket_list_signals.csv",
+    }
+    for label, filename in signal_files.items():
+        try:
+            if os.path.exists(filename):
+                df_signal = pd.read_csv(filename)
+                if "ticker" in df_signal.columns and ticker in df_signal["ticker"].values:
+                    own_signals.append(label)
+        except Exception:
+            continue
+    snapshot["in_own_signals_at_creation"] = ", ".join(own_signals) if own_signals else None
+
+    # Sector-rotatie-context: waar staat DEZE sector momenteel in de rangschikking?
+    if sector:
+        mapped_sector = YFINANCE_SECTOR_TO_OURS.get(sector)
+        if mapped_sector:
+            try:
+                rotation = build_sector_rotation(region="US")
+                match = next((r for r in rotation if r["sector"] == mapped_sector), None)
+                if match:
+                    snapshot["sector_rotation_pct_at_creation"] = match["return_pct"]
+            except Exception:
+                pass
+
+    return snapshot
+
+
+def get_company_logo_url(ticker: str) -> str:
+    """
+    Geeft een logo-URL terug via Google's eigen, gratis favicon-dienst --
+    geen aanmelding/API-sleutel nodig, en betrouwbaarder dan een kleine,
+    losse gratis-dienst (Clearbit's gratis logo-API, ooit de standaardkeuze
+    hiervoor, is per december 2025 gestopt te bestaan). Gebaseerd op het
+    bedrijfsdomein uit yfinance's 'website'-veld. Geeft None terug als er
+    geen domein bekend is.
+    """
+    try:
+        info = get_cached_ticker_info(ticker)
+        website = info.get("website")
+        if not website:
+            return None
+        domain = website.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+        return f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+    except Exception:
+        return None
 
 
 def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 21) -> list:
@@ -2911,6 +3029,8 @@ elif current_view == "analyze":
                 if not dd_ticker or not dd_naam:
                     st.error("Vul minimaal een ticker en naam in.")
                 else:
+                    with st.spinner("Marktdata ophalen..."):
+                        market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
                     database.add_deep_dive(
                         user_email, dd_ticker, dd_naam,
                         business_overview=dd_business or None,
@@ -2923,6 +3043,7 @@ elif current_view == "analyze":
                         position_sizing_plan=dd_sizing or None,
                         sell_criteria=dd_sell_criteria or None,
                         conclusion=dd_conclusion,
+                        market_snapshot=market_snapshot,
                     )
                     st.success(f"Nieuwe versie voor {dd_ticker} opgeslagen!")
                     st.rerun()
@@ -2935,10 +3056,34 @@ elif current_view == "analyze":
             for entry in dd_overview:
                 conclusion_emoji = {"Buy": "🟢", "Watch": "🟡", "Pass": "🔴"}.get(entry["conclusion"], "")
                 with st.expander(f"{conclusion_emoji} {entry['naam']} ({entry['ticker']}) -- laatste update: {entry['created_at'][:10]}"):
+                    logo_url = get_company_logo_url(entry["ticker"])
+                    if logo_url:
+                        st.image(logo_url, width=48)
                     history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
                     st.caption(f"{len(history)} versie(s) gelogd, meest recente eerst.")
                     for version in history:
                         st.markdown(f"##### {version['created_at'][:10]} -- {version['conclusion']}")
+
+                        snapshot_parts = []
+                        if version.get("price_at_creation"):
+                            snapshot_parts.append(f"Prijs: €{version['price_at_creation']:.2f}")
+                        if version.get("fifty_two_week_high_at_creation") and version.get("fifty_two_week_low_at_creation"):
+                            snapshot_parts.append(
+                                f"52wk: €{version['fifty_two_week_low_at_creation']:.2f}-€{version['fifty_two_week_high_at_creation']:.2f}"
+                            )
+                        if version.get("market_cap_at_creation"):
+                            snapshot_parts.append(f"Marktkap: €{version['market_cap_at_creation'] / 1e9:.1f}B")
+                        if version.get("sector_at_creation"):
+                            snapshot_parts.append(f"Sector: {version['sector_at_creation']}")
+                        if version.get("dividend_yield_at_creation"):
+                            snapshot_parts.append(f"Dividend: {version['dividend_yield_at_creation']:.2f}%")
+                        if version.get("in_own_signals_at_creation"):
+                            snapshot_parts.append(f"In eigen signalen: {version['in_own_signals_at_creation']}")
+                        if version.get("sector_rotation_pct_at_creation") is not None:
+                            snapshot_parts.append(f"Sector-rotatie (1m): {version['sector_rotation_pct_at_creation']:+.1f}%")
+                        if snapshot_parts:
+                            st.caption(" · ".join(snapshot_parts))
+
                         if version.get("business_overview"):
                             st.markdown(f"**Bedrijfsoverzicht**: {version['business_overview']}")
                         if version.get("investment_thesis"):

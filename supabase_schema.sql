@@ -145,7 +145,15 @@ create table deep_dives (
     catalysts text,
     position_sizing_plan text,
     sell_criteria text,
-    conclusion text check (conclusion in ('Buy', 'Watch', 'Pass'))
+    conclusion text check (conclusion in ('Buy', 'Watch', 'Pass')),
+    price_at_creation numeric,
+    fifty_two_week_high_at_creation numeric,
+    fifty_two_week_low_at_creation numeric,
+    market_cap_at_creation numeric,
+    sector_at_creation text,
+    dividend_yield_at_creation numeric,
+    in_own_signals_at_creation text,
+    sector_rotation_pct_at_creation numeric
 );
 
 -- Niet-ingelogde e-mail-abonnees voor de dagelijkse mail (laagdrempelig,
