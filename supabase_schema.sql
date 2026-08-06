@@ -142,6 +142,8 @@ create table deep_dives (
     bear_case text,
     valuation_view text,
     interested_price numeric,
+    sell_trigger_price numeric,
+    sell_trigger_date date,
     catalysts text,
     position_sizing_plan text,
     sell_criteria text,

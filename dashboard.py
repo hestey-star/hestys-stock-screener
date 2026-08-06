@@ -958,6 +958,13 @@ def _render_deep_dive_version(version: dict, user_email: str):
             st.markdown(f"**Position sizing plan**: {version['position_sizing_plan']}")
         if version.get("sell_criteria"):
             st.markdown(f"**Sell criteria**: {version['sell_criteria']}")
+        if version.get("sell_trigger_price") or version.get("sell_trigger_date"):
+            trigger_parts = []
+            if version.get("sell_trigger_price"):
+                trigger_parts.append(f"at €{version['sell_trigger_price']:.2f}")
+            if version.get("sell_trigger_date"):
+                trigger_parts.append(f"by {version['sell_trigger_date']}")
+            st.caption(f"🔔 Sell trigger set: {' or '.join(trigger_parts)} -- you'll see this on Today once reached.")
 
         edit_col, delete_col = st.columns(2)
         with edit_col:
@@ -982,6 +989,24 @@ def _render_deep_dive_version(version: dict, user_email: str):
         edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
         edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}")
         edit_sell_criteria = st.text_area("Sell criteria", value=version.get("sell_criteria") or "", key=f"dd_edit_sell_{version_id}")
+
+        edit_trigger_cols = st.columns(2)
+        with edit_trigger_cols[0]:
+            edit_sell_trigger_price = st.number_input(
+                "Sell at price", min_value=0.0, step=0.01,
+                value=float(version.get("sell_trigger_price") or 0.0), key=f"dd_edit_trigger_price_{version_id}",
+            )
+        with edit_trigger_cols[1]:
+            existing_trigger_date = version.get("sell_trigger_date")
+            if existing_trigger_date and isinstance(existing_trigger_date, str):
+                try:
+                    existing_trigger_date = datetime.strptime(existing_trigger_date, "%Y-%m-%d").date()
+                except Exception:
+                    existing_trigger_date = None
+            edit_sell_trigger_date = st.date_input(
+                "Sell by date", value=existing_trigger_date, key=f"dd_edit_trigger_date_{version_id}",
+            )
+
         conclusion_options = ["Watch", "Buy", "Pass"]
         current_conclusion_index = (
             conclusion_options.index(version["conclusion"]) if version.get("conclusion") in conclusion_options else 0
@@ -1005,6 +1030,8 @@ def _render_deep_dive_version(version: dict, user_email: str):
                     position_sizing_plan=edit_sizing or None,
                     sell_criteria=edit_sell_criteria or None,
                     conclusion=edit_conclusion,
+                    sell_trigger_price=edit_sell_trigger_price or None,
+                    sell_trigger_date=edit_sell_trigger_date.isoformat() if edit_sell_trigger_date else None,
                 )
                 st.session_state[edit_key] = False
                 st.success("Version updated.")
@@ -1015,6 +1042,75 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 st.rerun()
 
     st.divider()
+
+
+def get_deep_dive_triggers_hit(user_email: str, max_items: int = 5) -> list:
+    """
+    Checkt of een van je deep-dive-verkoop-triggers (prijs of datum) is
+    bereikt -- gebruikt de MEEST RECENTE versie per ticker (je huidige
+    kijk, niet een verouderde). De richting van een prijs-trigger wordt
+    afgeleid uit de prijs-op-het-moment-van-opslaan (price_at_creation):
+    staat de trigger HOGER dan dat, is het een winst-doel (trigger als de
+    prijs OMHOOG naar dat niveau gaat); staat 'ie LAGER, is het een
+    stop-loss (trigger als de prijs OMLAAG naar dat niveau gaat).
+
+    Een GEBEURTENIS-trigger (vrije tekst in sell_criteria, bv. 'als ze 2
+    kwartalen missen') wordt hier bewust NIET gecheckt -- dat kunnen we
+    niet automatisch verifiëren, dus dat blijft een handmatig te checken
+    herinnering op de Deep-dives-pagina zelf.
+    """
+    import database
+
+    today = datetime.now().date()
+    results = []
+    entries = database.get_all_deep_dive_tickers(user_email)
+    for entry in entries:
+        ticker = entry["ticker"]
+        naam = entry["naam"]
+
+        sell_trigger_date = entry.get("sell_trigger_date")
+        if sell_trigger_date:
+            try:
+                trigger_date = (
+                    datetime.strptime(sell_trigger_date, "%Y-%m-%d").date()
+                    if isinstance(sell_trigger_date, str) else sell_trigger_date
+                )
+                if trigger_date <= today:
+                    results.append({
+                        "ticker": ticker, "naam": naam, "type": "date",
+                        "detail": f"reached your sell-by date ({sell_trigger_date})",
+                    })
+            except Exception:
+                pass
+
+        sell_trigger_price = entry.get("sell_trigger_price")
+        if sell_trigger_price:
+            try:
+                info = get_cached_ticker_info(ticker)
+                current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+                if current_price is None:
+                    fallback_hist = get_cached_ticker_history(ticker, period="5d")
+                    if fallback_hist is not None and not fallback_hist.empty:
+                        valid_closes = fallback_hist["Close"].dropna()
+                        if not valid_closes.empty:
+                            current_price = float(valid_closes.iloc[-1])
+                if current_price is not None:
+                    price_at_creation = entry.get("price_at_creation")
+                    is_take_profit = price_at_creation is None or sell_trigger_price >= price_at_creation
+                    if is_take_profit and current_price >= sell_trigger_price:
+                        results.append({
+                            "ticker": ticker, "naam": naam, "type": "price",
+                            "detail": f"hit your sell target of €{sell_trigger_price:.2f} (now €{current_price:.2f})",
+                        })
+                    elif not is_take_profit and current_price <= sell_trigger_price:
+                        results.append({
+                            "ticker": ticker, "naam": naam, "type": "price",
+                            "detail": f"hit your stop-loss of €{sell_trigger_price:.2f} (now €{current_price:.2f})",
+                        })
+            except Exception:
+                continue
+
+    return results[:max_items]
 
 
 def get_deep_dive_market_snapshot(ticker: str) -> dict:
@@ -2085,6 +2181,12 @@ if current_view == "today":
                     label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
                     st.markdown(f"- {emoji} **{r['naam']}** ({r['ticker']}) just hit a {label}.")
 
+                # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
+                # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
+                deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
+                for t in deep_dive_triggers:
+                    st.markdown(f"- 🔔 **{t['naam']}** ({t['ticker']}) {t['detail']}.")
+
                 weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
                 last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
                 weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
@@ -3148,8 +3250,25 @@ elif current_view == "analyze":
             st.markdown("**Position sizing plan** -- how big a position, and why")
             dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
 
-            st.markdown("**Sell criteria** -- under what conditions do you exit")
+            st.markdown("**Sell criteria** -- under what conditions do you exit "
+                        "(this is also where a specific triggering EVENT belongs, e.g. "
+                        "'if they miss 2 consecutive quarters' -- we can't check that "
+                        "automatically, so it stays a reminder here on this page)")
             dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
+
+            st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
+            dd_sell_trigger_cols = st.columns(2)
+            with dd_sell_trigger_cols[0]:
+                dd_sell_trigger_price = st.number_input(
+                    "Sell at price", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
+                    help="Works both ways: a target above today's price is treated as a profit "
+                         "target, below it as a stop-loss.",
+                )
+            with dd_sell_trigger_cols[1]:
+                dd_sell_trigger_date = st.date_input(
+                    "Sell by date", value=None, key="dd_sell_trigger_date",
+                    help="A hard deadline to reconsider this position, regardless of price.",
+                )
 
             dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
 
@@ -3172,6 +3291,8 @@ elif current_view == "analyze":
                         sell_criteria=dd_sell_criteria or None,
                         conclusion=dd_conclusion,
                         market_snapshot=market_snapshot,
+                        sell_trigger_price=dd_sell_trigger_price or None,
+                        sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
                     )
                     st.success(f"New version for {dd_ticker} saved!")
                     st.rerun()
