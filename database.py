@@ -437,6 +437,7 @@ def add_deep_dive(
     interested_price: float = None, catalysts: str = None,
     position_sizing_plan: str = None, sell_criteria: str = None,
     conclusion: str = None, market_snapshot: dict = None,
+    sell_trigger_price: float = None, sell_trigger_date: str = None,
 ) -> int:
     """
     Slaat een NIEUWE versie van een deep-dive op (nooit overschrijven --
@@ -448,6 +449,13 @@ def add_deep_dive(
     dividendrendement, signalen-kruisverband, sector-rotatie) -- een
     'foto op dat moment', zodat oude versies hun eigen, destijds-geldige
     cijfers bewaren i.p.v. steeds de HUIDIGE cijfers te tonen.
+
+    'sell_trigger_price'/'sell_trigger_date' (optioneel): automatisch te
+    checken verkoop-triggers -- komen terug op Today zodra de prijs dat
+    niveau bereikt, of die datum is aangebroken. 'sell_criteria' (los,
+    vrije tekst) blijft de plek voor een GEBEURTENIS-trigger (bv. 'als ze
+    2 kwartalen missen') -- dat kunnen we niet automatisch verifiëren,
+    dus dat blijft een handmatig te checken herinnering op deze pagina.
     """
     client = get_supabase_client()
     row = {
@@ -464,6 +472,8 @@ def add_deep_dive(
         "position_sizing_plan": position_sizing_plan,
         "sell_criteria": sell_criteria,
         "conclusion": conclusion,
+        "sell_trigger_price": sell_trigger_price,
+        "sell_trigger_date": sell_trigger_date,
     }
     if market_snapshot:
         row.update(market_snapshot)
