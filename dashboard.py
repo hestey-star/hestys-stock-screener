@@ -3188,17 +3188,18 @@ elif current_view == "analyze":
                 tile_cols = st.columns(dd_tiles_per_row)
                 for tile_col, entry in zip(tile_cols, row_entries):
                     with tile_col:
-                        logo_url = get_company_logo_url(entry["ticker"])
-                        if logo_url:
-                            st.image(logo_url, width=40)
-                        conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
-                        st.markdown(f"**{entry['ticker']}** {conclusion_emoji}")
-                        st.caption(f"{entry['naam']}  ·  {entry['created_at'][:10]}")
-                        with st.expander("View history"):
-                            history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
-                            st.caption(f"{len(history)} version(s) logged, most recent first.")
-                            for version in history:
-                                _render_deep_dive_version(version, user_email)
+                        with st.container(border=True):
+                            logo_url = get_company_logo_url(entry["ticker"])
+                            if logo_url:
+                                st.image(logo_url, width=40)
+                            conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
+                            st.markdown(f"**{entry['ticker']}** {conclusion_emoji}")
+                            st.caption(f"{entry['naam']}  ·  {entry['created_at'][:10]}")
+                            with st.expander("View history"):
+                                history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
+                                st.caption(f"{len(history)} version(s) logged, most recent first.")
+                                for version in history:
+                                    _render_deep_dive_version(version, user_email)
 
         st.divider()
 
