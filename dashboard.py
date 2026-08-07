@@ -920,7 +920,10 @@ def _compute_deep_dive_overall_score(version: dict):
     in dezelfde richting (hoger = gunstiger voor een koopbeslissing),
     dus een simpel gemiddelde is hier zinvol.
     """
-    score_fields = ["thesis_score", "management_score", "bear_case_score", "valuation_score", "catalysts_score"]
+    score_fields = [
+        "thesis_score", "management_score", "bear_case_score",
+        "valuation_score", "catalysts_score", "technical_analysis_score",
+    ]
     filled_scores = [version[f] for f in score_fields if version.get(f) is not None]
     if not filled_scores:
         return None
@@ -985,6 +988,8 @@ def _render_deep_dive_version(version: dict, user_email: str):
             st.markdown(f"**Valuation**: {version['valuation_view']}")
         if version.get("interested_price"):
             st.markdown(f"**Interested from**: €{version['interested_price']:.2f}")
+        if version.get("technical_analysis"):
+            st.markdown(f"**Technical analysis**: {version['technical_analysis']}")
         if version.get("catalysts"):
             st.markdown(f"**Catalysts**: {version['catalysts']}")
         if version.get("position_sizing_plan"):
@@ -1031,6 +1036,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
         edit_interested_price = st.number_input(
             "Interested from price", min_value=0.0, step=0.01,
             value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
+        )
+        edit_technical_analysis = st.text_area(
+            "Technical analysis", value=version.get("technical_analysis") or "", key=f"dd_edit_ta_{version_id}"
+        )
+        edit_technical_analysis_score = st.columns([1, 1])[0].slider(
+            "How favorable is the technical setup?", 1, 10, int(version.get("technical_analysis_score") or 5), key=f"dd_edit_ta_score_{version_id}"
         )
         edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
         edit_catalysts_score = st.columns([1, 1])[0].slider(
@@ -1086,6 +1097,8 @@ def _render_deep_dive_version(version: dict, user_email: str):
                     bear_case_score=edit_bear_score,
                     valuation_score=edit_valuation_score,
                     catalysts_score=edit_catalysts_score,
+                    technical_analysis=edit_technical_analysis or None,
+                    technical_analysis_score=edit_technical_analysis_score,
                 )
                 st.session_state[edit_key] = False
                 st.success("Version updated.")
@@ -3305,6 +3318,11 @@ elif current_view == "analyze":
                 help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
             )
 
+            st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
+                        "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
+            dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
+            dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1, 10, 5, key="dd_technical_analysis_score")
+
             st.markdown("**Catalysts** -- what upcoming events could move the price")
             dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
             dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1, 10, 5, key="dd_catalysts_score")
@@ -3360,6 +3378,8 @@ elif current_view == "analyze":
                         bear_case_score=dd_bear_score,
                         valuation_score=dd_valuation_score,
                         catalysts_score=dd_catalysts_score,
+                        technical_analysis=dd_technical_analysis or None,
+                        technical_analysis_score=dd_technical_analysis_score,
                     )
                     st.success(f"New version for {dd_ticker} saved!")
                     st.rerun()

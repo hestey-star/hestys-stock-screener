@@ -441,6 +441,7 @@ def add_deep_dive(
     thesis_score: int = None, management_score: int = None,
     bear_case_score: int = None, valuation_score: int = None,
     catalysts_score: int = None,
+    technical_analysis: str = None, technical_analysis_score: int = None,
 ) -> int:
     """
     Slaat een NIEUWE versie van een deep-dive op (nooit overschrijven --
@@ -488,6 +489,8 @@ def add_deep_dive(
         "bear_case_score": bear_case_score,
         "valuation_score": valuation_score,
         "catalysts_score": catalysts_score,
+        "technical_analysis": technical_analysis,
+        "technical_analysis_score": technical_analysis_score,
     }
     if market_snapshot:
         row.update(market_snapshot)

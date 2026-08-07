@@ -149,6 +149,8 @@ create table deep_dives (
     bear_case_score smallint check (bear_case_score between 1 and 10),
     valuation_score smallint check (valuation_score between 1 and 10),
     catalysts_score smallint check (catalysts_score between 1 and 10),
+    technical_analysis text,
+    technical_analysis_score smallint check (technical_analysis_score between 1 and 10),
     catalysts text,
     position_sizing_plan text,
     sell_criteria text,
