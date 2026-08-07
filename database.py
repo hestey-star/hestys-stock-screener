@@ -438,6 +438,9 @@ def add_deep_dive(
     position_sizing_plan: str = None, sell_criteria: str = None,
     conclusion: str = None, market_snapshot: dict = None,
     sell_trigger_price: float = None, sell_trigger_date: str = None,
+    thesis_score: int = None, management_score: int = None,
+    bear_case_score: int = None, valuation_score: int = None,
+    catalysts_score: int = None,
 ) -> int:
     """
     Slaat een NIEUWE versie van een deep-dive op (nooit overschrijven --
@@ -456,6 +459,12 @@ def add_deep_dive(
     vrije tekst) blijft de plek voor een GEBEURTENIS-trigger (bv. 'als ze
     2 kwartalen missen') -- dat kunnen we niet automatisch verifiëren,
     dus dat blijft een handmatig te checken herinnering op deze pagina.
+
+    '*_score' (optioneel, 1-10): een cijfer per oordeel-onderdeel, ALTIJD
+    in dezelfde richting ('hoger = gunstiger voor een koopbeslissing') --
+    dus ook bear_case_score: hoog = de risico's zijn goed te overzien,
+    niet 'de risico's zijn ernstig'. Het gemiddelde van de ingevulde
+    scores geeft een totaalcijfer per deep-dive.
     """
     client = get_supabase_client()
     row = {
@@ -474,6 +483,11 @@ def add_deep_dive(
         "conclusion": conclusion,
         "sell_trigger_price": sell_trigger_price,
         "sell_trigger_date": sell_trigger_date,
+        "thesis_score": thesis_score,
+        "management_score": management_score,
+        "bear_case_score": bear_case_score,
+        "valuation_score": valuation_score,
+        "catalysts_score": catalysts_score,
     }
     if market_snapshot:
         row.update(market_snapshot)
