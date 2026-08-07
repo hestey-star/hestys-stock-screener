@@ -955,15 +955,18 @@ def _render_deep_dive_version(version: dict, user_email: str):
             unsafe_allow_html=True,
         )
 
+    ticker_currency_symbol = _currency_symbol_for_ticker(version["ticker"])
+
     snapshot_parts = []
     if version.get("price_at_creation"):
-        snapshot_parts.append(f"Price: €{version['price_at_creation']:.2f}")
+        snapshot_parts.append(f"Price: {ticker_currency_symbol}{version['price_at_creation']:.2f}")
     if version.get("fifty_two_week_high_at_creation") and version.get("fifty_two_week_low_at_creation"):
         snapshot_parts.append(
-            f"52wk: €{version['fifty_two_week_low_at_creation']:.2f}-€{version['fifty_two_week_high_at_creation']:.2f}"
+            f"52wk: {ticker_currency_symbol}{version['fifty_two_week_low_at_creation']:.2f}-"
+            f"{ticker_currency_symbol}{version['fifty_two_week_high_at_creation']:.2f}"
         )
     if version.get("market_cap_at_creation"):
-        snapshot_parts.append(f"Market cap: €{version['market_cap_at_creation'] / 1e9:.1f}B")
+        snapshot_parts.append(f"Market cap: {ticker_currency_symbol}{version['market_cap_at_creation'] / 1e9:.1f}B")
     if version.get("sector_at_creation"):
         snapshot_parts.append(f"Sector: {version['sector_at_creation']}")
     if version.get("dividend_yield_at_creation"):
@@ -987,7 +990,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
         if version.get("valuation_view"):
             st.markdown(f"**Valuation**: {version['valuation_view']}")
         if version.get("interested_price"):
-            st.markdown(f"**Interested from**: €{version['interested_price']:.2f}")
+            st.markdown(f"**Interested from**: {ticker_currency_symbol}{version['interested_price']:.2f}")
         if version.get("technical_analysis"):
             st.markdown(f"**Technical analysis**: {version['technical_analysis']}")
         if version.get("catalysts"):
@@ -999,7 +1002,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
         if version.get("sell_trigger_price") or version.get("sell_trigger_date"):
             trigger_parts = []
             if version.get("sell_trigger_price"):
-                trigger_parts.append(f"at €{version['sell_trigger_price']:.2f}")
+                trigger_parts.append(f"at {ticker_currency_symbol}{version['sell_trigger_price']:.2f}")
             if version.get("sell_trigger_date"):
                 trigger_parts.append(f"by {version['sell_trigger_date']}")
             st.caption(f"🔔 Sell trigger set: {' or '.join(trigger_parts)} -- you'll see this on Today once reached.")
@@ -1034,7 +1037,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
             "How attractive is the valuation?", 1, 10, int(version.get("valuation_score") or 5), key=f"dd_edit_valuation_score_{version_id}"
         )
         edit_interested_price = st.number_input(
-            "Interested from price", min_value=0.0, step=0.01,
+            f"Interested from price ({ticker_currency_symbol.strip()})", min_value=0.0, step=0.01,
             value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
         )
         edit_technical_analysis = st.text_area(
@@ -1053,7 +1056,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
         edit_trigger_cols = st.columns(2)
         with edit_trigger_cols[0]:
             edit_sell_trigger_price = st.number_input(
-                "Sell at price", min_value=0.0, step=0.01,
+                f"Sell at price ({ticker_currency_symbol.strip()})", min_value=0.0, step=0.01,
                 value=float(version.get("sell_trigger_price") or 0.0), key=f"dd_edit_trigger_price_{version_id}",
             )
         with edit_trigger_cols[1]:
@@ -1187,17 +1190,20 @@ def get_deep_dive_triggers_hit(user_email: str, max_items: int = 5) -> list:
                         if not valid_closes.empty:
                             current_price = float(valid_closes.iloc[-1])
                 if current_price is not None:
+                    trigger_currency_symbol = _currency_symbol_for_ticker(ticker)
                     price_at_creation = entry.get("price_at_creation")
                     is_take_profit = price_at_creation is None or sell_trigger_price >= price_at_creation
                     if is_take_profit and current_price >= sell_trigger_price:
                         results.append({
                             "ticker": ticker, "naam": naam, "type": "price",
-                            "detail": f"hit your sell target of €{sell_trigger_price:.2f} (now €{current_price:.2f})",
+                            "detail": f"hit your sell target of {trigger_currency_symbol}{sell_trigger_price:.2f} "
+                                      f"(now {trigger_currency_symbol}{current_price:.2f})",
                         })
                     elif not is_take_profit and current_price <= sell_trigger_price:
                         results.append({
                             "ticker": ticker, "naam": naam, "type": "price",
-                            "detail": f"hit your stop-loss of €{sell_trigger_price:.2f} (now €{current_price:.2f})",
+                            "detail": f"hit your stop-loss of {trigger_currency_symbol}{sell_trigger_price:.2f} "
+                                      f"(now {trigger_currency_symbol}{current_price:.2f})",
                         })
             except Exception:
                 continue
@@ -1283,6 +1289,22 @@ def get_deep_dive_market_snapshot(ticker: str) -> dict:
                 pass
 
     return snapshot
+
+
+def _currency_symbol_for_ticker(ticker: str) -> str:
+    """
+    Geeft het juiste valutasymbool terug, gebaseerd op de valuta waarin
+    het aandeel ZELF noteert (i.p.v. altijd standaard EUR te tonen) --
+    belangrijk omdat een groot deel van de aankopen in USD is, maar niet
+    alles (bv. Europese aandelen blijven gewoon EUR).
+    """
+    try:
+        info = get_cached_ticker_info(ticker)
+        currency = info.get("currency", "EUR")
+    except Exception:
+        currency = "EUR"
+    symbol_map = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CHF": "CHF ", "CAD": "C$"}
+    return symbol_map.get(currency, f"{currency} ")
 
 
 def get_company_logo_url(ticker: str) -> str:
@@ -3317,6 +3339,11 @@ elif current_view == "analyze":
 
             dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
 
+            # Het valutasymbool volgt het aandeel zelf (bv. $voor een
+            # Amerikaans aandeel, €voor een Europees) -- belangrijk omdat
+            # het grootste deel van de aankopen in USD is, maar niet alles.
+            dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "€"
+
             st.markdown("**Business overview** -- what does the company do, in your own words")
             dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
 
@@ -3339,7 +3366,7 @@ elif current_view == "analyze":
             dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
             dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1, 10, 5, key="dd_valuation_score")
             dd_interested_price = st.number_input(
-                "Interested from price (optional)", min_value=0.0, step=0.01, key="dd_interested_price",
+                f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
                 help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
             )
 
@@ -3365,7 +3392,7 @@ elif current_view == "analyze":
             dd_sell_trigger_cols = st.columns(2)
             with dd_sell_trigger_cols[0]:
                 dd_sell_trigger_price = st.number_input(
-                    "Sell at price", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
+                    f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
                     help="Works both ways: a target above today's price is treated as a profit "
                          "target, below it as a stop-loss.",
                 )
