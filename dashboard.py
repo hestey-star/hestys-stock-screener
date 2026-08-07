@@ -903,6 +903,16 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     return results
 
 
+def _deep_dive_score_color(score: float) -> str:
+    """Vertaalt een score (1-10) naar een betekenisvolle kleur -- groen (sterk), amber (gemiddeld), rood (zwak)."""
+    if score >= 7.5:
+        return "#1FAE96"  # Hesty's signature teal/groen -- sterk
+    elif score >= 5.0:
+        return "#E8A93C"  # amber -- gemiddeld
+    else:
+        return "#E5484D"  # rood -- zwak
+
+
 def _compute_deep_dive_overall_score(version: dict):
     """
     Geeft het gemiddelde van de 5 ingevulde oordeel-scores terug (1-10),
@@ -935,7 +945,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
     overall_score = _compute_deep_dive_overall_score(version)
     if overall_score is not None:
-        st.markdown(f"**Overall score: {overall_score:.1f}/10**")
+        score_color = _deep_dive_score_color(overall_score)
+        st.markdown(
+            f'<span style="font-size:1.3rem; font-weight:800; color:{score_color};">{overall_score:.1f}/10</span> '
+            f'<span style="font-size:0.8rem; color:#8992A3;">overall score</span>',
+            unsafe_allow_html=True,
+        )
 
     snapshot_parts = []
     if version.get("price_at_creation"):
@@ -997,20 +1012,20 @@ def _render_deep_dive_version(version: dict, user_email: str):
     else:
         edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}")
         edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}")
-        edit_thesis_score = st.slider(
+        edit_thesis_score = st.columns([1, 1])[0].slider(
             "How compelling is the thesis?", 1, 10, int(version.get("thesis_score") or 5), key=f"dd_edit_thesis_score_{version_id}"
         )
         edit_management = st.text_area("Management/CEO", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}")
-        edit_management_score = st.slider(
+        edit_management_score = st.columns([1, 1])[0].slider(
             "How much confidence in management?", 1, 10, int(version.get("management_score") or 5), key=f"dd_edit_management_score_{version_id}"
         )
         edit_bear = st.text_area("Bear case", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}")
-        edit_bear_score = st.slider(
+        edit_bear_score = st.columns([1, 1])[0].slider(
             "How manageable are the risks?", 1, 10, int(version.get("bear_case_score") or 5), key=f"dd_edit_bear_score_{version_id}",
             help="Higher = the risks are limited/well understood, not 'the risks are severe'.",
         )
         edit_valuation = st.text_area("Valuation", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}")
-        edit_valuation_score = st.slider(
+        edit_valuation_score = st.columns([1, 1])[0].slider(
             "How attractive is the valuation?", 1, 10, int(version.get("valuation_score") or 5), key=f"dd_edit_valuation_score_{version_id}"
         )
         edit_interested_price = st.number_input(
@@ -1018,7 +1033,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
             value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
         )
         edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
-        edit_catalysts_score = st.slider(
+        edit_catalysts_score = st.columns([1, 1])[0].slider(
             "How strong are the catalysts?", 1, 10, int(version.get("catalysts_score") or 5), key=f"dd_edit_catalysts_score_{version_id}"
         )
         edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}")
@@ -1247,7 +1262,7 @@ def get_company_logo_url(ticker: str) -> str:
         if not website:
             return None
         domain = website.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-        return f"https://www.google.com/s2/favicons?domain={domain}&sz=128"
+        return f"https://www.google.com/s2/favicons?domain={domain}&sz=256"
     except Exception:
         return None
 
@@ -3269,22 +3284,22 @@ elif current_view == "analyze":
 
             st.markdown("**Investment thesis** -- why this could be a good investment")
             dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-            dd_thesis_score = st.slider("How compelling is the thesis?", 1, 10, 5, key="dd_thesis_score")
+            dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1, 10, 5, key="dd_thesis_score")
 
             st.markdown("**Management/CEO** -- assess the management and the CEO")
             dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-            dd_management_score = st.slider("How much confidence in management?", 1, 10, 5, key="dd_management_score")
+            dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1, 10, 5, key="dd_management_score")
 
             st.markdown("**Bear case / risks** -- what could go wrong")
             dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
-            dd_bear_score = st.slider(
+            dd_bear_score = st.columns([1, 1])[0].slider(
                 "How manageable are the risks?", 1, 10, 5, key="dd_bear_score",
                 help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
             )
 
             st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
             dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-            dd_valuation_score = st.slider("How attractive is the valuation?", 1, 10, 5, key="dd_valuation_score")
+            dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1, 10, 5, key="dd_valuation_score")
             dd_interested_price = st.number_input(
                 "Interested from price (optional)", min_value=0.0, step=0.01, key="dd_interested_price",
                 help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
@@ -3292,7 +3307,7 @@ elif current_view == "analyze":
 
             st.markdown("**Catalysts** -- what upcoming events could move the price")
             dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-            dd_catalysts_score = st.slider("How strong are the catalysts?", 1, 10, 5, key="dd_catalysts_score")
+            dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1, 10, 5, key="dd_catalysts_score")
 
             st.markdown("**Position sizing plan** -- how big a position, and why")
             dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
@@ -3363,13 +3378,37 @@ elif current_view == "analyze":
                     with tile_col:
                         with st.container(border=True):
                             logo_url = get_company_logo_url(entry["ticker"])
-                            if logo_url:
-                                st.image(logo_url, width=40)
                             conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
-                            st.markdown(f"**{entry['ticker']}** {conclusion_emoji}")
                             tile_overall_score = _compute_deep_dive_overall_score(entry)
-                            score_suffix = f"  ·  {tile_overall_score:.1f}/10" if tile_overall_score is not None else ""
-                            st.caption(f"{entry['naam']}  ·  {entry['created_at'][:10]}{score_suffix}")
+
+                            logo_html = (
+                                f'<img src="{logo_url}" width="56" height="56" '
+                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
+                                if logo_url else
+                                '<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
+                                'display:flex; align-items:center; justify-content:center; font-size:1.4rem;">📈</div>'
+                            )
+                            if tile_overall_score is not None:
+                                score_color = _deep_dive_score_color(tile_overall_score)
+                                score_html = (
+                                    f'<div style="font-size:2rem; font-weight:800; color:{score_color}; line-height:1;">'
+                                    f'{tile_overall_score:.1f}<span style="font-size:0.85rem; font-weight:600; opacity:0.75;">/10</span></div>'
+                                )
+                            else:
+                                score_html = '<div style="font-size:0.85rem; color:#8992A3;">No score yet</div>'
+
+                            st.markdown(
+                                f"""
+                                <div style="text-align:center; padding: 0.25rem 0 0.75rem 0;">
+                                    <div style="display:flex; justify-content:center; margin-bottom:8px;">{logo_html}</div>
+                                    <div style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{entry['ticker']} {conclusion_emoji}</div>
+                                    <div style="font-size:0.8rem; color:#8992A3; margin: 2px 0 10px 0;">{entry['naam']}</div>
+                                    {score_html}
+                                    <div style="font-size:0.7rem; color:#8992A3; margin-top:8px;">Updated {entry['created_at'][:10]}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
                             with st.expander("View history"):
                                 history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
                                 st.caption(f"{len(history)} version(s) logged, most recent first.")
