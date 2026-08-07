@@ -1108,6 +1108,31 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 st.session_state[edit_key] = False
                 st.rerun()
 
+    st.markdown("**Images**")
+    existing_images = database.get_deep_dive_images(version_id)
+    if existing_images:
+        img_cols = st.columns(min(len(existing_images), 3))
+        for i, img in enumerate(existing_images):
+            with img_cols[i % len(img_cols)]:
+                st.image(img["image_url"], caption=img.get("caption") or None)
+                if st.button("🗑️ Remove image", key=f"dd_img_delete_{img['id']}"):
+                    database.delete_deep_dive_image(img["id"], user_email)
+                    st.rerun()
+
+    uploaded_image = st.file_uploader(
+        "Add an image (chart, screenshot, etc.)", type=["png", "jpg", "jpeg"],
+        key=f"dd_img_upload_{version_id}",
+    )
+    if uploaded_image is not None:
+        image_caption = st.text_input("Caption (optional)", key=f"dd_img_caption_{version_id}")
+        if st.button("Upload image", key=f"dd_img_upload_btn_{version_id}"):
+            database.upload_deep_dive_image(
+                user_email, version_id, uploaded_image.getvalue(), uploaded_image.name,
+                uploaded_image.type, image_caption or None,
+            )
+            st.success("Image uploaded!")
+            st.rerun()
+
     st.divider()
 
 

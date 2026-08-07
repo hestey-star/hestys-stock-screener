@@ -607,3 +607,63 @@ def get_confirmed_email_subscribers(region: str) -> list:
         .execute()
     )
     return response.data or []
+
+
+def upload_deep_dive_image(
+    user_email: str, deep_dive_id: int, file_bytes: bytes, filename: str,
+    content_type: str, caption: str = None,
+) -> str:
+    """
+    Uploadt een afbeelding naar Supabase Storage en legt een referentie
+    (+ bijschrift) vast in deep_dive_images. Geeft de publieke URL terug.
+    Een unieke bestandsnaam (met een willekeurige component) voorkomt dat
+    2 uploads met dezelfde oorspronkelijke bestandsnaam elkaar overschrijven.
+    """
+    import uuid
+    client = get_supabase_client()
+    unique_filename = f"{deep_dive_id}_{uuid.uuid4().hex}_{filename}"
+    client.storage.from_("deep-dive-images").upload(
+        unique_filename, file_bytes, {"content-type": content_type}
+    )
+    public_url = client.storage.from_("deep-dive-images").get_public_url(unique_filename)
+    client.table("deep_dive_images").insert({
+        "deep_dive_id": deep_dive_id,
+        "user_email": hash_email(user_email),
+        "image_url": public_url,
+        "storage_path": unique_filename,
+        "caption": caption,
+    }).execute()
+    return public_url
+
+
+def get_deep_dive_images(deep_dive_id: int) -> list:
+    """Geeft alle afbeeldingen voor 1 specifieke deep-dive-versie terug, oudste eerst."""
+    client = get_supabase_client()
+    response = (
+        client.table("deep_dive_images")
+        .select("*")
+        .eq("deep_dive_id", deep_dive_id)
+        .order("uploaded_at")
+        .execute()
+    )
+    return response.data or []
+
+
+def delete_deep_dive_image(image_id: int, user_email: str) -> None:
+    """Verwijdert een afbeelding -- zowel het bestand uit Storage als de database-rij."""
+    client = get_supabase_client()
+    hashed_email = hash_email(user_email)
+    response = (
+        client.table("deep_dive_images")
+        .select("storage_path")
+        .eq("id", image_id)
+        .eq("user_email", hashed_email)
+        .execute()
+    )
+    if response.data:
+        storage_path = response.data[0]["storage_path"]
+        try:
+            client.storage.from_("deep-dive-images").remove([storage_path])
+        except Exception:
+            pass  # het bestand is mogelijk al weg -- de database-rij verwijderen we hoe dan ook
+    client.table("deep_dive_images").delete().eq("id", image_id).eq("user_email", hashed_email).execute()

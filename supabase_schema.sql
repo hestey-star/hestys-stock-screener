@@ -180,3 +180,22 @@ create table email_subscribers (
     confirmed_at timestamp with time zone
 );
 alter table email_subscribers add constraint email_subscribers_email_unique unique (email);
+
+-- Deep-dive-afbeeldingen: meerdere per versie mogelijk (bv. een TA-
+-- grafiek, een DAU-screenshot), elk met een eigen bijschrift. De
+-- bestanden zelf staan in een Supabase Storage-bucket (aparte SQL
+-- hieronder); deze tabel houdt alleen de referentie + het bijschrift bij.
+create table deep_dive_images (
+    id bigint generated always as identity primary key,
+    deep_dive_id bigint not null references deep_dives(id) on delete cascade,
+    user_email text not null,
+    image_url text not null,
+    storage_path text not null,
+    caption text,
+    uploaded_at timestamp with time zone default now()
+);
+
+-- De Storage-bucket zelf -- publiek, want dit is geen gevoelige data en
+-- voorkomt dat we ingewikkelde losse RLS-policies moeten opzetten voor
+-- een klein, persoonlijk project.
+insert into storage.buckets (id, name, public) values ('deep-dive-images', 'deep-dive-images', true);
