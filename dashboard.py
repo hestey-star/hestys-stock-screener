@@ -2421,6 +2421,63 @@ if current_view == "today":
                 else:
                     st.caption("No market news available right now.")
 
+            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
+            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
+            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
+            with st.container(border=True):
+                st.markdown("**Yesterday's biggest movers**")
+                if os.path.exists("top_movers.csv"):
+                    st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
+                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+                    if not df_movers.empty:
+                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
+                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
+                        mover_col1, mover_col2 = st.columns(2)
+                        with mover_col1:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(31,174,150,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Top gainer</div>'
+                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{top_gainer["ticker"]}</div>'
+                                f'<div style="font-size:1.5rem; font-weight:800; color:#1FAE96;">'
+                                f'+{top_gainer["change_pct"]:.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with mover_col2:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(229,72,77,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Top loser</div>'
+                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{top_loser["ticker"]}</div>'
+                                f'<div style="font-size:1.5rem; font-weight:800; color:#E5484D;">'
+                                f'{top_loser["change_pct"]:.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with st.expander("See more movers"):
+                            mcol1, mcol2 = st.columns(2)
+                            with mcol1:
+                                st.markdown("Top gainers")
+                                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                                )
+                                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+                            with mcol2:
+                                st.markdown("Top losers")
+                                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                                )
+                                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+                    else:
+                        st.caption("No mover data available right now.")
+                else:
+                    st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
+
 # ============================================================
 # VIEW: SCREENER (public, no login required)
 # ============================================================
@@ -2683,28 +2740,6 @@ elif current_view == "discover":
             st.success("Almost there! Check your inbox to confirm your subscription.")
 
     render_section_banner("The Bigger Picture")
-
-    # --- Daily Top Movers (verplaatst naar hier -- dit is marktbrede data,
-    # geen 'signature signal', dus hoort thuis bij de andere market-context-items) ---
-    with st.expander("📊 Daily Top Movers", expanded=False):
-        if os.path.exists("top_movers.csv"):
-            st.caption(f"Last updated: {file_last_modified('top_movers.csv')} -- updates once daily.")
-            df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-            mcol1, mcol2 = st.columns(2)
-            with mcol1:
-                st.markdown("Top gainers")
-                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-            with mcol2:
-                st.markdown("Top losers")
-                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                )
-                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-        else:
-            st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
     # --- Sector rotation (nieuw) ---
     with st.expander("🔄 Sector rotation"):
