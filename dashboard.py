@@ -2270,12 +2270,34 @@ if current_view == "today":
                         st.metric("Vs. yesterday", "n/a")
                 with dcol2:
                     if daily_stats:
-                        st.metric("Best today", daily_stats["best_performer"], f"{daily_stats['best_change_pct']:+.1f}%")
+                        st.markdown(
+                            f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                            f'background:rgba(31,174,150,0.12);">'
+                            f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                            f'Best today</div>'
+                            f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                            f'{daily_stats["best_performer"]}</div>'
+                            f'<div style="font-size:1.4rem; font-weight:800; color:#1FAE96;">'
+                            f'{daily_stats["best_change_pct"]:+.1f}%</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.metric("Best today", "n/a")
                 with dcol3:
                     if daily_stats:
-                        st.metric("Worst today", daily_stats["worst_performer"], f"{daily_stats['worst_change_pct']:+.1f}%")
+                        st.markdown(
+                            f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                            f'background:rgba(229,72,77,0.12);">'
+                            f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                            f'Worst today</div>'
+                            f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                            f'{daily_stats["worst_performer"]}</div>'
+                            f'<div style="font-size:1.4rem; font-weight:800; color:#E5484D;">'
+                            f'{daily_stats["worst_change_pct"]:+.1f}%</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.metric("Worst today", "n/a")
 
@@ -2284,6 +2306,63 @@ if current_view == "today":
                     unsafe_allow_html=True,
                 )
                 st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+
+            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
+            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
+            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
+            with st.container(border=True):
+                st.markdown("**Yesterday's biggest movers**")
+                if os.path.exists("top_movers.csv"):
+                    st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
+                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+                    if not df_movers.empty:
+                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
+                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
+                        mover_col1, mover_col2 = st.columns(2)
+                        with mover_col1:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(31,174,150,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Top gainer</div>'
+                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{top_gainer["ticker"]}</div>'
+                                f'<div style="font-size:1.5rem; font-weight:800; color:#1FAE96;">'
+                                f'+{top_gainer["change_pct"]:.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with mover_col2:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(229,72,77,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Top loser</div>'
+                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{top_loser["ticker"]}</div>'
+                                f'<div style="font-size:1.5rem; font-weight:800; color:#E5484D;">'
+                                f'{top_loser["change_pct"]:.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with st.expander("See more movers"):
+                            mcol1, mcol2 = st.columns(2)
+                            with mcol1:
+                                st.markdown("Top gainers")
+                                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
+                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                                )
+                                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+                            with mcol2:
+                                st.markdown("Top losers")
+                                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
+                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
+                                )
+                                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+                    else:
+                        st.caption("No mover data available right now.")
+                else:
+                    st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
             # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
             with st.container(border=True):
@@ -2377,12 +2456,20 @@ if current_view == "today":
                     )
                     if weekly_scan_within_days:
                         from portfolio_watch import check_holding
+                        # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
+                        # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
+                        # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
+                        # berekend op basis van de exacte flip-datum ('sinds').
+                        FLIP_VISIBLE_DAYS_ON_TODAY = 2
+                        today_date = datetime.now().date()
                         with st.spinner("Checking for trend flips..."):
                             flipped = []
                             for h in holdings:
                                 result = check_holding(h["naam"], h["ticker"])
-                                if result and result.get("recent_gewijzigd"):
-                                    flipped.append(result)
+                                if result and result.get("sinds"):
+                                    days_since_flip = (today_date - result["sinds"]).days
+                                    if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
+                                        flipped.append(result)
                         for f in flipped[:3]:
                             emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
                             st.markdown(f"- {emoji} **{f['naam']}** just flipped to {f['status']}")
@@ -2421,68 +2508,57 @@ if current_view == "today":
                 else:
                     st.caption("No market news available right now.")
 
-            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
-            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
-            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
-            with st.container(border=True):
-                st.markdown("**Yesterday's biggest movers**")
-                if os.path.exists("top_movers.csv"):
-                    st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
-                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-                    if not df_movers.empty:
-                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
-                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
-                        mover_col1, mover_col2 = st.columns(2)
-                        with mover_col1:
-                            st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(31,174,150,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Top gainer</div>'
-                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{top_gainer["ticker"]}</div>'
-                                f'<div style="font-size:1.5rem; font-weight:800; color:#1FAE96;">'
-                                f'+{top_gainer["change_pct"]:.1f}%</div>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-                        with mover_col2:
-                            st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(229,72,77,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Top loser</div>'
-                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{top_loser["ticker"]}</div>'
-                                f'<div style="font-size:1.5rem; font-weight:800; color:#E5484D;">'
-                                f'{top_loser["change_pct"]:.1f}%</div>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-                        with st.expander("See more movers"):
-                            mcol1, mcol2 = st.columns(2)
-                            with mcol1:
-                                st.markdown("Top gainers")
-                                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                                )
-                                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-                            with mcol2:
-                                st.markdown("Top losers")
-                                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                                )
-                                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-                    else:
-                        st.caption("No mover data available right now.")
-                else:
-                    st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
 
 # ============================================================
 # VIEW: SCREENER (public, no login required)
 # ============================================================
 elif current_view == "discover":
     st.markdown("### Discover")
+    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
+    #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
+    #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
+    #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
+    #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
+    import database as _database_for_optin
+
+    st.markdown(
+        """
+        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+                    border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+                    padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
+            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                📬 Free daily email
+            </div>
+            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
+                In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
+            </div>
+            <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
+                Just your email -- no account needed.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
+    with optin_col1:
+        optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
+    with optin_col2:
+        optin_region = st.selectbox(
+            "Region", ["EU", "US_East", "US_West"],
+            format_func=lambda x: x.replace("_", " "),
+            key="discover_optin_region", label_visibility="collapsed",
+        )
+    with optin_col3:
+        optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
+
+    if optin_submitted:
+        if not optin_email or "@" not in optin_email:
+            st.error("Please enter a valid email address.")
+        else:
+            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+            send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
+            st.success("Almost there! Check your inbox to confirm your subscription.")
+
 
     st.markdown(
         """
@@ -2693,51 +2769,6 @@ elif current_view == "discover":
 
         st.divider()
         _email_pref_link("Want this weekly by email?")
-
-    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
-    #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
-    #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
-    #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
-    #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
-    import database as _database_for_optin
-
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                    border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
-                    padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
-            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                📬 Free daily email
-            </div>
-            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
-                In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
-            </div>
-            <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
-                Just your email -- no account needed.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
-    with optin_col1:
-        optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
-    with optin_col2:
-        optin_region = st.selectbox(
-            "Region", ["EU", "US_East", "US_West"],
-            format_func=lambda x: x.replace("_", " "),
-            key="discover_optin_region", label_visibility="collapsed",
-        )
-    with optin_col3:
-        optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
-
-    if optin_submitted:
-        if not optin_email or "@" not in optin_email:
-            st.error("Please enter a valid email address.")
-        else:
-            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
-            send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
-            st.success("Almost there! Check your inbox to confirm your subscription.")
 
     render_section_banner("The Bigger Picture")
 
