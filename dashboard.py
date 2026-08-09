@@ -2241,71 +2241,71 @@ if current_view == "today":
         else:
             tracked_items = holdings + watchlist_items
 
-            # --- Your portfolio today (gestyled als de Discover-banner) ---
+            # --- Your portfolio today (nu in een eigen kader, net als Yesterday's
+            # biggest movers -- consistente stijl over de hele Today-pagina) ---
             if holdings:
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings)
 
-                st.markdown(
-                    """
-                    <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
-                                border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
-                                padding: 1rem 1.25rem; margin: 0.5rem 0 0.5rem 0;">
-                        <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                            Your Portfolio Today
-                        </div>
-                        <div style="color:#8992A3; font-size:0.85rem; margin-top:3px;">
-                            How your positions did today.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                with st.container(border=True):
+                    st.markdown("**Your Portfolio Today**")
+                    st.caption("How your positions did today.")
 
-                dcol1, dcol2, dcol3 = st.columns(3)
-                with dcol1:
-                    if daily_stats:
-                        st.metric("Vs. yesterday", f"{daily_stats['portfolio_change_pct']:+.1f}%")
-                    else:
-                        st.metric("Vs. yesterday", "n/a")
-                with dcol2:
-                    if daily_stats:
-                        st.markdown(
-                            f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                            f'background:rgba(31,174,150,0.12);">'
-                            f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                            f'Best today</div>'
-                            f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                            f'{daily_stats["best_performer"]}</div>'
-                            f'<div style="font-size:1.4rem; font-weight:800; color:#1FAE96;">'
-                            f'{daily_stats["best_change_pct"]:+.1f}%</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.metric("Best today", "n/a")
-                with dcol3:
-                    if daily_stats:
-                        st.markdown(
-                            f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                            f'background:rgba(229,72,77,0.12);">'
-                            f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                            f'Worst today</div>'
-                            f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                            f'{daily_stats["worst_performer"]}</div>'
-                            f'<div style="font-size:1.4rem; font-weight:800; color:#E5484D;">'
-                            f'{daily_stats["worst_change_pct"]:+.1f}%</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.metric("Worst today", "n/a")
+                    dcol1, dcol2, dcol3 = st.columns(3)
+                    with dcol1:
+                        if daily_stats:
+                            vs_yesterday_pct = daily_stats["portfolio_change_pct"]
+                            vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
+                            vs_yesterday_bg = "rgba(31,174,150,0.12)" if vs_yesterday_pct >= 0 else "rgba(229,72,77,0.12)"
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:{vs_yesterday_bg};">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Vs. yesterday</div>'
+                                f'<div style="font-size:1.4rem; font-weight:800; color:{vs_yesterday_color}; margin-top:4px;">'
+                                f'{vs_yesterday_pct:+.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.metric("Vs. yesterday", "n/a")
+                    with dcol2:
+                        if daily_stats:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(31,174,150,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Best today</div>'
+                                f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{daily_stats["best_performer"]}</div>'
+                                f'<div style="font-size:1.4rem; font-weight:800; color:#1FAE96;">'
+                                f'{daily_stats["best_change_pct"]:+.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.metric("Best today", "n/a")
+                    with dcol3:
+                        if daily_stats:
+                            st.markdown(
+                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
+                                f'background:rgba(229,72,77,0.12);">'
+                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
+                                f'Worst today</div>'
+                                f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
+                                f'{daily_stats["worst_performer"]}</div>'
+                                f'<div style="font-size:1.4rem; font-weight:800; color:#E5484D;">'
+                                f'{daily_stats["worst_change_pct"]:+.1f}%</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.metric("Worst today", "n/a")
 
-                st.markdown(
-                    '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
+                        unsafe_allow_html=True,
+                    )
 
             # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
             # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
@@ -2479,9 +2479,9 @@ if current_view == "today":
                     unsafe_allow_html=True,
                 )
 
-            # --- Top nieuws (portfolio + watchlist) ---
-            with st.container(border=True):
-                st.markdown("**Top news for you**")
+            # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
+            # met Market news voelde dit als een lange wand van tekst ---
+            with st.expander("📰 Top news for you", expanded=False):
                 st.caption("The 5 most recent news items across your portfolio and watchlist "
                            "(up to 3 per position, from the last 3 days), most recent first.")
                 with st.spinner("Checking news..."):
@@ -2493,9 +2493,8 @@ if current_view == "today":
                 else:
                     st.caption("No recent news found for your tracked positions.")
 
-            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) ---
-            with st.container(border=True):
-                st.markdown("**Market news**")
+            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
+            with st.expander("🌐 Market news", expanded=False):
                 with st.spinner("Checking market news..."):
                     market_news = get_top_news_for_tickers(
                         [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
