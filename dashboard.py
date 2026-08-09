@@ -2731,30 +2731,43 @@ elif current_view == "discover":
         with st.spinner("Building trend chart..."):
             rotation_trend = build_sector_rotation_trend(region=region)
         if rotation_trend:
-            trend_fig = go.Figure()
-            trend_palette = [
-                "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
-            ]
-            for i, (sector, series) in enumerate(rotation_trend.items()):
-                trend_fig.add_trace(go.Scatter(
-                    x=series["dates"], y=series["values"], mode="lines", name=sector,
-                    line=dict(color=trend_palette[i % len(trend_palette)], width=2),
-                    hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
-                ))
-            trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-            trend_fig.update_layout(
-                yaxis_title="Trailing 1-month return (%)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                margin=dict(t=10, b=10, l=10, r=10),
-                height=420,
-                xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+            all_trend_sectors = list(rotation_trend.keys())
+            # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
+            # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
+            default_sectors = sorted(
+                all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
+            )[:5]
+            selected_sectors = st.multiselect(
+                "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
             )
-            st.plotly_chart(trend_fig, width="stretch")
+            if selected_sectors:
+                trend_fig = go.Figure()
+                trend_palette = [
+                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                ]
+                for i, sector in enumerate(selected_sectors):
+                    series = rotation_trend[sector]
+                    trend_fig.add_trace(go.Scatter(
+                        x=series["dates"], y=series["values"], mode="lines", name=sector,
+                        line=dict(color=trend_palette[i % len(trend_palette)], width=2),
+                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
+                    ))
+                trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                trend_fig.update_layout(
+                    yaxis_title="Trailing 1-month return (%)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=420,
+                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                )
+                st.plotly_chart(trend_fig, width="stretch")
+            else:
+                st.caption("Select at least 1 sector above to see the trend chart.")
         else:
             st.caption("No trend data available right now.")
 
