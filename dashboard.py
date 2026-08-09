@@ -2345,6 +2345,7 @@ if current_view == "today":
                                 f'</div>',
                                 unsafe_allow_html=True,
                             )
+                        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
                         with st.expander("See more movers"):
                             mcol1, mcol2 = st.columns(2)
                             with mcol1:
