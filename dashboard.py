@@ -881,6 +881,41 @@ def build_theme_rotation(period: str = "1mo") -> list:
     return results
 
 
+def build_sector_rotation_trend(region: str = "US", lookback_months: int = 6, rolling_window_days: int = 21) -> dict:
+    """
+    Geeft voor elke sector-ETF een TIJDREEKS van het rollende 1-maands-
+    rendement terug (i.p.v. build_sector_rotation()'s enkele, huidige
+    getal) -- laat zien of een sector aan het versnellen, vertragen, of
+    OMSLAAN is, zodat een reversal visueel te herkennen is in een
+    lijngrafiek. Sectoren met te weinig historische data worden
+    overgeslagen (geen crash bij een enkele problematische ticker).
+    """
+    etfs = US_SECTOR_ETFS if region == "US" else EU_SECTOR_ETFS
+    total_days_needed = lookback_months * 31 + rolling_window_days + 15  # ruime marge voor weekends/feestdagen
+    result = {}
+    for sector, ticker in etfs.items():
+        try:
+            hist = get_cached_ticker_history(ticker, period=f"{total_days_needed}d")
+            if hist is None or hist.empty:
+                continue
+            closes = hist["Close"].dropna()
+            if len(closes) < rolling_window_days + 5:
+                continue
+            rolling_return = (closes / closes.shift(rolling_window_days) - 1) * 100
+            rolling_return = rolling_return.dropna()
+            if rolling_return.empty:
+                continue
+            cutoff_date = rolling_return.index[-1] - pd.Timedelta(days=lookback_months * 31)
+            rolling_return = rolling_return[rolling_return.index >= cutoff_date]
+            result[sector] = {
+                "dates": rolling_return.index.strftime("%Y-%m-%d").tolist(),
+                "values": rolling_return.round(2).tolist(),
+            }
+        except Exception:
+            continue
+    return result
+
+
 def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     """
     Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
@@ -2689,6 +2724,39 @@ elif current_view == "discover":
             )
         else:
             st.caption("No sector data available right now.")
+
+        st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
+        st.caption("Each line shows how a sector's trailing 1-month return has evolved over the last 6 months. "
+                   "A line crossing from below zero to above (or vice versa) is a rotation signal.")
+        with st.spinner("Building trend chart..."):
+            rotation_trend = build_sector_rotation_trend(region=region)
+        if rotation_trend:
+            trend_fig = go.Figure()
+            trend_palette = [
+                "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+            ]
+            for i, (sector, series) in enumerate(rotation_trend.items()):
+                trend_fig.add_trace(go.Scatter(
+                    x=series["dates"], y=series["values"], mode="lines", name=sector,
+                    line=dict(color=trend_palette[i % len(trend_palette)], width=2),
+                    hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
+                ))
+            trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+            trend_fig.update_layout(
+                yaxis_title="Trailing 1-month return (%)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=420,
+                xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+            )
+            st.plotly_chart(trend_fig, width="stretch")
+        else:
+            st.caption("No trend data available right now.")
 
     # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
     # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
