@@ -916,6 +916,38 @@ def build_sector_rotation_trend(region: str = "US", lookback_months: int = 6, ro
     return result
 
 
+def build_theme_rotation_trend(lookback_months: int = 6, rolling_window_days: int = 21) -> dict:
+    """
+    Zelfde logica als build_sector_rotation_trend(), maar dan voor de
+    THEMA-ETF's -- geeft per thema een tijdreeks van het rollende
+    1-maands-rendement terug, i.p.v. build_theme_rotation()'s enkele,
+    huidige getal.
+    """
+    total_days_needed = lookback_months * 31 + rolling_window_days + 15
+    result = {}
+    for theme, ticker in THEME_ETFS.items():
+        try:
+            hist = get_cached_ticker_history(ticker, period=f"{total_days_needed}d")
+            if hist is None or hist.empty:
+                continue
+            closes = hist["Close"].dropna()
+            if len(closes) < rolling_window_days + 5:
+                continue
+            rolling_return = (closes / closes.shift(rolling_window_days) - 1) * 100
+            rolling_return = rolling_return.dropna()
+            if rolling_return.empty:
+                continue
+            cutoff_date = rolling_return.index[-1] - pd.Timedelta(days=lookback_months * 31)
+            rolling_return = rolling_return[rolling_return.index >= cutoff_date]
+            result[theme] = {
+                "dates": rolling_return.index.strftime("%Y-%m-%d").tolist(),
+                "values": rolling_return.round(2).tolist(),
+            }
+        except Exception:
+            continue
+    return result
+
+
 def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     """
     Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
@@ -2514,363 +2546,420 @@ if current_view == "today":
 # ============================================================
 elif current_view == "discover":
     st.markdown("### Discover")
-    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
-    #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
-    #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
-    #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
-    #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
-    import database as _database_for_optin
+
+    current_discover_subview = st.query_params.get("subview", "discover")
+
+    def _discover_subnav_class(subview_name):
+        return "nav-link active" if current_discover_subview == subview_name else "nav-link"
 
     st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                    border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
-                    padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
-            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                📬 Free daily email
-            </div>
-            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
-                In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
-            </div>
-            <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
-                Just your email -- no account needed.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
-    with optin_col1:
-        optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
-    with optin_col2:
-        optin_region = st.selectbox(
-            "Region", ["EU", "US_East", "US_West"],
-            format_func=lambda x: x.replace("_", " "),
-            key="discover_optin_region", label_visibility="collapsed",
-        )
-    with optin_col3:
-        optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
-
-    if optin_submitted:
-        if not optin_email or "@" not in optin_email:
-            st.error("Please enter a valid email address.")
-        else:
-            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
-            send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
-            st.success("Almost there! Check your inbox to confirm your subscription.")
-
-
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
-                    border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
-                    padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
-            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                Hesty's Signature Signals
-            </div>
-            <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
-                3 specially-built signals, each with its own investing style -- this is the core of Hesty's.
-            </div>
-            <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
-                📡 <b style="color:#EAEDF1;">Momentocrats</b> -- momentum + quality, for swing trades (days-weeks)<br>
-                🐦 <b style="color:#EAEDF1;">Snowballers</b> -- quality at a good price, for the long-term investor<br>
-                🚀 <b style="color:#EAEDF1;">Rocket List</b> -- accelerating growth, for higher risk/reward
-            </div>
+        f"""
+        <div class="nav-bar" style="margin-bottom: 1.25rem;">
+            <a href="?view=discover&subview=discover" class="{_discover_subnav_class('discover')}" target="_self">Discover</a>
+            <a href="?view=discover&subview=sectors_themes" class="{_discover_subnav_class('sectors_themes')}" target="_self">Sectors &amp; Themes</a>
+            <a href="?view=discover&subview=earnings_surprises" class="{_discover_subnav_class('earnings_surprises')}" target="_self">Earnings Surprises</a>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    def _email_pref_link(label: str):
-        """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
+    if current_discover_subview == "sectors_themes":
+        # --- Sector rotation (nieuw) ---
+        with st.expander("🔄 Sector rotation"):
+            st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
+            st.caption("Live data -- recalculated fresh every time you open this.")
+            region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
+            with st.spinner("Checking sector performance..."):
+                rotation = build_sector_rotation(region=region, period="1mo")
+            if rotation:
+                df_rotation = pd.DataFrame(rotation)[["sector", "return_pct"]]
+                df_rotation.columns = ["Sector", "1-Month Return"]
+                st.dataframe(
+                    df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
+                                      .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
+                    width=320,
+                    hide_index=True,
+                )
+            else:
+                st.caption("No sector data available right now.")
+
+            st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
+            st.caption("Each line shows how a sector's trailing 1-month return has evolved over the last 6 months. "
+                       "A line crossing from below zero to above (or vice versa) is a rotation signal.")
+            with st.spinner("Building trend chart..."):
+                rotation_trend = build_sector_rotation_trend(region=region)
+            if rotation_trend:
+                all_trend_sectors = list(rotation_trend.keys())
+                # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
+                # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
+                default_sectors = sorted(
+                    all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
+                )[:5]
+                selected_sectors = st.multiselect(
+                    "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
+                )
+                if selected_sectors:
+                    trend_fig = go.Figure()
+                    trend_palette = [
+                        "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                        "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                    ]
+                    for i, sector in enumerate(selected_sectors):
+                        series = rotation_trend[sector]
+                        trend_fig.add_trace(go.Scatter(
+                            x=series["dates"], y=series["values"], mode="lines", name=sector,
+                            line=dict(color=trend_palette[i % len(trend_palette)], width=2),
+                            hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
+                        ))
+                    trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                    trend_fig.update_layout(
+                        yaxis_title="Trailing 1-month return (%)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                        legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        height=420,
+                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    )
+                    st.plotly_chart(trend_fig, width="stretch")
+                else:
+                    st.caption("Select at least 1 sector above to see the trend chart.")
+            else:
+                st.caption("No trend data available right now.")
+
+        # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
+        # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
+        with st.expander("💡 Themes"):
+            st.caption("How popular investing themes are doing right now (trailing 1-month return) -- "
+                       "these cut across sectors, so they're tracked separately from Sector rotation.")
+            st.caption("Live data -- recalculated fresh every time you open this.")
+            with st.spinner("Checking theme performance..."):
+                theme_rotation = build_theme_rotation(period="1mo")
+            if theme_rotation:
+                df_themes = pd.DataFrame(theme_rotation)[["theme", "return_pct"]]
+                df_themes.columns = ["Theme", "1-Month Return"]
+                st.dataframe(
+                    df_themes.style.format({"1-Month Return": "{:+.1f}%"})
+                                    .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
+                    width=320,
+                    hide_index=True,
+                )
+            else:
+                st.caption("No theme data available right now.")
+
+            st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
+            st.caption("Each line shows how a theme's trailing 1-month return has evolved over the last 6 months. "
+                       "A line crossing from below zero to above (or vice versa) is a rotation signal.")
+            with st.spinner("Building trend chart..."):
+                theme_trend = build_theme_rotation_trend()
+            if theme_trend:
+                all_trend_themes = list(theme_trend.keys())
+                # Bij Themes zijn er maar 5 (i.p.v. 11 sectoren), dus standaard
+                # gewoon allemaal tonen -- minder kans op een chaotische grafiek.
+                selected_themes = st.multiselect(
+                    "Themes to compare", all_trend_themes, default=all_trend_themes, key="theme_trend_selection",
+                )
+                if selected_themes:
+                    theme_fig = go.Figure()
+                    theme_palette = ["#1FAE96", "#E8A93C", "#E5484D", "#4DA6FF", "#C77DFF"]
+                    for i, theme in enumerate(selected_themes):
+                        series = theme_trend[theme]
+                        theme_fig.add_trace(go.Scatter(
+                            x=series["dates"], y=series["values"], mode="lines", name=theme,
+                            line=dict(color=theme_palette[i % len(theme_palette)], width=2),
+                            hovertemplate="%{x}: %{y:+.1f}%<extra>" + theme + "</extra>",
+                        ))
+                    theme_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                    theme_fig.update_layout(
+                        yaxis_title="Trailing 1-month return (%)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                        legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        height=420,
+                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    )
+                    st.plotly_chart(theme_fig, width="stretch")
+                else:
+                    st.caption("Select at least 1 theme above to see the trend chart.")
+            else:
+                st.caption("No trend data available right now.")
+
+    elif current_discover_subview == "earnings_surprises":
+        with st.expander("💰 Earnings surprises"):
+            st.caption("Notable earnings beats/misses among today's and this week's signals -- "
+                       "only shown during earnings season (last 60 days).")
+            st.caption(f"Sourced from the daily and weekly scans. Last updated: "
+                       f"{file_last_modified('supertrend_signals_daily.csv')} (daily), "
+                       f"{file_last_modified('supertrend_signals.csv')} (weekly).")
+            surprises = get_earnings_surprises_from_signals(max_items=5)
+            if surprises:
+                for s in surprises:
+                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
+            else:
+                st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
+
+    else:
+        # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
+        #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
+        #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
+        #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
+        #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
+        import database as _database_for_optin
+
         st.markdown(
-            f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} -- manage in '
-            f'<a href="?view=settings" class="inline-link" target="_self">Settings</a>.</div>',
+            """
+            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+                        padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    📬 Free daily email
+                </div>
+                <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
+                    In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
+                </div>
+                <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
+                    Just your email -- no account needed.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
+        with optin_col1:
+            optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
+        with optin_col2:
+            optin_region = st.selectbox(
+                "Region", ["EU", "US_East", "US_West"],
+                format_func=lambda x: x.replace("_", " "),
+                key="discover_optin_region", label_visibility="collapsed",
+            )
+        with optin_col3:
+            optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
+
+        if optin_submitted:
+            if not optin_email or "@" not in optin_email:
+                st.error("Please enter a valid email address.")
+            else:
+                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+                send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
+                st.success("Almost there! Check your inbox to confirm your subscription.")
+
+
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+                        border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+                        padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    Hesty's Signature Signals
+                </div>
+                <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
+                    3 specially-built signals, each with its own investing style -- this is the core of Hesty's.
+                </div>
+                <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
+                    📡 <b style="color:#EAEDF1;">Momentocrats</b> -- momentum + quality, for swing trades (days-weeks)<br>
+                    🐦 <b style="color:#EAEDF1;">Snowballers</b> -- quality at a good price, for the long-term investor<br>
+                    🚀 <b style="color:#EAEDF1;">Rocket List</b> -- accelerating growth, for higher risk/reward
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
-    def _next_weekly_scan_time() -> str:
-        """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
-        now = datetime.now(timezone.utc)
-        days_ahead = (5 - now.weekday()) % 7  # maandag=0 ... zaterdag=5
-        if days_ahead == 0 and now.hour >= 7:
-            days_ahead = 7  # het is al zaterdag na 07:00 UTC -> volgende week
-        next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
-        return next_date.strftime("%Y-%m-%d %H:%M UTC")
-
-    if st.user.is_logged_in:
-        import database
-        _current_prefs = database.get_user_preferences(st.user.email)
-        _is_premium_discover = database.is_premium_user(st.user.email)
-    else:
-        _current_prefs = {}
-        # Discover vereist bewust geen login -- maar tijdens de 'iedereen
-        # premium'-testfase moet dat OOK voor niet-ingelogde bezoekers
-        # gelden, niet alleen voor wie toevallig al is ingelogd.
-        try:
-            _is_premium_discover = st.secrets.get("app", {}).get("premium_free_for_all", False)
-        except Exception:
-            _is_premium_discover = False
-    _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
-
-    # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-    with st.expander("📡 Momentocrats", expanded=False):
-        st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
-        timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
-        csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
-
-        st.caption(f"Last updated: {file_last_modified(csv_file)}")
-
-        df_screener = load_screener_data(csv_file)
-        if df_screener is None or df_screener.empty:
-            st.info("No results yet -- check back after the next scheduled scan.")
-        else:
-            df_screener = df_screener.sort_values("score", ascending=False)
-
-            min_score = st.slider("Minimum score", float(df_screener["score"].min()),
-                                   float(df_screener["score"].max()), float(df_screener["score"].min()))
-            filtered = df_screener[df_screener["score"] >= min_score].copy()
-
-            # 'benchmark' is interne informatie (welke index gebruikt is voor de
-            # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
-            filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
-
-            # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
-            # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
-            # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
-            column_labels = {
-                "ticker": "Ticker", "flip_date": "Flip Date",
-                "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
-                "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
-                "prijs_bij_omslag": "Price at Flip",
-                "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
-                "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
-                "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
-                "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
-                "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
-                "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
-                "fair_value": "Fair Value",
-                "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
-            }
-            filtered.rename(columns=column_labels, inplace=True)
-
-            # Score als 3e kolom, de rest in de logische volgorde erachter
-            preferred_order = [
-                "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
-                "Prior Trend (Weeks)", "Prior Trend (Days)",
-                "Price at Flip", "Price Now", "Since Flip", "Above EMA",
-                "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
-                "Earnings Surprise", "Earnings Beat", "Earnings Date",
-                "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
-            ]
-            ordered_cols = [c for c in preferred_order if c in filtered.columns]
-            ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
-            filtered = filtered[ordered_cols]
-
-            format_dict = {
-                "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
-                "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
-                "ROIC": "{:+.1f}%", "Score": "{:.2f}",
-                "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
-                "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
-            }
-            format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
-
-            total_matching = len(filtered)
-            filtered = filtered.head(_signal_display_limit)
-
-            st.dataframe(
-                filtered.style.format(format_dict, na_rep="unknown")
-                              .background_gradient(subset=["Score"], cmap="Greens")
-                              .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
-                width="stretch",
-                column_config={
-                    "Score": st.column_config.NumberColumn(
-                        "Score",
-                        help=(
-                            "Out of 10, built from 6 weighted parts: freshness of the flip (max 1.5), "
-                            "ROIC level + trend (max 1.5), relative strength vs. the index (max 2.5), "
-                            "volume confirmation (max 1.0), recent earnings surprise (max 1.5), and how "
-                            "far below the analyst price target it trades (max 2.0). Missing data counts "
-                            "as neutral (half the max) for that part."
-                        ),
-                    ),
-                },
-                height=500,
+        def _email_pref_link(label: str):
+            """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
+            st.markdown(
+                f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} -- manage in '
+                f'<a href="?view=settings" class="inline-link" target="_self">Settings</a>.</div>',
+                unsafe_allow_html=True,
             )
-            st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
-            if not _is_premium_discover and total_matching > _signal_display_limit:
-                st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                        f"Upgrade to Premium to see all {total_matching}.")
 
-        st.divider()
-        _email_pref_link("Want this weekly by email?")
+        def _next_weekly_scan_time() -> str:
+            """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
+            now = datetime.now(timezone.utc)
+            days_ahead = (5 - now.weekday()) % 7  # maandag=0 ... zaterdag=5
+            if days_ahead == 0 and now.hour >= 7:
+                days_ahead = 7  # het is al zaterdag na 07:00 UTC -> volgende week
+            next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
+            return next_date.strftime("%Y-%m-%d %H:%M UTC")
 
-    # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-    with st.expander("🐦 Snowballers"):
-        st.caption("Quality companies trading below fair value, with low volatility. For the "
-                   "long-term investor -- no fresh trend flip required.")
-        st.caption(f"Last updated: {file_last_modified('snowball_signals.csv')}")
-        st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
-        if os.path.exists("snowball_signals.csv"):
-            df_snowball = pd.read_csv("snowball_signals.csv")
-            if not df_snowball.empty:
-                df_display = df_snowball.rename(columns={
-                    "ticker": "Ticker", "prijs_nu": "Price", "roic_pct": "ROIC",
-                    "afwijking_fair_value_pct": "Vs Fair Value", "volatiliteit_pct": "Volatility",
-                })[["Ticker", "Price", "ROIC", "Vs Fair Value", "Volatility"]]
-                total_snowball = len(df_display)
-                df_display = df_display.head(_signal_display_limit)
-                st.dataframe(
-                    df_display.style.format({
-                        "Price": "{:.2f}", "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
-                    }),
-                    width="stretch", hide_index=True,
-                )
-                st.caption(f"{len(df_display)} of {total_snowball} matching stocks shown.")
-                if not _is_premium_discover and total_snowball > _signal_display_limit:
-                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                            f"Upgrade to Premium to see all {total_snowball}.")
+        if st.user.is_logged_in:
+            import database
+            _current_prefs = database.get_user_preferences(st.user.email)
+            _is_premium_discover = database.is_premium_user(st.user.email)
+        else:
+            _current_prefs = {}
+            # Discover vereist bewust geen login -- maar tijdens de 'iedereen
+            # premium'-testfase moet dat OOK voor niet-ingelogde bezoekers
+            # gelden, niet alleen voor wie toevallig al is ingelogd.
+            try:
+                _is_premium_discover = st.secrets.get("app", {}).get("premium_free_for_all", False)
+            except Exception:
+                _is_premium_discover = False
+        _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
+
+        # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
+        with st.expander("📡 Momentocrats", expanded=False):
+            st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
+            timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
+            csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
+
+            st.caption(f"Last updated: {file_last_modified(csv_file)}")
+
+            df_screener = load_screener_data(csv_file)
+            if df_screener is None or df_screener.empty:
+                st.info("No results yet -- check back after the next scheduled scan.")
             else:
-                st.caption("No stocks currently meet the Snowballers criteria.")
-        else:
-            st.caption("No data yet -- this updates once a week via the scheduled scan.")
+                df_screener = df_screener.sort_values("score", ascending=False)
 
-        st.divider()
-        _email_pref_link("Want this weekly by email?")
+                min_score = st.slider("Minimum score", float(df_screener["score"].min()),
+                                       float(df_screener["score"].max()), float(df_screener["score"].min()))
+                filtered = df_screener[df_screener["score"] >= min_score].copy()
 
-    # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
-    with st.expander("🚀 Rocket List"):
-        st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
-                   "with more risk in exchange for growth potential.")
-        st.caption(f"Last updated: {file_last_modified('rocket_list_signals.csv')}")
-        st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
-        if os.path.exists("rocket_list_signals.csv"):
-            df_rocket = pd.read_csv("rocket_list_signals.csv")
-            if not df_rocket.empty:
-                df_display = df_rocket.rename(columns={
-                    "ticker": "Ticker", "prijs_nu": "Price", "groei_pct": "Growth",
-                    "relatieve_sterkte": "Relative Strength",
-                })[["Ticker", "Price", "Growth", "Relative Strength"]]
-                total_rocket = len(df_display)
-                df_display = df_display.head(_signal_display_limit)
-                st.dataframe(
-                    df_display.style.format({"Price": "{:.2f}", "Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
-                    width="stretch", hide_index=True,
-                )
-                st.caption(f"{len(df_display)} of {total_rocket} matching stocks shown.")
-                if not _is_premium_discover and total_rocket > _signal_display_limit:
-                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                            f"Upgrade to Premium to see all {total_rocket}.")
-            else:
-                st.caption("No stocks currently meet the Rocket List criteria.")
-        else:
-            st.caption("No data yet -- this updates once a week via the scheduled scan.")
+                # 'benchmark' is interne informatie (welke index gebruikt is voor de
+                # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
+                filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
 
-        st.divider()
-        _email_pref_link("Want this weekly by email?")
+                # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
+                # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
+                # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
+                column_labels = {
+                    "ticker": "Ticker", "flip_date": "Flip Date",
+                    "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
+                    "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
+                    "prijs_bij_omslag": "Price at Flip",
+                    "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
+                    "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
+                    "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
+                    "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
+                    "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
+                    "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
+                    "fair_value": "Fair Value",
+                    "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
+                }
+                filtered.rename(columns=column_labels, inplace=True)
 
-    render_section_banner("The Bigger Picture")
-
-    # --- Sector rotation (nieuw) ---
-    with st.expander("🔄 Sector rotation"):
-        st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
-        st.caption("Live data -- recalculated fresh every time you open this.")
-        region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
-        with st.spinner("Checking sector performance..."):
-            rotation = build_sector_rotation(region=region, period="1mo")
-        if rotation:
-            df_rotation = pd.DataFrame(rotation)[["sector", "return_pct"]]
-            df_rotation.columns = ["Sector", "1-Month Return"]
-            st.dataframe(
-                df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
-                                  .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                width=320,
-                hide_index=True,
-            )
-        else:
-            st.caption("No sector data available right now.")
-
-        st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
-        st.caption("Each line shows how a sector's trailing 1-month return has evolved over the last 6 months. "
-                   "A line crossing from below zero to above (or vice versa) is a rotation signal.")
-        with st.spinner("Building trend chart..."):
-            rotation_trend = build_sector_rotation_trend(region=region)
-        if rotation_trend:
-            all_trend_sectors = list(rotation_trend.keys())
-            # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
-            # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
-            default_sectors = sorted(
-                all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
-            )[:5]
-            selected_sectors = st.multiselect(
-                "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
-            )
-            if selected_sectors:
-                trend_fig = go.Figure()
-                trend_palette = [
-                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                # Score als 3e kolom, de rest in de logische volgorde erachter
+                preferred_order = [
+                    "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
+                    "Prior Trend (Weeks)", "Prior Trend (Days)",
+                    "Price at Flip", "Price Now", "Since Flip", "Above EMA",
+                    "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
+                    "Earnings Surprise", "Earnings Beat", "Earnings Date",
+                    "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
                 ]
-                for i, sector in enumerate(selected_sectors):
-                    series = rotation_trend[sector]
-                    trend_fig.add_trace(go.Scatter(
-                        x=series["dates"], y=series["values"], mode="lines", name=sector,
-                        line=dict(color=trend_palette[i % len(trend_palette)], width=2),
-                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
-                    ))
-                trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                trend_fig.update_layout(
-                    yaxis_title="Trailing 1-month return (%)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    height=420,
-                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                ordered_cols = [c for c in preferred_order if c in filtered.columns]
+                ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
+                filtered = filtered[ordered_cols]
+
+                format_dict = {
+                    "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
+                    "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
+                    "ROIC": "{:+.1f}%", "Score": "{:.2f}",
+                    "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
+                    "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
+                }
+                format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
+
+                total_matching = len(filtered)
+                filtered = filtered.head(_signal_display_limit)
+
+                st.dataframe(
+                    filtered.style.format(format_dict, na_rep="unknown")
+                                  .background_gradient(subset=["Score"], cmap="Greens")
+                                  .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
+                    width="stretch",
+                    column_config={
+                        "Score": st.column_config.NumberColumn(
+                            "Score",
+                            help=(
+                                "Out of 10, built from 6 weighted parts: freshness of the flip (max 1.5), "
+                                "ROIC level + trend (max 1.5), relative strength vs. the index (max 2.5), "
+                                "volume confirmation (max 1.0), recent earnings surprise (max 1.5), and how "
+                                "far below the analyst price target it trades (max 2.0). Missing data counts "
+                                "as neutral (half the max) for that part."
+                            ),
+                        ),
+                    },
+                    height=500,
                 )
-                st.plotly_chart(trend_fig, width="stretch")
+                st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
+                if not _is_premium_discover and total_matching > _signal_display_limit:
+                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                            f"Upgrade to Premium to see all {total_matching}.")
+
+            st.divider()
+            _email_pref_link("Want this weekly by email?")
+
+        # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
+        with st.expander("🐦 Snowballers"):
+            st.caption("Quality companies trading below fair value, with low volatility. For the "
+                       "long-term investor -- no fresh trend flip required.")
+            st.caption(f"Last updated: {file_last_modified('snowball_signals.csv')}")
+            st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
+            if os.path.exists("snowball_signals.csv"):
+                df_snowball = pd.read_csv("snowball_signals.csv")
+                if not df_snowball.empty:
+                    df_display = df_snowball.rename(columns={
+                        "ticker": "Ticker", "prijs_nu": "Price", "roic_pct": "ROIC",
+                        "afwijking_fair_value_pct": "Vs Fair Value", "volatiliteit_pct": "Volatility",
+                    })[["Ticker", "Price", "ROIC", "Vs Fair Value", "Volatility"]]
+                    total_snowball = len(df_display)
+                    df_display = df_display.head(_signal_display_limit)
+                    st.dataframe(
+                        df_display.style.format({
+                            "Price": "{:.2f}", "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
+                        }),
+                        width="stretch", hide_index=True,
+                    )
+                    st.caption(f"{len(df_display)} of {total_snowball} matching stocks shown.")
+                    if not _is_premium_discover and total_snowball > _signal_display_limit:
+                        st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                                f"Upgrade to Premium to see all {total_snowball}.")
+                else:
+                    st.caption("No stocks currently meet the Snowballers criteria.")
             else:
-                st.caption("Select at least 1 sector above to see the trend chart.")
-        else:
-            st.caption("No trend data available right now.")
+                st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
-    # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
-    # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
-    with st.expander("💡 Themes"):
-        st.caption("How popular investing themes are doing right now (trailing 1-month return) -- "
-                   "these cut across sectors, so they're tracked separately from Sector rotation.")
-        st.caption("Live data -- recalculated fresh every time you open this.")
-        with st.spinner("Checking theme performance..."):
-            theme_rotation = build_theme_rotation(period="1mo")
-        if theme_rotation:
-            df_themes = pd.DataFrame(theme_rotation)[["theme", "return_pct"]]
-            df_themes.columns = ["Theme", "1-Month Return"]
-            st.dataframe(
-                df_themes.style.format({"1-Month Return": "{:+.1f}%"})
-                                .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                width=320,
-                hide_index=True,
-            )
-        else:
-            st.caption("No theme data available right now.")
+            st.divider()
+            _email_pref_link("Want this weekly by email?")
 
-    # --- Earnings surprises (nieuw, hergebruikt bestaande screener-data) ---
-    with st.expander("💰 Earnings surprises"):
-        st.caption("Notable earnings beats/misses among today's and this week's signals -- "
-                   "only shown during earnings season (last 60 days).")
-        st.caption(f"Sourced from the daily and weekly scans. Last updated: "
-                   f"{file_last_modified('supertrend_signals_daily.csv')} (daily), "
-                   f"{file_last_modified('supertrend_signals.csv')} (weekly).")
-        surprises = get_earnings_surprises_from_signals(max_items=5)
-        if surprises:
-            for s in surprises:
-                emoji = "🟢" if s["earnings_beat"] else "🔴"
-                st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
-        else:
-            st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
+        # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
+        with st.expander("🚀 Rocket List"):
+            st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
+                       "with more risk in exchange for growth potential.")
+            st.caption(f"Last updated: {file_last_modified('rocket_list_signals.csv')}")
+            st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
+            if os.path.exists("rocket_list_signals.csv"):
+                df_rocket = pd.read_csv("rocket_list_signals.csv")
+                if not df_rocket.empty:
+                    df_display = df_rocket.rename(columns={
+                        "ticker": "Ticker", "prijs_nu": "Price", "groei_pct": "Growth",
+                        "relatieve_sterkte": "Relative Strength",
+                    })[["Ticker", "Price", "Growth", "Relative Strength"]]
+                    total_rocket = len(df_display)
+                    df_display = df_display.head(_signal_display_limit)
+                    st.dataframe(
+                        df_display.style.format({"Price": "{:.2f}", "Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
+                        width="stretch", hide_index=True,
+                    )
+                    st.caption(f"{len(df_display)} of {total_rocket} matching stocks shown.")
+                    if not _is_premium_discover and total_rocket > _signal_display_limit:
+                        st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                                f"Upgrade to Premium to see all {total_rocket}.")
+                else:
+                    st.caption("No stocks currently meet the Rocket List criteria.")
+            else:
+                st.caption("No data yet -- this updates once a week via the scheduled scan.")
+
+            st.divider()
+            _email_pref_link("Want this weekly by email?")
 
 # ============================================================
 # VIEW: MY PORTFOLIO (personal, login required)
