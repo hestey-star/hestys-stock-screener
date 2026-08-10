@@ -2291,7 +2291,7 @@ if current_view == "today":
                             vs_yesterday_bg = "rgba(31,174,150,0.12)" if vs_yesterday_pct >= 0 else "rgba(229,72,77,0.12)"
                             st.markdown(
                                 f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:{vs_yesterday_bg};">'
+                                f'margin-bottom:0.5rem; background:{vs_yesterday_bg};">'
                                 f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
                                 f'Vs. yesterday</div>'
                                 f'<div style="font-size:1.4rem; font-weight:800; color:{vs_yesterday_color}; margin-top:4px;">'
@@ -2305,7 +2305,7 @@ if current_view == "today":
                         if daily_stats:
                             st.markdown(
                                 f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(31,174,150,0.12);">'
+                                f'margin-bottom:0.5rem; background:rgba(31,174,150,0.12);">'
                                 f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
                                 f'Best today</div>'
                                 f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
@@ -2321,7 +2321,7 @@ if current_view == "today":
                         if daily_stats:
                             st.markdown(
                                 f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(229,72,77,0.12);">'
+                                f'margin-bottom:0.5rem; background:rgba(229,72,77,0.12);">'
                                 f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
                                 f'Worst today</div>'
                                 f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
@@ -2354,7 +2354,7 @@ if current_view == "today":
                         with mover_col1:
                             st.markdown(
                                 f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(31,174,150,0.12);">'
+                                f'margin-bottom:0.5rem; background:rgba(31,174,150,0.12);">'
                                 f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
                                 f'Top gainer</div>'
                                 f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
@@ -2367,7 +2367,7 @@ if current_view == "today":
                         with mover_col2:
                             st.markdown(
                                 f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'background:rgba(229,72,77,0.12);">'
+                                f'margin-bottom:0.5rem; background:rgba(229,72,77,0.12);">'
                                 f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
                                 f'Top loser</div>'
                                 f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
