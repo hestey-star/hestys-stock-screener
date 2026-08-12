@@ -667,3 +667,34 @@ def delete_deep_dive_image(image_id: int, user_email: str) -> None:
         except Exception:
             pass  # het bestand is mogelijk al weg -- de database-rij verwijderen we hoe dan ook
     client.table("deep_dive_images").delete().eq("id", image_id).eq("user_email", hashed_email).execute()
+
+
+def get_performance_snapshot(user_email: str) -> dict:
+    """
+    Haalt de laatst opgeslagen Performance-snapshot op (indien aanwezig)
+    -- gebruikt om de Performance-pagina INSTANT te tonen i.p.v. bij elk
+    bezoek alles opnieuw (traag) te herberekenen.
+    """
+    client = get_supabase_client()
+    hashed_email = hash_email(user_email)
+    response = client.table("performance_snapshots").select("*").eq("user_email", hashed_email).execute()
+    return response.data[0] if response.data else None
+
+
+def save_performance_snapshot(
+    user_email: str, overall_return_pct: float, total_pnl: float,
+    earliest_date: str, checkpoint_results: list, value_series: list, performance_rows: list,
+) -> None:
+    """Slaat een nieuwe Performance-snapshot op (overschrijft de vorige -- we bewaren alleen de laatste)."""
+    client = get_supabase_client()
+    hashed_email = hash_email(user_email)
+    client.table("performance_snapshots").upsert({
+        "user_email": hashed_email,
+        "computed_at": datetime.now().isoformat(),
+        "overall_return_pct": overall_return_pct,
+        "total_pnl": total_pnl,
+        "earliest_date": earliest_date,
+        "checkpoint_results": checkpoint_results,
+        "value_series": value_series,
+        "performance_rows": performance_rows,
+    }).execute()

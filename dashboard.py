@@ -1966,7 +1966,7 @@ def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 1
     return float(valid["Close"].iloc[closest_pos])
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def _batch_download_history(tickers_tuple: tuple, period: str = "3y") -> dict:
     """
     Haalt de koersgeschiedenis van MEERDERE tickers op in 1 netwerk-
@@ -3980,58 +3980,61 @@ elif current_view == "analyze":
             st.caption("Your real return, based on the buy/sell transactions you've logged under "
                        "My Portfolio -- excludes dividends. Includes fully closed positions. "
                        "Positions without logged transactions won't show a return here.")
-            all_holdings_incl_closed = database.get_user_holdings(user_email)
-            with st.spinner("Loading price history..."):
-                shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
-            today = datetime.now().date()
-            performance_rows = []
-            total_invested = 0.0
-            total_pnl = 0.0
-            earliest_date = None
-            excluded_no_price = []
-            for h in all_holdings_incl_closed:
-                transactions = database.get_transactions_for_holding(user_email, h["id"])
-                if not transactions:
-                    continue
-                current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
-                if current_price is None:
-                    # Terugval: de snelle, gebatchte geschiedenis had geen recente
-                    # koers voor deze ticker (zeldzaam) -- dan alsnog de tragere
-                    # .info-route proberen, zodat de positie niet stilzwijgend
-                    # ontbreekt.
-                    single_info = get_cached_ticker_info(h["ticker"])
-                    current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
-                perf = compute_holding_performance(transactions, current_price)
-                if perf:
-                    is_closed = perf["shares_held"] <= 0.0001
-                    performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
-                    bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
-                    total_invested += bought_cost
-                    total_pnl += perf["total_pnl"]
-                    for t in transactions:
-                        if earliest_date is None or t["transaction_date"] < earliest_date:
-                            earliest_date = t["transaction_date"]
-                elif current_price is None:
-                    # Zelfs de terugval kon geen prijs vinden -- transparant melden
-                    # i.p.v. deze positie stilzwijgend uit het totaal te laten vallen.
-                    excluded_no_price.append(h["naam"])
 
-            if excluded_no_price:
-                st.caption(f"⚠️ Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
-                           f"excluded from the totals below until that's available again.")
+            snapshot = database.get_performance_snapshot(user_email)
+            refresh_col1, refresh_col2 = st.columns([3, 1])
+            with refresh_col1:
+                if snapshot and snapshot.get("computed_at"):
+                    st.caption(f"Last updated: {snapshot['computed_at'][:16].replace('T', ' ')}")
+                else:
+                    st.caption("Calculating your performance for the first time...")
+            with refresh_col2:
+                refresh_clicked = st.button("🔄 Refresh", key="perf_refresh_btn")
 
+            if refresh_clicked or not snapshot:
+                # VOLLEDIGE (trage) herberekening -- alleen op expliciet verzoek
+                # (de Refresh-knop) of bij het allereerste bezoek, NIET meer bij
+                # elk bezoek aan de pagina. Dit is de kern van de snelheidsfix:
+                # een volgend bezoek toont de opgeslagen snapshot INSTANT.
+                all_holdings_incl_closed = database.get_user_holdings(user_email)
+                with st.spinner("Loading price history..."):
+                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
+                today = datetime.now().date()
+                performance_rows = []
+                total_invested = 0.0
+                total_pnl = 0.0
+                earliest_date = None
+                excluded_no_price = []
+                for h in all_holdings_incl_closed:
+                    transactions = database.get_transactions_for_holding(user_email, h["id"])
+                    if not transactions:
+                        continue
+                    current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
+                    if current_price is None:
+                        single_info = get_cached_ticker_info(h["ticker"])
+                        current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
+                    perf = compute_holding_performance(transactions, current_price)
+                    if perf:
+                        is_closed = perf["shares_held"] <= 0.0001
+                        performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
+                        bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
+                        total_invested += bought_cost
+                        total_pnl += perf["total_pnl"]
+                        for t in transactions:
+                            if earliest_date is None or t["transaction_date"] < earliest_date:
+                                earliest_date = t["transaction_date"]
+                    elif current_price is None:
+                        excluded_no_price.append(h["naam"])
 
-            if performance_rows:
-                overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
-                if overall_return_pct is not None and pd.isna(overall_return_pct):
-                    # Laatste veiligheidsnet -- zou niet meer moeten gebeuren dankzij de
-                    # dropna()-fix hierboven, maar voorkomt sowieso ooit weer '+nan%'.
-                    overall_return_pct = None
-                if overall_return_pct is not None:
-                    since_txt = f" since {earliest_date}" if earliest_date else ""
-                    st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
+                if excluded_no_price:
+                    st.caption(f"⚠️ Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
+                               f"excluded from the totals below until that's available again.")
 
-                with st.spinner("Checking your performance across timeframes..."):
+                if performance_rows:
+                    overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
+                    if overall_return_pct is not None and pd.isna(overall_return_pct):
+                        overall_return_pct = None
+
                     checkpoints = []
                     if earliest_date:
                         try:
@@ -4053,19 +4056,58 @@ elif current_view == "analyze":
                         if result is not None:
                             checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
 
-                    ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
-                    one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
-                    ytd_pct = ytd_result["return_pct"] if ytd_result else None
-                    one_year_pct = one_year_result["return_pct"] if one_year_result else None
+                    value_series_raw = compute_portfolio_value_over_time(
+                        all_holdings_incl_closed, user_email, shared_history, num_points=24
+                    )
+                    value_series = [{"date": p["date"].isoformat(), "value": p["value"]} for p in value_series_raw]
 
-                benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
-                with st.spinner(f"Fetching {benchmark_name}..."):
-                    try:
-                        benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
-                        benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
-                        benchmark_1y = compute_price_return(benchmark_history, days_back=365)
-                    except Exception:
-                        benchmark_ytd = benchmark_1y = None
+                    database.save_performance_snapshot(
+                        user_email, overall_return_pct=overall_return_pct, total_pnl=total_pnl,
+                        earliest_date=earliest_date, checkpoint_results=checkpoint_results,
+                        value_series=value_series, performance_rows=performance_rows,
+                    )
+                    st.rerun()  # herlaad meteen om de zojuist opgeslagen snapshot te tonen (consistente weergave-route)
+                else:
+                    st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
+                               "to start tracking your return.")
+
+            elif snapshot:
+                # INSTANT -- toon de opgeslagen snapshot, GEEN netwerk-aanroepen nodig.
+                overall_return_pct = snapshot.get("overall_return_pct")
+                total_pnl = snapshot.get("total_pnl")
+                earliest_date = snapshot.get("earliest_date")
+                checkpoint_results = snapshot.get("checkpoint_results") or []
+                value_series = [
+                    {"date": datetime.strptime(p["date"], "%Y-%m-%d").date(), "value": p["value"]}
+                    for p in (snapshot.get("value_series") or [])
+                ]
+                performance_rows = snapshot.get("performance_rows") or []
+
+                if overall_return_pct is not None:
+                    since_txt = f" since {earliest_date}" if earliest_date else ""
+                    st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
+
+                ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
+                one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
+                ytd_pct = ytd_result["return_pct"] if ytd_result else None
+                one_year_pct = one_year_result["return_pct"] if one_year_result else None
+
+                # Benchmark-vergelijking is nu OPT-IN (een knop) i.p.v. automatisch
+                # bij elk bezoek -- scheelt een extra netwerk-aanroep als je 'm
+                # niet nodig hebt.
+                show_benchmark = st.checkbox("Compare against a benchmark", key="perf_show_benchmark")
+                benchmark_ytd = benchmark_1y = None
+                benchmark_name = None
+                if show_benchmark:
+                    benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
+                    if st.button(f"Fetch {benchmark_name}", key="perf_fetch_benchmark"):
+                        with st.spinner(f"Fetching {benchmark_name}..."):
+                            try:
+                                benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
+                                benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
+                                benchmark_1y = compute_price_return(benchmark_history, days_back=365)
+                            except Exception:
+                                benchmark_ytd = benchmark_1y = None
 
                 pcol1, pcol2 = st.columns(2)
                 with pcol1:
@@ -4083,9 +4125,6 @@ elif current_view == "analyze":
                 st.caption("Your real return over this period -- accounts for shares you already "
                            "held plus any buys/sells you made during it.")
 
-                value_series = compute_portfolio_value_over_time(
-                    all_holdings_incl_closed, user_email, shared_history, num_points=24
-                )
                 if len(value_series) >= 2:
                     st.markdown("**Your portfolio value over time**")
                     value_fig = go.Figure()
@@ -4111,7 +4150,7 @@ elif current_view == "analyze":
                     )
                     st.plotly_chart(value_fig, width="stretch")
 
-                if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
+                if performance_rows and st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                     for r in performance_rows:
                         pct = r["total_return_pct"]
                         closed_txt = " *(closed)*" if r.get("closed") else ""
@@ -4120,9 +4159,6 @@ elif current_view == "analyze":
                             st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
                         else:
                             st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
-            else:
-                st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
-                           "to start tracking your return.")
 
         render_section_banner("Risk &amp; Diversification")
 

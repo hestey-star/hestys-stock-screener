@@ -199,3 +199,18 @@ create table deep_dive_images (
 -- voorkomt dat we ingewikkelde losse RLS-policies moeten opzetten voor
 -- een klein, persoonlijk project.
 insert into storage.buckets (id, name, public) values ('deep-dive-images', 'deep-dive-images', true);
+
+-- Performance-snapshot: de laatst-berekende Performance-resultaten, zodat
+-- een volgend bezoek de pagina INSTANT kan tonen (uit deze tabel) i.p.v.
+-- alles opnieuw te moeten berekenen -- verversen gebeurt alleen nog op
+-- verzoek (een expliciete 'Refresh'-knop), niet automatisch bij elk bezoek.
+create table performance_snapshots (
+    user_email text primary key,
+    computed_at timestamp with time zone default now(),
+    overall_return_pct numeric,
+    total_pnl numeric,
+    earliest_date date,
+    checkpoint_results jsonb,
+    value_series jsonb,
+    performance_rows jsonb
+);
