@@ -3968,14 +3968,22 @@ elif current_view == "analyze":
             st.stop()
 
         risk_profile = database.get_risk_profile(user_email)
-        infos = get_tickers_info(holdings)
 
         # --- Performance (rendement uit gelogde transacties) ---
+        # BELANGRIJK: dit gebruikt de SNELLE, gebatchte koersgeschiedenis
+        # (shared_history) als EERSTE keuze voor de huidige prijs, i.p.v.
+        # te wachten op infos/.info (die pas hierONDER wordt opgehaald,
+        # en van yfinance bekend traag is). Zo verschijnt Performance
+        # meteen, terwijl de rest van de pagina (Sectors/Diversification/
+        # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
         with st.expander("📈 Performance", expanded=True):
             st.caption("Your real return, based on the buy/sell transactions you've logged under "
                        "My Portfolio -- excludes dividends. Includes fully closed positions. "
                        "Positions without logged transactions won't show a return here.")
             all_holdings_incl_closed = database.get_user_holdings(user_email)
+            with st.spinner("Loading price history..."):
+                shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
+            today = datetime.now().date()
             performance_rows = []
             total_invested = 0.0
             total_pnl = 0.0
@@ -3985,24 +3993,14 @@ elif current_view == "analyze":
                 transactions = database.get_transactions_for_holding(user_email, h["id"])
                 if not transactions:
                     continue
-                current_price = infos.get(h["ticker"], {}).get("currentPrice") or infos.get(h["ticker"], {}).get("regularMarketPrice")
+                current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
                 if current_price is None:
-                    # Terugval: niet elk aandeel heeft deze velden betrouwbaar gevuld in
-                    # yfinance's .info (bekende inconsistentie) -- koersgeschiedenis is
-                    # universeler beschikbaar. Zonder dit zou zo'n positie stilzwijgend
-                    # (en zonder duidelijke reden) uit Performance verdwijnen.
-                    try:
-                        fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
-                        if fallback_hist is not None and not fallback_hist.empty:
-                            # Zelfde soort probleem als eerder elders gevonden: de laatste
-                            # rij kan een onvolledige 'vandaag'-koers zijn (NaN) -- pak de
-                            # laatst GELDIGE koers i.p.v. blindelings de laatste rij,
-                            # anders vergiftigt die ene NaN de hele Overall-return-som.
-                            valid_fallback_closes = fallback_hist["Close"].dropna()
-                            if not valid_fallback_closes.empty:
-                                current_price = float(valid_fallback_closes.iloc[-1])
-                    except Exception:
-                        pass
+                    # Terugval: de snelle, gebatchte geschiedenis had geen recente
+                    # koers voor deze ticker (zeldzaam) -- dan alsnog de tragere
+                    # .info-route proberen, zodat de positie niet stilzwijgend
+                    # ontbreekt.
+                    single_info = get_cached_ticker_info(h["ticker"])
+                    current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
                 perf = compute_holding_performance(transactions, current_price)
                 if perf:
                     is_closed = perf["shares_held"] <= 0.0001
@@ -4034,8 +4032,6 @@ elif current_view == "analyze":
                     st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
 
                 with st.spinner("Checking your performance across timeframes..."):
-                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
-
                     checkpoints = []
                     if earliest_date:
                         try:
@@ -4148,6 +4144,12 @@ elif current_view == "analyze":
                     )
 
         # --- Sectoren ---
+        # infos (.info per ticker) wordt PAS hier opgehaald -- dit is een
+        # relatief trage aanroep in yfinance, dus door 'm hier (i.p.v.
+        # helemaal bovenaan de pagina) op te halen, verschijnt Performance
+        # hierboven al veel eerder, terwijl dit gedeelte daarna pas verder laadt.
+        with st.spinner("Loading sector/valuation data..."):
+            infos = get_tickers_info(holdings)
         with st.expander("🏭 Sectors"):
             for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
                 st.markdown(f"- {finding}")
