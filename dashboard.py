@@ -540,22 +540,34 @@ def analyze_sectors(holdings: list, infos: dict, max_sector_pct: float = 40.0) -
     for h in holdings:
         value = h.get("position_value") or 0
         sector = infos.get(h["ticker"], {}).get("sector")
-        if sector:
-            sector_values[sector] = sector_values.get(sector, 0) + value
+        # Posities zonder een GICS-sector (crypto, edelmetalen-achtige
+        # producten, e.d.) telden voorheen NIET mee in de uitsplitsing,
+        # terwijl hun waarde wel in total_value (de noemer) zat -- dat
+        # verklaarde waarom de percentages niet optelden tot 100%. Nu
+        # krijgen ze een expliciete, herkenbare bucket i.p.v. te verdwijnen.
+        bucket = sector if sector else "Non-equity / Other"
+        sector_values[bucket] = sector_values.get(bucket, 0) + value
 
     if not sector_values:
         return ["No sector data available for your tracked positions."]
 
-    dominant_sector, dominant_value = max(sector_values.items(), key=lambda x: x[1])
-    dominant_pct = dominant_value / total_value * 100
+    # De 'concentratie-risico'-melding gaat specifiek over ECHTE sectoren --
+    # 'Non-equity / Other' (crypto e.d.) meetellen als 'sector-concentratie'
+    # zou een verwarrende melding geven, dus die sluiten we hier expliciet uit.
+    real_sector_values = {s: v for s, v in sector_values.items() if s != "Non-equity / Other"}
+    if real_sector_values:
+        dominant_sector, dominant_value = max(real_sector_values.items(), key=lambda x: x[1])
+        dominant_pct = dominant_value / total_value * 100
 
-    if dominant_pct >= max_sector_pct * 1.5:
-        level = "🔴 High concentration"
-    elif dominant_pct > max_sector_pct:
-        level = "🟡 Above your target"
+        if dominant_pct >= max_sector_pct * 1.5:
+            level = "🔴 High concentration"
+        elif dominant_pct > max_sector_pct:
+            level = "🟡 Above your target"
+        else:
+            level = "🟢 Within your target"
+        findings.append(f"{level}: {dominant_sector} makes up {dominant_pct:.0f}% of your tracked portfolio (your target max: {max_sector_pct:.0f}%).")
     else:
-        level = "🟢 Within your target"
-    findings.append(f"{level}: {dominant_sector} makes up {dominant_pct:.0f}% of your tracked portfolio (your target max: {max_sector_pct:.0f}%).")
+        findings.append("No positions with a known equity sector yet -- all tracked positions are non-equity (crypto, etc.).")
 
     breakdown = ", ".join(
         f"{s}: {v / total_value * 100:.0f}%" for s, v in sorted(sector_values.items(), key=lambda x: -x[1])
@@ -582,7 +594,20 @@ def analyze_diversification(holdings: list, infos: dict) -> list:
     type_values = {}
     for h in holdings:
         value = h.get("position_value") or 0
-        asset_type = infos.get(h["ticker"], {}).get("quoteType", "UNKNOWN")
+        raw_quote_type = infos.get(h["ticker"], {}).get("quoteType")
+        if raw_quote_type:
+            asset_type = raw_quote_type
+        else:
+            # Yfinance geeft soms geen (of een lege) quoteType terug --
+            # vooral crypto-tickers (bv. 'BTC-EUR', 'SOL-EUR') volgen een
+            # herkenbaar {SYMBOL}-{VALUTA}-patroon. Die herkennen we hier
+            # expliciet, i.p.v. ze allemaal onder de vage, nietszeggende
+            # stempel 'Unknown' te laten vallen.
+            ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
+            if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
+                asset_type = "CRYPTOCURRENCY"
+            else:
+                asset_type = "UNKNOWN"
         type_values[asset_type] = type_values.get(asset_type, 0) + value
 
     if type_values:
