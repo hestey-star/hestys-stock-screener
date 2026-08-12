@@ -1967,7 +1967,7 @@ def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 1
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _batch_download_history(tickers_tuple: tuple, period: str = "3y") -> dict:
+def _batch_download_history(tickers_tuple: tuple, period: str = "max") -> dict:
     """
     Haalt de koersgeschiedenis van MEERDERE tickers op in 1 netwerk-
     aanroep (yfinance's batch-download), i.p.v. een aparte aanroep per
@@ -2002,7 +2002,7 @@ def _batch_download_history(tickers_tuple: tuple, period: str = "3y") -> dict:
         return result
 
 
-def get_shared_history_for_holdings(holdings: list, period: str = "3y") -> dict:
+def get_shared_history_for_holdings(holdings: list, period: str = "max") -> dict:
     """
     Haalt de koersgeschiedenis van AL je posities in 1x op (via een
     gecachte batch-download), voor hergebruik door MEERDERE berekeningen
@@ -2013,7 +2013,7 @@ def get_shared_history_for_holdings(holdings: list, period: str = "3y") -> dict:
     return _batch_download_history(unique_tickers, period=period)
 
 
-def compute_portfolio_value_over_time(holdings: list, user_email: str, history_by_ticker: dict, num_points: int = 24) -> list:
+def compute_portfolio_value_over_time(holdings: list, user_email: str, history_by_ticker: dict, num_points: int = 60) -> list:
     """
     Berekent de TOTALE portfoliowaarde op meerdere momenten in het
     verleden (gelijk verdeeld tussen je vroegste transactie en vandaag) --
@@ -3998,7 +3998,7 @@ elif current_view == "analyze":
                 # een volgend bezoek toont de opgeslagen snapshot INSTANT.
                 all_holdings_incl_closed = database.get_user_holdings(user_email)
                 with st.spinner("Loading price history..."):
-                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
+                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="max")
                 today = datetime.now().date()
                 performance_rows = []
                 total_invested = 0.0
@@ -4057,7 +4057,7 @@ elif current_view == "analyze":
                             checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
 
                     value_series_raw = compute_portfolio_value_over_time(
-                        all_holdings_incl_closed, user_email, shared_history, num_points=24
+                        all_holdings_incl_closed, user_email, shared_history, num_points=60
                     )
                     value_series = [{"date": p["date"].isoformat(), "value": p["value"]} for p in value_series_raw]
 
