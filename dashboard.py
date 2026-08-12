@@ -3857,7 +3857,13 @@ elif current_view == "analyze":
                     try:
                         fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
                         if fallback_hist is not None and not fallback_hist.empty:
-                            current_price = float(fallback_hist["Close"].iloc[-1])
+                            # Zelfde soort probleem als eerder elders gevonden: de laatste
+                            # rij kan een onvolledige 'vandaag'-koers zijn (NaN) -- pak de
+                            # laatst GELDIGE koers i.p.v. blindelings de laatste rij,
+                            # anders vergiftigt die ene NaN de hele Overall-return-som.
+                            valid_fallback_closes = fallback_hist["Close"].dropna()
+                            if not valid_fallback_closes.empty:
+                                current_price = float(valid_fallback_closes.iloc[-1])
                     except Exception:
                         pass
                 perf = compute_holding_performance(transactions, current_price)
@@ -3882,6 +3888,10 @@ elif current_view == "analyze":
 
             if performance_rows:
                 overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
+                if overall_return_pct is not None and pd.isna(overall_return_pct):
+                    # Laatste veiligheidsnet -- zou niet meer moeten gebeuren dankzij de
+                    # dropna()-fix hierboven, maar voorkomt sowieso ooit weer '+nan%'.
+                    overall_return_pct = None
                 if overall_return_pct is not None:
                     since_txt = f" since {earliest_date}" if earliest_date else ""
                     st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
