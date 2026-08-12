@@ -1948,32 +1948,125 @@ def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 1
     valid = history[history["Close"].notna()]
     if valid.empty:
         return None
+    # yfinance geeft vaak een tijdzone-BEWUSTE index terug (bv.
+    # 'America/New_York'), terwijl 'target_date' een gewone, tijdzone-
+    # NAIEVE datum is -- zonder dit te normaliseren gooit pandas een fout
+    # bij het vergelijken. Die fout werd elders stilzwijgend opgevangen
+    # (try/except), waardoor sommige posities ONTBRAKEN uit de
+    # berekening -- dat verklaarde de absurd hoge percentages (beginwaarde
+    # onvolledig, eindwaarde wel compleet).
+    index = valid.index
+    if getattr(index, "tz", None) is not None:
+        index = index.tz_localize(None)
     target_ts = pd.Timestamp(target_date)
-    time_diffs = abs(valid.index - target_ts)
+    time_diffs = abs(index - target_ts)
     closest_pos = time_diffs.argmin()
     if time_diffs[closest_pos].days > tolerance_days:
         return None
     return float(valid["Close"].iloc[closest_pos])
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _batch_download_history(tickers_tuple: tuple, period: str = "3y") -> dict:
+    """
+    Haalt de koersgeschiedenis van MEERDERE tickers op in 1 netwerk-
+    aanroep (yfinance's batch-download), i.p.v. een aparte aanroep per
+    ticker -- dit was de resterende bron van traagheid nadat de eerdere
+    fix (1x per periode i.p.v. per periode-per-positie) al hielp, maar bij
+    veel posities nog steeds 1 aanroep per positie deed.
+    """
+    tickers = list(tickers_tuple)
+    if not tickers:
+        return {}
+    try:
+        if len(tickers) == 1:
+            data = yf.download(tickers[0], period=period, progress=False)
+            return {tickers[0]: data}
+        data = yf.download(tickers, period=period, progress=False, group_by="ticker")
+        result = {}
+        for ticker in tickers:
+            try:
+                result[ticker] = data[ticker]
+            except Exception:
+                result[ticker] = None
+        return result
+    except Exception:
+        # Terugval: als de batch-download als geheel faalt, toch 1-voor-1
+        # proberen -- trager, maar beter dan helemaal geen data.
+        result = {}
+        for ticker in tickers:
+            try:
+                result[ticker] = get_cached_ticker_history(ticker, period=period)
+            except Exception:
+                result[ticker] = None
+        return result
+
+
 def get_shared_history_for_holdings(holdings: list, period: str = "3y") -> dict:
     """
-    Haalt 1x per ticker een langere koersgeschiedenis op (standaard 3 jaar),
-    voor hergebruik door MEERDERE periode-berekeningen (YTD, 1-jaar, en de
-    checkpoints-grafiek) -- i.p.v. dat elke periode zijn eigen, aparte
-    netwerk-aanroep per positie doet. Dit is de kern van de snelheidsfix
-    voor de Performance-kaart.
+    Haalt de koersgeschiedenis van AL je posities in 1x op (via een
+    gecachte batch-download), voor hergebruik door MEERDERE berekeningen
+    (YTD, 1-jaar, en de portfoliowaarde-over-tijd-grafiek) -- i.p.v. dat
+    elke periode of elke positie zijn eigen, aparte netwerk-aanroep doet.
     """
-    history_by_ticker = {}
+    unique_tickers = tuple(sorted({h["ticker"] for h in holdings}))
+    return _batch_download_history(unique_tickers, period=period)
+
+
+def compute_portfolio_value_over_time(holdings: list, user_email: str, history_by_ticker: dict, num_points: int = 24) -> list:
+    """
+    Berekent de TOTALE portfoliowaarde op meerdere momenten in het
+    verleden (gelijk verdeeld tussen je vroegste transactie en vandaag) --
+    voor de 'zie je portfolio groeien'-grafiek. Gebruikt de AL opgehaalde,
+    gedeelde geschiedenis (history_by_ticker) -- dus GEEN extra netwerk-
+    aanroepen nodig, ondanks dat er relatief veel punten berekend worden.
+    """
+    import database
+
+    all_transactions = {}
+    earliest = None
     for h in holdings:
-        ticker = h["ticker"]
-        if ticker in history_by_ticker:
-            continue
-        try:
-            history_by_ticker[ticker] = get_cached_ticker_history(ticker, period=period)
-        except Exception:
-            history_by_ticker[ticker] = None
-    return history_by_ticker
+        transactions = database.get_transactions_for_holding(user_email, h["id"])
+        all_transactions[h["ticker"]] = transactions
+        for t in transactions:
+            t_date = datetime.strptime(t["transaction_date"], "%Y-%m-%d").date()
+            if earliest is None or t_date < earliest:
+                earliest = t_date
+
+    if earliest is None:
+        return []
+
+    today = datetime.now().date()
+    total_days = (today - earliest).days
+    if total_days <= 0:
+        return []
+
+    points = [
+        earliest + timedelta(days=int(total_days * i / num_points))
+        for i in range(num_points + 1)
+    ]
+
+    series = []
+    for point_date in points:
+        total_value = 0.0
+        any_value = False
+        for h in holdings:
+            ticker = h["ticker"]
+            shares_at_point = 0.0
+            for t in all_transactions.get(ticker, []):
+                t_date = datetime.strptime(t["transaction_date"], "%Y-%m-%d").date()
+                if t_date <= point_date:
+                    delta = t["shares"] if t["transaction_type"] == "buy" else -t["shares"]
+                    shares_at_point += delta
+            if shares_at_point > 0.0001:
+                price = _price_near_date(history_by_ticker.get(ticker), point_date, tolerance_days=15)
+                if price is not None:
+                    total_value += shares_at_point * price
+                    any_value = True
+        if any_value:
+            series.append({"date": point_date, "value": total_value})
+
+    return series
 
 
 def compute_personal_windowed_return(holdings: list, user_email: str, window_start, history_by_ticker: dict = None) -> dict:
@@ -3972,7 +4065,7 @@ elif current_view == "analyze":
                 benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
                 with st.spinner(f"Fetching {benchmark_name}..."):
                     try:
-                        benchmark_history = yf.Ticker(BENCHMARK_OPTIONS[benchmark_name]).history(period="2y")
+                        benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
                         benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
                         benchmark_1y = compute_price_return(benchmark_history, days_back=365)
                     except Exception:
@@ -3994,20 +4087,23 @@ elif current_view == "analyze":
                 st.caption("Your real return over this period -- accounts for shares you already "
                            "held plus any buys/sells you made during it.")
 
-                if len(checkpoint_results) >= 2:
-                    st.markdown("**Your return across timeframes**")
-                    checkpoint_fig = go.Figure()
-                    bar_colors = ["#1FAE96" if r["return_pct"] >= 0 else "#E5484D" for r in checkpoint_results]
-                    checkpoint_fig.add_trace(go.Bar(
-                        x=[r["label"] for r in checkpoint_results],
-                        y=[r["return_pct"] for r in checkpoint_results],
-                        marker_color=bar_colors,
-                        text=[f"{r['return_pct']:+.1f}%" for r in checkpoint_results],
-                        textposition="outside",
+                value_series = compute_portfolio_value_over_time(
+                    all_holdings_incl_closed, user_email, shared_history, num_points=24
+                )
+                if len(value_series) >= 2:
+                    st.markdown("**Your portfolio value over time**")
+                    value_fig = go.Figure()
+                    value_fig.add_trace(go.Scatter(
+                        x=[p["date"].isoformat() for p in value_series],
+                        y=[p["value"] for p in value_series],
+                        mode="lines",
+                        line=dict(color="#1FAE96", width=2),
+                        fill="tozeroy",
+                        fillcolor="rgba(31,174,150,0.10)",
+                        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
                     ))
-                    checkpoint_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                    checkpoint_fig.update_layout(
-                        yaxis_title="Return (%)",
+                    value_fig.update_layout(
+                        yaxis_title="Portfolio value (€)",
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
@@ -4017,7 +4113,7 @@ elif current_view == "analyze":
                         xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
                         yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
                     )
-                    st.plotly_chart(checkpoint_fig, width="stretch")
+                    st.plotly_chart(value_fig, width="stretch")
 
                 if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                     for r in performance_rows:
