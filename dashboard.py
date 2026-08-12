@@ -2280,27 +2280,22 @@ if current_view == "today":
                     daily_stats = build_daily_portfolio_stats(holdings)
 
                 with st.container(border=True):
-                    st.markdown("**Your Portfolio Today**")
+                    if daily_stats:
+                        vs_yesterday_pct = daily_stats["portfolio_change_pct"]
+                        vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
+                        st.markdown(
+                            f'<div style="display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap;">'
+                            f'<span style="font-weight:700;">Your Portfolio Today</span>'
+                            f'<span style="font-size:0.85rem; font-weight:700; color:{vs_yesterday_color};">'
+                            f'{vs_yesterday_pct:+.1f}% vs yesterday</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown("**Your Portfolio Today**")
                     st.caption("How your positions did today.")
 
-                    dcol1, dcol2, dcol3 = st.columns(3)
-                    with dcol1:
-                        if daily_stats:
-                            vs_yesterday_pct = daily_stats["portfolio_change_pct"]
-                            vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
-                            vs_yesterday_bg = "rgba(31,174,150,0.12)" if vs_yesterday_pct >= 0 else "rgba(229,72,77,0.12)"
-                            st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'margin-bottom:0.5rem; background:{vs_yesterday_bg};">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Vs. yesterday</div>'
-                                f'<div style="font-size:1.4rem; font-weight:800; color:{vs_yesterday_color}; margin-top:4px;">'
-                                f'{vs_yesterday_pct:+.1f}%</div>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.metric("Vs. yesterday", "n/a")
+                    dcol2, dcol3 = st.columns(2)
                     with dcol2:
                         if daily_stats:
                             st.markdown(

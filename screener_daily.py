@@ -225,8 +225,9 @@ def _get_macro_teaser_text() -> str:
     return f"Also today: {e['name']} ({e['time']})"
 
 
-def build_no_signals_email_daily() -> tuple:
+def build_no_signals_email_daily(name: str = None) -> tuple:
     """Korte, warme mail voor een dag zonder signalen -- houdt het dagelijkse contactmoment in stand."""
+    greeting = f"Good morning, {name}" if name else "Good morning"
     macro_teaser = _get_macro_teaser_text()
     macro_line_text = f"\n{macro_teaser}\n" if macro_teaser else ""
     macro_line_html = (
@@ -235,11 +236,11 @@ def build_no_signals_email_daily() -> tuple:
     )
 
     text_body = (
-        "Good morning from Hesty's\n\n"
+        f"{greeting} from Hesty's\n\n"
         "No bullish flips showed up on today's scan -- a quiet day on that front.\n"
         f"{macro_line_text}\n"
-        "Check Discover for sector rotation and top movers, Today for the day's key "
-        "macro events, or Analyse for your own portfolio.\n\n"
+        "Check Discover for sector/theme rotation and earnings surprises, Today for macro events "
+        "and yesterday's biggest movers, or Analyse for your own portfolio.\n\n"
         "-- Hesty's, your personal investment assistant\n\n"
         "This is a screener, not investment advice."
     )
@@ -247,7 +248,7 @@ def build_no_signals_email_daily() -> tuple:
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
             <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
-            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Good morning</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">{greeting}</div>
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">
@@ -256,9 +257,9 @@ def build_no_signals_email_daily() -> tuple:
             {macro_line_html}
             <p style="margin-top:16px; font-size:14px; color:#5B6472; line-height:1.5;">
                 Check <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
-                for sector rotation and top movers,
+                for sector/theme rotation and earnings surprises,
                 <a href="https://hestys.streamlit.app/?view=today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
-                for the day's key macro events, or
+                for macro events and yesterday's biggest movers, or
                 <a href="https://hestys.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
@@ -269,14 +270,19 @@ def build_no_signals_email_daily() -> tuple:
     return text_body, html_body
 
 
-def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
+def build_email_body_daily(df_hits: pd.DataFrame, name: str = None) -> tuple:
     """
     Bouwt de dagelijkse mail -- zakelijk maar met een eigen stem: een korte,
     op de data gebaseerde toelichting (geen hype, geen giswerk) vooraf, dan
     de tabel, en een korte, herkenbare afsluiting namens Hesty's.
+
+    'name' (optioneel): voor een persoonlijke aanhef ('Good morning, [naam]')
+    -- alleen bekend bij ingelogde gebruikers (via user_identity), niet bij
+    de niet-ingelogde e-mail-opt-in-abonnees, die krijgen de neutrale versie.
     """
     n = len(df_hits)
     top_pick = df_hits.iloc[0]  # df_hits is al gesorteerd op score (hoog naar laag)
+    greeting = f"Good morning, {name}" if name else "Good morning"
 
     intro_line = (
         f"{n} stock{'s' if n != 1 else ''} just flipped bullish on today's scan. "
@@ -286,7 +292,7 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
 
     # --- Tekst-versie ---
     text_lines = [
-        "Good morning from Hesty's",
+        f"{greeting} from Hesty's",
         "",
         intro_line,
     ]
@@ -298,14 +304,14 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
     ]
     for _, row in df_hits.iterrows():
         text_lines.append(
-            f"- [{row['score']}] {row['ticker']}: flipped {row['dagen_geleden']} day(s) ago "
-            f"after {row['voorgaande_trend_dagen']} days bearish -- "
+            f"- [{row['score']}] {row['ticker']} (https://finance.yahoo.com/quote/{row['ticker']}): "
+            f"flipped {row['dagen_geleden']} day(s) ago after {row['voorgaande_trend_dagen']} days bearish -- "
             f"{row['prijs_bij_omslag']} -> {row['prijs_nu']} ({row['sinds_omslag_pct']:+.2f}%)"
         )
     text_lines += [
         "",
-        "See the full list, sector rotation, and top movers under Discover on the site, "
-        "or check Today for the day's key macro events.",
+        "See sector/theme rotation and earnings surprises under Discover on the site, "
+        "or check Today for macro events and yesterday's biggest movers.",
         "",
         "-- Hesty's, your personal investment assistant",
         "",
@@ -318,7 +324,9 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
     rows_html = "".join(
         f"""<tr style="border-bottom:1px solid #E5E8EC;">
             <td style="padding:10px 8px;font-weight:700;color:#101825;">{r['score']}</td>
-            <td style="padding:10px 8px;font-weight:600;color:#101825;">{r['ticker']}</td>
+            <td style="padding:10px 8px;font-weight:600;">
+                <a href="https://finance.yahoo.com/quote/{r['ticker']}" style="color:#1FAE96; text-decoration:none;">{r['ticker']}</a>
+            </td>
             <td style="padding:10px 8px;color:#5B6472;">{r['flip_date']}</td>
             <td style="padding:10px 8px;color:#5B6472;">{r['dagen_geleden']}d ago</td>
             <td style="padding:10px 8px;color:#5B6472;">{r['prijs_bij_omslag']} &rarr; {r['prijs_nu']}</td>
@@ -336,7 +344,7 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
     <div style="font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; background:#ffffff;">
         <div style="background:#101825; padding: 28px 24px; border-radius: 12px 12px 0 0;">
             <div style="color:#1FAE96; font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase;">Hesty's Daily</div>
-            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Good morning</div>
+            <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">{greeting}</div>
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
             <p style="font-size:15px; color:#101825; line-height:1.5; margin-top:0;">{intro_line}</p>
@@ -353,10 +361,10 @@ def build_email_body_daily(df_hits: pd.DataFrame) -> tuple:
                 {rows_html}
             </table>
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
-                Want sector rotation, top movers, and earnings surprises too? Check
+                Want sector/theme rotation and earnings surprises too? Check
                 <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site,
                 or see <a href="https://hestys.streamlit.app/?view=today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
-                for the day's key macro events.
+                for macro events and yesterday's biggest movers.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
