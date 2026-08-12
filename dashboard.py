@@ -4127,10 +4127,30 @@ elif current_view == "analyze":
 
                 if len(value_series) >= 2:
                     st.markdown("**Your portfolio value over time**")
+                    chart_timeframe = st.radio(
+                        "Timeframe", ["1M", "3M", "1Y", "3Y", "ALL"], index=4,
+                        horizontal=True, key="perf_chart_timeframe",
+                    )
+                    # Filteren op de AL berekende data -- geen nieuwe netwerk-
+                    # aanroepen nodig, dus dit is instant, ook vanuit een
+                    # opgeslagen snapshot.
+                    timeframe_days = {"1M": 30, "3M": 90, "1Y": 365, "3Y": 365 * 3, "ALL": None}
+                    days_back = timeframe_days[chart_timeframe]
+                    if days_back is not None:
+                        cutoff_date = datetime.now().date() - timedelta(days=days_back)
+                        filtered_series = [p for p in value_series if p["date"] >= cutoff_date]
+                        if len(filtered_series) < 2:
+                            # Te weinig punten binnen deze periode (bv. account
+                            # bestaat nog niet zo lang) -- terugvallen op ALL
+                            # i.p.v. een lege/kapotte grafiek te tonen.
+                            filtered_series = value_series
+                    else:
+                        filtered_series = value_series
+
                     value_fig = go.Figure()
                     value_fig.add_trace(go.Scatter(
-                        x=[p["date"].isoformat() for p in value_series],
-                        y=[p["value"] for p in value_series],
+                        x=[p["date"].isoformat() for p in filtered_series],
+                        y=[p["value"] for p in filtered_series],
                         mode="lines",
                         line=dict(color="#1FAE96", width=2),
                         fill="tozeroy",
