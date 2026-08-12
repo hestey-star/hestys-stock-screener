@@ -1936,7 +1936,47 @@ def get_ticker_ytd_and_1y_return(ticker: str) -> dict:
     }
 
 
-def compute_personal_windowed_return(holdings: list, user_email: str, window_start) -> dict:
+def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 10):
+    """
+    Zoekt de koers het dichtst bij een specifieke datum, BINNEN een al
+    opgehaalde (langere) geschiedenis -- i.p.v. voor elke periode een
+    aparte, nieuwe netwerk-aanroep te doen. Geeft None terug als er geen
+    geldige koers binnen de tolerantie ligt.
+    """
+    if history is None or history.empty:
+        return None
+    valid = history[history["Close"].notna()]
+    if valid.empty:
+        return None
+    target_ts = pd.Timestamp(target_date)
+    time_diffs = abs(valid.index - target_ts)
+    closest_pos = time_diffs.argmin()
+    if time_diffs[closest_pos].days > tolerance_days:
+        return None
+    return float(valid["Close"].iloc[closest_pos])
+
+
+def get_shared_history_for_holdings(holdings: list, period: str = "3y") -> dict:
+    """
+    Haalt 1x per ticker een langere koersgeschiedenis op (standaard 3 jaar),
+    voor hergebruik door MEERDERE periode-berekeningen (YTD, 1-jaar, en de
+    checkpoints-grafiek) -- i.p.v. dat elke periode zijn eigen, aparte
+    netwerk-aanroep per positie doet. Dit is de kern van de snelheidsfix
+    voor de Performance-kaart.
+    """
+    history_by_ticker = {}
+    for h in holdings:
+        ticker = h["ticker"]
+        if ticker in history_by_ticker:
+            continue
+        try:
+            history_by_ticker[ticker] = get_cached_ticker_history(ticker, period=period)
+        except Exception:
+            history_by_ticker[ticker] = None
+    return history_by_ticker
+
+
+def compute_personal_windowed_return(holdings: list, user_email: str, window_start, history_by_ticker: dict = None) -> dict:
     """
     Berekent je ECHTE, persoonlijke rendement over een specifieke periode
     (bv. YTD of de laatste 12 maanden) -- een vereenvoudigde Dietz-methode:
@@ -1951,6 +1991,13 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
     Rendement = (eind-waarde - begin-waarde - netto-inleg) / (begin-waarde + netto-inleg)
 
     Geeft None terug als er te weinig data is om iets te zeggen.
+
+    'history_by_ticker' (optioneel): een AL opgehaalde, langere
+    koersgeschiedenis per ticker (bv. 3 jaar) -- als meegegeven, wordt
+    die HERGEBRUIKT i.p.v. een nieuwe, aparte netwerk-aanroep per periode
+    te doen. Dit is de kern van de snelheidsfix: zonder dit deed elke
+    aparte periode (YTD, 1-jaar, straks meer) zijn EIGEN aanroep per
+    positie, wat met meerdere periodes en posities snel optelde.
     """
     import database
 
@@ -1978,23 +2025,20 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
 
         if shares_before_window > 0.0001:
             try:
-                history = get_cached_ticker_history(
-                    h["ticker"],
-                    start=(window_start - timedelta(days=7)).isoformat(),
-                    end=(window_start + timedelta(days=7)).isoformat(),
-                )
-                if history is not None and not history.empty:
-                    # Zelfde soort probleem als eerder bij de dagelijkse scan:
-                    # de EERSTE rij in deze historische periode kan NaN zijn
-                    # (bv. een data-gat rond een feestdag, jaren geleden) --
-                    # pak dan de eerstvolgende GELDIGE koers i.p.v. blindelings
-                    # de allereerste rij te gebruiken, anders vergiftigt die
-                    # ene NaN de hele berekening (het 'nan%'-symptoom).
-                    valid_closes = history["Close"].dropna()
-                    if not valid_closes.empty:
-                        price_at_start = float(valid_closes.iloc[0])
-                        starting_value += shares_before_window * price_at_start
-                        any_starting_data = True
+                if history_by_ticker is not None:
+                    history = history_by_ticker.get(h["ticker"])
+                else:
+                    # Terugval als er geen gedeelde cache is meegegeven --
+                    # werkt nog steeds, alleen zonder het snelheidsvoordeel.
+                    history = get_cached_ticker_history(
+                        h["ticker"],
+                        start=(window_start - timedelta(days=10)).isoformat(),
+                        end=(window_start + timedelta(days=10)).isoformat(),
+                    )
+                price_at_start = _price_near_date(history, window_start)
+                if price_at_start is not None:
+                    starting_value += shares_before_window * price_at_start
+                    any_starting_data = True
             except Exception:
                 pass
 
@@ -3896,13 +3940,32 @@ elif current_view == "analyze":
                     since_txt = f" since {earliest_date}" if earliest_date else ""
                     st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
 
-                with st.spinner("Checking YTD and 1-year performance..."):
-                    ytd_result = compute_personal_windowed_return(
-                        all_holdings_incl_closed, user_email, date(datetime.now().year, 1, 1)
-                    )
-                    one_year_result = compute_personal_windowed_return(
-                        all_holdings_incl_closed, user_email, (datetime.now() - timedelta(days=365)).date()
-                    )
+                with st.spinner("Checking your performance across timeframes..."):
+                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="3y")
+
+                    checkpoints = []
+                    if earliest_date:
+                        try:
+                            since_inception_date = datetime.strptime(earliest_date, "%Y-%m-%d").date()
+                            checkpoints.append(("Since inception", since_inception_date))
+                        except Exception:
+                            pass
+                    checkpoints.append(("3 years", (datetime.now() - timedelta(days=365 * 3)).date()))
+                    checkpoints.append(("1 year", (datetime.now() - timedelta(days=365)).date()))
+                    checkpoints.append(("YTD", date(datetime.now().year, 1, 1)))
+                    checkpoints.append(("3 months", (datetime.now() - timedelta(days=90)).date()))
+                    checkpoints.append(("1 month", (datetime.now() - timedelta(days=30)).date()))
+
+                    checkpoint_results = []
+                    for label, window_start in checkpoints:
+                        result = compute_personal_windowed_return(
+                            all_holdings_incl_closed, user_email, window_start, history_by_ticker=shared_history
+                        )
+                        if result is not None:
+                            checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
+
+                    ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
+                    one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
                     ytd_pct = ytd_result["return_pct"] if ytd_result else None
                     one_year_pct = one_year_result["return_pct"] if one_year_result else None
 
@@ -3930,6 +3993,31 @@ elif current_view == "analyze":
                         st.metric("1-Year", "n/a")
                 st.caption("Your real return over this period -- accounts for shares you already "
                            "held plus any buys/sells you made during it.")
+
+                if len(checkpoint_results) >= 2:
+                    st.markdown("**Your return across timeframes**")
+                    checkpoint_fig = go.Figure()
+                    bar_colors = ["#1FAE96" if r["return_pct"] >= 0 else "#E5484D" for r in checkpoint_results]
+                    checkpoint_fig.add_trace(go.Bar(
+                        x=[r["label"] for r in checkpoint_results],
+                        y=[r["return_pct"] for r in checkpoint_results],
+                        marker_color=bar_colors,
+                        text=[f"{r['return_pct']:+.1f}%" for r in checkpoint_results],
+                        textposition="outside",
+                    ))
+                    checkpoint_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                    checkpoint_fig.update_layout(
+                        yaxis_title="Return (%)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                        margin=dict(t=30, b=10, l=10, r=10),
+                        height=320,
+                        showlegend=False,
+                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    )
+                    st.plotly_chart(checkpoint_fig, width="stretch")
 
                 if st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
                     for r in performance_rows:
