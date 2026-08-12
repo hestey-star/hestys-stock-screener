@@ -2468,13 +2468,28 @@ if current_view == "today":
                         return False
 
                 tracked_tickers = {item["ticker"] for item in tracked_items}
+                all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
                 personal_surprises = [
-                    s for s in get_earnings_surprises_from_signals(max_items=50)
+                    s for s in all_recent_surprises
                     if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
                 ]
                 for s in personal_surprises[:3]:
                     emoji = "🟢" if s["earnings_beat"] else "🔴"
                     st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})")
+
+                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
+                # strenger venster (1 dag i.p.v. 2), want minder persoonlijk relevant,
+                # maar toch de moeite waard om even te vermelden.
+                market_wide_surprises = [
+                    s for s in all_recent_surprises
+                    if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
+                ]
+                for s in market_wide_surprises[:2]:
+                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    st.markdown(
+                        f"- {emoji} Also worth noting (not in your portfolio): "
+                        f"**{s['ticker']}** {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
+                    )
 
                 if holdings:
                     weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
