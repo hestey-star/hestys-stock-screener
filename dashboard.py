@@ -861,6 +861,50 @@ def render_section_banner(title: str):
     )
 
 
+def get_sector_theme_threshold_alerts() -> list:
+    """
+    Checkt sectoren EN thema's op extreme 1-maands-trailing-rendementen --
+    mogelijk een koop-/verkoopmoment (sterk gedaald) of iets om in de gaten
+    te houden (sterk gestegen). Thema's krijgen een ruimere drempel dan
+    sectoren, want smallere thema-ETF's (bv. BOTZ, ARKG) zijn van nature
+    volatieler -- eenzelfde uitslag is daar minder bijzonder.
+
+    Sectoren: onder -10% ('notable'), boven +10% ('notable'), boven +15%
+    ('extreme'). Thema's: onder -15%, boven +15%, boven +20%.
+    """
+    alerts = []
+
+    for region in ["US", "EU"]:
+        try:
+            rotation = build_sector_rotation(region=region, period="1mo")
+        except Exception:
+            continue
+        for r in rotation:
+            pct = r["return_pct"]
+            if pct <= -10:
+                alerts.append({"name": r["sector"], "kind": "sector", "region": region, "pct": pct, "level": "notable", "direction": "down"})
+            elif pct >= 15:
+                alerts.append({"name": r["sector"], "kind": "sector", "region": region, "pct": pct, "level": "extreme", "direction": "up"})
+            elif pct >= 10:
+                alerts.append({"name": r["sector"], "kind": "sector", "region": region, "pct": pct, "level": "notable", "direction": "up"})
+
+    try:
+        theme_rotation = build_theme_rotation(period="1mo")
+    except Exception:
+        theme_rotation = []
+    for r in theme_rotation:
+        pct = r["return_pct"]
+        if pct <= -15:
+            alerts.append({"name": r["theme"], "kind": "theme", "region": None, "pct": pct, "level": "notable", "direction": "down"})
+        elif pct >= 20:
+            alerts.append({"name": r["theme"], "kind": "theme", "region": None, "pct": pct, "level": "extreme", "direction": "up"})
+        elif pct >= 15:
+            alerts.append({"name": r["theme"], "kind": "theme", "region": None, "pct": pct, "level": "notable", "direction": "up"})
+
+    alerts.sort(key=lambda a: abs(a["pct"]), reverse=True)
+    return alerts
+
+
 def build_theme_rotation(period: str = "1mo") -> list:
     """
     Zelfde logica als build_sector_rotation(), maar dan voor de populaire
@@ -2489,6 +2533,20 @@ if current_view == "today":
                     st.markdown(
                         f"- {emoji} Also worth noting (not in your portfolio): "
                         f"**{s['ticker']}** {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
+                    )
+
+                # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
+                # kan een koop-/verkoopmoment zijn.
+                with st.spinner("Checking for sector/theme extremes..."):
+                    threshold_alerts = get_sector_theme_threshold_alerts()
+                for alert in threshold_alerts[:3]:
+                    move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
+                    extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
+                    region_suffix = f" ({alert['region']})" if alert.get("region") else ""
+                    kind_label = "sector" if alert["kind"] == "sector" else "theme"
+                    st.markdown(
+                        f"- {move_emoji} **{alert['name']}**{region_suffix} ({kind_label}) is "
+                        f"{alert['pct']:+.1f}% this month{extreme_marker}"
                     )
 
                 if holdings:
