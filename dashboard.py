@@ -4111,8 +4111,7 @@ elif current_view == "analyze":
                 for cat, items in sorted(groups.items(), key=lambda x: -sum(v for _, _, v in x[1])):
                     cat_value = sum(v for _, _, v in items)
                     cat_pct = cat_value / total_value_for_breakdown * 100 if total_value_for_breakdown else 0
-                    names = ", ".join(f"{naam} ({ticker})" for naam, ticker, _ in items)
-                    st.markdown(f"- **{cat}** ({cat_pct:.0f}%): {names}")
+                    st.markdown(f"- **{cat}**: {cat_pct:.0f}%")
 
             comp_col1, comp_col2 = st.columns(2)
             with comp_col1:
