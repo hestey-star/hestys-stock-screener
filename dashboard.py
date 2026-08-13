@@ -685,25 +685,37 @@ def analyze_diversification(holdings: list, infos: dict) -> list:
 
 
 def analyze_risk(holdings: list, infos: dict) -> list:
-    """Risico-kaart: gewogen koers-winst-verhouding (de correlatie-matrix wordt apart als grafiek getoond)."""
+    """Risico-kaart: gewogen koers-winst-verhouding + welke positie dat cijfer het meest beinvloedt."""
     findings = []
     total_value = sum(h.get("position_value") or 0 for h in holdings)
     if total_value <= 0:
         return ["No position values available yet -- click 'Update portfolio value' first."]
 
-    pe_pairs = [
-        (infos.get(h["ticker"], {}).get("trailingPE"), h.get("position_value") or 0)
+    pe_entries = [
+        {"naam": h["naam"], "ticker": h["ticker"], "pe": infos.get(h["ticker"], {}).get("trailingPE"),
+         "weight": h.get("position_value") or 0}
         for h in holdings
     ]
-    pe_pairs = [(pe, w) for pe, w in pe_pairs if pe and w]
-    if pe_pairs:
-        weighted_pe = sum(pe * w for pe, w in pe_pairs) / sum(w for _, w in pe_pairs)
+    pe_entries = [e for e in pe_entries if e["pe"] and e["weight"]]
+    if pe_entries:
+        weighted_pe = sum(e["pe"] * e["weight"] for e in pe_entries) / sum(e["weight"] for e in pe_entries)
         if weighted_pe >= 25:
             findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
         elif weighted_pe <= 12:
             findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
         else:
             findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
+
+        # Context: WELKE positie beinvloedt dit getal het meest? Een gewogen
+        # gemiddelde zonder deze context kan misleidend zijn -- een enkele,
+        # grote positie kan het cijfer volledig bepalen.
+        dominant_entry = max(pe_entries, key=lambda e: e["weight"])
+        dominant_weight_pct = dominant_entry["weight"] / total_value * 100
+        if dominant_weight_pct >= 30:
+            findings.append(
+                f"⚠️ This is mostly driven by **{dominant_entry['naam']} ({dominant_entry['ticker']})** "
+                f"-- {dominant_weight_pct:.0f}% of your portfolio, P/E {dominant_entry['pe']:.1f}x."
+            )
     else:
         findings.append("No valuation (P/E) data available for your tracked positions.")
 
@@ -4063,25 +4075,59 @@ elif current_view == "analyze":
                     )
 
         # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
-        with st.expander("🏭 Sectors", expanded=True):
-            for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
-                st.markdown(f"- {finding}")
-
-            sector_values_chart = {}
+        # --- Portfolio-samenstelling: Sectors + Asset Type + Region samen,
+        # in een compactere 2-koloms-layout i.p.v. elk een eigen, volle-
+        # breedte sectie. Elke categorie toont nu ook de tickers erachter
+        # (bv. welk ETF, welke positie telt als 'Future') i.p.v. alleen een
+        # kaal percentage. ---
+        with st.expander("🏭 Portfolio Composition", expanded=True):
+            sector_groups, type_groups, region_groups = {}, {}, {}
             for h in holdings:
                 value = h.get("position_value") or 0
-                sector = infos.get(h["ticker"], {}).get("sector") or "Non-equity / Other"
-                sector_values_chart[sector] = sector_values_chart.get(sector, 0) + value
-            if sector_values_chart:
-                sector_fig = build_breakdown_pie_chart(list(sector_values_chart.keys()), list(sector_values_chart.values()))
-                st.plotly_chart(sector_fig, width="stretch")
+                info = infos.get(h["ticker"], {})
+
+                sector = info.get("sector") or "Non-equity / Other"
+                sector_groups.setdefault(sector, []).append((h["naam"], h["ticker"], value))
+
+                raw_quote_type = info.get("quoteType")
+                if raw_quote_type:
+                    asset_type = raw_quote_type.title()
+                else:
+                    ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
+                    asset_type = "Cryptocurrency" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "Unknown"
+                type_groups.setdefault(asset_type, []).append((h["naam"], h["ticker"], value))
+
+                region = get_holding_region(h["ticker"], info)
+                region_groups.setdefault(region, []).append((h["naam"], h["ticker"], value))
+
+            total_value_for_breakdown = sum(h.get("position_value") or 0 for h in holdings)
+
+            def _render_breakdown(title, groups):
+                st.markdown(f"**{title}**")
+                chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
+                if chart_values:
+                    fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
+                    st.plotly_chart(fig, width="stretch")
+                for cat, items in sorted(groups.items(), key=lambda x: -sum(v for _, _, v in x[1])):
+                    cat_value = sum(v for _, _, v in items)
+                    cat_pct = cat_value / total_value_for_breakdown * 100 if total_value_for_breakdown else 0
+                    names = ", ".join(f"{naam} ({ticker})" for naam, ticker, _ in items)
+                    st.markdown(f"- **{cat}** ({cat_pct:.0f}%): {names}")
+
+            comp_col1, comp_col2 = st.columns(2)
+            with comp_col1:
+                _render_breakdown("Sectors", sector_groups)
+            with comp_col2:
+                _render_breakdown("Asset Type", type_groups)
+
+            st.divider()
+            _render_breakdown("Region", region_groups)
 
             sector_values_check = {
-                s: v for s, v in sector_values_chart.items() if s != "Non-equity / Other"
+                s: sum(v for _, _, v in items) for s, items in sector_groups.items() if s != "Non-equity / Other"
             }
-            total_value_for_sectors = sum(h.get("position_value") or 0 for h in holdings)
-            if sector_values_check and total_value_for_sectors > 0:
-                dominant_sector_pct = max(sector_values_check.values()) / total_value_for_sectors * 100
+            if sector_values_check and total_value_for_breakdown > 0:
+                dominant_sector_pct = max(sector_values_check.values()) / total_value_for_breakdown * 100
                 if dominant_sector_pct > risk_profile["max_sector_pct"]:
                     st.caption("Overweight in one sector? Steering future contributions toward other "
                                "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
@@ -4089,44 +4135,6 @@ elif current_view == "analyze":
                         '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
                         unsafe_allow_html=True,
                     )
-
-        # --- Diversificatie -- nu met een taartdiagram i.p.v. alleen tekst ---
-        with st.expander("🧩 Diversification", expanded=True):
-            for finding in analyze_diversification(holdings, infos):
-                st.markdown(f"- {finding}")
-
-            type_values_chart = {}
-            for h in holdings:
-                value = h.get("position_value") or 0
-                raw_quote_type = infos.get(h["ticker"], {}).get("quoteType")
-                if not raw_quote_type:
-                    ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
-                    asset_type = "CRYPTOCURRENCY" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "UNKNOWN"
-                else:
-                    asset_type = raw_quote_type
-                type_values_chart[asset_type] = type_values_chart.get(asset_type, 0) + value
-            if type_values_chart:
-                type_fig = build_breakdown_pie_chart(
-                    [t.title() for t in type_values_chart.keys()], list(type_values_chart.values())
-                )
-                st.plotly_chart(type_fig, width="stretch")
-
-        # --- Regio -- nieuwe dimensie, nog niet eerder getoond ---
-        with st.expander("🌍 Region", expanded=True):
-            region_values = {}
-            for h in holdings:
-                value = h.get("position_value") or 0
-                region = get_holding_region(h["ticker"], infos.get(h["ticker"], {}))
-                region_values[region] = region_values.get(region, 0) + value
-            total_value_for_region = sum(h.get("position_value") or 0 for h in holdings)
-            if region_values and total_value_for_region > 0:
-                region_fig = build_breakdown_pie_chart(list(region_values.keys()), list(region_values.values()))
-                st.plotly_chart(region_fig, width="stretch")
-                dominant_region, dominant_region_value = max(region_values.items(), key=lambda x: x[1])
-                dominant_region_pct = dominant_region_value / total_value_for_region * 100
-                st.caption(f"{dominant_region} makes up {dominant_region_pct:.0f}% of your tracked portfolio.")
-            else:
-                st.caption("No region data available for your tracked positions.")
 
         # --- Risico ---
         with st.expander("⚖️ Risk"):
