@@ -1029,8 +1029,17 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
     for sector, ticker in etfs.items():
         try:
             hist = get_cached_ticker_history(ticker, period=period)
-            if len(hist) >= 2:
-                ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+            if hist is None or hist.empty:
+                continue
+            # Zelfde soort probleem als eerder elders gevonden: de EERSTE of
+            # LAATSTE rij kan een onvolledige koers (NaN) zijn (bv. een
+            # 'vandaag'-bar die nog niet volledig is, vaker voorkomend bij
+            # niet-Amerikaanse beurzen met andere handelstijden) -- pak de
+            # eerste/laatste GELDIGE koers i.p.v. blindelings de rand-rijen,
+            # anders wordt het rendement NaN (toont als 'None' in de tabel).
+            valid_closes = hist["Close"].dropna()
+            if len(valid_closes) >= 2:
+                ret = (valid_closes.iloc[-1] / valid_closes.iloc[0] - 1) * 100
                 results.append({"sector": sector, "ticker": ticker, "return_pct": round(ret, 2)})
         except Exception:
             continue
