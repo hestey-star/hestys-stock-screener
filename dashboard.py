@@ -322,31 +322,35 @@ def get_fx_rate(from_currency: str, to_currency: str):
 
 def build_breakdown_pie_chart(labels: list, values: list):
     """
-    Generieke donut-chart voor een verdeling (sector/asset-type/regio) --
-    zelfde visuele stijl als build_portfolio_pie_chart(), maar dan
-    herbruikbaar voor willekeurige categorie-verdelingen i.p.v. alleen
-    per-positie.
+    Generieke, COMPACTE donut-chart voor een verdeling (sector/asset-type/
+    regio). De legenda staat nu horizontaal ONDER de taart (i.p.v. rechts
+    ernaast) -- dat voorkomt de grote, lege ruimte die ontstaat als een
+    smalle taart wordt uitgerekt over een brede kolom met de legenda ver
+    weggeduwd naar rechts.
     """
     palette = ["#1FAE96", "#E8A93C", "#4DA6FF", "#E5484D", "#C77DFF",
                "#3ED9C4", "#F5C518", "#FF8A5C", "#8992A3", "#5AC8B0", "#B0E0D8"]
     colors = (palette * (len(labels) // len(palette) + 1))[:len(labels)]
 
     fig = go.Figure(data=[go.Pie(
-        labels=labels, values=values, hole=0.55,
+        labels=labels, values=values, hole=0.6,
         marker=dict(colors=colors, line=dict(color="#101825", width=2)),
         texttemplate="%{percent:.0%}",
         textposition="inside",
-        textfont=dict(family="Inter, sans-serif", size=13, color="#EAEDF1"),
+        textfont=dict(family="Inter, sans-serif", size=11, color="#EAEDF1"),
         hovertemplate="%{label}: %{percent:.1%}<extra></extra>",
     )])
     fig.update_layout(
         showlegend=True,
-        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02,
-                    font=dict(family="Inter, sans-serif", size=10, color="#8992A3"), bgcolor="rgba(0,0,0,0)"),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.08, xanchor="center", x=0.5,
+            font=dict(family="Inter, sans-serif", size=10, color="#8992A3"), bgcolor="rgba(0,0,0,0)",
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=10, b=10, l=10, r=110),
+        margin=dict(t=10, b=10, l=10, r=10),
         height=280,
+        width=280,
         font=dict(family="Inter, sans-serif", color="#EAEDF1"),
     )
     return fig
@@ -4107,11 +4111,7 @@ elif current_view == "analyze":
                 chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
                 if chart_values:
                     fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
-                    st.plotly_chart(fig, width="stretch")
-                for cat, items in sorted(groups.items(), key=lambda x: -sum(v for _, _, v in x[1])):
-                    cat_value = sum(v for _, _, v in items)
-                    cat_pct = cat_value / total_value_for_breakdown * 100 if total_value_for_breakdown else 0
-                    st.markdown(f"- **{cat}**: {cat_pct:.0f}%")
+                    st.plotly_chart(fig)
 
             comp_col1, comp_col2 = st.columns(2)
             with comp_col1:
