@@ -320,6 +320,38 @@ def get_fx_rate(from_currency: str, to_currency: str):
     return None
 
 
+def build_breakdown_pie_chart(labels: list, values: list):
+    """
+    Generieke donut-chart voor een verdeling (sector/asset-type/regio) --
+    zelfde visuele stijl als build_portfolio_pie_chart(), maar dan
+    herbruikbaar voor willekeurige categorie-verdelingen i.p.v. alleen
+    per-positie.
+    """
+    palette = ["#1FAE96", "#E8A93C", "#4DA6FF", "#E5484D", "#C77DFF",
+               "#3ED9C4", "#F5C518", "#FF8A5C", "#8992A3", "#5AC8B0", "#B0E0D8"]
+    colors = (palette * (len(labels) // len(palette) + 1))[:len(labels)]
+
+    fig = go.Figure(data=[go.Pie(
+        labels=labels, values=values, hole=0.55,
+        marker=dict(colors=colors, line=dict(color="#101825", width=2)),
+        texttemplate="%{percent:.0%}",
+        textposition="inside",
+        textfont=dict(family="Inter, sans-serif", size=13, color="#EAEDF1"),
+        hovertemplate="%{label}: %{percent:.1%}<extra></extra>",
+    )])
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02,
+                    font=dict(family="Inter, sans-serif", size=10, color="#8992A3"), bgcolor="rgba(0,0,0,0)"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(t=10, b=10, l=10, r=110),
+        height=280,
+        font=dict(family="Inter, sans-serif", color="#EAEDF1"),
+    )
+    return fig
+
+
 def build_portfolio_pie_chart(holdings: list):
     """Bouwt een compacte donut-chart van de portfolio-verdeling, met de legenda naast (niet onder) de taart."""
     palette = ["#1FAE96", "#17876F", "#3ED9C4", "#0F5C4E", "#5AC8B0",
@@ -575,6 +607,37 @@ def analyze_sectors(holdings: list, infos: dict, max_sector_pct: float = 40.0) -
     findings.append(f"Full breakdown -- {breakdown}.")
 
     return findings
+
+
+def get_holding_region(ticker: str, info: dict) -> str:
+    """
+    Bepaalt de regio van een positie -- eerst via yfinance's 'country'-veld
+    (het meest betrouwbaar), gegroepeerd in bredere regio's. Voor posities
+    zonder land-info (zoals crypto) wordt teruggevallen op hetzelfde
+    ticker-patroon-herkenning als bij Diversification.
+    """
+    country = (info or {}).get("country")
+    if country:
+        us_countries = {"United States"}
+        eu_countries = {
+            "Germany", "France", "Netherlands", "Belgium", "Spain", "Italy",
+            "Ireland", "Luxembourg", "Austria", "Portugal", "Finland",
+            "Sweden", "Denmark", "Norway", "Switzerland", "Poland",
+        }
+        if country in us_countries:
+            return "United States"
+        elif country in eu_countries:
+            return "Europe"
+        elif country == "United Kingdom":
+            return "United Kingdom"
+        else:
+            return country  # bv. China, Japan, Canada -- toon het land zelf
+
+    ticker_suffix = ticker.rsplit("-", 1)[-1].upper() if "-" in ticker else ""
+    if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
+        return "Cryptocurrency"
+
+    return "Unknown"
 
 
 def analyze_diversification(holdings: list, infos: dict) -> list:
@@ -3767,7 +3830,9 @@ elif current_view == "analyze":
     st.markdown(
         f"""
         <div class="nav-bar" style="margin-bottom: 1.25rem;">
-            <a href="?view=analyze&subview=performance" class="{_subnav_class('performance')}" target="_self">Performance &amp; Risk</a>
+            <a href="?view=analyze&subview=performance" class="{_subnav_class('performance')}" target="_self">Performance</a>
+            <a href="?view=analyze&subview=portfolio" class="{_subnav_class('portfolio')}" target="_self">Portfolio Overview</a>
+            <a href="?view=analyze&subview=dividend" class="{_subnav_class('dividend')}" target="_self">Dividend</a>
             <a href="?view=analyze&subview=deepdives" class="{_subnav_class('deepdives')}" target="_self">Deep-dives</a>
         </div>
         """,
@@ -3963,6 +4028,173 @@ elif current_view == "analyze":
                                     _render_deep_dive_version(version, user_email)
 
         st.divider()
+
+    elif current_subview == "portfolio":
+        import database
+
+        user_email = st.user.email
+        holdings = filter_active_holdings(database.get_user_holdings(user_email))
+        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
+        is_premium = database.is_premium_user(user_email)
+
+        if not holdings:
+            st.info("Add positions under My Portfolio to see your analysis here.")
+            st.stop()
+
+        risk_profile = database.get_risk_profile(user_email)
+        with st.spinner("Loading sector/valuation data..."):
+            infos = get_tickers_info(holdings)
+
+        # --- Concentratie Risk ---
+        with st.expander("🎯 Concentration Risk", expanded=True):
+            for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
+                st.markdown(f"- {finding}")
+
+            total_value_check = sum(h.get("position_value") or 0 for h in holdings)
+            if total_value_check > 0:
+                largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
+                largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
+                if largest_pct_check > risk_profile["max_position_pct"]:
+                    st.caption("One way to gradually correct an overweight position without a big, "
+                               "one-time move: adjust future contributions with the Smart DCA Assistant.")
+                    st.markdown(
+                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                        unsafe_allow_html=True,
+                    )
+
+        # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
+        with st.expander("🏭 Sectors", expanded=True):
+            for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
+                st.markdown(f"- {finding}")
+
+            sector_values_chart = {}
+            for h in holdings:
+                value = h.get("position_value") or 0
+                sector = infos.get(h["ticker"], {}).get("sector") or "Non-equity / Other"
+                sector_values_chart[sector] = sector_values_chart.get(sector, 0) + value
+            if sector_values_chart:
+                sector_fig = build_breakdown_pie_chart(list(sector_values_chart.keys()), list(sector_values_chart.values()))
+                st.plotly_chart(sector_fig, width="stretch")
+
+            sector_values_check = {
+                s: v for s, v in sector_values_chart.items() if s != "Non-equity / Other"
+            }
+            total_value_for_sectors = sum(h.get("position_value") or 0 for h in holdings)
+            if sector_values_check and total_value_for_sectors > 0:
+                dominant_sector_pct = max(sector_values_check.values()) / total_value_for_sectors * 100
+                if dominant_sector_pct > risk_profile["max_sector_pct"]:
+                    st.caption("Overweight in one sector? Steering future contributions toward other "
+                               "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
+                    st.markdown(
+                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                        unsafe_allow_html=True,
+                    )
+
+        # --- Diversificatie -- nu met een taartdiagram i.p.v. alleen tekst ---
+        with st.expander("🧩 Diversification", expanded=True):
+            for finding in analyze_diversification(holdings, infos):
+                st.markdown(f"- {finding}")
+
+            type_values_chart = {}
+            for h in holdings:
+                value = h.get("position_value") or 0
+                raw_quote_type = infos.get(h["ticker"], {}).get("quoteType")
+                if not raw_quote_type:
+                    ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
+                    asset_type = "CRYPTOCURRENCY" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "UNKNOWN"
+                else:
+                    asset_type = raw_quote_type
+                type_values_chart[asset_type] = type_values_chart.get(asset_type, 0) + value
+            if type_values_chart:
+                type_fig = build_breakdown_pie_chart(
+                    [t.title() for t in type_values_chart.keys()], list(type_values_chart.values())
+                )
+                st.plotly_chart(type_fig, width="stretch")
+
+        # --- Regio -- nieuwe dimensie, nog niet eerder getoond ---
+        with st.expander("🌍 Region", expanded=True):
+            region_values = {}
+            for h in holdings:
+                value = h.get("position_value") or 0
+                region = get_holding_region(h["ticker"], infos.get(h["ticker"], {}))
+                region_values[region] = region_values.get(region, 0) + value
+            total_value_for_region = sum(h.get("position_value") or 0 for h in holdings)
+            if region_values and total_value_for_region > 0:
+                region_fig = build_breakdown_pie_chart(list(region_values.keys()), list(region_values.values()))
+                st.plotly_chart(region_fig, width="stretch")
+                dominant_region, dominant_region_value = max(region_values.items(), key=lambda x: x[1])
+                dominant_region_pct = dominant_region_value / total_value_for_region * 100
+                st.caption(f"{dominant_region} makes up {dominant_region_pct:.0f}% of your tracked portfolio.")
+            else:
+                st.caption("No region data available for your tracked positions.")
+
+        # --- Risico ---
+        with st.expander("⚖️ Risk"):
+            for finding in analyze_risk(holdings, infos):
+                st.markdown(f"- {finding}")
+
+            if is_premium:
+                if len(holdings) >= 2:
+                    with st.spinner("Building correlation matrix..."):
+                        corr_chart = build_correlation_matrix_chart(holdings)
+                    if corr_chart is not None:
+                        st.plotly_chart(corr_chart, width="stretch")
+                else:
+                    st.caption("Add at least 2 positions to see a correlation matrix.")
+            else:
+                st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
+
+
+    elif current_subview == "dividend":
+        import database
+
+        user_email = st.user.email
+        holdings = filter_active_holdings(database.get_user_holdings(user_email))
+        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
+        is_premium = database.is_premium_user(user_email)
+
+        if not holdings:
+            st.info("Add positions under My Portfolio to see your analysis here.")
+            st.stop()
+
+        risk_profile = database.get_risk_profile(user_email)
+
+        # --- Performance (rendement uit gelogde transacties) ---
+        # BELANGRIJK: dit gebruikt de SNELLE, gebatchte koersgeschiedenis
+        # (shared_history) als EERSTE keuze voor de huidige prijs, i.p.v.
+        # te wachten op infos/.info (die pas hierONDER wordt opgehaald,
+        # en van yfinance bekend traag is). Zo verschijnt Performance
+        # meteen, terwijl de rest van de pagina (Sectors/Diversification/
+        # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
+        with st.spinner("Loading dividend data..."):
+            infos = get_tickers_info(holdings)
+
+        with st.expander("💰 Dividend"):
+            if is_premium:
+                dividend_result = analyze_dividend(holdings, infos)
+                for finding in dividend_result["findings"]:
+                    st.markdown(f"- {finding}")
+                if dividend_result["per_position"]:
+                    if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
+                        df_div = pd.DataFrame(dividend_result["per_position"])
+                        symbol = dividend_result["currency_symbol"]
+                        df_display = pd.DataFrame({
+                            "Name": df_div["naam"],
+                            "Ticker": df_div["ticker"],
+                            "Annual Dividend": df_div["annual_dividend"].apply(
+                                lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
+                            ),
+                            "Yield": df_div["yield_pct"].apply(
+                                lambda v: f"{v:.2f}%" if v is not None else "-"
+                            ),
+                        })
+                        st.dataframe(
+                            df_display, width=480, hide_index=True,
+                            height=min(38 * (len(df_display) + 1), 300),
+                        )
+            else:
+                st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
+
 
     else:
         import database
@@ -4188,103 +4420,6 @@ elif current_view == "analyze":
                             st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
                         else:
                             st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
-
-        render_section_banner("Risk &amp; Diversification")
-
-        # --- Concentratie Risk ---
-        with st.expander("🎯 Concentration Risk", expanded=True):
-            for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
-                st.markdown(f"- {finding}")
-
-            total_value_check = sum(h.get("position_value") or 0 for h in holdings)
-            if total_value_check > 0:
-                largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
-                largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
-                if largest_pct_check > risk_profile["max_position_pct"]:
-                    st.caption("One way to gradually correct an overweight position without a big, "
-                               "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                    st.markdown(
-                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
-
-        # --- Sectoren ---
-        # infos (.info per ticker) wordt PAS hier opgehaald -- dit is een
-        # relatief trage aanroep in yfinance, dus door 'm hier (i.p.v.
-        # helemaal bovenaan de pagina) op te halen, verschijnt Performance
-        # hierboven al veel eerder, terwijl dit gedeelte daarna pas verder laadt.
-        with st.spinner("Loading sector/valuation data..."):
-            infos = get_tickers_info(holdings)
-        with st.expander("🏭 Sectors"):
-            for finding in analyze_sectors(holdings, infos, risk_profile["max_sector_pct"]):
-                st.markdown(f"- {finding}")
-
-            sector_values_check = {}
-            for h in holdings:
-                value = h.get("position_value") or 0
-                sector = infos.get(h["ticker"], {}).get("sector")
-                if sector:
-                    sector_values_check[sector] = sector_values_check.get(sector, 0) + value
-            total_value_for_sectors = sum(h.get("position_value") or 0 for h in holdings)
-            if sector_values_check and total_value_for_sectors > 0:
-                dominant_sector_pct = max(sector_values_check.values()) / total_value_for_sectors * 100
-                if dominant_sector_pct > risk_profile["max_sector_pct"]:
-                    st.caption("Overweight in one sector? Steering future contributions toward other "
-                               "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                    st.markdown(
-                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
-
-        # --- Diversificatie ---
-        with st.expander("🧩 Diversification"):
-            for finding in analyze_diversification(holdings, infos):
-                st.markdown(f"- {finding}")
-
-        # --- Risico ---
-        with st.expander("⚖️ Risk"):
-            for finding in analyze_risk(holdings, infos):
-                st.markdown(f"- {finding}")
-
-            if is_premium:
-                if len(holdings) >= 2:
-                    with st.spinner("Building correlation matrix..."):
-                        corr_chart = build_correlation_matrix_chart(holdings)
-                    if corr_chart is not None:
-                        st.plotly_chart(corr_chart, width="stretch")
-                else:
-                    st.caption("Add at least 2 positions to see a correlation matrix.")
-            else:
-                st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
-
-        render_section_banner("Income")
-
-        # --- Dividend ---
-        with st.expander("💰 Dividend"):
-            if is_premium:
-                dividend_result = analyze_dividend(holdings, infos)
-                for finding in dividend_result["findings"]:
-                    st.markdown(f"- {finding}")
-                if dividend_result["per_position"]:
-                    if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
-                        df_div = pd.DataFrame(dividend_result["per_position"])
-                        symbol = dividend_result["currency_symbol"]
-                        df_display = pd.DataFrame({
-                            "Name": df_div["naam"],
-                            "Ticker": df_div["ticker"],
-                            "Annual Dividend": df_div["annual_dividend"].apply(
-                                lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
-                            ),
-                            "Yield": df_div["yield_pct"].apply(
-                                lambda v: f"{v:.2f}%" if v is not None else "-"
-                            ),
-                        })
-                        st.dataframe(
-                            df_display, width=480, hide_index=True,
-                            height=min(38 * (len(df_display) + 1), 300),
-                        )
-            else:
-                st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
 
 elif current_view == "settings":
     import database
