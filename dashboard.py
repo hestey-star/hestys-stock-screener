@@ -223,10 +223,42 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 .positions-table tr:last-child td {
     border-bottom: none;
 }
+.positions-table tbody tr:nth-child(even) {
+    background: rgba(255,255,255,0.015);
+}
+.positions-table tbody tr:hover {
+    background: rgba(31,174,150,0.06);
+}
 .positions-table code {
     color: #1FAE96;
     background: none;
     font-size: 0.85rem;
+}
+.positions-table .position-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    object-fit: contain;
+    background: #fff;
+    padding: 2px;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+.positions-table .weight-bar-track {
+    display: inline-block;
+    width: 46px;
+    height: 5px;
+    border-radius: 3px;
+    background: #232D3A;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+    overflow: hidden;
+}
+.positions-table .weight-bar-fill {
+    display: block;
+    height: 100%;
+    background: #1FAE96;
+    border-radius: 3px;
 }
 
 /* Iets compactere tabellen: kleinere tekst in de databladen */
@@ -1559,6 +1591,7 @@ def _currency_symbol_for_ticker(ticker: str) -> str:
     return symbol_map.get(currency, f"{currency} ")
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
 def get_company_logo_url(ticker: str) -> str:
     """
     Geeft een logo-URL terug via Google's eigen, gratis favicon-dienst --
@@ -1567,6 +1600,11 @@ def get_company_logo_url(ticker: str) -> str:
     hiervoor, is per december 2025 gestopt te bestaan). Gebaseerd op het
     bedrijfsdomein uit yfinance's 'website'-veld. Geeft None terug als er
     geen domein bekend is.
+
+    24-uur gecached (i.p.v. de standaard 5 minuten van get_cached_ticker_info
+    zelf) -- een logo verandert vrijwel nooit, en deze functie wordt nu ook
+    gebruikt in My Portfolio's tabel (die bij ELK paginabezoek rendert), dus
+    een lange cache voorkomt dat het paginabezoek zelf traag wordt.
     """
     try:
         info = get_cached_ticker_info(ticker)
@@ -3389,12 +3427,6 @@ elif current_view == "portfolio":
                 else:
                     st.warning(message)
 
-            def _format_pct(holding):
-                if total_value <= 0:
-                    return "-"
-                value = holding.get("position_value") or 0
-                return f"{value / total_value * 100:.0f}%"
-
             def _format_value(holding):
                 value = holding.get("position_value")
                 sym = "€" if holding.get("value_currency") == "EUR" else "$"
@@ -3418,11 +3450,27 @@ elif current_view == "portfolio":
                 color = "#1FAE96" if pct >= 0 else "#E5484D"
                 return f'<span style="color:{color}; font-weight:600;">{pct:+.1f}%</span>'
 
+            def _format_name_with_logo(holding):
+                logo_url = get_company_logo_url(holding["ticker"])
+                logo_html = f'<img src="{logo_url}" class="position-logo" />' if logo_url else ""
+                return f'{logo_html}{holding["naam"]}'
+
+            def _format_pct_with_bar(holding):
+                if total_value <= 0:
+                    return "-"
+                value = holding.get("position_value") or 0
+                pct = value / total_value * 100
+                bar_pct = min(pct, 100)
+                return (
+                    f'<span class="weight-bar-track"><span class="weight-bar-fill" '
+                    f'style="width:{bar_pct:.0f}%;"></span></span>{pct:.0f}%'
+                )
+
             rows_html = "".join(
-                f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
+                f'<tr><td>{_format_name_with_logo(h)}</td><td><code>{h["ticker"]}</code></td>'
                 f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
                 f'<td>{_format_day_change(h)}</td>'
-                f'<td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
+                f'<td>{_format_value(h)}</td><td>{_format_pct_with_bar(h)}</td></tr>'
                 for h in holdings
             )
             st.markdown(
