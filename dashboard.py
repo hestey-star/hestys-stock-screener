@@ -3571,11 +3571,11 @@ elif current_view == "portfolio":
             )
             if selected_position_label != "-- Select a position --":
                 selected_holding = position_options[selected_position_label]
-                with st.container(border=True):
-                    detail_col1, detail_col2 = st.columns(2)
+                st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
+                detail_col1, detail_col2 = st.columns(2)
 
-                    with detail_col1:
-                        st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
+                with detail_col1:
+                    with st.container(border=True):
                         transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
                         if transactions:
                             perf = compute_holding_performance(
@@ -3599,13 +3599,21 @@ elif current_view == "portfolio":
                         else:
                             st.caption("No transactions logged for this position yet -- log one under 'Manage' below.")
 
-                    with detail_col2:
+                with detail_col2:
+                    with st.container(border=True):
                         st.caption("Price -- last 6 months")
                         with st.spinner("Loading chart..."):
                             mini_hist = get_cached_ticker_history(selected_holding["ticker"], period="6mo")
                         if mini_hist is not None and not mini_hist.empty:
                             valid_mini_closes = mini_hist["Close"].dropna()
                             if len(valid_mini_closes) >= 2:
+                                # De Y-as strak om de DAADWERKELIJKE prijsrange laten
+                                # aansluiten (i.p.v. Plotly's standaard, ruimere
+                                # marge) -- laat veel meer 'reliëf' in de koers zien,
+                                # zodat verschillen tussen prijsniveaus beter opvallen.
+                                y_min = float(valid_mini_closes.min())
+                                y_max = float(valid_mini_closes.max())
+                                y_padding = (y_max - y_min) * 0.05 or y_max * 0.02
                                 mini_fig = go.Figure()
                                 mini_fig.add_trace(go.Scatter(
                                     x=valid_mini_closes.index.strftime("%Y-%m-%d").tolist(),
@@ -3624,7 +3632,10 @@ elif current_view == "portfolio":
                                     height=220,
                                     showlegend=False,
                                     xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                                    yaxis=dict(
+                                        gridcolor="rgba(137,146,163,0.15)",
+                                        range=[y_min - y_padding, y_max + y_padding],
+                                    ),
                                 )
                                 st.plotly_chart(mini_fig)
                             else:
