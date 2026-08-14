@@ -1245,20 +1245,20 @@ def _render_deep_dive_version(version: dict, user_email: str):
         edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}")
         edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}")
         edit_thesis_score = st.columns([1, 1])[0].slider(
-            "How compelling is the thesis?", 1, 10, int(version.get("thesis_score") or 5), key=f"dd_edit_thesis_score_{version_id}"
+            "How compelling is the thesis?", 1.0, 10.0, float(version.get("thesis_score") or 5), step=0.5, key=f"dd_edit_thesis_score_{version_id}"
         )
         edit_management = st.text_area("Management/CEO", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}")
         edit_management_score = st.columns([1, 1])[0].slider(
-            "How much confidence in management?", 1, 10, int(version.get("management_score") or 5), key=f"dd_edit_management_score_{version_id}"
+            "How much confidence in management?", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5, key=f"dd_edit_management_score_{version_id}"
         )
         edit_bear = st.text_area("Bear case", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}")
         edit_bear_score = st.columns([1, 1])[0].slider(
-            "How manageable are the risks?", 1, 10, int(version.get("bear_case_score") or 5), key=f"dd_edit_bear_score_{version_id}",
+            "How manageable are the risks?", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5, key=f"dd_edit_bear_score_{version_id}",
             help="Higher = the risks are limited/well understood, not 'the risks are severe'.",
         )
         edit_valuation = st.text_area("Valuation", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}")
         edit_valuation_score = st.columns([1, 1])[0].slider(
-            "How attractive is the valuation?", 1, 10, int(version.get("valuation_score") or 5), key=f"dd_edit_valuation_score_{version_id}"
+            "How attractive is the valuation?", 1.0, 10.0, float(version.get("valuation_score") or 5), step=0.5, key=f"dd_edit_valuation_score_{version_id}"
         )
         edit_interested_price = st.number_input(
             f"Interested from price ({ticker_currency_symbol.strip()})", min_value=0.0, step=0.01,
@@ -1268,11 +1268,11 @@ def _render_deep_dive_version(version: dict, user_email: str):
             "Technical analysis", value=version.get("technical_analysis") or "", key=f"dd_edit_ta_{version_id}"
         )
         edit_technical_analysis_score = st.columns([1, 1])[0].slider(
-            "How favorable is the technical setup?", 1, 10, int(version.get("technical_analysis_score") or 5), key=f"dd_edit_ta_score_{version_id}"
+            "How favorable is the technical setup?", 1.0, 10.0, float(version.get("technical_analysis_score") or 5), step=0.5, key=f"dd_edit_ta_score_{version_id}"
         )
         edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
         edit_catalysts_score = st.columns([1, 1])[0].slider(
-            "How strong are the catalysts?", 1, 10, int(version.get("catalysts_score") or 5), key=f"dd_edit_catalysts_score_{version_id}"
+            "How strong are the catalysts?", 1.0, 10.0, float(version.get("catalysts_score") or 5), step=0.5, key=f"dd_edit_catalysts_score_{version_id}"
         )
         edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}")
         edit_sell_criteria = st.text_area("Sell criteria", value=version.get("sell_criteria") or "", key=f"dd_edit_sell_{version_id}")
@@ -3905,22 +3905,22 @@ elif current_view == "analyze":
 
             st.markdown("**Investment thesis** -- why this could be a good investment")
             dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-            dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1, 10, 5, key="dd_thesis_score")
+            dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
 
             st.markdown("**Management/CEO** -- assess the management and the CEO")
             dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-            dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1, 10, 5, key="dd_management_score")
+            dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
 
             st.markdown("**Bear case / risks** -- what could go wrong")
             dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
             dd_bear_score = st.columns([1, 1])[0].slider(
-                "How manageable are the risks?", 1, 10, 5, key="dd_bear_score",
+                "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
                 help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
             )
 
             st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
             dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-            dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1, 10, 5, key="dd_valuation_score")
+            dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
             dd_interested_price = st.number_input(
                 f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
                 help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
@@ -3929,11 +3929,11 @@ elif current_view == "analyze":
             st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
                         "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
             dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
-            dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1, 10, 5, key="dd_technical_analysis_score")
+            dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
 
             st.markdown("**Catalysts** -- what upcoming events could move the price")
             dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-            dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1, 10, 5, key="dd_catalysts_score")
+            dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
 
             st.markdown("**Position sizing plan** -- how big a position, and why")
             dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
@@ -4556,6 +4556,12 @@ elif current_view == "premium":
     import database
 
     st.markdown("### Premium")
+
+    _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
+    if _premium_free_for_all:
+        st.success("🚀 Everything is unlocked for free while we're still getting started -- "
+                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
+
     st.write(
         "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
     )
@@ -4649,13 +4655,8 @@ elif current_view == "premium":
                     "please wait a few seconds and refresh this page."
                 )
 
-        _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
-
         if not st.user.is_logged_in:
             st.info("Log in first (top right) so we know which account to upgrade.")
-        elif _premium_free_for_all:
-            st.success("🚀 Everything is unlocked for free while we're still getting started -- "
-                       "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
         elif database.is_premium_user(st.user.email):
             st.success("You're already on Premium. Thank you!")
             customer_id = database.get_stripe_customer_id(st.user.email)
