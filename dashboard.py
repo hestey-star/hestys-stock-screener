@@ -3587,9 +3587,24 @@ elif current_view == "portfolio":
                                 pct = perf["total_return_pct"]
                                 color_emoji = "🟢" if pct >= 0 else "🔴"
                                 st.markdown(f"{color_emoji} **Return: {pct:+.1f}%** (€{perf['total_pnl']:+,.2f})")
-                            st.caption("Transactions (most recent first)")
                             sorted_transactions = sorted(transactions, key=lambda t: t["transaction_date"], reverse=True)
-                            for t in sorted_transactions:
+
+                            DEFAULT_TRANSACTIONS_SHOWN = 5
+                            show_all_transactions = True
+                            if len(sorted_transactions) > DEFAULT_TRANSACTIONS_SHOWN:
+                                st.caption(f"{len(sorted_transactions)} transactions total")
+                                show_all_transactions = st.checkbox(
+                                    f"Show all {len(sorted_transactions)} (most recent {DEFAULT_TRANSACTIONS_SHOWN} shown by default)",
+                                    key=f"show_all_tx_{selected_holding['id']}",
+                                )
+                            else:
+                                st.caption("Transactions (most recent first)")
+
+                            transactions_to_show = (
+                                sorted_transactions if show_all_transactions
+                                else sorted_transactions[:DEFAULT_TRANSACTIONS_SHOWN]
+                            )
+                            for t in transactions_to_show:
                                 type_emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
                                 type_label = "Buy" if t["transaction_type"] == "buy" else "Sell"
                                 st.markdown(
