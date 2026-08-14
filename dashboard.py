@@ -1591,6 +1591,34 @@ def _currency_symbol_for_ticker(ticker: str) -> str:
     return symbol_map.get(currency, f"{currency} ")
 
 
+def _guess_domain_from_name(name: str) -> str:
+    """
+    Gokt een domeinnaam op basis van de bedrijfsnaam -- terugval voor
+    wanneer yfinance's 'website'-veld ontbreekt (een bekende, terugkerende
+    onbetrouwbaarheid in yfinance's .info-dict, bevestigd in meerdere
+    GitHub-issues over verdwijnende velden tussen versies). Simpele
+    heuristiek: strip veelvoorkomende bedrijfssuffixen, haal spaties/
+    leestekens weg, plak '.com' erachter. Niet perfect (werkt bv. niet
+    voor crypto, die worden apart uitgesloten), maar beter dan helemaal
+    geen logo.
+    """
+    if not name:
+        return None
+    suffixes = [
+        ", Inc.", " Inc.", " Inc", ", Corporation", " Corporation", " Corp.",
+        " Corp", ", Ltd.", " Ltd.", " Ltd", " PLC", " plc", " N.V.", " NV",
+        " S.A.", " AG", " Co.", ", Co", " Company", " Holdings", " Holding",
+        " Group", " Class A", " Class B",
+    ]
+    cleaned = name
+    for suf in suffixes:
+        cleaned = cleaned.replace(suf, "")
+    cleaned = cleaned.strip().lower().replace(" ", "").replace(",", "").replace(".", "").replace("&", "")
+    if not cleaned:
+        return None
+    return f"{cleaned}.com"
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def get_company_logo_url(ticker: str) -> str:
     """
@@ -1598,8 +1626,10 @@ def get_company_logo_url(ticker: str) -> str:
     geen aanmelding/API-sleutel nodig, en betrouwbaarder dan een kleine,
     losse gratis-dienst (Clearbit's gratis logo-API, ooit de standaardkeuze
     hiervoor, is per december 2025 gestopt te bestaan). Gebaseerd op het
-    bedrijfsdomein uit yfinance's 'website'-veld. Geeft None terug als er
-    geen domein bekend is.
+    bedrijfsdomein uit yfinance's 'website'-veld -- met een terugval op
+    een domein-gok uit de bedrijfsnaam, want 'website' bleek in de
+    praktijk regelmatig te ontbreken (bekende yfinance-onbetrouwbaarheid).
+    Geeft None terug als er geen domein af te leiden is (bv. crypto).
 
     24-uur gecached (i.p.v. de standaard 5 minuten van get_cached_ticker_info
     zelf) -- een logo verandert vrijwel nooit, en deze functie wordt nu ook
@@ -1609,10 +1639,21 @@ def get_company_logo_url(ticker: str) -> str:
     try:
         info = get_cached_ticker_info(ticker)
         website = info.get("website")
-        if not website:
+        if website:
+            domain = website.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+            return f"https://www.google.com/s2/favicons?domain={domain}&sz=256"
+
+        # Terugval: geen 'website'-veld -- crypto-achtige tickers (geen
+        # bedrijf, dus geen zinvol domein te gokken) slaan we bewust over.
+        ticker_suffix = ticker.rsplit("-", 1)[-1].upper() if "-" in ticker else ""
+        if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
             return None
-        domain = website.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-        return f"https://www.google.com/s2/favicons?domain={domain}&sz=256"
+
+        name = info.get("shortName") or info.get("longName")
+        guessed_domain = _guess_domain_from_name(name)
+        if not guessed_domain:
+            return None
+        return f"https://www.google.com/s2/favicons?domain={guessed_domain}&sz=256"
     except Exception:
         return None
 
