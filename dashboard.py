@@ -2746,13 +2746,12 @@ if current_view == "today":
                             f'<div style="display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap;">'
                             f'<span style="font-weight:700;">Your Portfolio Today</span>'
                             f'<span style="font-size:0.85rem; font-weight:700; color:{vs_yesterday_color};">'
-                            f'{vs_yesterday_pct:+.1f}% vs yesterday</span>'
+                            f'{vs_yesterday_pct:+.1f}%</span>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown("**Your Portfolio Today**")
-                    st.caption("How your positions did today.")
 
                     dcol2, dcol3 = st.columns(2)
                     with dcol2:
