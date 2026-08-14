@@ -425,15 +425,47 @@ def build_portfolio_pie_chart(holdings: list):
     return fig
 
 
+TICKER_EXCHANGE_CURRENCY = {
+    "AS": "EUR", "PA": "EUR", "DE": "EUR", "MI": "EUR", "MC": "EUR",
+    "BR": "EUR", "LS": "EUR", "HE": "EUR", "VI": "EUR", "IR": "EUR",
+    "L": "GBP",
+    "TO": "CAD", "V": "CAD",
+    "SW": "CHF",
+    "ST": "SEK", "CO": "DKK", "OL": "NOK",
+    "HK": "HKD",
+    "T": "JPY",
+    "AX": "AUD",
+}
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def get_cached_ticker_currency(ticker: str) -> str:
     """
     Cachet de valuta van een ticker voor 24 uur (i.p.v. de standaard 5
     minuten) -- de valuta van een ticker verandert vrijwel nooit, dus een
     lange cache-tijd voorkomt dat elke portfolio-refresh opnieuw de trage
-    .info-aanroep per positie moet doen (dit was de belangrijkste
-    resterende oorzaak van een trage 'Update portfolio value'-knop).
+    .info-aanroep per positie moet doen.
+
+    Bepaalt de valuta EERST via het ticker-achtervoegsel (bv. '.AS' ->
+    EUR, '.L' -> GBP) -- een VEEL betrouwbaardere bron dan yfinance's
+    .info['currency']-veld, dat (net als eerder gevonden bij 'website')
+    regelmatig lijkt te ontbreken. Concreet gevolg zonder deze fix: een
+    EUR-aandeel als ADYEN.AS werd via de terugval-standaard 'USD'
+    behandeld, waardoor er een ONTERECHTE USD->EUR-omrekening op een
+    al-EUR-prijs plaatsvond (zichtbaar als een te lage getoonde prijs).
+    Alleen als het achtervoegsel niet herkend wordt (bv. Amerikaanse
+    tickers zonder achtervoegsel), valt dit terug op .info als laatste optie.
     """
+    if "." in ticker:
+        suffix = ticker.rsplit(".", 1)[-1].upper()
+        if suffix in TICKER_EXCHANGE_CURRENCY:
+            return TICKER_EXCHANGE_CURRENCY[suffix]
+    if "-" in ticker:
+        crypto_suffix = ticker.rsplit("-", 1)[-1].upper()
+        if crypto_suffix in ("EUR", "GBP"):
+            return crypto_suffix
+        if crypto_suffix in ("USD", "USDT", "USDC"):
+            return "USD"
     try:
         return yf.Ticker(ticker).info.get("currency", "USD")
     except Exception:
