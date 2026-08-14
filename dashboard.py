@@ -3563,6 +3563,75 @@ elif current_view == "portfolio":
                 unsafe_allow_html=True,
             )
 
+            # --- Positie-detail: transacties + rendement + mini-koersgrafiek ---
+            position_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+            selected_position_label = st.selectbox(
+                "View position details", ["-- Select a position --"] + list(position_options.keys()),
+                key="portfolio_position_detail_select",
+            )
+            if selected_position_label != "-- Select a position --":
+                selected_holding = position_options[selected_position_label]
+                with st.container(border=True):
+                    detail_col1, detail_col2 = st.columns(2)
+
+                    with detail_col1:
+                        st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
+                        transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
+                        if transactions:
+                            perf = compute_holding_performance(
+                                transactions,
+                                current_price=(selected_holding.get("position_value") or 0) / selected_holding["shares"]
+                                if selected_holding.get("shares") else None,
+                            )
+                            if perf and perf.get("total_return_pct") is not None:
+                                pct = perf["total_return_pct"]
+                                color_emoji = "🟢" if pct >= 0 else "🔴"
+                                st.markdown(f"{color_emoji} **Return: {pct:+.1f}%** (€{perf['total_pnl']:+,.2f})")
+                            st.caption("Transactions (most recent first)")
+                            sorted_transactions = sorted(transactions, key=lambda t: t["transaction_date"], reverse=True)
+                            for t in sorted_transactions:
+                                type_emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
+                                type_label = "Buy" if t["transaction_type"] == "buy" else "Sell"
+                                st.markdown(
+                                    f"- {type_emoji} {type_label}: {t['shares']:g} @ €{t['price']:,.2f} "
+                                    f"*({t['transaction_date']})*"
+                                )
+                        else:
+                            st.caption("No transactions logged for this position yet -- log one under 'Manage' below.")
+
+                    with detail_col2:
+                        st.caption("Price -- last 6 months")
+                        with st.spinner("Loading chart..."):
+                            mini_hist = get_cached_ticker_history(selected_holding["ticker"], period="6mo")
+                        if mini_hist is not None and not mini_hist.empty:
+                            valid_mini_closes = mini_hist["Close"].dropna()
+                            if len(valid_mini_closes) >= 2:
+                                mini_fig = go.Figure()
+                                mini_fig.add_trace(go.Scatter(
+                                    x=valid_mini_closes.index.strftime("%Y-%m-%d").tolist(),
+                                    y=valid_mini_closes.tolist(),
+                                    mode="lines",
+                                    line=dict(color="#1FAE96", width=2),
+                                    fill="tozeroy",
+                                    fillcolor="rgba(31,174,150,0.10)",
+                                    hovertemplate="%{x}: %{y:,.2f}<extra></extra>",
+                                ))
+                                mini_fig.update_layout(
+                                    paper_bgcolor="rgba(0,0,0,0)",
+                                    plot_bgcolor="rgba(0,0,0,0)",
+                                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=10),
+                                    margin=dict(t=10, b=10, l=10, r=10),
+                                    height=220,
+                                    showlegend=False,
+                                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                                )
+                                st.plotly_chart(mini_fig)
+                            else:
+                                st.caption("Not enough price data to show a chart.")
+                        else:
+                            st.caption("No price data available right now.")
+
     # ============================================================
     # 3. MANAGE
     # ============================================================
