@@ -229,6 +229,13 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 .positions-table tbody tr:hover {
     background: rgba(31,174,150,0.06);
 }
+.positions-table th:first-child,
+.positions-table td:first-child {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .positions-table code {
     color: #1FAE96;
     background: none;
