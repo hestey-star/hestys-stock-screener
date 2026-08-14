@@ -386,12 +386,29 @@ def build_portfolio_pie_chart(holdings: list):
     return fig
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_cached_ticker_currency(ticker: str) -> str:
+    """
+    Cachet de valuta van een ticker voor 24 uur (i.p.v. de standaard 5
+    minuten) -- de valuta van een ticker verandert vrijwel nooit, dus een
+    lange cache-tijd voorkomt dat elke portfolio-refresh opnieuw de trage
+    .info-aanroep per positie moet doen (dit was de belangrijkste
+    resterende oorzaak van een trage 'Update portfolio value'-knop).
+    """
+    try:
+        return yf.Ticker(ticker).info.get("currency", "USD")
+    except Exception:
+        return "USD"
+
+
 def refresh_portfolio_values(holdings: list, user_email: str, display_currency: str = "EUR") -> tuple:
     """
-    Haalt voor elke positie de actuele koers EN de eigen valuta op, rekent
-    om naar de gekozen weergave-valuta (display_currency), en werkt
-    position_value bij. Rate-limited tot 1x per 10 seconden per gebruiker
-    (ruim voldoende tegen per-ongeluk-dubbelklikken, zonder te frustreren).
+    Haalt voor al je posities in 1x (via een gebatchte download) de
+    actuele koers op, gebruikt een 24-uur-gecachte valuta-lookup per
+    ticker (i.p.v. een trage .info-aanroep per positie bij elke refresh),
+    rekent om naar de gekozen weergave-valuta, en werkt position_value
+    bij. Rate-limited tot 1x per 10 seconden per gebruiker (ruim
+    voldoende tegen per-ongeluk-dubbelklikken, zonder te frustreren).
 
     Geeft (success: bool, message: str) terug.
     """
@@ -403,6 +420,15 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
             wait_seconds = int(10 - seconds_since)
             return False, f"Please wait {wait_seconds} more second(s) before updating again."
 
+    tickers_to_fetch = list({h["ticker"] for h in holdings if h.get("shares")})
+    if not tickers_to_fetch:
+        return False, "No positions with shares to update."
+
+    shared_prices = get_shared_history_for_holdings(
+        [{"ticker": t} for t in tickers_to_fetch], period="5d"
+    )
+    today = datetime.now().date()
+
     fx_cache = {}
     updated_count = 0
     skipped_currencies = set()
@@ -411,12 +437,11 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
         if not holding.get("shares"):
             continue
         try:
-            ticker_obj = yf.Ticker(holding["ticker"])
-            price_data = ticker_obj.history(period="1d")
-            if price_data.empty:
+            hist = shared_prices.get(holding["ticker"])
+            native_price = _price_near_date(hist, today, tolerance_days=10) if hist is not None else None
+            if native_price is None:
                 continue
-            native_price = float(price_data["Close"].iloc[-1])
-            native_currency = ticker_obj.info.get("currency", "USD")
+            native_currency = get_cached_ticker_currency(holding["ticker"])
 
             if native_currency not in fx_cache:
                 fx_cache[native_currency] = get_fx_rate(native_currency, display_currency)
