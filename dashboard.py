@@ -452,7 +452,10 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
                 continue
 
             new_value = holding["shares"] * native_price * fx_rate
-            database.update_holding_value(holding["id"], user_email, new_value, value_currency=display_currency)
+            day_change_pct = compute_day_change_pct(hist)
+            database.update_holding_value(
+                holding["id"], user_email, new_value, value_currency=display_currency, day_change_pct=day_change_pct
+            )
             updated_count += 1
         except Exception:
             continue
@@ -2049,6 +2052,25 @@ def get_ticker_ytd_and_1y_return(ticker: str) -> dict:
     }
 
 
+def compute_day_change_pct(history: pd.DataFrame) -> float:
+    """
+    Berekent de dagverandering (%) op basis van de laatste 2 GELDIGE
+    slotkoersen in een AL opgehaalde geschiedenis -- geen extra
+    netwerk-aanroep nodig, want deze data wordt toch al opgehaald bij
+    een portfolio-refresh (period='5d').
+    """
+    if history is None or history.empty:
+        return None
+    valid_closes = history["Close"].dropna()
+    if len(valid_closes) < 2:
+        return None
+    latest = float(valid_closes.iloc[-1])
+    previous = float(valid_closes.iloc[-2])
+    if previous == 0:
+        return None
+    return (latest - previous) / previous * 100
+
+
 def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 10):
     """
     Zoekt de koers het dichtst bij een specifieke datum, BINNEN een al
@@ -3389,16 +3411,24 @@ elif current_view == "portfolio":
                 sym = "€" if holding.get("value_currency") == "EUR" else "$"
                 return f"{sym}{value / shares:,.2f}"
 
+            def _format_day_change(holding):
+                pct = holding.get("day_change_pct")
+                if pct is None:
+                    return '<span style="color:#8992A3;">-</span>'
+                color = "#1FAE96" if pct >= 0 else "#E5484D"
+                return f'<span style="color:{color}; font-weight:600;">{pct:+.1f}%</span>'
+
             rows_html = "".join(
                 f'<tr><td>{h["naam"]}</td><td><code>{h["ticker"]}</code></td>'
                 f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
+                f'<td>{_format_day_change(h)}</td>'
                 f'<td>{_format_value(h)}</td><td>{_format_pct(h)}</td></tr>'
                 for h in holdings
             )
             st.markdown(
                 f"""
                 <table class="positions-table">
-                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Value</th><th>% of portfolio</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Day</th><th>Value</th><th>% of portfolio</th></tr></thead>
                     <tbody>{rows_html}</tbody>
                 </table>
                 """,

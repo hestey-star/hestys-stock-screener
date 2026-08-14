@@ -16,9 +16,14 @@ create table portfolio_holdings (
     shares numeric,          -- aantal aandelen/eenheden dat je bezit (NULL bij watchlist-items)
     position_value numeric,  -- LAATST BEREKENDE waarde (shares x koers x wisselkoers), bijgewerkt via de 'Update'-knop
     value_currency text,     -- in welke valuta position_value staat (bv. 'EUR' of 'USD') -- voorkomt verwarring bij het wisselen van weergave-valuta
+    day_change_pct numeric,  -- dagverandering (%) van de koers, 'gratis' meegenomen bij de refresh (zelfde opgehaalde data)
     is_watchlist boolean not null default false,  -- true = alleen volgen (geen eigendom), false = eigen positie
     created_at timestamp with time zone default now()
 );
+
+-- Als je portfolio_holdings AL bestond (van eerder), draai dan ALLEEN
+-- deze regel om de nieuwe kolom toe te voegen:
+-- alter table portfolio_holdings add column day_change_pct numeric;
 
 -- Als je portfolio_holdings AL bestond (van eerder), draai dan ALLEEN
 -- deze regels om de nieuwe kolommen toe te voegen, niet de create table hierboven:

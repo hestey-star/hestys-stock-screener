@@ -150,10 +150,13 @@ def delete_transaction(transaction_id: int, user_email: str) -> None:
         .eq("id", transaction_id).eq("user_email", hash_email(user_email)).execute()
 
 
-def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR") -> None:
-    """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat."""
+def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR", day_change_pct: float = None) -> None:
+    """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat, en de dagverandering (%) -- 'gratis' meegenomen bij dezelfde refresh."""
     client = get_supabase_client()
-    client.table("portfolio_holdings").update({"position_value": position_value, "value_currency": value_currency}) \
+    update_data = {"position_value": position_value, "value_currency": value_currency}
+    if day_change_pct is not None:
+        update_data["day_change_pct"] = day_change_pct
+    client.table("portfolio_holdings").update(update_data) \
         .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
