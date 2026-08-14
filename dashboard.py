@@ -4107,11 +4107,12 @@ elif current_view == "analyze":
             total_value_for_breakdown = sum(h.get("position_value") or 0 for h in holdings)
 
             def _render_breakdown(title, groups):
-                st.markdown(f"**{title}**")
-                chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
-                if chart_values:
-                    fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
-                    st.plotly_chart(fig)
+                with st.container(border=True):
+                    st.markdown(f"**{title}**")
+                    chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
+                    if chart_values:
+                        fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
+                        st.plotly_chart(fig)
 
             comp_col1, comp_col2 = st.columns(2)
             with comp_col1:
@@ -4119,8 +4120,12 @@ elif current_view == "analyze":
             with comp_col2:
                 _render_breakdown("Asset Type", type_groups)
 
-            st.divider()
-            _render_breakdown("Region", region_groups)
+            # Region krijgt dezelfde kolomstructuur (i.p.v. los, gecentreerd
+            # over de volle breedte) -- staat zo netjes uitgelijnd onder
+            # Sectors, consistent met de blokken hierboven.
+            region_col1, region_col2 = st.columns(2)
+            with region_col1:
+                _render_breakdown("Region", region_groups)
 
             sector_values_check = {
                 s: sum(v for _, _, v in items) for s, items in sector_groups.items() if s != "Non-equity / Other"
