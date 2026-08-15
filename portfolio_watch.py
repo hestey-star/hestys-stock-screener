@@ -180,7 +180,25 @@ def build_email_body(df: pd.DataFrame) -> tuple:
 
     upcoming_earnings = df[df["upcoming_earnings_date"].notna()].sort_values("upcoming_earnings_date")
 
-    notable_tickers = set(changed["ticker"]) | set(earnings_this_week["ticker"])
+    # --- Fundamentele signalen: dalende ROIC (jaar-op-jaar, al berekend
+    # door get_roic_data() -- geen nieuwe opslag nodig) EN/OF een recente
+    # earnings-misser -- allebei zaken die je mening over een positie
+    # zouden kunnen bijstellen, in tegenstelling tot een neutrale
+    # trend-flip of een earnings-beat. ---
+    def _fundamental_reason(row):
+        reasons = []
+        if row["roic_trend"] == "dalend":
+            reasons.append("ROIC declining year-over-year")
+        if earnings_mask.get(row.name, False) and row["earnings_beat"] is False:
+            reasons.append(f"missed earnings estimates by {row['earnings_surprise_pct']:+.1f}%")
+        return " and ".join(reasons)
+
+    fundamental_mask = (df["roic_trend"] == "dalend") | (earnings_mask & (df["earnings_beat"] == False))
+    fundamental_concerns = df[fundamental_mask].copy()
+    if not fundamental_concerns.empty:
+        fundamental_concerns["reason"] = fundamental_concerns.apply(_fundamental_reason, axis=1)
+
+    notable_tickers = set(changed["ticker"]) | set(earnings_this_week["ticker"]) | set(fundamental_concerns["ticker"])
     quiet_positions = df[~df["ticker"].isin(notable_tickers)]
 
     # --- Gewogen weekrendement + beste/slechtste positie deze week --
@@ -220,6 +238,12 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     else:
         text_lines.append("🔄 No trend changes this week.")
     text_lines.append("")
+
+    if not fundamental_concerns.empty:
+        text_lines.append("⚠️ Worth a closer look:")
+        for _, row in fundamental_concerns.iterrows():
+            text_lines.append(f"  - {row['naam']} ({row['ticker']}): {row['reason']}")
+        text_lines.append("")
 
     if len(earnings_this_week) > 0:
         text_lines.append("📊 Earnings this week:")
@@ -288,6 +312,18 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     else:
         flips_html = "<p style='color:#5B6472; margin:8px 0;'>No trend changes this week.</p>"
 
+    fundamental_html = ""
+    if not fundamental_concerns.empty:
+        fundamental_items = "".join(
+            f"<li style='padding:6px 0;'><strong style='color:#101825;'>{r['naam']} ({r['ticker']})</strong>: "
+            f"<span style='color:#C1524A;'>{r['reason']}</span></li>"
+            for _, r in fundamental_concerns.iterrows()
+        )
+        fundamental_html = (
+            f"<h4 style='color:#101825; font-size:15px; margin:20px 0 4px 0;'>⚠️ Worth a closer look</h4>"
+            f"<ul style='margin:8px 0; padding-left:20px;'>{fundamental_items}</ul>"
+        )
+
     def _earnings_row_html(r):
         beat_txt = "beat" if r["earnings_beat"] else "missed"
         color = "#0F8F6E" if r["earnings_beat"] else "#C1524A"
@@ -334,6 +370,7 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             {week_summary_html}
             <h4 style="color:#101825; font-size:15px; margin:0 0 4px 0;">🔄 Trend changes this week</h4>
             {flips_html}
+            {fundamental_html}
             {earnings_section_html}
             {upcoming_earnings_html}
             {quiet_html}
