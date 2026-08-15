@@ -2,19 +2,34 @@ name: Wekelijkse screener en portfolio-mails
 
 on:
   schedule:
-    # Zaterdag. LET OP: BEWUST niet op :00/:30 -- zie de toelichting in
-    # daily.yml (GitHub's eigen documentatie waarschuwt dat het hele uur
-    # het drukste moment is op heel GitHub Actions, met kans op vertraging
-    # of zelfs overslaan van de run).
+    # Zaterdag: gedeelde screener + weekly-signalen-mails + vrijdag's
+    # volledige dagelijkse flips (allemaal in 1 mail). LET OP: BEWUST niet
+    # op :00/:30 -- zie de toelichting in daily.yml (GitHub's eigen
+    # documentatie waarschuwt dat het hele uur het drukste moment is op
+    # heel GitHub Actions, met kans op vertraging of zelfs overslaan van
+    # de run).
     #
-    # 06:07 UTC = scan + mail draaien (~07:07 CET winter / ~08:07 CEST zomer)
+    # 06:07 UTC = hoofdtrigger (~07:07 CET winter / ~08:07 CEST zomer)
     # 06:37 UTC = VANGNET -- als GitHub's planner de 06:07-tick een keer
     #             mist (komt voor, 'best effort'-planning), proberen we
     #             het hier nog een keer. Slaat zichzelf over als de
     #             06:07-run al gelukt is (voorkomt een dubbele mail).
     - cron: "7 6 * * 6"
     - cron: "37 6 * * 6"
-  workflow_dispatch:  # laat je dit ook handmatig starten via de GitHub-website, handig om te testen
+    # Zondag: ALLEEN Portfolio Watch -- apart van zaterdag, zodat je niet
+    # 2-3 mails tegelijk krijgt op 1 ochtend.
+    - cron: "7 6 * * 0"
+    - cron: "37 6 * * 0"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Welke modus voor een handmatige test-run"
+        required: false
+        default: "saturday"
+        type: choice
+        options:
+          - saturday
+          - sunday
 
 jobs:
   run-weekly:
@@ -39,37 +54,57 @@ jobs:
       - name: Dependencies installeren
         run: pip install -r requirements.txt
 
-      - name: Checken of de scan/mail vandaag al gelukt is
+      - name: Modus bepalen, en of dit vandaag al gelukt is
         id: determine
         run: |
-          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals.csv 2>/dev/null || echo "never")
+          SCHEDULE="${{ github.event.schedule }}"
+          if [ "$SCHEDULE" = "7 6 * * 6" ] || [ "$SCHEDULE" = "37 6 * * 6" ]; then
+            MODE="saturday"
+          elif [ "$SCHEDULE" = "7 6 * * 0" ] || [ "$SCHEDULE" = "37 6 * * 0" ]; then
+            MODE="sunday"
+          else
+            MODE="${{ github.event.inputs.mode }}"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+          # Per-modus marker-bestand (i.p.v. de eerdere, gebugde check op
+          # supertrend_signals.csv, die alleen op zaterdag uberhaupt wordt
+          # aangeraakt) -- zo worden zaterdag en zondag correct als APARTE
+          # dingen bijgehouden, en werkt het vangnet nu ook echt voor BEIDE
+          # triggers (het was eerder alleen geconditioneerd op de 06:37-
+          # trigger specifiek, waardoor de hoofdtrigger nooit oversloeg).
           TODAY=$(date -u +%Y-%m-%d)
-          if [ "$LAST_COMMIT_DATE" = "$TODAY" ]; then
+          LAST_DONE_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- ".email_sent_markers/weekly_$MODE.txt" 2>/dev/null || echo "never")
+          if [ "$LAST_DONE_DATE" = "$TODAY" ]; then
             echo "already_done_today=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_done_today=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Wekelijks batch-script draaien
+      - name: Wekelijks batch-script draaien (alleen als dat vandaag nog niet gelukt is)
         if: steps.determine.outputs.already_done_today == 'false'
-        run: python weekly_batch.py
+        run: |
+          python weekly_batch.py ${{ steps.determine.outputs.mode }}
+          mkdir -p .email_sent_markers
+          date -u +%Y-%m-%d > ".email_sent_markers/weekly_${{ steps.determine.outputs.mode }}.txt"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PORTFOLIO_WATCH_USER_EMAIL: ${{ secrets.PORTFOLIO_WATCH_USER_EMAIL }}
           EMAIL_SMTP_SERVER: smtp.gmail.com
           EMAIL_SMTP_PORT: 587
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
-          PORTFOLIO_WATCH_USER_EMAIL: ${{ secrets.PORTFOLIO_WATCH_USER_EMAIL }}
 
       - name: Bijgewerkte bestanden committen en pushen
         if: steps.determine.outputs.already_done_today == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          for f in supertrend_signals.csv snowball_signals.csv rocket_list_signals.csv; do
+          for f in supertrend_signals.csv snowball_signals.csv rocket_list_signals.csv supertrend_signals_daily.csv top_movers.csv portfolio_watch.csv; do
             [ -f "$f" ] && git add "$f"
           done
+          git add .email_sent_markers/ 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Automatische wekelijkse update"
           git pull --rebase origin main
           git push
