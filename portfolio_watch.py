@@ -5,16 +5,21 @@ AEX/Nasdaq-100 zoekt). Dit is vooral relevant bij een geconcentreerde
 portfolio -- weten of je grootste positie (bv. Tesla) nog steeds in een
 bullish trend zit, is vaak belangrijker dan een willekeurig nieuw signaal.
 
-BELANGRIJK: check en corrigeer de tickers hieronder. Vooral crypto,
-kleine fondsen en niet-beursgenoteerde/private-equity-achtige posities
-(zoals SpaceX-exposure-producten) hebben vaak een niet voor de hand
-liggende Yahoo Finance-ticker, of zijn er soms helemaal niet in te vinden.
+Haalt je posities nu RECHTSTREEKS uit de database (dezelfde die 'My
+Portfolio' op de site gebruikt), i.p.v. een hardgecodeerde lijst die
+handmatig bijgewerkt moest worden -- deze mail blijft nu altijd
+gesynchroniseerd met wat je daadwerkelijk bezit, ook als je iets koopt
+of verkoopt. Alleen posities met shares > 0 worden meegenomen (geen
+watchlist-items, geen posities die je al verkocht hebt).
 
 Vereist: pip install -r requirements.txt
+Vereist env-var: PORTFOLIO_WATCH_USER_EMAIL (welk account de posities gevolgd worden)
 
 Gebruik: python portfolio_watch.py
 """
 from __future__ import annotations
+
+import os
 
 import pandas as pd
 import yfinance as yf
@@ -22,22 +27,29 @@ import yfinance as yf
 from indicators import supertrend, ema, resample_to_weekly
 from screener import get_roic_data, fetch_weekly, get_recent_news
 from emailer import send_email, is_configured as email_is_configured
+from database import get_user_holdings
 
-# --- Jouw posities. CONTROLEER elke ticker, vooral de onderstaande met een '?' ---
-PORTFOLIO_HOLDINGS = [
-    {"naam": "Tesla", "ticker": "TSLA"},
-    {"naam": "Bitcoin", "ticker": "BTC-EUR"},
-    {"naam": "Solana", "ticker": "SOL-EUR"},
-    {"naam": "Telcoin", "ticker": "TEL-USD"},
-    {"naam": "AST SpaceMobile", "ticker": "ASTS"},
-    {"naam": "Hims & Hers", "ticker": "HIMS"},
-    {"naam": "Duolingo", "ticker": "DUOL"},
-    {"naam": "Semiconductors ETF", "ticker": "SMH"},
-    {"naam": "TDIV Dividend Leaders ETF", "ticker": "TDIV"},  # ? controleer exacte notering/beurs
-    {"naam": "SpaceX", "ticker": "SPCX"},  # IPO 12 juni 2026 -- nog te weinig historie voor weekly Supertrend
-    # PROP.COM (fractioneel vastgoed Dubai) is een niet-beursgenoteerd
-    # exposure-product zonder ticker -- hier bewust weggelaten.
-]
+
+def get_current_holdings() -> list:
+    """
+    Haalt de ACTUELE, eigen posities op uit de database (i.p.v. een
+    hardgecodeerde lijst) -- alleen posities met shares > 0 (geen
+    watchlist-items, geen verkochte posities). Vereist de env-var
+    PORTFOLIO_WATCH_USER_EMAIL, zodat dit script weet WELK account
+    gevolgd moet worden (het draait immers los van een ingelogde sessie).
+    """
+    user_email = os.getenv("PORTFOLIO_WATCH_USER_EMAIL")
+    if not user_email:
+        raise ValueError(
+            "PORTFOLIO_WATCH_USER_EMAIL is niet ingesteld -- Portfolio Watch weet "
+            "hierdoor niet welk account de posities gevolgd moeten worden."
+        )
+    all_holdings = get_user_holdings(user_email, is_watchlist=False)
+    return [
+        {"naam": h["naam"], "ticker": h["ticker"]}
+        for h in all_holdings
+        if (h.get("shares") or 0) > 0
+    ]
 
 ATR_LENGTH = 6
 ATR_MULTIPLIER = 2.6
@@ -227,11 +239,12 @@ def build_email_body(df: pd.DataFrame) -> tuple:
 
 
 def main() -> None:
-    print(f"Portfolio Watch: {len(PORTFOLIO_HOLDINGS)} posities checken "
+    portfolio_holdings = get_current_holdings()
+    print(f"Portfolio Watch: {len(portfolio_holdings)} posities checken "
           f"(weekly, ATR-periode {ATR_LENGTH}, multiplier {ATR_MULTIPLIER})...\n")
 
     results = []
-    for holding in PORTFOLIO_HOLDINGS:
+    for holding in portfolio_holdings:
         result = check_holding(holding["naam"], holding["ticker"])
         if result:
             results.append(result)
