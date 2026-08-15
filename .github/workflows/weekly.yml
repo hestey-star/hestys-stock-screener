@@ -60,6 +60,7 @@ jobs:
           EMAIL_SMTP_PORT: 587
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          PORTFOLIO_WATCH_USER_EMAIL: ${{ secrets.PORTFOLIO_WATCH_USER_EMAIL }}
 
       - name: Bijgewerkte bestanden committen en pushen
         if: steps.determine.outputs.already_done_today == 'false'
