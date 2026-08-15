@@ -25,7 +25,7 @@ import pandas as pd
 import yfinance as yf
 
 from indicators import supertrend, ema, resample_to_weekly
-from screener import get_roic_data, fetch_weekly, get_recent_news
+from screener import get_roic_data, fetch_weekly, get_earnings_surprise
 from emailer import send_email, is_configured as email_is_configured
 from database import get_user_holdings
 
@@ -55,14 +55,14 @@ ATR_LENGTH = 6
 ATR_MULTIPLIER = 2.6
 TREND_FILTER_EMA_LENGTH = 20
 RECENT_CHANGE_WEEKS = 2  # een statusverandering binnen dit aantal weken wordt als 'LET OP' gemarkeerd
-NEWS_DAYS_BACK = 7       # hoe recent nieuws moet zijn om meegenomen te worden
-NEWS_MAX_ITEMS = 3       # max. aantal nieuwsberichten per positie
+EARNINGS_RECENT_DAYS = 7  # hoe recent gerapporteerde cijfers moeten zijn om als 'deze week' te tellen
 
 
 def check_holding(naam: str, ticker: str):
-    # Nieuws is onafhankelijk van of er genoeg historie is voor Supertrend --
-    # altijd proberen op te halen, ook als de technische check hieronder faalt.
-    news_items = get_recent_news(ticker, max_items=NEWS_MAX_ITEMS, days_back=NEWS_DAYS_BACK)
+    # Earnings-verrassing is onafhankelijk van of er genoeg historie is voor
+    # Supertrend -- altijd proberen op te halen, ook als de technische check
+    # hieronder faalt.
+    earnings_info = get_earnings_surprise(ticker)
 
     try:
         df = fetch_weekly(ticker)
@@ -72,19 +72,23 @@ def check_holding(naam: str, ticker: str):
             "naam": naam, "ticker": ticker, "status": "ONBEKEND (fout bij ophalen)",
             "sinds": None, "weken_in_trend": None, "recent_gewijzigd": False,
             "prijs": None, "boven_ema20": None, "roic_pct": None, "roic_trend": "onbekend",
-            "nieuws": news_items,
+            "earnings_surprise_pct": earnings_info["surprise_pct"],
+            "earnings_beat": earnings_info["beat"],
+            "earnings_date": earnings_info["earnings_date"],
         }
 
     min_needed = max(ATR_LENGTH, TREND_FILTER_EMA_LENGTH) + 5
     if df.empty or len(df) < min_needed:
         print(f"  {naam} ({ticker}): te weinig data voor Supertrend (nodig: {min_needed}, "
-              f"gekregen: {len(df)}) -- nieuws wordt wel getoond")
+              f"gekregen: {len(df)})")
         latest_price = round(float(df['close'].iloc[-1]), 2) if not df.empty else None
         return {
             "naam": naam, "ticker": ticker, "status": "ONBEKEND (te weinig historie)",
             "sinds": None, "weken_in_trend": None, "recent_gewijzigd": False,
             "prijs": latest_price, "boven_ema20": None, "roic_pct": None, "roic_trend": "onbekend",
-            "nieuws": news_items,
+            "earnings_surprise_pct": earnings_info["surprise_pct"],
+            "earnings_beat": earnings_info["beat"],
+            "earnings_date": earnings_info["earnings_date"],
         }
 
     st = supertrend(df, length=ATR_LENGTH, multiplier=ATR_MULTIPLIER)
@@ -111,7 +115,9 @@ def check_holding(naam: str, ticker: str):
         "boven_ema20": bool(latest_row["close"] > latest_row["ema_trend"]),
         "roic_pct": round(roic_data["roic"] * 100, 1) if roic_data["roic"] is not None else None,
         "roic_trend": roic_data["roic_trend"],
-        "nieuws": news_items,
+        "earnings_surprise_pct": earnings_info["surprise_pct"],
+        "earnings_beat": earnings_info["beat"],
+        "earnings_date": earnings_info["earnings_date"],
     }
 
 
@@ -119,40 +125,52 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     """Bouwt de Portfolio Watch-mail -- zelfde Hesty's-stijl als de dagelijkse/wekelijkse signalen-mails."""
     changed = df[df["recent_gewijzigd"]]
 
+    # --- Beknopt: alleen wat DEZE WEEK daadwerkelijk is veranderd, i.p.v.
+    # een volledige, elke-keer-herhalende samenvatting van alles. ---
+    from datetime import datetime as _datetime
+
+    def _is_recent_earnings(earnings_date):
+        if earnings_date is None:
+            return False
+        try:
+            ed = earnings_date.date() if hasattr(earnings_date, "date") else earnings_date
+            days_since = (_datetime.now().date() - ed).days
+            return 0 <= days_since <= EARNINGS_RECENT_DAYS
+        except Exception:
+            return False
+
+    earnings_mask = df["earnings_date"].apply(_is_recent_earnings) & df["earnings_surprise_pct"].notna()
+    earnings_this_week = df[earnings_mask]
+
+    notable_tickers = set(changed["ticker"]) | set(earnings_this_week["ticker"])
+    quiet_positions = df[~df["ticker"].isin(notable_tickers)]
+
     # --- Tekst-versie ---
     text_lines = ["Good morning from Hesty's -- here's your portfolio watch.", ""]
 
     if len(changed) > 0:
-        text_lines.append(f"🔄 {len(changed)} position(s) just flipped trend:")
+        text_lines.append("🔄 Trend changes this week:")
         for _, row in changed.iterrows():
-            text_lines.append(f"  - {row['naam']} ({row['ticker']}): now {row['status']} since {row['sinds']}")
+            emoji = "🟢" if row["status"] == "BULLISH" else "🔴"
+            text_lines.append(f"  {emoji} {row['naam']} ({row['ticker']}): flipped to {row['status']}")
+    else:
+        text_lines.append("🔄 No trend changes this week.")
+    text_lines.append("")
+
+    if len(earnings_this_week) > 0:
+        text_lines.append("📊 Earnings this week:")
+        for _, row in earnings_this_week.iterrows():
+            beat_txt = "beat" if row["earnings_beat"] else "missed"
+            text_lines.append(f"  - {row['naam']} ({row['ticker']}): {beat_txt} estimates by {row['earnings_surprise_pct']:+.1f}%")
         text_lines.append("")
 
-    text_lines.append(f"Full overview ({len(df)} positions):")
-    for _, row in df.iterrows():
-        roic_txt = f"{row['roic_pct']:+.1f}% ({row['roic_trend']})" if row["roic_pct"] is not None else "unknown"
-        text_lines.append(
-            f"  - {row['naam']} ({row['ticker']}): {row['status']} since {row['sinds']} "
-            f"({row['weken_in_trend']} weeks), price {row['prijs']}, ROIC: {roic_txt}"
-        )
-
-    text_lines.append("")
-    text_lines.append("Recent news (last 7 days):")
-    any_news = False
-    for _, row in df.iterrows():
-        if row["nieuws"]:
-            any_news = True
-            text_lines.append(f"\n{row['naam']} ({row['ticker']}):")
-            for item in row["nieuws"]:
-                text_lines.append(f"  - [{item['published'].strftime('%Y-%m-%d')}] {item['title']} ({item['publisher']})")
-                if item["link"]:
-                    text_lines.append(f"    {item['link']}")
-    if not any_news:
-        text_lines.append("No recent news found for your positions.")
+    if len(quiet_positions) > 0:
+        quiet_names = ", ".join(quiet_positions["ticker"].tolist())
+        text_lines.append(f"✅ No notable changes ({len(quiet_positions)} position(s)): {quiet_names}")
+        text_lines.append("")
 
     text_lines += [
-        "",
-        "See the full analysis under Analyze on the site.",
+        "See the full picture under Analyze > Portfolio Overview on the site.",
         "",
         "-- Hesty's, your personal investment assistant",
         "",
@@ -160,46 +178,44 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     ]
     text_body = "\n".join(text_lines)
 
-    # --- HTML-versie: lichte achtergrond met jade accent, zelfde stijl als
-    # de dagelijkse/wekelijkse mail ---
-    def _row_html(r):
-        roic_str = f"{r['roic_pct']:+.1f}%" if r["roic_pct"] is not None else "-"
+    # --- HTML-versie: zelfde donkere-header-met-jade-accent-stijl als de
+    # andere Hesty's-mails, maar nu bewust beknopt: 3 korte secties i.p.v.
+    # een volledige tabel + nieuws-dump. ---
+    def _flip_row_html(r):
+        emoji = "🟢" if r["status"] == "BULLISH" else "🔴"
         status_color = "#0F8F6E" if r["status"] == "BULLISH" else "#C1524A"
-        row_bg = "background-color:#EAF7F3;" if r["recent_gewijzigd"] else ""
         return (
-            f"<tr style='border-bottom:1px solid #E5E8EC;{row_bg}'>"
-            f"<td style='padding:8px;font-weight:600;color:#101825;'>{r['naam']}</td>"
-            f"<td style='padding:8px;color:#5B6472;'>{r['ticker']}</td>"
-            f"<td style='padding:8px;font-weight:600;color:{status_color};'>{r['status']}</td>"
-            f"<td style='padding:8px;color:#5B6472;'>{r['sinds']}</td>"
-            f"<td style='padding:8px;color:#5B6472;'>{r['weken_in_trend']}</td>"
-            f"<td style='padding:8px;color:#101825;'>{r['prijs']}</td>"
-            f"<td style='padding:8px;color:#5B6472;'>{roic_str}</td>"
-            f"</tr>"
+            f"<li style='padding:6px 0;'>{emoji} <strong style='color:#101825;'>{r['naam']} ({r['ticker']})</strong>: "
+            f"flipped to <span style='color:{status_color}; font-weight:600;'>{r['status']}</span></li>"
         )
 
-    rows_html = "".join(_row_html(r) for _, r in df.iterrows())
-
-    def _news_html(row):
-        if not row["nieuws"]:
-            return ""
-        items_html = "".join(
-            f"<li style='padding:4px 0;'><a href=\"{item['link']}\" style='color:#1FAE96;text-decoration:none;font-weight:600;'>{item['title']}</a> "
-            f"<span style='color:#9AA1AC;font-size:12px;'>({item['publisher']}, {item['published'].strftime('%Y-%m-%d')})</span></li>"
-            for item in row["nieuws"]
-        )
-        return (f"<p style='margin:16px 0 4px 0;font-weight:700;color:#101825;'>{row['naam']} ({row['ticker']})</p>"
-                f"<ul style='margin:0;padding-left:20px;'>{items_html}</ul>")
-
-    news_html = "".join(_news_html(r) for _, r in df.iterrows())
-    if not news_html:
-        news_html = "<p style='color:#5B6472;'>No recent news found for your positions.</p>"
-
-    flip_banner = ""
     if len(changed) > 0:
-        flip_banner = (
-            f"<p style='background:#FFF3CD;padding:10px 14px;border-radius:8px;font-size:14px;color:#101825;margin-top:0;'>"
-            f"🔄 {len(changed)} position(s) just flipped trend -- see highlighted rows below.</p>"
+        flips_html = f"<ul style='margin:8px 0; padding-left:20px;'>{''.join(_flip_row_html(r) for _, r in changed.iterrows())}</ul>"
+    else:
+        flips_html = "<p style='color:#5B6472; margin:8px 0;'>No trend changes this week.</p>"
+
+    def _earnings_row_html(r):
+        beat_txt = "beat" if r["earnings_beat"] else "missed"
+        color = "#0F8F6E" if r["earnings_beat"] else "#C1524A"
+        return (
+            f"<li style='padding:6px 0;'><strong style='color:#101825;'>{r['naam']} ({r['ticker']})</strong>: "
+            f"{beat_txt} estimates by <span style='color:{color}; font-weight:600;'>{r['earnings_surprise_pct']:+.1f}%</span></li>"
+        )
+
+    earnings_section_html = ""
+    if len(earnings_this_week) > 0:
+        earnings_items = "".join(_earnings_row_html(r) for _, r in earnings_this_week.iterrows())
+        earnings_section_html = (
+            f"<h4 style='color:#101825; font-size:15px; margin:20px 0 4px 0;'>📊 Earnings this week</h4>"
+            f"<ul style='margin:8px 0; padding-left:20px;'>{earnings_items}</ul>"
+        )
+
+    quiet_html = ""
+    if len(quiet_positions) > 0:
+        quiet_names = ", ".join(quiet_positions["ticker"].tolist())
+        quiet_html = (
+            f"<p style='margin-top:20px; font-size:13px; color:#5B6472;'>"
+            f"✅ No notable changes ({len(quiet_positions)}): {quiet_names}</p>"
         )
 
     html_body = f"""
@@ -209,26 +225,13 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Your positions, checked</div>
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
-            {flip_banner}
-            <table style="width:100%; border-collapse:collapse; margin-top:16px; font-size:14px;">
-                <tr style="border-bottom:2px solid #101825;">
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Name</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Ticker</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Trend</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Since</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Weeks</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">Price</th>
-                    <th style="text-align:left; padding:8px; font-size:11px; color:#5B6472; text-transform:uppercase;">ROIC</th>
-                </tr>
-                {rows_html}
-            </table>
-
-            <h4 style="color:#101825; font-size:16px; margin:24px 0 8px 0;">📰 Recent news</h4>
-            {news_html}
-
+            <h4 style="color:#101825; font-size:15px; margin:0 0 4px 0;">🔄 Trend changes this week</h4>
+            {flips_html}
+            {earnings_section_html}
+            {quiet_html}
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
-                See the full analysis under
-                <a href="https://hestys.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyze</a> on the site.
+                See the full picture under
+                <a href="https://hestys.streamlit.app/?view=analyze&subview=portfolio" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyze &gt; Portfolio Overview</a> on the site.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
@@ -260,43 +263,23 @@ def main() -> None:
         return
 
     df = pd.DataFrame(results)
-    # 'nieuws' is een lijst-per-rij -- hoort niet netjes in een CSV-cel of
-    # brede tabel, laten we dat weg en tonen het apart
-    df.drop(columns=["nieuws"]).to_csv("portfolio_watch.csv", index=False)
-
-    # Nieuws apart opslaan als JSON, zodat het dashboard dit kan tonen
-    # zonder alles opnieuw op te hoeven halen
-    import json
-    news_export = {}
-    for _, row in df.iterrows():
-        news_export[row["ticker"]] = [
-            {**item, "published": item["published"].isoformat()} for item in row["nieuws"]
-        ]
-    with open("portfolio_watch_news.json", "w", encoding="utf-8") as f:
-        json.dump(news_export, f, ensure_ascii=False, indent=2)
+    df.to_csv("portfolio_watch.csv", index=False)
 
     print(f"\n=== OVERZICHT ===\n")
-    print(df.drop(columns=["nieuws"]).to_string(index=False))
-
-    print("\n=== RECENT NIEUWS (laatste 7 dagen) ===")
-    any_news = False
-    for _, row in df.iterrows():
-        if row["nieuws"]:
-            any_news = True
-            print(f"\n{row['naam']} ({row['ticker']}):")
-            for item in row["nieuws"]:
-                print(f"  - [{item['published'].strftime('%Y-%m-%d')}] {item['title']} ({item['publisher']})")
-                if item["link"]:
-                    print(f"    {item['link']}")
-    if not any_news:
-        print("  Geen recent nieuws gevonden voor je posities.")
+    print(df.to_string(index=False))
 
     print("\nOpgeslagen in 'portfolio_watch.csv'.")
 
     if email_is_configured():
         text_body, html_body = build_email_body(df)
-        n_changed = df["recent_gewijzigd"].sum()
-        subject = f"Portfolio Watch: {n_changed} wijziging(en)" if n_changed > 0 else "Portfolio Watch: geen wijzigingen"
+        n_changed = int(df["recent_gewijzigd"].sum())
+        n_earnings = int((df["earnings_surprise_pct"].notna()).sum())
+        subject_parts = []
+        if n_changed > 0:
+            subject_parts.append(f"{n_changed} trend change(s)")
+        if n_earnings > 0:
+            subject_parts.append(f"{n_earnings} earnings update(s)")
+        subject = f"Portfolio Watch: {', '.join(subject_parts)}" if subject_parts else "Portfolio Watch: no notable changes this week"
         send_email(subject=subject, body_text=text_body, body_html=html_body)
     else:
         print("\n(E-mail niet verstuurd: nog niet ingesteld in .env.)")
