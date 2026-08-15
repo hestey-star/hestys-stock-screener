@@ -123,10 +123,10 @@ SIGNAL_TYPES = {
 }
 
 
-def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tuple:
+def build_weekly_signals_email(sections: list, is_premium: bool = False, daily_flips_text: str = "", daily_flips_html: str = "") -> tuple:
     """
     Bouwt 1 gecombineerde mail voor alle signaal-types die deze gebruiker
-    heeft aangevinkt.
+    heeft aangevinkt, plus (optioneel) vrijdag's dagelijkse flips.
 
     Toont altijd top 3 per signaal, OOK voor premium -- een mail met
     tientallen regels per signaal is geen prettige samenvatting meer,
@@ -135,6 +135,8 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
     functioneel is), maar beïnvloedt de mail-inhoud nu bewust niet.
 
     sections: lijst van dicts met keys 'title', 'emoji', 'df', 'formatter'.
+    daily_flips_text/daily_flips_html: optioneel, van build_daily_flips_section() --
+    leeg als er niks te melden was (dan wordt deze sectie gewoon overgeslagen).
     """
     display_limit = 3
     text_lines = ["Good morning from Hesty's -- your weekly signals are in.", ""]
@@ -156,6 +158,11 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
         <h4 style="color:#101825; font-size:16px; margin:20px 0 8px 0;">{section['emoji']} {section['title']}</h4>
         <ul style="margin:0; padding-left:20px; font-size:14px;">{rows_html}</ul>
         """)
+
+    if daily_flips_text:
+        text_lines.append(daily_flips_text)
+    if daily_flips_html:
+        html_sections_list.append(daily_flips_html)
 
     text_lines += [
         "See the full lists, sector rotation, and top movers under Discover on the site.",
@@ -186,10 +193,16 @@ def build_weekly_signals_email(sections: list, is_premium: bool = False) -> tupl
     return text_body, html_body
 
 
-def run_weekly_signals_emails(preferences: dict) -> None:
+def run_weekly_signals_emails(preferences: dict, daily_flips_text: str = "", daily_flips_html: str = "") -> None:
     """
     Stuurt 1 gecombineerde mail per gebruiker, met alleen de signaal-types
-    waar diegene zich voor heeft aangemeld (top 3 gratis / top 10 premium).
+    waar diegene zich voor heeft aangemeld (top 3 gratis / top 10 premium),
+    plus (optioneel) vrijdag's dagelijkse flips erbij.
+
+    daily_flips_text/daily_flips_html: alleen toegevoegd aan mails die
+    sowieso al verstuurd worden (dus gebruikers met minstens 1 signaal-
+    type aangevinkt) -- geen nieuwe categorie gebruikers die anders
+    niks zouden ontvangen.
     """
     print("\n=== Wekelijkse signalen-mails versturen aan opt-in-gebruikers ===")
 
@@ -224,7 +237,10 @@ def run_weekly_signals_emails(preferences: dict) -> None:
 
         is_premium = bool(prefs.get("is_premium", False))
         print(f"  {real_email} ({'premium' if is_premium else 'free'}): {', '.join(s['title'] for s in sections)}")
-        text_body, html_body = build_weekly_signals_email(sections, is_premium=is_premium)
+        text_body, html_body = build_weekly_signals_email(
+            sections, is_premium=is_premium,
+            daily_flips_text=daily_flips_text, daily_flips_html=daily_flips_html,
+        )
         total_signals = sum(len(s["df"]) for s in sections)
         subject = f"Hesty's Weekly: {total_signals} new signal(s) this week"
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
@@ -276,16 +292,76 @@ def run_portfolio_emails(preferences: dict) -> None:
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
 
 
+def run_daily_flip_scan_for_weekly() -> None:
+    """
+    Draait de dagelijkse flip-scan OPNIEUW, specifiek voor de zaterdag-
+    weekly-mail -- dit vangt de VOLLEDIGE, net-afgeronde vrijdag-sessie op.
+    (De reguliere vrijdagochtend-scan draaide namelijk vroeg, VOORDAT de
+    Amerikaanse beurs zelfs maar open was, en liet dus donderdag-vs-
+    woensdag's beweging zien, niet de volledige vrijdag-sessie.)
+
+    Schrijft dezelfde bestanden als de dagelijkse scan (supertrend_signals_daily.csv,
+    top_movers.csv) -- verstuurt zelf GEEN aparte mail, de resultaten worden
+    hieronder in de weekly-mail verwerkt.
+    """
+    import screener_daily
+    print("\n=== Dagelijkse flip-scan opnieuw draaien (voor de volledige vrijdag-sessie) ===")
+    screener_daily.main(send_own_email=False)
+
+
+def build_daily_flips_section() -> tuple:
+    """
+    Bouwt een tekst- en HTML-fragment met de belangrijkste flips uit de
+    zojuist opnieuw gedraaide dagelijkse scan (dus: vrijdag's volledige
+    sessie) -- toegevoegd aan de zaterdag-weekly-mail, i.p.v. hiervoor een
+    aparte mail te sturen. Geeft (leeg, leeg) terug als er geen data is
+    of geen signalen waren, zodat de aanroeper deze sectie dan gewoon
+    kan overslaan.
+    """
+    if not os.path.exists("supertrend_signals_daily.csv"):
+        return "", ""
+    df_daily = pd.read_csv("supertrend_signals_daily.csv")
+    if df_daily.empty:
+        return "", ""
+
+    df_daily = df_daily.sort_values("score", ascending=False)
+    display_limit = 5
+    top_n = df_daily.head(display_limit)
+
+    text_lines = [f"📅 Friday's daily flips (top {len(top_n)} of {len(df_daily)} total):"]
+    for _, row in top_n.iterrows():
+        text_lines.append(
+            f"  - [{row['score']}] {row['ticker']}: {row['prijs_bij_omslag']} -> {row['prijs_nu']} "
+            f"({row['sinds_omslag_pct']:+.2f}%)"
+        )
+    text_lines.append("")
+    text_fragment = "\n".join(text_lines)
+
+    rows_html = "".join(
+        f"<li style='padding:4px 0;color:#101825;'>[{row['score']}] {row['ticker']}: "
+        f"{row['prijs_bij_omslag']} &rarr; {row['prijs_nu']} ({row['sinds_omslag_pct']:+.2f}%)</li>"
+        for _, row in top_n.iterrows()
+    )
+    html_fragment = f"""
+    <h4 style="color:#101825; font-size:16px; margin:20px 0 8px 0;">📅 Friday's daily flips (top {len(top_n)} of {len(df_daily)} total)</h4>
+    <ul style="margin:0; padding-left:20px; font-size:14px;">{rows_html}</ul>
+    """
+    return text_fragment, html_fragment
+
+
 def run_saturday() -> None:
     """
     Zaterdag: de gedeelde screener + wekelijkse signalen-mails (Momentocrats/
-    Snowballers/Rocket List). Portfolio Watch is BEWUST verplaatst naar
-    zondag (zie run_sunday) -- anders kreeg je 2-3 mails tegelijk op
-    zaterdagochtend.
+    Snowballers/Rocket List) -- nu AANGEVULD met vrijdag's volledige
+    dagelijkse flips (i.p.v. daarvoor een aparte mail te sturen). Portfolio
+    Watch is BEWUST verplaatst naar zondag (zie run_sunday) -- anders kreeg
+    je 2-3 mails tegelijk op zaterdagochtend.
     """
     run_screener_shared()
+    run_daily_flip_scan_for_weekly()
     all_preferences = get_all_preferences()
-    run_weekly_signals_emails(all_preferences)
+    daily_flips_text, daily_flips_html = build_daily_flips_section()
+    run_weekly_signals_emails(all_preferences, daily_flips_text=daily_flips_text, daily_flips_html=daily_flips_html)
 
 
 def run_sunday() -> None:
