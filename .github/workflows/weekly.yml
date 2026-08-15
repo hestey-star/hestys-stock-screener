@@ -44,7 +44,7 @@ jobs:
         run: |
           LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=format:%Y-%m-%d -- supertrend_signals.csv 2>/dev/null || echo "never")
           TODAY=$(date -u +%Y-%m-%d)
-          if [ "$LAST_COMMIT_DATE" = "$TODAY" ] && [ "${{ github.event.schedule }}" = "37 6 * * 6" ]; then
+          if [ "$LAST_COMMIT_DATE" = "$TODAY" ]; then
             echo "already_done_today=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_done_today=false" >> "$GITHUB_OUTPUT"
@@ -60,6 +60,7 @@ jobs:
           EMAIL_SMTP_PORT: 587
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          PORTFOLIO_WATCH_USER_EMAIL: ${{ secrets.PORTFOLIO_WATCH_USER_EMAIL }}
 
       - name: Bijgewerkte bestanden committen en pushen
         if: steps.determine.outputs.already_done_today == 'false'
