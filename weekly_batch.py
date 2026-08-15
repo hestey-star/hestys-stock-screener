@@ -272,6 +272,7 @@ def run_portfolio_emails(preferences: dict) -> None:
         for holding in holdings:
             result = check_holding(holding["naam"], holding["ticker"])
             if result:
+                result["shares"] = holding.get("shares")
                 results.append(result)
 
         if not results:

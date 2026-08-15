@@ -46,7 +46,7 @@ def get_current_holdings() -> list:
         )
     all_holdings = get_user_holdings(user_email, is_watchlist=False)
     return [
-        {"naam": h["naam"], "ticker": h["ticker"]}
+        {"naam": h["naam"], "ticker": h["ticker"], "shares": h["shares"]}
         for h in all_holdings
         if (h.get("shares") or 0) > 0
     ]
@@ -58,11 +58,33 @@ RECENT_CHANGE_WEEKS = 2  # een statusverandering binnen dit aantal weken wordt a
 EARNINGS_RECENT_DAYS = 7  # hoe recent gerapporteerde cijfers moeten zijn om als 'deze week' te tellen
 
 
+def get_upcoming_earnings_date(ticker: str):
+    """
+    Checkt of deze positie AANKOMENDE cijfers heeft binnen de komende 7
+    dagen -- vooruitkijkend, in tegenstelling tot get_earnings_surprise()
+    (die kijkt naar AL gerapporteerde cijfers). Geeft None terug als er
+    geen aankomende cijfers binnen dat venster zijn, of als het niet op
+    te halen is.
+    """
+    try:
+        earnings_dates = yf.Ticker(ticker).get_earnings_dates(limit=8)
+        if earnings_dates is None or earnings_dates.empty:
+            return None
+        today = pd.Timestamp.now(tz=earnings_dates.index.tz).normalize()
+        window_end = today + pd.Timedelta(days=7)
+        future_dates = earnings_dates.index[(earnings_dates.index >= today) & (earnings_dates.index <= window_end)]
+        return future_dates[0] if len(future_dates) > 0 else None
+    except Exception:
+        return None
+
+
 def check_holding(naam: str, ticker: str):
-    # Earnings-verrassing is onafhankelijk van of er genoeg historie is voor
+    # Earnings-verrassing (al gerapporteerd) EN aankomende earnings (komende
+    # 7 dagen) zijn allebei onafhankelijk van of er genoeg historie is voor
     # Supertrend -- altijd proberen op te halen, ook als de technische check
     # hieronder faalt.
     earnings_info = get_earnings_surprise(ticker)
+    upcoming_earnings = get_upcoming_earnings_date(ticker)
 
     try:
         df = fetch_weekly(ticker)
@@ -72,9 +94,11 @@ def check_holding(naam: str, ticker: str):
             "naam": naam, "ticker": ticker, "status": "ONBEKEND (fout bij ophalen)",
             "sinds": None, "weken_in_trend": None, "recent_gewijzigd": False,
             "prijs": None, "boven_ema20": None, "roic_pct": None, "roic_trend": "onbekend",
+            "week_change_pct": None,
             "earnings_surprise_pct": earnings_info["surprise_pct"],
             "earnings_beat": earnings_info["beat"],
             "earnings_date": earnings_info["earnings_date"],
+            "upcoming_earnings_date": upcoming_earnings,
         }
 
     min_needed = max(ATR_LENGTH, TREND_FILTER_EMA_LENGTH) + 5
@@ -82,13 +106,20 @@ def check_holding(naam: str, ticker: str):
         print(f"  {naam} ({ticker}): te weinig data voor Supertrend (nodig: {min_needed}, "
               f"gekregen: {len(df)})")
         latest_price = round(float(df['close'].iloc[-1]), 2) if not df.empty else None
+        week_change_pct = None
+        if len(df) >= 2:
+            prev_close = float(df["close"].iloc[-2])
+            if prev_close:
+                week_change_pct = (float(df["close"].iloc[-1]) - prev_close) / prev_close * 100
         return {
             "naam": naam, "ticker": ticker, "status": "ONBEKEND (te weinig historie)",
             "sinds": None, "weken_in_trend": None, "recent_gewijzigd": False,
             "prijs": latest_price, "boven_ema20": None, "roic_pct": None, "roic_trend": "onbekend",
+            "week_change_pct": week_change_pct,
             "earnings_surprise_pct": earnings_info["surprise_pct"],
             "earnings_beat": earnings_info["beat"],
             "earnings_date": earnings_info["earnings_date"],
+            "upcoming_earnings_date": upcoming_earnings,
         }
 
     st = supertrend(df, length=ATR_LENGTH, multiplier=ATR_MULTIPLIER)
@@ -104,6 +135,9 @@ def check_holding(naam: str, ticker: str):
     latest_row = df.iloc[-1]
     roic_data = get_roic_data(ticker)
 
+    prev_close = float(df["close"].iloc[-2])
+    week_change_pct = (float(latest_row["close"]) - prev_close) / prev_close * 100 if prev_close else None
+
     return {
         "naam": naam,
         "ticker": ticker,
@@ -115,9 +149,11 @@ def check_holding(naam: str, ticker: str):
         "boven_ema20": bool(latest_row["close"] > latest_row["ema_trend"]),
         "roic_pct": round(roic_data["roic"] * 100, 1) if roic_data["roic"] is not None else None,
         "roic_trend": roic_data["roic_trend"],
+        "week_change_pct": week_change_pct,
         "earnings_surprise_pct": earnings_info["surprise_pct"],
         "earnings_beat": earnings_info["beat"],
         "earnings_date": earnings_info["earnings_date"],
+        "upcoming_earnings_date": upcoming_earnings,
     }
 
 
@@ -142,11 +178,39 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     earnings_mask = df["earnings_date"].apply(_is_recent_earnings) & df["earnings_surprise_pct"].notna()
     earnings_this_week = df[earnings_mask]
 
+    upcoming_earnings = df[df["upcoming_earnings_date"].notna()].sort_values("upcoming_earnings_date")
+
     notable_tickers = set(changed["ticker"]) | set(earnings_this_week["ticker"])
     quiet_positions = df[~df["ticker"].isin(notable_tickers)]
 
+    # --- Gewogen weekrendement + beste/slechtste positie deze week --
+    # gewogen op huidige positiewaarde (shares x prijs), zodat een grote
+    # positie logischerwijs zwaarder meetelt dan een kleine.
+    df_with_value = df.copy()
+    df_with_value["value"] = df_with_value["shares"].fillna(0) * df_with_value["prijs"].fillna(0)
+    valid_week = df_with_value[df_with_value["week_change_pct"].notna() & (df_with_value["value"] > 0)]
+    portfolio_week_change_pct = None
+    if not valid_week.empty and valid_week["value"].sum() > 0:
+        portfolio_week_change_pct = (valid_week["week_change_pct"] * valid_week["value"]).sum() / valid_week["value"].sum()
+
+    best_this_week = worst_this_week = None
+    valid_week_moves = df[df["week_change_pct"].notna()]
+    if not valid_week_moves.empty:
+        best_this_week = valid_week_moves.loc[valid_week_moves["week_change_pct"].idxmax()]
+        worst_this_week = valid_week_moves.loc[valid_week_moves["week_change_pct"].idxmin()]
+        if best_this_week["ticker"] == worst_this_week["ticker"]:
+            worst_this_week = None  # slechts 1 positie met bekende weekbeweging -- niet 2x dezelfde tonen
+
     # --- Tekst-versie ---
     text_lines = ["Good morning from Hesty's -- here's your portfolio watch.", ""]
+
+    if portfolio_week_change_pct is not None:
+        text_lines.append(f"📈 Your portfolio this week: {portfolio_week_change_pct:+.1f}%")
+        if best_this_week is not None:
+            text_lines.append(f"  Best: {best_this_week['naam']} ({best_this_week['ticker']}) {best_this_week['week_change_pct']:+.1f}%")
+        if worst_this_week is not None:
+            text_lines.append(f"  Worst: {worst_this_week['naam']} ({worst_this_week['ticker']}) {worst_this_week['week_change_pct']:+.1f}%")
+        text_lines.append("")
 
     if len(changed) > 0:
         text_lines.append("🔄 Trend changes this week:")
@@ -164,6 +228,13 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             text_lines.append(f"  - {row['naam']} ({row['ticker']}): {beat_txt} estimates by {row['earnings_surprise_pct']:+.1f}%")
         text_lines.append("")
 
+    if len(upcoming_earnings) > 0:
+        text_lines.append("📅 Earnings coming up next week:")
+        for _, row in upcoming_earnings.iterrows():
+            earnings_date_str = row["upcoming_earnings_date"].strftime("%A %Y-%m-%d")
+            text_lines.append(f"  - {row['naam']} ({row['ticker']}): {earnings_date_str}")
+        text_lines.append("")
+
     if len(quiet_positions) > 0:
         quiet_names = ", ".join(quiet_positions["ticker"].tolist())
         text_lines.append(f"✅ No notable changes ({len(quiet_positions)} position(s)): {quiet_names}")
@@ -179,8 +250,31 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     text_body = "\n".join(text_lines)
 
     # --- HTML-versie: zelfde donkere-header-met-jade-accent-stijl als de
-    # andere Hesty's-mails, maar nu bewust beknopt: 3 korte secties i.p.v.
+    # andere Hesty's-mails, maar nu bewust beknopt: korte secties i.p.v.
     # een volledige tabel + nieuws-dump. ---
+    week_summary_html = ""
+    if portfolio_week_change_pct is not None:
+        week_color = "#0F8F6E" if portfolio_week_change_pct >= 0 else "#C1524A"
+        best_worst_bits = []
+        if best_this_week is not None:
+            best_worst_bits.append(
+                f"Best: <strong>{best_this_week['naam']} ({best_this_week['ticker']})</strong> "
+                f"<span style='color:#0F8F6E;'>{best_this_week['week_change_pct']:+.1f}%</span>"
+            )
+        if worst_this_week is not None:
+            best_worst_bits.append(
+                f"Worst: <strong>{worst_this_week['naam']} ({worst_this_week['ticker']})</strong> "
+                f"<span style='color:#C1524A;'>{worst_this_week['week_change_pct']:+.1f}%</span>"
+            )
+        best_worst_html = f"<p style='margin:6px 0 0 0; font-size:13px; color:#5B6472;'>{' &middot; '.join(best_worst_bits)}</p>" if best_worst_bits else ""
+        week_summary_html = f"""
+        <div style="background:#F7F9FA; border-radius:8px; padding:14px 16px; margin-bottom:20px;">
+            <span style="font-size:14px; color:#5B6472;">📈 Your portfolio this week</span><br/>
+            <span style="font-size:22px; font-weight:700; color:{week_color};">{portfolio_week_change_pct:+.1f}%</span>
+            {best_worst_html}
+        </div>
+        """
+
     def _flip_row_html(r):
         emoji = "🟢" if r["status"] == "BULLISH" else "🔴"
         status_color = "#0F8F6E" if r["status"] == "BULLISH" else "#C1524A"
@@ -210,6 +304,18 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             f"<ul style='margin:8px 0; padding-left:20px;'>{earnings_items}</ul>"
         )
 
+    upcoming_earnings_html = ""
+    if len(upcoming_earnings) > 0:
+        upcoming_items = "".join(
+            f"<li style='padding:6px 0;'><strong style='color:#101825;'>{r['naam']} ({r['ticker']})</strong>: "
+            f"{r['upcoming_earnings_date'].strftime('%A %Y-%m-%d')}</li>"
+            for _, r in upcoming_earnings.iterrows()
+        )
+        upcoming_earnings_html = (
+            f"<h4 style='color:#101825; font-size:15px; margin:20px 0 4px 0;'>📅 Earnings coming up next week</h4>"
+            f"<ul style='margin:8px 0; padding-left:20px;'>{upcoming_items}</ul>"
+        )
+
     quiet_html = ""
     if len(quiet_positions) > 0:
         quiet_names = ", ".join(quiet_positions["ticker"].tolist())
@@ -225,9 +331,11 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             <div style="color:#EAEDF1; font-size:22px; font-weight:700; margin-top:4px;">Your positions, checked</div>
         </div>
         <div style="padding: 24px; border: 1px solid #E5E8EC; border-top: none; border-radius: 0 0 12px 12px;">
+            {week_summary_html}
             <h4 style="color:#101825; font-size:15px; margin:0 0 4px 0;">🔄 Trend changes this week</h4>
             {flips_html}
             {earnings_section_html}
+            {upcoming_earnings_html}
             {quiet_html}
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 See the full picture under
@@ -250,6 +358,7 @@ def main() -> None:
     for holding in portfolio_holdings:
         result = check_holding(holding["naam"], holding["ticker"])
         if result:
+            result["shares"] = holding.get("shares")
             results.append(result)
             marker = " <-- LET OP, recent gewijzigd" if result["recent_gewijzigd"] else ""
             if result["sinds"] is not None:
