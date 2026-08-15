@@ -47,9 +47,22 @@ def get_real_email(email_hash: str) -> str:
 
 
 def get_all_users_with_holdings() -> dict:
-    """Geeft alle gebruikers en hun posities terug, gegroepeerd per (gehasht) e-mailadres."""
+    """
+    Geeft alle gebruikers en hun ACTIEVE, EIGEN posities terug, gegroepeerd
+    per (gehasht) e-mailadres. Filtert expliciet op is_watchlist=false EN
+    shares > 0 -- zonder deze filters kwamen watchlist-items en al-
+    verkochte posities (shares=0, blijven soms als rij staan i.p.v.
+    verwijderd) ook mee in de Portfolio Watch-mail, wat precies de bron
+    was van 'ik krijg info over posities die ik al verkocht heb'.
+    """
     client = get_supabase_client()
-    response = client.table("portfolio_holdings").select("*").execute()
+    response = (
+        client.table("portfolio_holdings")
+        .select("*")
+        .eq("is_watchlist", False)
+        .gt("shares", 0)
+        .execute()
+    )
 
     grouped: dict[str, list[dict]] = {}
     for row in response.data:
@@ -252,17 +265,42 @@ def run_portfolio_emails(preferences: dict) -> None:
         df = pd.DataFrame(results)
         text_body, html_body = build_email_body(df)
         n_changed = int(df["recent_gewijzigd"].sum())
-        subject = (
-            f"Portfolio Watch: {n_changed} wijziging(en)"
-            if n_changed > 0 else "Portfolio Watch: geen wijzigingen"
-        )
+        n_earnings = int((df["earnings_surprise_pct"].notna()).sum())
+        subject_parts = []
+        if n_changed > 0:
+            subject_parts.append(f"{n_changed} trend change(s)")
+        if n_earnings > 0:
+            subject_parts.append(f"{n_earnings} earnings update(s)")
+        subject = f"Portfolio Watch: {', '.join(subject_parts)}" if subject_parts else "Portfolio Watch: no notable changes this week"
 
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
 
 
-if __name__ == "__main__":
+def run_saturday() -> None:
+    """
+    Zaterdag: de gedeelde screener + wekelijkse signalen-mails (Momentocrats/
+    Snowballers/Rocket List). Portfolio Watch is BEWUST verplaatst naar
+    zondag (zie run_sunday) -- anders kreeg je 2-3 mails tegelijk op
+    zaterdagochtend.
+    """
     run_screener_shared()
     all_preferences = get_all_preferences()
     run_weekly_signals_emails(all_preferences)
+
+
+def run_sunday() -> None:
+    """Zondag: alleen Portfolio Watch -- apart van de zaterdag-signalen, geen mail-opeenstapeling meer."""
+    all_preferences = get_all_preferences()
     run_portfolio_emails(all_preferences)
+
+
+if __name__ == "__main__":
+    import sys
+    mode = sys.argv[1] if len(sys.argv) > 1 else "saturday"
+    if mode == "saturday":
+        run_saturday()
+    elif mode == "sunday":
+        run_sunday()
+    else:
+        raise ValueError(f"Onbekende modus: '{mode}' -- gebruik 'saturday' of 'sunday'.")
     print("\nKlaar.")
