@@ -1058,6 +1058,8 @@ EU_SECTOR_ETFS = {
 THEME_ETFS = {
     "Robotics & AI": "BOTZ", "Clean Energy": "ICLN", "Cybersecurity": "CIBR",
     "Semiconductors": "SMH", "Genomics & Biotech": "ARKG",
+    "Cloud / SaaS": "WCLD", "Data Centers": "DTCR", "Aerospace & Defense": "ITA",
+    "Quantum Computing": "QTUM", "Nuclear Energy": "NLR", "Space": "ARKX",
 }
 
 # yfinance's eigen 'sector'-veld gebruikt ANDERE namen dan onze
@@ -1153,8 +1155,14 @@ def build_theme_rotation(period: str = "1mo") -> list:
     for theme, ticker in THEME_ETFS.items():
         try:
             hist = get_cached_ticker_history(ticker, period=period)
-            if len(hist) >= 2:
-                ret = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+            if hist is None or hist.empty:
+                continue
+            # Zelfde fix als bij build_sector_rotation(): de eerste/laatste
+            # rij kan een onvolledige koers (NaN) zijn -- pak de eerste/
+            # laatste GELDIGE koers i.p.v. blindelings de rand-rijen.
+            valid_closes = hist["Close"].dropna()
+            if len(valid_closes) >= 2:
+                ret = (valid_closes.iloc[-1] / valid_closes.iloc[0] - 1) * 100
                 results.append({"theme": theme, "ticker": ticker, "return_pct": round(ret, 2)})
         except Exception:
             continue
@@ -3173,14 +3181,22 @@ elif current_view == "discover":
                 theme_trend = build_theme_rotation_trend()
             if theme_trend:
                 all_trend_themes = list(theme_trend.keys())
-                # Bij Themes zijn er maar 5 (i.p.v. 11 sectoren), dus standaard
-                # gewoon allemaal tonen -- minder kans op een chaotische grafiek.
+                # Nu er 11 thema's zijn (was 5), standaard de top-5 op basis
+                # van het HUIDIGE (laatste) rendement tonen -- zelfde aanpak
+                # als bij Sectors, voorkomt dat de grafiek meteen met 11
+                # lijnen chaotisch oogt.
+                default_themes = sorted(
+                    all_trend_themes, key=lambda t: theme_trend[t]["values"][-1], reverse=True
+                )[:5]
                 selected_themes = st.multiselect(
-                    "Themes to compare", all_trend_themes, default=all_trend_themes, key="theme_trend_selection",
+                    "Themes to compare", all_trend_themes, default=default_themes, key="theme_trend_selection",
                 )
                 if selected_themes:
                     theme_fig = go.Figure()
-                    theme_palette = ["#1FAE96", "#E8A93C", "#E5484D", "#4DA6FF", "#C77DFF"]
+                    theme_palette = [
+                        "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                        "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                    ]
                     for i, theme in enumerate(selected_themes):
                         series = theme_trend[theme]
                         theme_fig.add_trace(go.Scatter(
@@ -3223,10 +3239,11 @@ elif current_view == "discover":
 
     else:
         # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
-        #     account nodig. Bewust NA de 3 signalen (ze hebben net gezien wat
-        #     de dagelijkse signalen opleveren), en de tekst legt zelf uit wat
-        #     'dagelijks' precies inhoudt (i.p.v. te vertrouwen op dat de
-        #     bezoeker zelf het daily/weekly-onderscheid al doorheeft).
+        #     account nodig. Progressive disclosure: eerst alleen 1 duidelijke
+        #     knop (voelt als een kleinere stap dan meteen een formulier),
+        #     het e-mail/regio-formulier verschijnt pas na een klik -- een
+        #     bekende, effectieve conversie-techniek (focus ligt eerst
+        #     volledig op de knop, niet op een direct-al-zichtbaar formulier).
         import database as _database_for_optin
 
         st.markdown(
@@ -3236,37 +3253,46 @@ elif current_view == "discover":
                         box-shadow: 0 0 24px rgba(31,174,150,0.12);
                         padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    📬 Free daily email
+                    📬 Free daily signals
                 </div>
-                <div style="color:#EAEDF1; font-size:1.2rem; font-weight:700; margin-top:8px; line-height:1.4;">
-                    In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
+                <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
+                    The stocks turning bullish today.
                 </div>
-                <div style="color:#8992A3; font-size:0.9rem; margin-top:8px;">
-                    Just your email -- no account needed.
+                <div style="color:#C3E8E0; font-size:1rem; margin-top:4px; font-weight:500;">
+                    Free, straight to your inbox, every weekday morning.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
-        with optin_col1:
-            optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
-        with optin_col2:
-            optin_region = st.selectbox(
-                "Region", ["EU", "US_East", "US_West"],
-                format_func=lambda x: x.replace("_", " "),
-                key="discover_optin_region", label_visibility="collapsed",
-            )
-        with optin_col3:
-            optin_submitted = st.button("Sign up", key="discover_optin_submit", type="primary")
 
-        if optin_submitted:
-            if not optin_email or "@" not in optin_email:
-                st.error("Please enter a valid email address.")
-            else:
-                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
-                send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
-                st.success("Almost there! Check your inbox to confirm your subscription.")
+        if "discover_optin_form_revealed" not in st.session_state:
+            st.session_state["discover_optin_form_revealed"] = False
+
+        if not st.session_state["discover_optin_form_revealed"]:
+            if st.button("Get my free signals →", key="discover_optin_reveal", type="primary"):
+                st.session_state["discover_optin_form_revealed"] = True
+                st.rerun()
+        else:
+            optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
+            with optin_col1:
+                optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
+            with optin_col2:
+                optin_region = st.selectbox(
+                    "Region", ["EU", "US_East", "US_West"],
+                    format_func=lambda x: x.replace("_", " "),
+                    key="discover_optin_region", label_visibility="collapsed",
+                )
+            with optin_col3:
+                optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary")
+
+            if optin_submitted:
+                if not optin_email or "@" not in optin_email:
+                    st.error("Please enter a valid email address.")
+                else:
+                    confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+                    send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
+                    st.success("Almost there! Check your inbox to confirm your subscription.")
 
 
         st.markdown(
