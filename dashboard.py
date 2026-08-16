@@ -127,6 +127,41 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     border: 1px solid #1FAE96;
 }
 
+/* Mobiel: header + navigatie flink compacter -- op een smal scherm nam
+   dit voorheen zoveel verticale ruimte in (logo + tagline + hoofdnav +
+   sub-nav) dat bezoekers eerst een hele lading 'menu' moesten scrollen
+   voordat ze bij daadwerkelijke content kwamen (bv. de dagelijkse-mail-
+   opt-in op Discover). Deze regel raakt ZOWEL de hoofdnavigatie als elke
+   sub-navigatie (Discover/Analyze), want die delen dezelfde .nav-bar/
+   .nav-link-klassen. */
+@media (max-width: 640px) {
+    .app-header {
+        padding: 0.7rem 0 0.5rem 0;
+        margin-bottom: 0.75rem;
+    }
+    .app-header-top {
+        gap: 0.6rem;
+        margin-bottom: 0.6rem;
+    }
+    .app-header-top svg {
+        width: 30px !important;
+        height: 30px !important;
+    }
+    .app-header h1 {
+        font-size: 1.35rem !important;
+    }
+    .app-header .tagline {
+        font-size: 0.55rem;
+    }
+    .nav-bar {
+        gap: 0.3rem;
+    }
+    .nav-link, .nav-link:visited, .nav-link:active {
+        font-size: 0.78rem;
+        padding: 0.3rem 0.6rem;
+    }
+}
+
 /* Mooie inline-link binnen lopende tekst (bv. '... zie Discover') --
    alleen het woord zelf is gestyled, niet de hele zin, en geen kaal
    blauw-onderstreept-link-gevoel */
@@ -3196,16 +3231,17 @@ elif current_view == "discover":
 
         st.markdown(
             """
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
-                        padding: 1.25rem 1.5rem; margin: 1.5rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+                        border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
+                        box-shadow: 0 0 24px rgba(31,174,150,0.12);
+                        padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
                     📬 Free daily email
                 </div>
-                <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:6px; line-height:1.5;">
+                <div style="color:#EAEDF1; font-size:1.2rem; font-weight:700; margin-top:8px; line-height:1.4;">
                     In your inbox before your morning coffee ☕ -- today's new bullish signals, every weekday.
                 </div>
-                <div style="color:#8992A3; font-size:0.9rem; margin-top:6px;">
+                <div style="color:#8992A3; font-size:0.9rem; margin-top:8px;">
                     Just your email -- no account needed.
                 </div>
             </div>
