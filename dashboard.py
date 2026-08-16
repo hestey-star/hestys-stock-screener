@@ -3256,10 +3256,10 @@ elif current_view == "discover":
                     📬 Free daily signals
                 </div>
                 <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
-                    The stocks turning bullish today.
+                    Quality stocks turning bullish today.
                 </div>
                 <div style="color:#C3E8E0; font-size:1rem; margin-top:4px; font-weight:500;">
-                    Free, straight to your inbox, every weekday morning.
+                    Free, straight to your inbox, every weekday morning ☕
                 </div>
             </div>
             """,
