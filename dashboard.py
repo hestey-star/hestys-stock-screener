@@ -1116,7 +1116,7 @@ def get_sector_theme_threshold_alerts() -> list:
 
     for region in ["US", "EU"]:
         try:
-            rotation = build_sector_rotation(region=region, period="1mo")
+            rotation = build_sector_rotation(region=region)
         except Exception:
             continue
         for r in rotation:
@@ -1129,7 +1129,7 @@ def get_sector_theme_threshold_alerts() -> list:
                 alerts.append({"name": r["sector"], "kind": "sector", "region": region, "pct": pct, "level": "notable", "direction": "up"})
 
     try:
-        theme_rotation = build_theme_rotation(period="1mo")
+        theme_rotation = build_theme_rotation()
     except Exception:
         theme_rotation = []
     for r in theme_rotation:
@@ -1145,24 +1145,35 @@ def get_sector_theme_threshold_alerts() -> list:
     return alerts
 
 
-def build_theme_rotation(period: str = "1mo") -> list:
+THEME_ROTATION_WINDOW_DAYS = 21  # handelsdagen -- zelfde als build_theme_rotation_trend()'s rolling_window_days
+
+
+def build_theme_rotation(window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
     """
     Zelfde logica als build_sector_rotation(), maar dan voor de populaire
     THEMA-ETF's (Robotics & AI, Clean Energy, etc.) i.p.v. de officiële
     GICS-sectoren.
+
+    Gebruikt een EXACT 'N handelsdagen terug'-venster (i.p.v. yfinance's
+    'period=1mo'-string) -- zodat dit getal exact overeenkomt met het
+    laatste punt van build_theme_rotation_trend()'s grafiek. Voorheen
+    gebruikten beide een net-iets-ander tijdvak (kalendermaand vs. 21
+    handelsdagen), wat bij een volatiel thema zoals Genomics & Biotech
+    tot een merkbaar afwijkend percentage kon leiden.
     """
+    fetch_period = f"{window_days + 15}d"
     results = []
     for theme, ticker in THEME_ETFS.items():
         try:
-            hist = get_cached_ticker_history(ticker, period=period)
+            hist = get_cached_ticker_history(ticker, period=fetch_period)
             if hist is None or hist.empty:
                 continue
             # Zelfde fix als bij build_sector_rotation(): de eerste/laatste
             # rij kan een onvolledige koers (NaN) zijn -- pak de eerste/
             # laatste GELDIGE koers i.p.v. blindelings de rand-rijen.
             valid_closes = hist["Close"].dropna()
-            if len(valid_closes) >= 2:
-                ret = (valid_closes.iloc[-1] / valid_closes.iloc[0] - 1) * 100
+            if len(valid_closes) > window_days:
+                ret = (valid_closes.iloc[-1] / valid_closes.iloc[-1 - window_days] - 1) * 100
                 results.append({"theme": theme, "ticker": ticker, "return_pct": round(ret, 2)})
         except Exception:
             continue
@@ -1238,18 +1249,24 @@ def build_theme_rotation_trend(lookback_months: int = 6, rolling_window_days: in
     return result
 
 
-def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
+def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
     """
     Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
     signaal (welke sectoren doen het momenteel relatief goed/slecht?).
     Sectoren waarvan de ETF geen data teruggeeft, worden gewoon overgeslagen
     (geen crash bij een enkele niet-beschikbare ticker).
+
+    Gebruikt een EXACT 'N handelsdagen terug'-venster (i.p.v. yfinance's
+    'period=1mo'-string) -- zodat dit getal exact overeenkomt met het
+    laatste punt van build_sector_rotation_trend()'s grafiek (zelfde fix
+    als bij build_theme_rotation()).
     """
+    fetch_period = f"{window_days + 15}d"
     etfs = US_SECTOR_ETFS if region == "US" else EU_SECTOR_ETFS
     results = []
     for sector, ticker in etfs.items():
         try:
-            hist = get_cached_ticker_history(ticker, period=period)
+            hist = get_cached_ticker_history(ticker, period=fetch_period)
             if hist is None or hist.empty:
                 continue
             # Zelfde soort probleem als eerder elders gevonden: de EERSTE of
@@ -1259,8 +1276,8 @@ def build_sector_rotation(region: str = "US", period: str = "1mo") -> list:
             # eerste/laatste GELDIGE koers i.p.v. blindelings de rand-rijen,
             # anders wordt het rendement NaN (toont als 'None' in de tabel).
             valid_closes = hist["Close"].dropna()
-            if len(valid_closes) >= 2:
-                ret = (valid_closes.iloc[-1] / valid_closes.iloc[0] - 1) * 100
+            if len(valid_closes) > window_days:
+                ret = (valid_closes.iloc[-1] / valid_closes.iloc[-1 - window_days] - 1) * 100
                 results.append({"sector": sector, "ticker": ticker, "return_pct": round(ret, 2)})
         except Exception:
             continue
@@ -3095,7 +3112,7 @@ elif current_view == "discover":
             st.caption("Live data -- recalculated fresh every time you open this.")
             region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
             with st.spinner("Checking sector performance..."):
-                rotation = build_sector_rotation(region=region, period="1mo")
+                rotation = build_sector_rotation(region=region)
             if rotation:
                 df_rotation = pd.DataFrame(rotation)[["sector", "return_pct"]]
                 df_rotation.columns = ["Sector", "1-Month Return"]
@@ -3161,7 +3178,7 @@ elif current_view == "discover":
                        "these cut across sectors, so they're tracked separately from Sector rotation.")
             st.caption("Live data -- recalculated fresh every time you open this.")
             with st.spinner("Checking theme performance..."):
-                theme_rotation = build_theme_rotation(period="1mo")
+                theme_rotation = build_theme_rotation()
             if theme_rotation:
                 df_themes = pd.DataFrame(theme_rotation)[["theme", "return_pct"]]
                 df_themes.columns = ["Theme", "1-Month Return"]
