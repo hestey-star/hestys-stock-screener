@@ -27,7 +27,7 @@ import yfinance as yf
 from indicators import supertrend, ema, resample_to_weekly
 from screener import get_roic_data, fetch_weekly, get_earnings_surprise
 from emailer import send_email, is_configured as email_is_configured
-from database import get_user_holdings
+from database import get_user_holdings, get_roic_trend_history, save_roic_trend_history
 
 
 def get_current_holdings() -> list:
@@ -180,20 +180,35 @@ def build_email_body(df: pd.DataFrame) -> tuple:
 
     upcoming_earnings = df[df["upcoming_earnings_date"].notna()].sort_values("upcoming_earnings_date")
 
-    # --- Fundamentele signalen: dalende ROIC (jaar-op-jaar, al berekend
-    # door get_roic_data() -- geen nieuwe opslag nodig) EN/OF een recente
+    # --- Fundamentele signalen: NIEUWE dalende ROIC (dus: deze week voor
+    # het eerst 'dalend', niet al weken bekend -- anders zou dit elke week
+    # opnieuw dezelfde, allang-bekende trend melden) EN/OF een recente
     # earnings-misser -- allebei zaken die je mening over een positie
     # zouden kunnen bijstellen, in tegenstelling tot een neutrale
-    # trend-flip of een earnings-beat. ---
+    # trend-flip of een earnings-beat.
+    #
+    # 'roic_decline_is_new' wordt door de aanroeper vooraf berekend (via
+    # database.get_roic_trend_history()) -- vergelijkt de HUIDIGE
+    # roic_trend met de LAATST BEKENDE stand van vorige week. Als deze
+    # kolom ontbreekt (bv. bij handmatig testen zonder database-koppeling),
+    # valt dit terug op het oude gedrag (elke 'dalend' telt mee) i.p.v. te
+    # crashen. ---
+    has_new_roic_column = "roic_decline_is_new" in df.columns
+
     def _fundamental_reason(row):
         reasons = []
-        if row["roic_trend"] == "dalend":
-            reasons.append("ROIC declining year-over-year")
+        is_new_decline = row["roic_decline_is_new"] if has_new_roic_column else (row["roic_trend"] == "dalend")
+        if is_new_decline:
+            reasons.append("ROIC just turned declining year-over-year")
         if earnings_mask.get(row.name, False) and row["earnings_beat"] is False:
             reasons.append(f"missed earnings estimates by {row['earnings_surprise_pct']:+.1f}%")
         return " and ".join(reasons)
 
-    fundamental_mask = (df["roic_trend"] == "dalend") | (earnings_mask & (df["earnings_beat"] == False))
+    if has_new_roic_column:
+        roic_flag = df["roic_decline_is_new"]
+    else:
+        roic_flag = df["roic_trend"] == "dalend"
+    fundamental_mask = roic_flag | (earnings_mask & (df["earnings_beat"] == False))
     fundamental_concerns = df[fundamental_mask].copy()
     if not fundamental_concerns.empty:
         fundamental_concerns["reason"] = fundamental_concerns.apply(_fundamental_reason, axis=1)
@@ -416,6 +431,15 @@ def main() -> None:
 
     print("\nOpgeslagen in 'portfolio_watch.csv'.")
 
+    # --- Alleen NIEUWE ROIC-dalingen laten meetellen in 'Worth a closer
+    # look' -- vergelijkt met vorige week's bekende stand, i.p.v. elke
+    # week opnieuw dezelfde, allang-bekende daling te melden. ---
+    previous_roic_trends = get_roic_trend_history(df["ticker"].tolist())
+    df["roic_decline_is_new"] = df.apply(
+        lambda r: r["roic_trend"] == "dalend" and previous_roic_trends.get(r["ticker"]) != "dalend",
+        axis=1,
+    )
+
     if email_is_configured():
         text_body, html_body = build_email_body(df)
         n_changed = int(df["recent_gewijzigd"].sum())
@@ -429,6 +453,11 @@ def main() -> None:
         send_email(subject=subject, body_text=text_body, body_html=html_body)
     else:
         print("\n(E-mail niet verstuurd: nog niet ingesteld in .env.)")
+
+    # De HUIDIGE ROIC-stand opslaan als 'vorige week' voor de volgende
+    # run -- onafhankelijk van of de mail daadwerkelijk verstuurd werd,
+    # want deze week se check heeft sowieso plaatsgevonden.
+    save_roic_trend_history(dict(zip(df["ticker"], df["roic_trend"])))
 
 
 if __name__ == "__main__":

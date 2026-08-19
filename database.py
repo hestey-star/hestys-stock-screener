@@ -701,3 +701,31 @@ def save_performance_snapshot(
         "value_series": value_series,
         "performance_rows": performance_rows,
     }).execute()
+
+
+def get_roic_trend_history(tickers: list) -> dict:
+    """
+    Haalt de LAATST BEKENDE ROIC-trend per ticker op (van de vorige
+    Portfolio Watch-run) -- gebruikt om te bepalen of een 'dalende ROIC'-
+    signalering deze week ECHT NIEUW is, i.p.v. elke week opnieuw dezelfde,
+    al-langer-bekende trend te tonen. Per TICKER bijgehouden (niet per
+    gebruiker) -- de ROIC-trend van een aandeel is voor iedereen hetzelfde,
+    dus geen zin om dit per gebruiker te dupliceren.
+    """
+    if not tickers:
+        return {}
+    client = get_supabase_client()
+    response = client.table("roic_trend_history").select("ticker,last_roic_trend").in_("ticker", tickers).execute()
+    return {row["ticker"]: row["last_roic_trend"] for row in response.data}
+
+
+def save_roic_trend_history(ticker_trends: dict) -> None:
+    """Slaat de HUIDIGE ROIC-trend per ticker op, als 'vorige stand' voor de volgende Portfolio Watch-run."""
+    if not ticker_trends:
+        return
+    client = get_supabase_client()
+    rows = [
+        {"ticker": ticker, "last_roic_trend": trend, "last_checked_at": datetime.now().isoformat()}
+        for ticker, trend in ticker_trends.items()
+    ]
+    client.table("roic_trend_history").upsert(rows, on_conflict="ticker").execute()

@@ -24,6 +24,7 @@ load_dotenv()
 
 import screener
 from portfolio_watch import check_holding, build_email_body
+from database import get_roic_trend_history, save_roic_trend_history
 from emailer import send_email
 
 
@@ -280,6 +281,15 @@ def run_portfolio_emails(preferences: dict) -> None:
             continue
 
         df = pd.DataFrame(results)
+
+        # Alleen NIEUWE ROIC-dalingen laten meetellen in 'Worth a closer
+        # look' -- zelfde logica als portfolio_watch.py's eigen main().
+        previous_roic_trends = get_roic_trend_history(df["ticker"].tolist())
+        df["roic_decline_is_new"] = df.apply(
+            lambda r: r["roic_trend"] == "dalend" and previous_roic_trends.get(r["ticker"]) != "dalend",
+            axis=1,
+        )
+
         text_body, html_body = build_email_body(df)
         n_changed = int(df["recent_gewijzigd"].sum())
         n_earnings = int((df["earnings_surprise_pct"].notna()).sum())
@@ -291,6 +301,11 @@ def run_portfolio_emails(preferences: dict) -> None:
         subject = f"Portfolio Watch: {', '.join(subject_parts)}" if subject_parts else "Portfolio Watch: no notable changes this week"
 
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
+
+        # De HUIDIGE ROIC-stand opslaan als 'vorige week' voor de volgende
+        # run -- onafhankelijk per ticker (niet per gebruiker), aangezien
+        # de ROIC-trend van een aandeel voor iedereen hetzelfde is.
+        save_roic_trend_history(dict(zip(df["ticker"], df["roic_trend"])))
 
 
 def run_daily_flip_scan_for_weekly() -> None:
