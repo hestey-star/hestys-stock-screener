@@ -25,7 +25,7 @@ import pandas as pd
 import yfinance as yf
 
 from indicators import supertrend, ema, resample_to_weekly
-from screener import get_roic_data, fetch_weekly, get_earnings_surprise
+from screener import get_roic_data, fetch_weekly, get_earnings_surprise, get_fair_value_estimate
 from emailer import send_email, is_configured as email_is_configured
 from database import get_user_holdings, get_roic_trend_history, save_roic_trend_history
 
@@ -58,6 +58,27 @@ RECENT_CHANGE_WEEKS = 2  # een statusverandering binnen dit aantal weken wordt a
 EARNINGS_RECENT_DAYS = 7  # hoe recent gerapporteerde cijfers moeten zijn om als 'deze week' te tellen
 
 
+FAIR_VALUE_THRESHOLD_PCT = 10  # marge rond 0% om ruis te voorkomen (kleine schommelingen rond fair value tellen niet als een 'omslag')
+
+
+def _fair_value_bucket(afwijking_pct) -> str:
+    """
+    Bepaalt of een positie momenteel 'cheap' (duidelijk onder fair value),
+    'expensive' (duidelijk erboven), of 'neutral' (te dicht bij fair value
+    om iets van te zeggen) is -- gebruikt om NIEUWE omslagen te herkennen
+    (bv. cheap -> expensive), i.p.v. elke kleine schommeling rond 0% als
+    een omslag te tellen.
+    """
+    if afwijking_pct is None:
+        return None
+    if afwijking_pct < -FAIR_VALUE_THRESHOLD_PCT:
+        return "cheap"
+    elif afwijking_pct > FAIR_VALUE_THRESHOLD_PCT:
+        return "expensive"
+    else:
+        return "neutral"
+
+
 def get_upcoming_earnings_date(ticker: str):
     """
     Checkt of deze positie AANKOMENDE cijfers heeft binnen de komende 7
@@ -79,12 +100,14 @@ def get_upcoming_earnings_date(ticker: str):
 
 
 def check_holding(naam: str, ticker: str):
-    # Earnings-verrassing (al gerapporteerd) EN aankomende earnings (komende
-    # 7 dagen) zijn allebei onafhankelijk van of er genoeg historie is voor
-    # Supertrend -- altijd proberen op te halen, ook als de technische check
-    # hieronder faalt.
+    # Earnings-verrassing (al gerapporteerd), aankomende earnings (komende
+    # 7 dagen), EN fair-value-afwijking zijn allemaal onafhankelijk van of
+    # er genoeg historie is voor Supertrend -- altijd proberen op te
+    # halen, ook als de technische check hieronder faalt.
     earnings_info = get_earnings_surprise(ticker)
     upcoming_earnings = get_upcoming_earnings_date(ticker)
+    fair_value_info = get_fair_value_estimate(ticker)
+    fair_value_bucket = _fair_value_bucket(fair_value_info.get("afwijking_pct"))
 
     try:
         df = fetch_weekly(ticker)
@@ -99,6 +122,8 @@ def check_holding(naam: str, ticker: str):
             "earnings_beat": earnings_info["beat"],
             "earnings_date": earnings_info["earnings_date"],
             "upcoming_earnings_date": upcoming_earnings,
+            "afwijking_fair_value_pct": fair_value_info.get("afwijking_pct"),
+            "fair_value_bucket": fair_value_bucket,
         }
 
     min_needed = max(ATR_LENGTH, TREND_FILTER_EMA_LENGTH) + 5
@@ -120,6 +145,8 @@ def check_holding(naam: str, ticker: str):
             "earnings_beat": earnings_info["beat"],
             "earnings_date": earnings_info["earnings_date"],
             "upcoming_earnings_date": upcoming_earnings,
+            "afwijking_fair_value_pct": fair_value_info.get("afwijking_pct"),
+            "fair_value_bucket": fair_value_bucket,
         }
 
     st = supertrend(df, length=ATR_LENGTH, multiplier=ATR_MULTIPLIER)
@@ -154,6 +181,8 @@ def check_holding(naam: str, ticker: str):
         "earnings_beat": earnings_info["beat"],
         "earnings_date": earnings_info["earnings_date"],
         "upcoming_earnings_date": upcoming_earnings,
+        "afwijking_fair_value_pct": fair_value_info.get("afwijking_pct"),
+        "fair_value_bucket": fair_value_bucket,
     }
 
 
@@ -180,20 +209,20 @@ def build_email_body(df: pd.DataFrame) -> tuple:
 
     upcoming_earnings = df[df["upcoming_earnings_date"].notna()].sort_values("upcoming_earnings_date")
 
-    # --- Fundamentele signalen: NIEUWE dalende ROIC (dus: deze week voor
-    # het eerst 'dalend', niet al weken bekend -- anders zou dit elke week
-    # opnieuw dezelfde, allang-bekende trend melden) EN/OF een recente
-    # earnings-misser -- allebei zaken die je mening over een positie
-    # zouden kunnen bijstellen, in tegenstelling tot een neutrale
-    # trend-flip of een earnings-beat.
+    # --- Zorgpunten ('Worth a closer look'): NIEUWE dalende ROIC, een
+    # recente earnings-misser, EN/OF een NIEUWE omslag naar 'expensive'
+    # (duidelijk boven fair value) -- allemaal zaken die je mening over
+    # een positie zouden kunnen bijstellen, in tegenstelling tot een
+    # neutrale trend-flip of een earnings-beat.
     #
-    # 'roic_decline_is_new' wordt door de aanroeper vooraf berekend (via
-    # database.get_roic_trend_history()) -- vergelijkt de HUIDIGE
-    # roic_trend met de LAATST BEKENDE stand van vorige week. Als deze
-    # kolom ontbreekt (bv. bij handmatig testen zonder database-koppeling),
-    # valt dit terug op het oude gedrag (elke 'dalend' telt mee) i.p.v. te
-    # crashen. ---
+    # 'roic_decline_is_new'/'fair_value_crossed_expensive_is_new' worden
+    # door de aanroeper vooraf berekend (via database.get_roic_trend_history())
+    # -- vergelijkt de HUIDIGE stand met de LAATST BEKENDE stand van vorige
+    # week. Als deze kolommen ontbreken (bv. bij handmatig testen zonder
+    # database-koppeling), valt dit terug op het oude gedrag (elke
+    # 'dalend'/'expensive' telt mee) i.p.v. te crashen. ---
     has_new_roic_column = "roic_decline_is_new" in df.columns
+    has_fair_value_column = "fair_value_crossed_expensive_is_new" in df.columns
 
     def _fundamental_reason(row):
         reasons = []
@@ -202,18 +231,61 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             reasons.append("ROIC just turned declining year-over-year")
         if earnings_mask.get(row.name, False) and row["earnings_beat"] is False:
             reasons.append(f"missed earnings estimates by {row['earnings_surprise_pct']:+.1f}%")
+        is_newly_expensive = (
+            row["fair_value_crossed_expensive_is_new"] if has_fair_value_column
+            else (row.get("fair_value_bucket") == "expensive")
+        )
+        if is_newly_expensive:
+            reasons.append(f"now trading {row['afwijking_fair_value_pct']:+.0f}% above estimated fair value")
         return " and ".join(reasons)
 
-    if has_new_roic_column:
-        roic_flag = df["roic_decline_is_new"]
-    else:
-        roic_flag = df["roic_trend"] == "dalend"
-    fundamental_mask = roic_flag | (earnings_mask & (df["earnings_beat"] == False))
+    roic_decline_flag = df["roic_decline_is_new"] if has_new_roic_column else (df["roic_trend"] == "dalend")
+    fair_value_expensive_flag = (
+        df["fair_value_crossed_expensive_is_new"] if has_fair_value_column
+        else (df.get("fair_value_bucket") == "expensive" if "fair_value_bucket" in df.columns else False)
+    )
+    fundamental_mask = roic_decline_flag | (earnings_mask & (df["earnings_beat"] == False)) | fair_value_expensive_flag
     fundamental_concerns = df[fundamental_mask].copy()
     if not fundamental_concerns.empty:
         fundamental_concerns["reason"] = fundamental_concerns.apply(_fundamental_reason, axis=1)
 
-    notable_tickers = set(changed["ticker"]) | set(earnings_this_week["ticker"]) | set(fundamental_concerns["ticker"])
+    # --- Positieve signalen ('Improving fundamentals'): NIEUWE stijgende
+    # ROIC EN/OF een NIEUWE omslag naar 'cheap' (duidelijk onder fair
+    # value) -- apart van de zorgpunten-sectie gehouden, want een
+    # waarschuwings-icoon naast goed nieuws zou verwarrend zijn. ---
+    has_new_roic_improve_column = "roic_improvement_is_new" in df.columns
+    has_fair_value_cheap_column = "fair_value_crossed_cheap_is_new" in df.columns
+
+    def _positive_reason(row):
+        reasons = []
+        is_new_improvement = (
+            row["roic_improvement_is_new"] if has_new_roic_improve_column
+            else (row["roic_trend"] == "stijgend")
+        )
+        if is_new_improvement:
+            reasons.append("ROIC just turned improving year-over-year")
+        is_newly_cheap = (
+            row["fair_value_crossed_cheap_is_new"] if has_fair_value_cheap_column
+            else (row.get("fair_value_bucket") == "cheap")
+        )
+        if is_newly_cheap:
+            reasons.append(f"now trading {row['afwijking_fair_value_pct']:+.0f}% below estimated fair value")
+        return " and ".join(reasons)
+
+    roic_improve_flag = df["roic_improvement_is_new"] if has_new_roic_improve_column else (df["roic_trend"] == "stijgend")
+    fair_value_cheap_flag = (
+        df["fair_value_crossed_cheap_is_new"] if has_fair_value_cheap_column
+        else (df.get("fair_value_bucket") == "cheap" if "fair_value_bucket" in df.columns else False)
+    )
+    positive_mask = roic_improve_flag | fair_value_cheap_flag
+    positive_signals = df[positive_mask].copy()
+    if not positive_signals.empty:
+        positive_signals["reason"] = positive_signals.apply(_positive_reason, axis=1)
+
+    notable_tickers = (
+        set(changed["ticker"]) | set(earnings_this_week["ticker"])
+        | set(fundamental_concerns["ticker"]) | set(positive_signals["ticker"])
+    )
     quiet_positions = df[~df["ticker"].isin(notable_tickers)]
 
     # --- Gewogen weekrendement + beste/slechtste positie deze week --
@@ -257,6 +329,12 @@ def build_email_body(df: pd.DataFrame) -> tuple:
     if not fundamental_concerns.empty:
         text_lines.append("⚠️ Worth a closer look:")
         for _, row in fundamental_concerns.iterrows():
+            text_lines.append(f"  - {row['naam']} ({row['ticker']}): {row['reason']}")
+        text_lines.append("")
+
+    if not positive_signals.empty:
+        text_lines.append("✨ Improving fundamentals:")
+        for _, row in positive_signals.iterrows():
             text_lines.append(f"  - {row['naam']} ({row['ticker']}): {row['reason']}")
         text_lines.append("")
 
@@ -339,6 +417,18 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             f"<ul style='margin:8px 0; padding-left:20px;'>{fundamental_items}</ul>"
         )
 
+    positive_html = ""
+    if not positive_signals.empty:
+        positive_items = "".join(
+            f"<li style='padding:6px 0;'><strong style='color:#101825;'>{r['naam']} ({r['ticker']})</strong>: "
+            f"<span style='color:#0F8F6E;'>{r['reason']}</span></li>"
+            for _, r in positive_signals.iterrows()
+        )
+        positive_html = (
+            f"<h4 style='color:#101825; font-size:15px; margin:20px 0 4px 0;'>✨ Improving fundamentals</h4>"
+            f"<ul style='margin:8px 0; padding-left:20px;'>{positive_items}</ul>"
+        )
+
     def _earnings_row_html(r):
         beat_txt = "beat" if r["earnings_beat"] else "missed"
         color = "#0F8F6E" if r["earnings_beat"] else "#C1524A"
@@ -386,6 +476,7 @@ def build_email_body(df: pd.DataFrame) -> tuple:
             <h4 style="color:#101825; font-size:15px; margin:0 0 4px 0;">🔄 Trend changes this week</h4>
             {flips_html}
             {fundamental_html}
+            {positive_html}
             {earnings_section_html}
             {upcoming_earnings_html}
             {quiet_html}
@@ -431,13 +522,28 @@ def main() -> None:
 
     print("\nOpgeslagen in 'portfolio_watch.csv'.")
 
-    # --- Alleen NIEUWE ROIC-dalingen laten meetellen in 'Worth a closer
-    # look' -- vergelijkt met vorige week's bekende stand, i.p.v. elke
-    # week opnieuw dezelfde, allang-bekende daling te melden. ---
-    previous_roic_trends = get_roic_trend_history(df["ticker"].tolist())
+    # --- Alleen NIEUWE signalen laten meetellen -- vergelijkt met vorige
+    # week's bekende stand, i.p.v. elke week opnieuw dezelfde, allang-
+    # bekende trend/waardering te melden. ---
+    previous_states = get_roic_trend_history(df["ticker"].tolist())
+
+    def _was_roic_trend(ticker, trend):
+        return previous_states.get(ticker, {}).get("roic_trend") == trend
+
+    def _was_fair_value_bucket(ticker, bucket):
+        return previous_states.get(ticker, {}).get("fair_value_bucket") == bucket
+
     df["roic_decline_is_new"] = df.apply(
-        lambda r: r["roic_trend"] == "dalend" and previous_roic_trends.get(r["ticker"]) != "dalend",
-        axis=1,
+        lambda r: r["roic_trend"] == "dalend" and not _was_roic_trend(r["ticker"], "dalend"), axis=1
+    )
+    df["roic_improvement_is_new"] = df.apply(
+        lambda r: r["roic_trend"] == "stijgend" and not _was_roic_trend(r["ticker"], "stijgend"), axis=1
+    )
+    df["fair_value_crossed_expensive_is_new"] = df.apply(
+        lambda r: r["fair_value_bucket"] == "expensive" and not _was_fair_value_bucket(r["ticker"], "expensive"), axis=1
+    )
+    df["fair_value_crossed_cheap_is_new"] = df.apply(
+        lambda r: r["fair_value_bucket"] == "cheap" and not _was_fair_value_bucket(r["ticker"], "cheap"), axis=1
     )
 
     if email_is_configured():
@@ -454,10 +560,14 @@ def main() -> None:
     else:
         print("\n(E-mail niet verstuurd: nog niet ingesteld in .env.)")
 
-    # De HUIDIGE ROIC-stand opslaan als 'vorige week' voor de volgende
-    # run -- onafhankelijk van of de mail daadwerkelijk verstuurd werd,
-    # want deze week se check heeft sowieso plaatsgevonden.
-    save_roic_trend_history(dict(zip(df["ticker"], df["roic_trend"])))
+    # De HUIDIGE stand opslaan als 'vorige week' voor de volgende run --
+    # onafhankelijk van of de mail daadwerkelijk verstuurd werd, want deze
+    # week se check heeft sowieso plaatsgevonden.
+    current_states = {
+        row["ticker"]: {"roic_trend": row["roic_trend"], "fair_value_bucket": row["fair_value_bucket"]}
+        for _, row in df.iterrows()
+    }
+    save_roic_trend_history(current_states)
 
 
 if __name__ == "__main__":

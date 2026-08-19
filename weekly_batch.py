@@ -282,12 +282,27 @@ def run_portfolio_emails(preferences: dict) -> None:
 
         df = pd.DataFrame(results)
 
-        # Alleen NIEUWE ROIC-dalingen laten meetellen in 'Worth a closer
-        # look' -- zelfde logica als portfolio_watch.py's eigen main().
-        previous_roic_trends = get_roic_trend_history(df["ticker"].tolist())
+        # Alleen NIEUWE signalen laten meetellen -- zelfde logica als
+        # portfolio_watch.py's eigen main().
+        previous_states = get_roic_trend_history(df["ticker"].tolist())
+
+        def _was_roic_trend(ticker, trend):
+            return previous_states.get(ticker, {}).get("roic_trend") == trend
+
+        def _was_fair_value_bucket(ticker, bucket):
+            return previous_states.get(ticker, {}).get("fair_value_bucket") == bucket
+
         df["roic_decline_is_new"] = df.apply(
-            lambda r: r["roic_trend"] == "dalend" and previous_roic_trends.get(r["ticker"]) != "dalend",
-            axis=1,
+            lambda r: r["roic_trend"] == "dalend" and not _was_roic_trend(r["ticker"], "dalend"), axis=1
+        )
+        df["roic_improvement_is_new"] = df.apply(
+            lambda r: r["roic_trend"] == "stijgend" and not _was_roic_trend(r["ticker"], "stijgend"), axis=1
+        )
+        df["fair_value_crossed_expensive_is_new"] = df.apply(
+            lambda r: r["fair_value_bucket"] == "expensive" and not _was_fair_value_bucket(r["ticker"], "expensive"), axis=1
+        )
+        df["fair_value_crossed_cheap_is_new"] = df.apply(
+            lambda r: r["fair_value_bucket"] == "cheap" and not _was_fair_value_bucket(r["ticker"], "cheap"), axis=1
         )
 
         text_body, html_body = build_email_body(df)
@@ -302,10 +317,14 @@ def run_portfolio_emails(preferences: dict) -> None:
 
         send_email(subject=subject, body_text=text_body, body_html=html_body, to_email=real_email)
 
-        # De HUIDIGE ROIC-stand opslaan als 'vorige week' voor de volgende
-        # run -- onafhankelijk per ticker (niet per gebruiker), aangezien
-        # de ROIC-trend van een aandeel voor iedereen hetzelfde is.
-        save_roic_trend_history(dict(zip(df["ticker"], df["roic_trend"])))
+        # De HUIDIGE stand opslaan als 'vorige week' voor de volgende run
+        # -- onafhankelijk per ticker (niet per gebruiker), aangezien deze
+        # waardes voor iedereen hetzelfde zijn.
+        current_states = {
+            row["ticker"]: {"roic_trend": row["roic_trend"], "fair_value_bucket": row["fair_value_bucket"]}
+            for _, row in df.iterrows()
+        }
+        save_roic_trend_history(current_states)
 
 
 def run_daily_flip_scan_for_weekly() -> None:
