@@ -32,6 +32,11 @@ on:
           - EU
           - US_East
           - US_West
+      force_rescan:
+        description: "Forceer een NIEUWE scan, ook als er vandaag al eentje gelukt is (handig om een net gepushte fix direct te testen zonder tot morgen te wachten)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   run-daily:
@@ -47,6 +52,7 @@ jobs:
           echo "Trigger event: ${{ github.event_name }}"
           echo "Schedule-expressie (indien van toepassing): ${{ github.event.schedule }}"
           echo "Werkelijke starttijd (UTC): $(date -u)"
+          echo "Force-rescan: ${{ github.event.inputs.force_rescan }}"
 
       - name: Python installeren
         uses: actions/setup-python@v5
@@ -71,6 +77,17 @@ jobs:
           echo "region=$REGION" >> "$GITHUB_OUTPUT"
 
           TODAY=$(date -u +%Y-%m-%d)
+
+          # force_rescan (alleen mogelijk bij een handmatige workflow_dispatch-
+          # run) omzeilt BEIDE dedup-checks hieronder -- handig om een net
+          # gepushte fix meteen te kunnen testen, zonder tot de volgende dag
+          # (of het overschrijven van de marker-bestanden) te hoeven wachten.
+          if [ "${{ github.event.inputs.force_rescan }}" = "true" ]; then
+            echo "eu_scan_already_done_today=false" >> "$GITHUB_OUTPUT"
+            echo "mail_already_sent_today=false" >> "$GITHUB_OUTPUT"
+            echo "(force_rescan actief -- dedup-checks overgeslagen)"
+            exit 0
+          fi
 
           # Scan-check (alleen relevant voor EU): is de scan van VANDAAG
           # al gecommit? Voorkomt een dubbele scan, niet meer dan dat.
