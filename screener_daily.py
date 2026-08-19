@@ -43,7 +43,25 @@ EARNINGS_RELEVANCE_DAYS = 45       # hoe recent winstcijfers moeten zijn (i.p.v.
 
 
 def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
-    """Haalt dagelijkse OHLCV-data op -- GEEN resampling naar weekly, in tegenstelling tot screener.py."""
+    """
+    Haalt dagelijkse OHLCV-data op -- GEEN resampling naar weekly, in
+    tegenstelling tot screener.py.
+
+    Bevat een verstheids-check: yfinance's databron loopt soms 1+
+    handelsdag achter op het moment dat deze scan draait (een bekend,
+    terugkerend probleem -- bevestigd via meerdere GitHub-issues over
+    'laatste dag'-data die niet klopt). Zonder deze check zou een positie
+    stilzwijgend met verouderde cijfers getoond worden (bv. 'Since: 0d
+    ago' terwijl het eigenlijk 2 handelsdagen geleden was, met een
+    0,00%-koersverandering die niet klopt omdat de 'omslag'- en
+    'huidige'-koers toevallig dezelfde, verouderde rij zijn).
+
+    Vergelijkt NIET met een vast aantal dagen (dat zou een normale
+    maandagochtend-achterstand tot vrijdag, 3 kalenderdagen, ten onrechte
+    als verdacht bestempelen) -- maar met de VERWACHTE meest recente
+    handelsdag, rekening houdend met het weekend, plus 1 dag speling voor
+    incidentele feestdagen.
+    """
     df = yf.download(ticker, period=f"{years}y", interval="1d", auto_adjust=True, progress=False)
     if df.empty:
         return df
@@ -59,6 +77,35 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
     # (aangezien score ook op de laatste koers steunt) ook de score
     # zelf NaN maken -- precies wat een 'nan' overal in de mail geeft.
     df = df[df["close"].notna()]
+
+    if not df.empty:
+        last_date = df.index[-1]
+        if getattr(last_date, "tz", None) is not None:
+            last_date = last_date.tz_localize(None)
+        today = pd.Timestamp.now().normalize()
+        weekday = today.dayofweek  # maandag=0 ... zondag=6
+        # BEWUST geen ruime buffer op doordeweekse dagen (dinsdag-vrijdag) --
+        # een 1-dags-speling zou precies de waargenomen bug (2 handelsdagen
+        # achterstand) ook goedkeuren, en 'm dus onzichtbaar maken. Alleen
+        # rond maandag iets meer ruimte (voor een mogelijke vrijdag-
+        # feestdag) -- die 3-daagse weekend-sprong is al normaal, dus 1
+        # dag extra dekt een incidentele feestdag zonder de vaste
+        # weekend-sprong zelf te flaggen.
+        if weekday == 0:      # maandag
+            max_days_back = 4
+        elif weekday == 6:    # zondag (draait normaal niet, voor de zekerheid)
+            max_days_back = 3
+        else:                  # dinsdag t/m vrijdag
+            max_days_back = 1
+        oldest_acceptable_date = today - pd.Timedelta(days=max_days_back)
+
+        if last_date < oldest_acceptable_date:
+            days_stale = (today - last_date).days
+            print(f"    (Overgeslagen: laatste data voor {ticker} is {days_stale} dag(en) oud "
+                  f"(laatste koers: {last_date.date()}) -- waarschijnlijk yfinance-vertraging, "
+                  f"niet betrouwbaar genoeg voor vandaag.)")
+            return pd.DataFrame()
+
     return df
 
 
