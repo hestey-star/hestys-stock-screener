@@ -1060,6 +1060,8 @@ THEME_ETFS = {
     "Semiconductors": "SMH", "Genomics & Biotech": "ARKG",
     "Cloud / SaaS": "WCLD", "Data Centers": "DTCR", "Aerospace & Defense": "ITA",
     "Quantum Computing": "QTUM", "Nuclear Energy": "NLR", "Space": "ARKX",
+    "Drones": "UAV", "Materials & Critical Minerals": "REMX", "Fintech": "FINX",
+    "Infrastructure": "PAVE", "Power & Utilities": "XLU",
 }
 
 # yfinance's eigen 'sector'-veld gebruikt ANDERE namen dan onze
