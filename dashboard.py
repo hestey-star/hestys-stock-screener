@@ -3204,16 +3204,30 @@ elif current_view == "discover":
                     b = round(start[2] + (end[2] - start[2]) * t)
                     return r, g, b
 
-                def _theme_tile_html(theme_name, return_pct):
+                THEME_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-badge
+
+                def _theme_tile_html(rank, theme_name, return_pct):
                     r, g, b = _theme_gradient_color(return_pct)
                     accent_rgb = f"{r},{g},{b}"
                     text_color = f"rgb({accent_rgb})"
+                    trend_arrow = "↗" if return_pct >= 0 else "↘"
+
+                    rocket_html = ""
+                    if return_pct >= THEME_ROCKET_THRESHOLD_PCT:
+                        rocket_html = (
+                            '<div style="position:absolute; top:8px; right:8px; background:rgba(31,174,150,0.18); '
+                            'border:1px solid rgba(31,174,150,0.5); border-radius:20px; padding:2px 8px; '
+                            'font-size:0.85rem; box-shadow:0 0 10px rgba(31,174,150,0.35);">🚀</div>'
+                        )
+
                     return f"""
-                    <div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02));
+                    <div style="position:relative; background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02));
                                 border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px;
                                 padding: 0.9rem 1rem;">
-                        <div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em;">{theme_name}</div>
-                        <div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{return_pct:+.1f}%</div>
+                        {rocket_html}
+                        <div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}</div>
+                        <div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{theme_name}</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{trend_arrow} {return_pct:+.1f}%</div>
                     </div>
                     """
 
@@ -3224,7 +3238,7 @@ elif current_view == "discover":
                 # scherm (bv. 2 i.p.v. 6+ op desktop) -- de kern van
                 # 'mobiel-vriendelijk'.
                 theme_tiles_html = "".join(
-                    _theme_tile_html(r["theme"], r["return_pct"]) for r in theme_rotation
+                    _theme_tile_html(i + 1, r["theme"], r["return_pct"]) for i, r in enumerate(theme_rotation)
                 )
                 st.markdown(
                     f"""
