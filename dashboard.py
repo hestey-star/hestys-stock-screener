@@ -2863,7 +2863,7 @@ with st.sidebar:
                 </svg>
                 <div>
                     <h1 style="font-size:1.35rem !important;">Hesty's</h1>
-                    <div class="tagline">YOUR PERSONAL INVESTMENT ASSISTANT</div>
+                    <div class="tagline">YOUR INVESTING EDGE</div>
                 </div>
             </a>
         </div>
@@ -3253,28 +3253,32 @@ elif current_view == "discover":
         # interpreteert door voorloop-spaties/newlines). ---
         hero_points = [
             ("🔍", "Discover new ideas", "signals, themes, trends"),
-            ("📊", "Analyze your own portfolio", ""),
-            ("📬", "Tailored daily & weekly updates", ""),
-            ("🚀", "Expanding every week", ""),
+            ("📊", "Analyze your own portfolio", "performance, risk, allocation"),
+            ("📬", "Tailored daily & weekly updates", "matched to your investing style"),
+            ("🚀", "Expanding every week", "new signals, always improving"),
         ]
+        # 2x2-grid i.p.v. flex-wrap (dat gaf op brede schermen 4 platte,
+        # dunne vakjes op 1 rij -- saai). Een icoon-badge (gekleurde
+        # cirkel) achter elke emoji geeft meer visueel gewicht.
         hero_points_html = "".join(
             f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
-            f'border-radius:10px; padding:0.7rem 0.9rem; flex:1; min-width:150px;">'
-            f'<div style="font-size:1.1rem;">{emoji}</div>'
-            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:4px; line-height:1.3;">{title}</div>'
-            + (f'<div style="color:#8992A3; font-size:0.75rem; margin-top:2px;">{sub}</div>' if sub else "")
-            + f'</div>'
+            f'border-radius:12px; padding:1rem 1.1rem;">'
+            f'<div style="width:36px; height:36px; border-radius:50%; background:rgba(31,174,150,0.18); '
+            f'display:flex; align-items:center; justify-content:center; font-size:1.15rem;">{emoji}</div>'
+            f'<div style="color:#EAEDF1; font-size:0.88rem; font-weight:700; margin-top:9px; line-height:1.3;">{title}</div>'
+            f'<div style="color:#8992A3; font-size:0.75rem; margin-top:3px; line-height:1.35;">{sub}</div>'
+            f'</div>'
             for emoji, title, sub in hero_points
         )
         st.markdown(
             '<div style="text-align:center; padding: 1.5rem 0.5rem 1rem 0.5rem;">'
             '<div style="display:inline-block; background:rgba(31,174,150,0.12); border:1px solid rgba(31,174,150,0.4); '
             'border-radius:20px; padding:5px 14px; color:#1FAE96; font-size:0.8rem; font-weight:600;">'
-            '📬 Free to start &mdash; no credit card needed</div>'
+            'Free &mdash; no credit card needed</div>'
             '<h1 style="font-size:2.2rem; font-weight:800; margin:0.9rem 0 0 0; line-height:1.25; color:#EAEDF1;">'
             'Your Investing Edge,<br/><span style="color:#1FAE96;">Built Around You</span></h1>'
-            '<div style="max-width:640px; margin:0 auto;">'
-            f'<div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:1.5rem;">{hero_points_html}</div>'
+            '<div style="max-width:520px; margin:0 auto;">'
+            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.7rem; margin-top:1.5rem;">{hero_points_html}</div>'
             '</div>'
             '<div style="margin-top:1.75rem; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">'
             '<a href="#signup" style="background:#1FAE96; color:#0B1210; font-weight:700; font-size:0.95rem; '
@@ -3437,41 +3441,35 @@ elif current_view == "discover":
 
     else:
         # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
-        #     account nodig. Progressive disclosure: eerst alleen 1 duidelijke
-        #     knop (voelt als een kleinere stap dan meteen een formulier),
-        #     het e-mail/regio-formulier verschijnt pas na een klik -- een
-        #     bekende, effectieve conversie-techniek (focus ligt eerst
-        #     volledig op de knop, niet op een direct-al-zichtbaar formulier).
-        import database as _database_for_optin
+        #     account nodig. ALLEEN voor niet-ingelogde bezoekers -- een
+        #     ingelogde gebruiker beheert z'n e-mail-voorkeuren al via
+        #     Settings, en hoeft dit hier niet nogmaals te zien.
+        #     Formulier direct zichtbaar (geen aparte 'onthul'-knop meer --
+        #     dat gaf samen met de hero-knop het gevoel van '2x eenzelfde
+        #     knop moeten indrukken' voor je bij het e-mailveld komt).
+        if not st.user.is_logged_in:
+            import database as _database_for_optin
 
-        st.markdown(
-            """
-            <div id="signup" style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
-                        border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
-                        box-shadow: 0 0 24px rgba(31,174,150,0.12);
-                        padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    📬 Free daily signals
+            st.markdown(
+                """
+                <div id="signup" style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+                            border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
+                            box-shadow: 0 0 24px rgba(31,174,150,0.12);
+                            padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
+                    <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
+                        📬 Free daily signals
+                    </div>
+                    <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
+                        Quality stocks turning bullish today.
+                    </div>
+                    <div style="color:#C3E8E0; font-size:1rem; margin-top:4px; font-weight:500;">
+                        Free, straight to your inbox, every weekday morning ☕
+                    </div>
                 </div>
-                <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
-                    Quality stocks turning bullish today.
-                </div>
-                <div style="color:#C3E8E0; font-size:1rem; margin-top:4px; font-weight:500;">
-                    Free, straight to your inbox, every weekday morning ☕
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
-        if "discover_optin_form_revealed" not in st.session_state:
-            st.session_state["discover_optin_form_revealed"] = False
-
-        if not st.session_state["discover_optin_form_revealed"]:
-            if st.button("Get my free signals →", key="discover_optin_reveal", type="primary"):
-                st.session_state["discover_optin_form_revealed"] = True
-                st.rerun()
-        else:
             optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
             with optin_col1:
                 optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
