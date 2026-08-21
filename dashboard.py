@@ -1365,6 +1365,20 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     ⭐-badge) bij écht opvallende signalen (bv. Momentocrats-score >= 8) --
     precies de handvol die de moeite waard zijn om verder te bekijken.
     """
+    # Normaliseer naar een NATIVE Python True/False/None -- een waarde die
+    # rechtstreeks uit een pandas-vergelijking komt (bv. row['x'] < 0, of
+    # een boolean-kolom uit een CSV) is een numpy.bool_, GEEN Python bool.
+    # 'numpy.bool_(True) is True' geeft dan ONTERECHT False terug (identity-
+    # check faalt bij een ander type), waardoor de kleur hieronder altijd
+    # op het neutrale wit zou blijven hangen i.p.v. groen/rood. Ook een
+    # ontbrekende waarde (NaN, bv. bij earnings_beat dat niet bekend is)
+    # moet expliciet None worden -- bool(nan) geeft anders ONTERECHT True
+    # terug (elk niet-nul getal is 'truthy' in Python, NaN incluis).
+    if primary_positive is not None and pd.isna(primary_positive):
+        primary_positive = None
+    elif primary_positive is not None:
+        primary_positive = bool(primary_positive)
+
     if primary_positive is True:
         color = "#1FAE96"
     elif primary_positive is False:
@@ -3321,7 +3335,12 @@ elif current_view == "discover":
         # --- Sector rotation (nieuw) ---
         with st.expander("🔄 Sector rotation"):
             st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
-            region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
+            region = st.segmented_control(
+                "Region", options=["US", "EU"], selection_mode="single",
+                default="US", key="sector_region", label_visibility="collapsed",
+            )
+            if region is None:
+                region = "US"
             with st.spinner("Checking sector performance..."):
                 rotation = build_sector_rotation(region=region)
             if rotation:
@@ -3436,14 +3455,20 @@ elif current_view == "discover":
         with st.expander("💰 Earnings surprises"):
             st.caption("Notable earnings beats/misses among today's and this week's signals -- "
                        "only shown during earnings season (last 60 days).")
-            st.caption(f"Sourced from the daily and weekly scans. Last updated: "
-                       f"{file_last_modified('supertrend_signals_daily.csv')} (daily), "
-                       f"{file_last_modified('supertrend_signals.csv')} (weekly).")
             surprises = get_earnings_surprises_from_signals(max_items=5)
             if surprises:
-                for s in surprises:
-                    emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})")
+                cards_html = [
+                    _signal_card_html(
+                        s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
+                        s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
+                        standout=abs(s["earnings_surprise_pct"]) >= 15.0,
+                    )
+                    for s in surprises
+                ]
+                _render_signal_cards(cards_html)
+                st.caption(f"Updated {file_last_modified('supertrend_signals_daily.csv')} (daily), "
+                           f"{file_last_modified('supertrend_signals.csv')} (weekly). "
+                           "⭐ = 15%+ surprise, in either direction.")
             else:
                 st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
 
