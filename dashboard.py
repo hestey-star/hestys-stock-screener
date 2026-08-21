@@ -3181,6 +3181,48 @@ if current_view == "today":
 # VIEW: SCREENER (public, no login required)
 # ============================================================
 elif current_view == "discover":
+    if not st.user.is_logged_in:
+        # --- Hero-sectie: 1 gerichte, heldere binnenkomer voor nieuwe
+        # bezoekers, vóór alle navigatie/content -- i.p.v. meteen met
+        # tabbladen te beginnen. Zelfde HTML-op-1-regel-aanpak als de
+        # thema-tegels (voorkomt dat Markdown het als code-blok
+        # interpreteert door voorloop-spaties/newlines). ---
+        hero_points = [
+            ("🔍", "Discover new ideas", "signals, themes, trends"),
+            ("📊", "Analyze your own portfolio", ""),
+            ("📬", "Tailored daily & weekly updates", ""),
+            ("🚀", "Expanding every week", ""),
+        ]
+        hero_points_html = "".join(
+            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
+            f'border-radius:10px; padding:0.7rem 0.9rem; flex:1; min-width:150px;">'
+            f'<div style="font-size:1.1rem;">{emoji}</div>'
+            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:4px; line-height:1.3;">{title}</div>'
+            + (f'<div style="color:#8992A3; font-size:0.75rem; margin-top:2px;">{sub}</div>' if sub else "")
+            + f'</div>'
+            for emoji, title, sub in hero_points
+        )
+        st.markdown(
+            '<div style="text-align:center; padding: 1.5rem 0.5rem 1rem 0.5rem;">'
+            '<div style="display:inline-block; background:rgba(31,174,150,0.12); border:1px solid rgba(31,174,150,0.4); '
+            'border-radius:20px; padding:5px 14px; color:#1FAE96; font-size:0.8rem; font-weight:600;">'
+            '📬 Free to start &mdash; no credit card needed</div>'
+            '<h1 style="font-size:2.2rem; font-weight:800; margin:0.9rem 0 0 0; line-height:1.25; color:#EAEDF1;">'
+            'Your Investing Edge,<br/><span style="color:#1FAE96;">Built Around You</span></h1>'
+            '<div style="max-width:640px; margin:0 auto;">'
+            f'<div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:1.5rem;">{hero_points_html}</div>'
+            '</div>'
+            '<div style="margin-top:1.75rem; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">'
+            '<a href="#signup" style="background:#1FAE96; color:#0B1210; font-weight:700; font-size:0.95rem; '
+            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block;">Get my free signals &rarr;</a>'
+            '<a href="#signals" style="background:transparent; color:#EAEDF1; font-weight:600; font-size:0.95rem; '
+            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block; '
+            'border:1px solid rgba(234,237,241,0.3);">Browse today\'s signals</a>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown("### Discover")
 
     current_discover_subview = st.query_params.get("subview", "discover")
@@ -3340,7 +3382,7 @@ elif current_view == "discover":
 
         st.markdown(
             """
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+            <div id="signup" style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
                         border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
                         box-shadow: 0 0 24px rgba(31,174,150,0.12);
                         padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
@@ -3389,7 +3431,7 @@ elif current_view == "discover":
 
         st.markdown(
             """
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+            <div id="signals" style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
                         border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
