@@ -3201,7 +3201,7 @@ elif current_view == "discover":
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation (nieuw) ---
         with st.expander("🔄 Sector rotation"):
-            st.caption("Which sectors are relatively strong or weak right now.")
+            st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
             region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
             with st.spinner("Checking sector performance..."):
                 rotation = build_sector_rotation(region=region)
@@ -3258,7 +3258,7 @@ elif current_view == "discover":
         # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
         # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
         with st.expander("💡 Themes"):
-            st.caption("How popular investing themes are doing right now.")
+            st.caption("How popular investing themes are doing right now (1-month trailing).")
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
             if theme_rotation:
