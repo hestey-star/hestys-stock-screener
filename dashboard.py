@@ -3620,8 +3620,6 @@ elif current_view == "discover":
         with st.expander("🐦 Snowballers"):
             st.caption("Quality companies trading below fair value, with low volatility. For the "
                        "long-term investor -- no fresh trend flip required.")
-            st.caption(f"Last updated: {file_last_modified('snowball_signals.csv')}")
-            st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
             if os.path.exists("snowball_signals.csv"):
                 df_snowball = pd.read_csv("snowball_signals.csv")
                 if not df_snowball.empty:
@@ -3633,6 +3631,8 @@ elif current_view == "discover":
                     # gebruikelijke +/- logica: een NEGATIEVE afwijking van
                     # fair value betekent 'goedkoper dan terecht' -- precies
                     # wat je wil bij dit signaaltype, dus GROEN, niet rood.
+                    # Standout (ster) bij 20%+ onder fair value -- de écht
+                    # opvallende koopjes.
                     cards_html = []
                     for _, row in df_snowball.iterrows():
                         secondary = []
@@ -3645,9 +3645,11 @@ elif current_view == "discover":
                         cards_html.append(_signal_card_html(
                             row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
                             row["afwijking_fair_value_pct"] < 0, secondary,
+                            standout=row["afwijking_fair_value_pct"] <= -20.0,
                         ))
                     _render_signal_cards(cards_html)
-                    st.caption(f"{len(df_snowball)} of {total_snowball} matching stocks shown.")
+                    st.caption(f"{len(df_snowball)} of {total_snowball} shown, updated {file_last_modified('snowball_signals.csv')}. "
+                               f"⭐ = 20%+ below fair value. Next update: {_next_weekly_scan_time()}.")
                     if not _is_premium_discover and total_snowball > _signal_display_limit:
                         st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                                 f"Upgrade to Premium to see all {total_snowball}.")
@@ -3663,8 +3665,6 @@ elif current_view == "discover":
         with st.expander("🚀 Rocket List"):
             st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
                        "with more risk in exchange for growth potential.")
-            st.caption(f"Last updated: {file_last_modified('rocket_list_signals.csv')}")
-            st.caption(f"Next scheduled update: {_next_weekly_scan_time()}")
             if os.path.exists("rocket_list_signals.csv"):
                 df_rocket = pd.read_csv("rocket_list_signals.csv")
                 if not df_rocket.empty:
@@ -3672,6 +3672,8 @@ elif current_view == "discover":
                     total_rocket = len(df_rocket)
                     df_rocket = df_rocket.head(_signal_display_limit)
 
+                    # Standout (ster) bij 25%+ groei -- de écht opvallende
+                    # versnellers.
                     cards_html = []
                     for _, row in df_rocket.iterrows():
                         secondary = []
@@ -3681,9 +3683,11 @@ elif current_view == "discover":
                             secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
                         cards_html.append(_signal_card_html(
                             row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
+                            standout=row["groei_pct"] >= 25.0,
                         ))
                     _render_signal_cards(cards_html)
-                    st.caption(f"{len(df_rocket)} of {total_rocket} matching stocks shown.")
+                    st.caption(f"{len(df_rocket)} of {total_rocket} shown, updated {file_last_modified('rocket_list_signals.csv')}. "
+                               f"⭐ = 25%+ growth. Next update: {_next_weekly_scan_time()}.")
                     if not _is_premium_discover and total_rocket > _signal_display_limit:
                         st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
                                 f"Upgrade to Premium to see all {total_rocket}.")
