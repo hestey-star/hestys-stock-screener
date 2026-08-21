@@ -1251,6 +1251,97 @@ def build_theme_rotation_trend(lookback_months: int = 6, rolling_window_days: in
     return result
 
 
+def _rotation_gradient_color(return_pct):
+    """
+    Interpoleert tussen rood (sterk negatief, <=-15%), amber (neutraal,
+    rond 0%), en jade-groen (sterk positief, >=+15%) -- i.p.v. binair
+    groen/rood, zodat echte uitschieters in BEIDE richtingen er visueel
+    uitspringen t.o.v. iets dat maar een beetje beweegt.
+
+    Gebruikt een vierkantswortel-curve i.p.v. een lineaire -- bij
+    lineair bewoog een klein percentage (bv. +2.6%) nauwelijks weg van
+    amber, waardoor + en - moeilijk uit elkaar te houden waren op het
+    oog. Met sqrt() beweegt de kleur SNEL weg van amber bij kleine
+    percentages, en vlakt af richting de uiterste kleur -- meer
+    contrast precies waar het toe doet, terwijl grote uitschieters nog
+    steeds gewoon uitkomen op puur rood/groen.
+
+    Gedeeld tussen Sector rotation en Themes (zelfde tegel-stijl).
+    """
+    clamped = max(-15.0, min(15.0, return_pct))
+    red, amber, green = (229, 72, 77), (232, 169, 60), (31, 174, 150)
+    if clamped >= 0:
+        t = (clamped / 15.0) ** 0.5  # 0 = amber, 1 = puur groen
+        start, end = amber, green
+    else:
+        t = ((-clamped) / 15.0) ** 0.5  # 0 = amber, 1 = puur rood
+        start, end = amber, red
+    r = round(start[0] + (end[0] - start[0]) * t)
+    g = round(start[1] + (end[1] - start[1]) * t)
+    b = round(start[2] + (end[2] - start[2]) * t)
+    return r, g, b
+
+
+ROTATION_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-icoontje
+
+
+def _rotation_tile_html(rank, name, return_pct):
+    r, g, b = _rotation_gradient_color(return_pct)
+    accent_rgb = f"{r},{g},{b}"
+    text_color = f"rgb({accent_rgb})"
+    trend_arrow = "↗" if return_pct >= 0 else "↘"
+
+    # Inline i.p.v. absoluut gepositioneerd (voorkomt dat 'ie over de
+    # naam heen kan vallen als die naar een 2e regel wrapt), en geen
+    # omlijning/achtergrond -- gewoon het kale icoontje naast het
+    # rangnummer.
+    rocket_span = " 🚀" if return_pct >= ROTATION_ROCKET_THRESHOLD_PCT else ""
+
+    # BELANGRIJK: geen voorloop-spaties/newlines binnen deze HTML-string
+    # -- Markdown interpreteert 4+ spaties inspringing aan het begin van
+    # een regel als een CODE-BLOK, niet als HTML, wat tegels als rauwe
+    # HTML-tekst zou tonen i.p.v. gerenderd.
+    #
+    # height:100% + flex-column: laat de tegel uitrekken tot de hoogte
+    # van de langste tegel IN DEZELFDE RIJ -- lost op dat een 2-regelige
+    # naam de rij-hoogte laat verschillen t.o.v. een 1-regelige naam
+    # ernaast. white-space:nowrap op het percentage-blok voorkomt dat de
+    # pijl en het percentage naar een 2e regel wrappen.
+    return (
+        f'<div style="height:100%; box-sizing:border-box; display:flex; flex-direction:column; '
+        f'background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
+        f'border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px; padding: 0.9rem 1rem;">'
+        f'<div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}{rocket_span}</div>'
+        f'<div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{name}</div>'
+        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:auto; padding-top:6px; white-space:nowrap;">{trend_arrow} {return_pct:+.1f}%</div>'
+        f'</div>'
+    )
+
+
+def _render_rotation_tiles(items: list, name_key: str) -> None:
+    """
+    Rendert een responsieve tegel-grid voor rotatie-data (Sectors of
+    Themes) -- 1 gedeelde renderer i.p.v. losse implementaties, zodat
+    beide secties er altijd exact hetzelfde uitzien.
+
+    items: lijst met dicts, elk met minstens 'return_pct' en name_key
+    (bv. 'sector' of 'theme'). Verwacht al gesorteerd te zijn (bepaalt
+    de rangnummers).
+    """
+    tiles_html = "".join(
+        _rotation_tile_html(i + 1, item[name_key], item["return_pct"]) for i, item in enumerate(items)
+    )
+    # CSS-grid met auto-fill/minmax i.p.v. st.columns() -- dat laatste
+    # houdt altijd hetzelfde aantal kolommen aan (wordt alleen smaller op
+    # mobiel, niet minder kolommen), terwijl auto-fill echt herschikt naar
+    # minder kolommen op een smal scherm -- de kern van 'mobiel-vriendelijk'.
+    st.markdown(
+        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
+        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{tiles_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
     """
     Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
@@ -3110,26 +3201,17 @@ elif current_view == "discover":
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation (nieuw) ---
         with st.expander("🔄 Sector rotation"):
-            st.caption("Which sectors are relatively strong or weak right now (trailing 1-month return)?")
-            st.caption("Live data -- recalculated fresh every time you open this.")
+            st.caption("Which sectors are relatively strong or weak right now.")
             region = st.radio("Region", ["US", "EU"], horizontal=True, key="sector_region")
             with st.spinner("Checking sector performance..."):
                 rotation = build_sector_rotation(region=region)
             if rotation:
-                df_rotation = pd.DataFrame(rotation)[["sector", "return_pct"]]
-                df_rotation.columns = ["Sector", "1-Month Return"]
-                st.dataframe(
-                    df_rotation.style.format({"1-Month Return": "{:+.1f}%"})
-                                      .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                    width=320,
-                    hide_index=True,
-                )
+                _render_rotation_tiles(rotation, "sector")
             else:
                 st.caption("No sector data available right now.")
 
-            st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
-            st.caption("Each line shows how a sector's trailing 1-month return has evolved over the last 6 months. "
-                       "A line crossing from below zero to above (or vice versa) is a rotation signal.")
+            st.markdown("**Trend**")
+            st.caption("A line crossing zero is a rotation signal.")
             with st.spinner("Building trend chart..."):
                 rotation_trend = build_sector_rotation_trend(region=region)
             if rotation_trend:
@@ -3176,110 +3258,16 @@ elif current_view == "discover":
         # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
         # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
         with st.expander("💡 Themes"):
-            st.caption("How popular investing themes are doing right now (trailing 1-month return) -- "
-                       "these cut across sectors, so they're tracked separately from Sector rotation.")
-            st.caption("Live data -- recalculated fresh every time you open this.")
+            st.caption("How popular investing themes are doing right now.")
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
             if theme_rotation:
-                def _theme_gradient_color(return_pct):
-                    """
-                    Interpoleert tussen rood (sterk negatief, <=-15%),
-                    amber (neutraal, rond 0%), en jade-groen (sterk
-                    positief, >=+15%) -- i.p.v. binair groen/rood, zodat
-                    echte uitschieters in BEIDE richtingen er visueel
-                    uitspringen t.o.v. een thema dat maar een beetje
-                    beweegt.
-
-                    Gebruikt een vierkantswortel-curve i.p.v. een lineaire
-                    -- bij lineair bewoog een klein percentage (bv. +2.6%)
-                    nauwelijks weg van amber, waardoor + en - moeilijk uit
-                    elkaar te houden waren op het oog. Met sqrt() beweegt
-                    de kleur SNEL weg van amber bij kleine percentages, en
-                    vlakt af richting de uiterste kleur -- meer contrast
-                    precies waar het toe doet (de veelvoorkomende, kleine
-                    percentages), terwijl grote uitschieters nog steeds
-                    gewoon uitkomen op puur rood/groen.
-                    """
-                    clamped = max(-15.0, min(15.0, return_pct))
-                    red, amber, green = (229, 72, 77), (232, 169, 60), (31, 174, 150)
-                    if clamped >= 0:
-                        t = (clamped / 15.0) ** 0.5  # 0 = amber, 1 = puur groen
-                        start, end = amber, green
-                    else:
-                        t = ((-clamped) / 15.0) ** 0.5  # 0 = amber, 1 = puur rood
-                        start, end = amber, red
-                    r = round(start[0] + (end[0] - start[0]) * t)
-                    g = round(start[1] + (end[1] - start[1]) * t)
-                    b = round(start[2] + (end[2] - start[2]) * t)
-                    return r, g, b
-
-                THEME_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-icoontje
-
-                def _theme_tile_html(rank, theme_name, return_pct):
-                    r, g, b = _theme_gradient_color(return_pct)
-                    accent_rgb = f"{r},{g},{b}"
-                    text_color = f"rgb({accent_rgb})"
-                    trend_arrow = "↗" if return_pct >= 0 else "↘"
-
-                    # Inline i.p.v. absoluut gepositioneerd (voorkomt dat
-                    # 'ie over de thema-naam heen kan vallen als die naar
-                    # een 2e regel wrapt), en geen omlijning/achtergrond --
-                    # gewoon het kale icoontje naast het rangnummer.
-                    rocket_span = " 🚀" if return_pct >= THEME_ROCKET_THRESHOLD_PCT else ""
-
-                    # BELANGRIJK: geen voorloop-spaties/newlines binnen deze
-                    # HTML-string -- Markdown interpreteert 4+ spaties
-                    # inspringing aan het begin van een regel als een
-                    # CODE-BLOK, niet als HTML. Bij een multi-line f-string
-                    # (met Python's eigen, diep-geneste code-inspringing
-                    # erin) leidde dat ertoe dat sommige tegels als rauwe
-                    # HTML-tekst werden getoond i.p.v. gerenderd. Daarom:
-                    # alles op 1 regel, geen inspringing.
-                    #
-                    # height:100% + box-sizing:border-box: laat de tegel
-                    # uitrekken tot de hoogte van de langste tegel IN
-                    # DEZELFDE RIJ (grid-cellen zijn standaard al even hoog,
-                    # maar de tegel zelf rekte daar zonder height:100% niet
-                    # in mee) -- lost op dat een 2-regelige naam (bv.
-                    # 'Genomics & Biotech') de rij-hoogte liet verschillen
-                    # t.o.v. een 1-regelige naam ernaast.
-                    #
-                    # white-space:nowrap op het percentage-blok: voorkomt
-                    # dat de pijl (↗/↘) en het percentage bij een bepaalde
-                    # tegel-breedte naar een 2e regel wrappen (wat de pijl
-                    # ineens 'hoger' liet lijken t.o.v. andere tegels).
-                    return (
-                        f'<div style="height:100%; box-sizing:border-box; display:flex; flex-direction:column; '
-                        f'background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
-                        f'border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px; padding: 0.9rem 1rem;">'
-                        f'<div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}{rocket_span}</div>'
-                        f'<div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{theme_name}</div>'
-                        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:auto; padding-top:6px; white-space:nowrap;">{trend_arrow} {return_pct:+.1f}%</div>'
-                        f'</div>'
-                    )
-
-                # CSS-grid met auto-fill/minmax i.p.v. st.columns() -- dat
-                # laatste houdt altijd hetzelfde aantal kolommen aan (wordt
-                # alleen smaller op mobiel, niet minder kolommen), terwijl
-                # auto-fill echt herschikt naar minder kolommen op een smal
-                # scherm (bv. 2 i.p.v. 6+ op desktop) -- de kern van
-                # 'mobiel-vriendelijk'.
-                theme_tiles_html = "".join(
-                    _theme_tile_html(i + 1, r["theme"], r["return_pct"]) for i, r in enumerate(theme_rotation)
-                )
-                # Ook de outer wrapper zonder inspringing, zelfde reden.
-                st.markdown(
-                    f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
-                    f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{theme_tiles_html}</div>',
-                    unsafe_allow_html=True,
-                )
+                _render_rotation_tiles(theme_rotation, "theme")
             else:
                 st.caption("No theme data available right now.")
 
-            st.markdown("**Trend -- spot a reversal before it shows up in the table above**")
-            st.caption("Each line shows how a theme's trailing 1-month return has evolved over the last 6 months. "
-                       "A line crossing from below zero to above (or vice versa) is a rotation signal.")
+            st.markdown("**Trend**")
+            st.caption("A line crossing zero is a rotation signal.")
             with st.spinner("Building trend chart..."):
                 theme_trend = build_theme_rotation_trend()
             if theme_trend:
