@@ -107,6 +107,15 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+.nav-bar-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.nav-bar-vertical .nav-link {
+    width: 100%;
+    box-sizing: border-box;
+}
 .nav-link, .nav-link:visited, .nav-link:active {
     font-family: 'Inter', sans-serif;
     font-size: 0.9rem;
@@ -2786,14 +2795,12 @@ def _nav_class_any(view_names: list) -> str:
     return "nav-link active" if current_view in view_names else "nav-link"
 
 
-header_col, login_col = st.columns([5, 1])
-
-with header_col:
+with st.sidebar:
     st.markdown(
         f"""
-        <div class="app-header">
+        <div class="app-header" style="border-bottom:none; padding:0 0 0.5rem 0; margin-bottom:0.5rem;">
             <a href="?view={_default_view}" class="app-header-top" target="_self">
-                <svg width="42" height="42" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <svg width="36" height="36" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                     <rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#1FAE96"
                           stroke-width="2.5" transform="rotate(45 24 24)"/>
                     <polyline points="13,30 20,22 26,26 33,15" fill="none" stroke="#1FAE96"
@@ -2801,25 +2808,28 @@ with header_col:
                     <circle cx="33" cy="15" r="2.3" fill="#1FAE96"/>
                 </svg>
                 <div>
-                    <h1>Hesty's</h1>
+                    <h1 style="font-size:1.35rem !important;">Hesty's</h1>
                     <div class="tagline">YOUR PERSONAL INVESTMENT ASSISTANT</div>
                 </div>
             </a>
-            <div class="nav-bar">
-                <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
-                <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
-                <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
-                <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
-                <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
-                <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
-            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-with login_col:
-    st.markdown("<div style='height: 1.4rem'></div>", unsafe_allow_html=True)  # verticaal uitlijnen met het logo
+    st.markdown(
+        f"""
+        <div class="nav-bar-vertical" style="margin-top: 1.25rem;">
+            <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
+            <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
+            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
+            <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
+            <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
+            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.divider()
     if st.user.is_logged_in:
         import database as _database_for_identity
         _database_for_identity.ensure_user_identity(st.user.email, st.user.name)
@@ -3214,7 +3224,7 @@ elif current_view == "discover":
             '</div>'
             '<div style="margin-top:1.75rem; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">'
             '<a href="#signup" style="background:#1FAE96; color:#0B1210; font-weight:700; font-size:0.95rem; '
-            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block;">Get my free signals &rarr;</a>'
+            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block;">Start free, in seconds &rarr;</a>'
             '<a href="#signals" style="background:transparent; color:#EAEDF1; font-weight:600; font-size:0.95rem; '
             'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block; '
             'border:1px solid rgba(234,237,241,0.3);">Browse today\'s signals</a>'
