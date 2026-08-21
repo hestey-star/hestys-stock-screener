@@ -3553,25 +3553,23 @@ elif current_view == "discover":
         _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
         # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-        with st.expander("📡 Momentocrats", expanded=False):
+        with st.expander("📡 Momentocrats", expanded=False, key="momentocrats_expander"):
             st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
 
-            # Moderne pill-toggle i.p.v. st.radio -- die zag er met de
-            # bolletjes wat oldschool uit, past niet bij de rest van de
-            # (tegel-gebaseerde) pagina. Zelfde stijl als de nav-links.
-            current_timeframe = st.query_params.get("timeframe", "daily")
-
-            def _timeframe_class(tf):
-                return "nav-link active" if current_timeframe == tf else "nav-link"
-
-            st.markdown(
-                f'<div class="nav-bar" style="margin-bottom:0.5rem;">'
-                f'<a href="?view=discover&timeframe=daily" class="{_timeframe_class("daily")}" target="_self">Daily</a>'
-                f'<a href="?view=discover&timeframe=weekly" class="{_timeframe_class("weekly")}" target="_self">Weekly</a>'
-                f'</div>',
-                unsafe_allow_html=True,
+            # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
+            # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
+            # <a href="?...">), waardoor de expander steeds weer dichtklapte.
+            # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
+            # (geen page-reload), dus de expander-status blijft nu intact --
+            # en ziet er nog steeds modern/pill-achtig uit, geen oldschool
+            # radio-bolletjes.
+            current_timeframe = st.segmented_control(
+                "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
+                default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
             )
-            csv_file = "supertrend_signals_daily.csv" if current_timeframe == "daily" else "supertrend_signals.csv"
+            if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
+                current_timeframe = "Daily"
+            csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
 
             df_screener = load_screener_data(csv_file)
             if df_screener is None or df_screener.empty:
