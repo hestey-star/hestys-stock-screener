@@ -1369,9 +1369,13 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     else:
         color = "#EAEDF1"
 
+    # 2x2-grid i.p.v. alles op 1 rij -- bij 4 stats naast elkaar in een
+    # smalle tegel was er te weinig ruimte per label, waardoor woorden
+    # midden doorbraken (bv. 'FLIP'/'PED'). white-space:nowrap op zowel
+    # het label als de waarde voorkomt dat definitief.
     secondary_html = "".join(
-        f'<div style="flex:1; min-width:0;">'
-        f'<div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">{label}</div>'
+        f'<div style="min-width:0;">'
+        f'<div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{label}</div>'
         f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px; white-space:nowrap;">{value}</div>'
         f'</div>'
         for label, value in secondary_stats
@@ -1386,7 +1390,7 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
         f'<div style="font-size:1.05rem; font-weight:800; color:#EAEDF1;">{ticker}</div>'
         f'<div style="font-size:1.5rem; font-weight:800; color:{color}; margin-top:4px; white-space:nowrap;">{primary_value}</div>'
         f'<div style="font-size:0.68rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
-        f'<div style="display:flex; gap:0.9rem; margin-top:auto; padding-top:8px; '
+        f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; margin-top:auto; padding-top:8px; '
         f'border-top:1px solid rgba(137,146,163,0.15);">{secondary_html}</div>'
         f'</div>'
     )
@@ -1396,7 +1400,7 @@ def _render_signal_cards(cards_html: list) -> None:
     """Rendert een responsieve grid van signaal-kaarten (zelfde auto-fill/minmax-aanpak als rotatie-tegels)."""
     combined = "".join(cards_html)
     st.markdown(
-        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); '
+        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); '
         f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
         unsafe_allow_html=True,
     )
