@@ -3184,21 +3184,31 @@ elif current_view == "discover":
             if theme_rotation:
                 def _theme_gradient_color(return_pct):
                     """
-                    Interpoleert soepel tussen rood (sterk negatief, <=-15%),
+                    Interpoleert tussen rood (sterk negatief, <=-15%),
                     amber (neutraal, rond 0%), en jade-groen (sterk
                     positief, >=+15%) -- i.p.v. binair groen/rood, zodat
                     echte uitschieters in BEIDE richtingen er visueel
                     uitspringen t.o.v. een thema dat maar een beetje
                     beweegt.
+
+                    Gebruikt een vierkantswortel-curve i.p.v. een lineaire
+                    -- bij lineair bewoog een klein percentage (bv. +2.6%)
+                    nauwelijks weg van amber, waardoor + en - moeilijk uit
+                    elkaar te houden waren op het oog. Met sqrt() beweegt
+                    de kleur SNEL weg van amber bij kleine percentages, en
+                    vlakt af richting de uiterste kleur -- meer contrast
+                    precies waar het toe doet (de veelvoorkomende, kleine
+                    percentages), terwijl grote uitschieters nog steeds
+                    gewoon uitkomen op puur rood/groen.
                     """
                     clamped = max(-15.0, min(15.0, return_pct))
                     red, amber, green = (229, 72, 77), (232, 169, 60), (31, 174, 150)
                     if clamped >= 0:
-                        t = clamped / 15.0
+                        t = (clamped / 15.0) ** 0.5  # 0 = amber, 1 = puur groen
                         start, end = amber, green
                     else:
-                        t = (clamped + 15.0) / 15.0
-                        start, end = red, amber
+                        t = ((-clamped) / 15.0) ** 0.5  # 0 = amber, 1 = puur rood
+                        start, end = amber, red
                     r = round(start[0] + (end[0] - start[0]) * t)
                     g = round(start[1] + (end[1] - start[1]) * t)
                     b = round(start[2] + (end[2] - start[2]) * t)
@@ -3226,12 +3236,26 @@ elif current_view == "discover":
                     # erin) leidde dat ertoe dat sommige tegels als rauwe
                     # HTML-tekst werden getoond i.p.v. gerenderd. Daarom:
                     # alles op 1 regel, geen inspringing.
+                    #
+                    # height:100% + box-sizing:border-box: laat de tegel
+                    # uitrekken tot de hoogte van de langste tegel IN
+                    # DEZELFDE RIJ (grid-cellen zijn standaard al even hoog,
+                    # maar de tegel zelf rekte daar zonder height:100% niet
+                    # in mee) -- lost op dat een 2-regelige naam (bv.
+                    # 'Genomics & Biotech') de rij-hoogte liet verschillen
+                    # t.o.v. een 1-regelige naam ernaast.
+                    #
+                    # white-space:nowrap op het percentage-blok: voorkomt
+                    # dat de pijl (↗/↘) en het percentage bij een bepaalde
+                    # tegel-breedte naar een 2e regel wrappen (wat de pijl
+                    # ineens 'hoger' liet lijken t.o.v. andere tegels).
                     return (
-                        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
+                        f'<div style="height:100%; box-sizing:border-box; display:flex; flex-direction:column; '
+                        f'background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
                         f'border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px; padding: 0.9rem 1rem;">'
                         f'<div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}{rocket_span}</div>'
                         f'<div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{theme_name}</div>'
-                        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{trend_arrow} {return_pct:+.1f}%</div>'
+                        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:auto; padding-top:6px; white-space:nowrap;">{trend_arrow} {return_pct:+.1f}%</div>'
                         f'</div>'
                     )
 
