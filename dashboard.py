@@ -1352,7 +1352,7 @@ def _render_rotation_tiles(items: list, name_key: str) -> None:
     )
 
 
-def _signal_card_html(ticker: str, primary_label: str, primary_value: str, primary_positive, secondary_stats: list) -> str:
+def _signal_card_html(ticker: str, primary_label: str, primary_value: str, primary_positive, secondary_stats: list, standout: bool = False) -> str:
     """
     Bouwt 1 signaal-kaart (Momentocrats/Snowballers/Rocket List) -- i.p.v.
     een brede st.dataframe met 13+ kolommen, die op mobiel dubbel-scrollen
@@ -1361,6 +1361,9 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
 
     primary_positive: True (groen), False (rood), of None (neutraal wit)
     secondary_stats: lijst van (label, al-geformatteerde waarde)-tuples
+    standout: True voor een extra visueel accent (sterkere rand + gloed +
+    ⭐-badge) bij écht opvallende signalen (bv. Momentocrats-score >= 8) --
+    precies de handvol die de moeite waard zijn om verder te bekijken.
     """
     if primary_positive is True:
         color = "#1FAE96"
@@ -1381,13 +1384,18 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
         for label, value in secondary_stats
     )
 
+    star_badge = ' <span style="font-size:0.9rem;">⭐</span>' if standout else ""
+    border_style = "1.5px solid rgba(31,174,150,0.6)" if standout else "1px solid rgba(137,146,163,0.25)"
+    box_shadow = "box-shadow:0 0 16px rgba(31,174,150,0.18); " if standout else ""
+    background = "background:rgba(31,174,150,0.06); " if standout else "background:rgba(137,146,163,0.05); "
+
     # Geen voorloop-spaties/newlines -- zelfde reden als bij de rotatie-
     # tegels: Markdown zou dit anders als een code-blok interpreteren.
     return (
-        f'<div style="height:100%; box-sizing:border-box; background:rgba(137,146,163,0.05); '
-        f'border:1px solid rgba(137,146,163,0.25); border-radius:12px; padding:0.9rem 1rem; '
+        f'<div style="height:100%; box-sizing:border-box; {background}'
+        f'border:{border_style}; {box_shadow}border-radius:12px; padding:0.9rem 1rem; '
         f'display:flex; flex-direction:column;">'
-        f'<div style="font-size:1.05rem; font-weight:800; color:#EAEDF1;">{ticker}</div>'
+        f'<div style="font-size:1.05rem; font-weight:800; color:#EAEDF1;">{ticker}{star_badge}</div>'
         f'<div style="font-size:1.5rem; font-weight:800; color:{color}; margin-top:4px; white-space:nowrap;">{primary_value}</div>'
         f'<div style="font-size:0.68rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
         f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; margin-top:auto; padding-top:8px; '
@@ -3547,10 +3555,23 @@ elif current_view == "discover":
         # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
         with st.expander("📡 Momentocrats", expanded=False):
             st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
-            timeframe = st.radio("Timeframe", ["Daily", "Weekly"], horizontal=True, key="screener_timeframe")
-            csv_file = "supertrend_signals_daily.csv" if timeframe == "Daily" else "supertrend_signals.csv"
 
-            st.caption(f"Last updated: {file_last_modified(csv_file)}")
+            # Moderne pill-toggle i.p.v. st.radio -- die zag er met de
+            # bolletjes wat oldschool uit, past niet bij de rest van de
+            # (tegel-gebaseerde) pagina. Zelfde stijl als de nav-links.
+            current_timeframe = st.query_params.get("timeframe", "daily")
+
+            def _timeframe_class(tf):
+                return "nav-link active" if current_timeframe == tf else "nav-link"
+
+            st.markdown(
+                f'<div class="nav-bar" style="margin-bottom:0.5rem;">'
+                f'<a href="?view=discover&timeframe=daily" class="{_timeframe_class("daily")}" target="_self">Daily</a>'
+                f'<a href="?view=discover&timeframe=weekly" class="{_timeframe_class("weekly")}" target="_self">Weekly</a>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            csv_file = "supertrend_signals_daily.csv" if current_timeframe == "daily" else "supertrend_signals.csv"
 
             df_screener = load_screener_data(csv_file)
             if df_screener is None or df_screener.empty:
@@ -3558,12 +3579,12 @@ elif current_view == "discover":
             else:
                 df_screener = df_screener.sort_values("score", ascending=False)
 
-                min_score = st.slider("Minimum score", float(df_screener["score"].min()),
-                                       float(df_screener["score"].max()), float(df_screener["score"].min()))
-                filtered = df_screener[df_screener["score"] >= min_score].copy()
-
-                total_matching = len(filtered)
-                filtered = filtered.head(_signal_display_limit)
+                # De 'minimum score'-slider is weg -- bleek in de praktijk
+                # nauwelijks gebruikt te worden. Toont nu gewoon alle
+                # matchende signalen (tot de weergavelimiet), al gesorteerd
+                # op score.
+                total_matching = len(df_screener)
+                filtered = df_screener.head(_signal_display_limit)
 
                 # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
                 # dat dwingt op mobiel dubbel scrollen af, verticaal EN
@@ -3585,10 +3606,11 @@ elif current_view == "discover":
                         secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
                     cards_html.append(_signal_card_html(
                         row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
+                        standout=row["score"] >= 8.0,
                     ))
                 _render_signal_cards(cards_html)
-                st.caption(f"{len(filtered)} of {total_matching} matching signals shown. Score combines flip "
-                           "freshness, ROIC, relative strength, volume, earnings surprise, and fair value.")
+                st.caption(f"{len(filtered)} of {total_matching} shown, updated {file_last_modified(csv_file)}. "
+                           "⭐ = score 8+, usually the ones worth a closer look.")
                 if not _is_premium_discover and total_matching > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                             f"Upgrade to Premium to see all {total_matching}.")
