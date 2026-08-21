@@ -3204,7 +3204,7 @@ elif current_view == "discover":
                     b = round(start[2] + (end[2] - start[2]) * t)
                     return r, g, b
 
-                THEME_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-badge
+                THEME_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-icoontje
 
                 def _theme_tile_html(rank, theme_name, return_pct):
                     r, g, b = _theme_gradient_color(return_pct)
@@ -3212,24 +3212,28 @@ elif current_view == "discover":
                     text_color = f"rgb({accent_rgb})"
                     trend_arrow = "↗" if return_pct >= 0 else "↘"
 
-                    rocket_html = ""
-                    if return_pct >= THEME_ROCKET_THRESHOLD_PCT:
-                        rocket_html = (
-                            '<div style="position:absolute; top:8px; right:8px; background:rgba(31,174,150,0.18); '
-                            'border:1px solid rgba(31,174,150,0.5); border-radius:20px; padding:2px 8px; '
-                            'font-size:0.85rem; box-shadow:0 0 10px rgba(31,174,150,0.35);">🚀</div>'
-                        )
+                    # Inline i.p.v. absoluut gepositioneerd (voorkomt dat
+                    # 'ie over de thema-naam heen kan vallen als die naar
+                    # een 2e regel wrapt), en geen omlijning/achtergrond --
+                    # gewoon het kale icoontje naast het rangnummer.
+                    rocket_span = " 🚀" if return_pct >= THEME_ROCKET_THRESHOLD_PCT else ""
 
-                    return f"""
-                    <div style="position:relative; background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02));
-                                border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px;
-                                padding: 0.9rem 1rem;">
-                        {rocket_html}
-                        <div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}</div>
-                        <div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{theme_name}</div>
-                        <div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{trend_arrow} {return_pct:+.1f}%</div>
-                    </div>
-                    """
+                    # BELANGRIJK: geen voorloop-spaties/newlines binnen deze
+                    # HTML-string -- Markdown interpreteert 4+ spaties
+                    # inspringing aan het begin van een regel als een
+                    # CODE-BLOK, niet als HTML. Bij een multi-line f-string
+                    # (met Python's eigen, diep-geneste code-inspringing
+                    # erin) leidde dat ertoe dat sommige tegels als rauwe
+                    # HTML-tekst werden getoond i.p.v. gerenderd. Daarom:
+                    # alles op 1 regel, geen inspringing.
+                    return (
+                        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
+                        f'border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px; padding: 0.9rem 1rem;">'
+                        f'<div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}{rocket_span}</div>'
+                        f'<div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{theme_name}</div>'
+                        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{trend_arrow} {return_pct:+.1f}%</div>'
+                        f'</div>'
+                    )
 
                 # CSS-grid met auto-fill/minmax i.p.v. st.columns() -- dat
                 # laatste houdt altijd hetzelfde aantal kolommen aan (wordt
@@ -3240,13 +3244,10 @@ elif current_view == "discover":
                 theme_tiles_html = "".join(
                     _theme_tile_html(i + 1, r["theme"], r["return_pct"]) for i, r in enumerate(theme_rotation)
                 )
+                # Ook de outer wrapper zonder inspringing, zelfde reden.
                 st.markdown(
-                    f"""
-                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
-                                gap:0.6rem; margin: 0.5rem 0 1rem 0;">
-                        {theme_tiles_html}
-                    </div>
-                    """,
+                    f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
+                    f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{theme_tiles_html}</div>',
                     unsafe_allow_html=True,
                 )
             else:
