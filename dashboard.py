@@ -3182,13 +3182,35 @@ elif current_view == "discover":
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
             if theme_rotation:
+                def _theme_gradient_color(return_pct):
+                    """
+                    Interpoleert soepel tussen rood (sterk negatief, <=-15%),
+                    amber (neutraal, rond 0%), en jade-groen (sterk
+                    positief, >=+15%) -- i.p.v. binair groen/rood, zodat
+                    echte uitschieters in BEIDE richtingen er visueel
+                    uitspringen t.o.v. een thema dat maar een beetje
+                    beweegt.
+                    """
+                    clamped = max(-15.0, min(15.0, return_pct))
+                    red, amber, green = (229, 72, 77), (232, 169, 60), (31, 174, 150)
+                    if clamped >= 0:
+                        t = clamped / 15.0
+                        start, end = amber, green
+                    else:
+                        t = (clamped + 15.0) / 15.0
+                        start, end = red, amber
+                    r = round(start[0] + (end[0] - start[0]) * t)
+                    g = round(start[1] + (end[1] - start[1]) * t)
+                    b = round(start[2] + (end[2] - start[2]) * t)
+                    return r, g, b
+
                 def _theme_tile_html(theme_name, return_pct):
-                    is_positive = return_pct >= 0
-                    accent_rgb = "31,174,150" if is_positive else "229,72,77"
-                    text_color = "#1FAE96" if is_positive else "#E5484D"
+                    r, g, b = _theme_gradient_color(return_pct)
+                    accent_rgb = f"{r},{g},{b}"
+                    text_color = f"rgb({accent_rgb})"
                     return f"""
-                    <div style="background: linear-gradient(135deg, rgba({accent_rgb},0.16), rgba({accent_rgb},0.02));
-                                border: 1px solid rgba({accent_rgb},0.35); border-radius: 12px;
+                    <div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02));
+                                border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px;
                                 padding: 0.9rem 1rem;">
                         <div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em;">{theme_name}</div>
                         <div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{return_pct:+.1f}%</div>
