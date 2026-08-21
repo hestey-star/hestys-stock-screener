@@ -3822,11 +3822,19 @@ elif current_view == "portfolio":
             st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
                        "(CSV) to import your full buy/sell history in one go, instead of "
                        "logging each one by hand.")
-            last_csv_import = database.get_last_csv_import(user_email)
-            if last_csv_import:
-                import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
-                filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
-                st.caption(f"📥 Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
+            # Defensief: hasattr + try/except, zodat een eventueel niet
+            # (nog) correct doorgekomen database.py-update deze SECTIE
+            # laat degraderen (gewoon geen 'laatst geimporteerd'-regel
+            # tonen) i.p.v. de HELE pagina te laten crashen.
+            if hasattr(database, "get_last_csv_import"):
+                try:
+                    last_csv_import = database.get_last_csv_import(user_email)
+                except Exception:
+                    last_csv_import = None
+                if last_csv_import:
+                    import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
+                    filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
+                    st.caption(f"📥 Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
             st.caption("Using a different broker?")
             st.markdown(
                 '<a href="?view=support" class="button-link" target="_self">Go to Support &rarr;</a>',
@@ -4029,7 +4037,11 @@ elif current_view == "portfolio":
                                f"{imported_positions} new position(s)!{dup_txt}")
                     already_imported.add(degiro_file.name)
                     st.session_state["degiro_imported_filenames"] = already_imported
-                    database.set_last_csv_import(user_email, datetime.now().isoformat(), degiro_file.name)
+                    if hasattr(database, "set_last_csv_import"):
+                        try:
+                            database.set_last_csv_import(user_email, datetime.now().isoformat(), degiro_file.name)
+                        except Exception:
+                            pass  # het loggen van dit tijdstip mag de daadwerkelijke import nooit blokkeren
                     for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
                                        "degiro_ticker_matches", "degiro_ticker_candidates"]:
                         st.session_state.pop(state_key, None)
