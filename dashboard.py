@@ -1352,6 +1352,56 @@ def _render_rotation_tiles(items: list, name_key: str) -> None:
     )
 
 
+def _signal_card_html(ticker: str, primary_label: str, primary_value: str, primary_positive, secondary_stats: list) -> str:
+    """
+    Bouwt 1 signaal-kaart (Momentocrats/Snowballers/Rocket List) -- i.p.v.
+    een brede st.dataframe met 13+ kolommen, die op mobiel dubbel-scrollen
+    afdwingt (verticaal EN horizontaal). Toont de KERN-metric groot en
+    gekleurd, en een paar secundaire stats compact eronder.
+
+    primary_positive: True (groen), False (rood), of None (neutraal wit)
+    secondary_stats: lijst van (label, al-geformatteerde waarde)-tuples
+    """
+    if primary_positive is True:
+        color = "#1FAE96"
+    elif primary_positive is False:
+        color = "#E5484D"
+    else:
+        color = "#EAEDF1"
+
+    secondary_html = "".join(
+        f'<div style="flex:1; min-width:0;">'
+        f'<div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">{label}</div>'
+        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px; white-space:nowrap;">{value}</div>'
+        f'</div>'
+        for label, value in secondary_stats
+    )
+
+    # Geen voorloop-spaties/newlines -- zelfde reden als bij de rotatie-
+    # tegels: Markdown zou dit anders als een code-blok interpreteren.
+    return (
+        f'<div style="height:100%; box-sizing:border-box; background:rgba(137,146,163,0.05); '
+        f'border:1px solid rgba(137,146,163,0.25); border-radius:12px; padding:0.9rem 1rem; '
+        f'display:flex; flex-direction:column;">'
+        f'<div style="font-size:1.05rem; font-weight:800; color:#EAEDF1;">{ticker}</div>'
+        f'<div style="font-size:1.5rem; font-weight:800; color:{color}; margin-top:4px; white-space:nowrap;">{primary_value}</div>'
+        f'<div style="font-size:0.68rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
+        f'<div style="display:flex; gap:0.9rem; margin-top:auto; padding-top:8px; '
+        f'border-top:1px solid rgba(137,146,163,0.15);">{secondary_html}</div>'
+        f'</div>'
+    )
+
+
+def _render_signal_cards(cards_html: list) -> None:
+    """Rendert een responsieve grid van signaal-kaarten (zelfde auto-fill/minmax-aanpak als rotatie-tegels)."""
+    combined = "".join(cards_html)
+    st.markdown(
+        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); '
+        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
     """
     Rangschikt sectoren op trailing-rendement -- een simpel sector-rotatie-
@@ -3510,74 +3560,33 @@ elif current_view == "discover":
                                        float(df_screener["score"].max()), float(df_screener["score"].min()))
                 filtered = df_screener[df_screener["score"] >= min_score].copy()
 
-                # 'benchmark' is interne informatie (welke index gebruikt is voor de
-                # vergelijking) -- niet interessant genoeg om te tonen, dus weg ermee
-                filtered.drop(columns=["benchmark"], errors="ignore", inplace=True)
-
-                # Nette, leesbare Engelse kolomnamen i.p.v. de ruwe Python-veldnamen met
-                # underscores -- bevat zowel de wekelijkse (weken_*) als dagelijkse
-                # (dagen_*) veldnamen, aangezien beide varianten hier getoond worden
-                column_labels = {
-                    "ticker": "Ticker", "flip_date": "Flip Date",
-                    "weken_geleden": "Weeks Ago", "dagen_geleden": "Days Ago",
-                    "voorgaande_trend_weken": "Prior Trend (Weeks)", "voorgaande_trend_dagen": "Prior Trend (Days)",
-                    "prijs_bij_omslag": "Price at Flip",
-                    "prijs_nu": "Price Now", "sinds_omslag_pct": "Since Flip",
-                    "boven_ema20": "Above EMA", "boven_ema": "Above EMA",
-                    "relatieve_sterkte": "Relative Strength", "roic_pct": "ROIC", "roic_trend": "ROIC Trend",
-                    "volume_bevestigd": "Volume Confirmed", "earnings_surprise_pct": "Earnings Surprise",
-                    "earnings_beat": "Earnings Beat", "earnings_date": "Earnings Date",
-                    "weken_sinds_earnings": "Weeks Since Earnings", "dagen_sinds_earnings": "Days Since Earnings",
-                    "fair_value": "Fair Value",
-                    "afwijking_fair_value_pct": "Vs Fair Value", "score": "Score",
-                }
-                filtered.rename(columns=column_labels, inplace=True)
-
-                # Score als 3e kolom, de rest in de logische volgorde erachter
-                preferred_order = [
-                    "Ticker", "Flip Date", "Score", "Weeks Ago", "Days Ago",
-                    "Prior Trend (Weeks)", "Prior Trend (Days)",
-                    "Price at Flip", "Price Now", "Since Flip", "Above EMA",
-                    "Relative Strength", "ROIC", "ROIC Trend", "Volume Confirmed",
-                    "Earnings Surprise", "Earnings Beat", "Earnings Date",
-                    "Weeks Since Earnings", "Days Since Earnings", "Fair Value", "Vs Fair Value",
-                ]
-                ordered_cols = [c for c in preferred_order if c in filtered.columns]
-                ordered_cols += [c for c in filtered.columns if c not in ordered_cols]  # vangnet voor eventuele extra kolommen
-                filtered = filtered[ordered_cols]
-
-                format_dict = {
-                    "Price at Flip": "{:.2f}", "Price Now": "{:.2f}",
-                    "Since Flip": "{:+.2f}%", "Relative Strength": "{:+.2f}%",
-                    "ROIC": "{:+.1f}%", "Score": "{:.2f}",
-                    "Earnings Surprise": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%",
-                    "Fair Value": "{:.2f}", "Weeks Since Earnings": "{:.0f}",
-                }
-                format_dict = {k: v for k, v in format_dict.items() if k in filtered.columns}
-
                 total_matching = len(filtered)
                 filtered = filtered.head(_signal_display_limit)
 
-                st.dataframe(
-                    filtered.style.format(format_dict, na_rep="unknown")
-                                  .background_gradient(subset=["Score"], cmap="Greens")
-                                  .background_gradient(subset=["Relative Strength"], cmap="RdYlGn"),
-                    width="stretch",
-                    column_config={
-                        "Score": st.column_config.NumberColumn(
-                            "Score",
-                            help=(
-                                "Out of 10, built from 6 weighted parts: freshness of the flip (max 1.5), "
-                                "ROIC level + trend (max 1.5), relative strength vs. the index (max 2.5), "
-                                "volume confirmation (max 1.0), recent earnings surprise (max 1.5), and how "
-                                "far below the analyst price target it trades (max 2.0). Missing data counts "
-                                "as neutral (half the max) for that part."
-                            ),
-                        ),
-                    },
-                    height=500,
-                )
-                st.caption(f"{len(filtered)} of {total_matching} matching signals shown.")
+                # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
+                # dat dwingt op mobiel dubbel scrollen af, verticaal EN
+                # horizontaal). 'Weeks ago'/'Days ago' verschilt per
+                # tijdvenster (weekly.csv heeft weken_geleden, daily.csv
+                # heeft dagen_geleden) -- beide velden afgehandeld.
+                cards_html = []
+                for _, row in filtered.iterrows():
+                    secondary = []
+                    if "dagen_geleden" in row.index and pd.notna(row.get("dagen_geleden")):
+                        secondary.append(("Flipped", f"{int(row['dagen_geleden'])}d ago"))
+                    elif "weken_geleden" in row.index and pd.notna(row.get("weken_geleden")):
+                        secondary.append(("Flipped", f"{int(row['weken_geleden'])}w ago"))
+                    if pd.notna(row.get("sinds_omslag_pct")):
+                        secondary.append(("Since flip", f"{row['sinds_omslag_pct']:+.1f}%"))
+                    if pd.notna(row.get("roic_pct")):
+                        secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+                    if pd.notna(row.get("relatieve_sterkte")):
+                        secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+                    cards_html.append(_signal_card_html(
+                        row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
+                    ))
+                _render_signal_cards(cards_html)
+                st.caption(f"{len(filtered)} of {total_matching} matching signals shown. Score combines flip "
+                           "freshness, ROIC, relative strength, volume, earnings surprise, and fair value.")
                 if not _is_premium_discover and total_matching > _signal_display_limit:
                     st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                             f"Upgrade to Premium to see all {total_matching}.")
@@ -3594,19 +3603,29 @@ elif current_view == "discover":
             if os.path.exists("snowball_signals.csv"):
                 df_snowball = pd.read_csv("snowball_signals.csv")
                 if not df_snowball.empty:
-                    df_display = df_snowball.rename(columns={
-                        "ticker": "Ticker", "prijs_nu": "Price", "roic_pct": "ROIC",
-                        "afwijking_fair_value_pct": "Vs Fair Value", "volatiliteit_pct": "Volatility",
-                    })[["Ticker", "Price", "ROIC", "Vs Fair Value", "Volatility"]]
-                    total_snowball = len(df_display)
-                    df_display = df_display.head(_signal_display_limit)
-                    st.dataframe(
-                        df_display.style.format({
-                            "Price": "{:.2f}", "ROIC": "{:+.1f}%", "Vs Fair Value": "{:+.1f}%", "Volatility": "{:.1f}%",
-                        }),
-                        width="stretch", hide_index=True,
-                    )
-                    st.caption(f"{len(df_display)} of {total_snowball} matching stocks shown.")
+                    df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
+                    total_snowball = len(df_snowball)
+                    df_snowball = df_snowball.head(_signal_display_limit)
+
+                    # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
+                    # gebruikelijke +/- logica: een NEGATIEVE afwijking van
+                    # fair value betekent 'goedkoper dan terecht' -- precies
+                    # wat je wil bij dit signaaltype, dus GROEN, niet rood.
+                    cards_html = []
+                    for _, row in df_snowball.iterrows():
+                        secondary = []
+                        if pd.notna(row.get("roic_pct")):
+                            secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+                        if pd.notna(row.get("volatiliteit_pct")):
+                            secondary.append(("Volatility", f"{row['volatiliteit_pct']:.1f}%"))
+                        if pd.notna(row.get("prijs_nu")):
+                            secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                        cards_html.append(_signal_card_html(
+                            row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
+                            row["afwijking_fair_value_pct"] < 0, secondary,
+                        ))
+                    _render_signal_cards(cards_html)
+                    st.caption(f"{len(df_snowball)} of {total_snowball} matching stocks shown.")
                     if not _is_premium_discover and total_snowball > _signal_display_limit:
                         st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                                 f"Upgrade to Premium to see all {total_snowball}.")
@@ -3627,17 +3646,22 @@ elif current_view == "discover":
             if os.path.exists("rocket_list_signals.csv"):
                 df_rocket = pd.read_csv("rocket_list_signals.csv")
                 if not df_rocket.empty:
-                    df_display = df_rocket.rename(columns={
-                        "ticker": "Ticker", "prijs_nu": "Price", "groei_pct": "Growth",
-                        "relatieve_sterkte": "Relative Strength",
-                    })[["Ticker", "Price", "Growth", "Relative Strength"]]
-                    total_rocket = len(df_display)
-                    df_display = df_display.head(_signal_display_limit)
-                    st.dataframe(
-                        df_display.style.format({"Price": "{:.2f}", "Growth": "{:+.1f}%", "Relative Strength": "{:+.1f}%"}),
-                        width="stretch", hide_index=True,
-                    )
-                    st.caption(f"{len(df_display)} of {total_rocket} matching stocks shown.")
+                    df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
+                    total_rocket = len(df_rocket)
+                    df_rocket = df_rocket.head(_signal_display_limit)
+
+                    cards_html = []
+                    for _, row in df_rocket.iterrows():
+                        secondary = []
+                        if pd.notna(row.get("relatieve_sterkte")):
+                            secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+                        if pd.notna(row.get("prijs_nu")):
+                            secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                        cards_html.append(_signal_card_html(
+                            row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
+                        ))
+                    _render_signal_cards(cards_html)
+                    st.caption(f"{len(df_rocket)} of {total_rocket} matching stocks shown.")
                     if not _is_premium_discover and total_rocket > _signal_display_limit:
                         st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
                                 f"Upgrade to Premium to see all {total_rocket}.")
