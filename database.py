@@ -748,3 +748,35 @@ def save_roic_trend_history(ticker_states: dict) -> None:
         for ticker, state in ticker_states.items()
     ]
     client.table("roic_trend_history").upsert(rows, on_conflict="ticker").execute()
+
+
+def get_last_csv_import(user_email: str) -> dict | None:
+    """
+    Geeft tijdstip + bestandsnaam van de laatste broker-CSV-import terug
+    (of None als nog nooit gedaan) -- zelfde patroon als
+    get_last_price_refresh(), maar dan voor de 'Import from a broker'-
+    functie.
+    """
+    client = get_supabase_client()
+    response = (
+        client.table("user_preferences")
+        .select("last_csv_import_at,last_csv_import_filename")
+        .eq("user_email", hash_email(user_email))
+        .execute()
+    )
+    if response.data and response.data[0].get("last_csv_import_at"):
+        return {
+            "timestamp": response.data[0]["last_csv_import_at"],
+            "filename": response.data[0].get("last_csv_import_filename"),
+        }
+    return None
+
+
+def set_last_csv_import(user_email: str, timestamp_iso: str, filename: str) -> None:
+    """Slaat tijdstip + bestandsnaam van een zojuist afgeronde broker-CSV-import op."""
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": hash_email(user_email),
+        "last_csv_import_at": timestamp_iso,
+        "last_csv_import_filename": filename,
+    }).execute()
