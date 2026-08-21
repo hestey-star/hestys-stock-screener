@@ -1,8 +1,7 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-BIIB,2026-08-19,0,26,221.56,221.56,0.0,True,^GSPC,11.21,False,8.5,stijgend,77.4,True,2026-07-29,21,235.57,-5.9,7.43
-TRGP,2026-08-18,1,16,297.77,297.09,-0.23,True,^GSPC,4.71,True,12.2,stijgend,14.2,True,2026-08-06,13,301.81,-1.6,7.25
-JNJ,2026-08-18,1,24,271.11,273.41,0.85,True,^GSPC,14.21,True,17.5,dalend,1.6,True,2026-07-15,35,272.5,0.3,6.33
-STX,2026-08-17,2,35,994.79,832.56,-16.31,False,^GSPC,-0.62,False,73.4,stijgend,12.1,True,2026-07-28,22,1125.0,-26.0,6.08
-MRNA,2026-08-19,0,24,174.38,174.38,0.0,True,^GSPC,268.83,True,-31.3,dalend,4.3,True,2026-07-31,19,50.84,243.0,6.07
-MRVL,2026-08-17,2,29,234.33,237.27,1.25,True,^GSPC,17.74,False,6.1,stijgend,0.6,True,2026-05-27,84,256.91,-7.6,5.57
-HAL,2026-08-17,2,55,34.73,35.02,0.84,True,^GSPC,-18.33,False,14.1,dalend,2.3,True,2026-07-21,29,43.2,-18.9,3.13
+TRGP,2026-08-18,2,16,297.77,302.25,1.5,True,^GSPC,10.89,True,12.2,stijgend,14.2,True,2026-08-06,14,305.24,-1.0,6.87
+BIIB,2026-08-19,1,26,221.56,214.35,-3.25,True,^GSPC,9.39,False,8.5,stijgend,77.4,True,2026-07-29,22,235.57,-9.0,6.67
+COIN,2026-08-20,0,59,172.35,172.35,0.0,True,^GSPC,-5.88,True,9.6,dalend,,False,2026-07-30,21,194.97,-11.6,5.84
+JNJ,2026-08-18,2,24,271.11,267.37,-1.38,True,^GSPC,14.53,True,17.5,dalend,1.6,True,2026-07-15,36,272.5,-1.9,5.67
+MRNA,2026-08-19,1,24,174.38,133.32,-23.55,True,^GSPC,181.86,True,-31.3,dalend,4.3,True,2026-07-31,20,89.33,49.2,5.32
+BG,2026-08-20,0,16,116.57,116.57,0.0,True,^GSPC,-3.95,False,3.2,dalend,2.9,True,2026-07-29,22,141.22,-17.5,5.16
