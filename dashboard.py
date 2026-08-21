@@ -1062,7 +1062,7 @@ THEME_ETFS = {
     "Quantum Computing": "QTUM", "Nuclear Energy": "NLR", "Space": "ARKX",
     "Drones": "UAV", "Materials & Critical Minerals": "REMX", "Fintech": "FINX",
     "Infrastructure": "PAVE", "Power & Utilities": "XLU",
-    "Crypto (Top 10)": "HODLX", "Precious Metals": "GLTR",
+    "Crypto (Top 10)": "HODLX.SW", "Precious Metals": "GLTR",
 }
 
 # yfinance's eigen 'sector'-veld gebruikt ANDERE namen dan onze
