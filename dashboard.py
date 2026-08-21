@@ -3182,13 +3182,36 @@ elif current_view == "discover":
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
             if theme_rotation:
-                df_themes = pd.DataFrame(theme_rotation)[["theme", "return_pct"]]
-                df_themes.columns = ["Theme", "1-Month Return"]
-                st.dataframe(
-                    df_themes.style.format({"1-Month Return": "{:+.1f}%"})
-                                    .background_gradient(subset=["1-Month Return"], cmap="RdYlGn"),
-                    width=320,
-                    hide_index=True,
+                def _theme_tile_html(theme_name, return_pct):
+                    is_positive = return_pct >= 0
+                    accent_rgb = "31,174,150" if is_positive else "229,72,77"
+                    text_color = "#1FAE96" if is_positive else "#E5484D"
+                    return f"""
+                    <div style="background: linear-gradient(135deg, rgba({accent_rgb},0.16), rgba({accent_rgb},0.02));
+                                border: 1px solid rgba({accent_rgb},0.35); border-radius: 12px;
+                                padding: 0.9rem 1rem;">
+                        <div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em;">{theme_name}</div>
+                        <div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:6px;">{return_pct:+.1f}%</div>
+                    </div>
+                    """
+
+                # CSS-grid met auto-fill/minmax i.p.v. st.columns() -- dat
+                # laatste houdt altijd hetzelfde aantal kolommen aan (wordt
+                # alleen smaller op mobiel, niet minder kolommen), terwijl
+                # auto-fill echt herschikt naar minder kolommen op een smal
+                # scherm (bv. 2 i.p.v. 6+ op desktop) -- de kern van
+                # 'mobiel-vriendelijk'.
+                theme_tiles_html = "".join(
+                    _theme_tile_html(r["theme"], r["return_pct"]) for r in theme_rotation
+                )
+                st.markdown(
+                    f"""
+                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+                                gap:0.6rem; margin: 0.5rem 0 1rem 0;">
+                        {theme_tiles_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
             else:
                 st.caption("No theme data available right now.")
