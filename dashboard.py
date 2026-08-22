@@ -2943,19 +2943,38 @@ if current_view == "today":
             """,
             unsafe_allow_html=True,
         )
+        # Tegels i.p.v. een bullet-lijst -- die voelde op mobiel al snel
+        # 'supervol' aan met 6 losse regels + icoontjes. Zelfde stijl als
+        # de hero-tegels (icoon-badge + titel + subtekst), en het overzicht
+        # is meteen ook completer/actueler dan de oude lijst (mistte
+        # 'nieuwe, persoonlijke signalen' -- een van de kernfeatures).
+        today_points = [
+            ("📊", "Your daily performance", "best/worst positions, vs. yesterday"),
+            ("📅", "Earnings & dividends ahead", "for your actual holdings"),
+            ("⚖️", "Risk & concentration alerts", "when a position outgrows your target"),
+            ("🚀", "52-week highs & lows", "the moment they happen"),
+            ("🔍", "New signals, personalized", "matched to what you hold or watch"),
+            ("📰", "News, filtered to your tickers", "no noise"),
+        ]
+        today_points_html = "".join(
+            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
+            f'border-radius:12px; padding:0.85rem 1rem;">'
+            f'<div style="width:32px; height:32px; border-radius:50%; background:rgba(31,174,150,0.18); '
+            f'display:flex; align-items:center; justify-content:center; font-size:1rem;">{emoji}</div>'
+            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:8px; line-height:1.3;">{title}</div>'
+            f'<div style="color:#8992A3; font-size:0.73rem; margin-top:2px; line-height:1.3;">{sub}</div>'
+            f'</div>'
+            for emoji, title, sub in today_points
+        )
         st.markdown(
-            "- 📊 Your real return vs. yesterday, and your best/worst performer today\n"
-            "- 📆 Earnings coming up this week for your positions -- not just on the day itself\n"
-            "- ⚖️ A heads-up if a position outgrows your own risk target\n"
-            "- 💰 Upcoming ex-dividend dates for what you actually hold\n"
-            "- 🚀 A ping when one of your positions hits a new 52-week high or low\n"
-            "- 📰 News, filtered to just the tickers you care about"
+            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
+            unsafe_allow_html=True,
         )
         st.markdown(
             '<a href="?view=discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
             unsafe_allow_html=True,
         )
-        st.info("Log in (top right) once you're ready, then add positions under My Portfolio or "
+        st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
                 "your Watchlist to unlock this.")
     else:
         import database
@@ -3733,7 +3752,7 @@ elif current_view == "portfolio":
             '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
         )
-        st.info("Log in (top right) to track your own positions. No one else can see what you add.")
+        st.info("Log in via the menu to track your own positions. No one else can see what you add.")
         st.stop()
 
     import database
@@ -4411,7 +4430,7 @@ elif current_view == "analyze":
             '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
         )
-        st.info("Log in (top right) to track your own positions and analyze your portfolio. No one else can see what you add.")
+        st.info("Log in via the menu to track your own positions and analyze your portfolio. No one else can see what you add.")
         st.stop()
 
     current_subview = st.query_params.get("subview", "performance")
@@ -5126,7 +5145,7 @@ elif current_view == "settings":
                     st.success("Reset to defaults!")
                     st.rerun()
     else:
-        st.info("Log in (top right) to manage your email preferences.")
+        st.info("Log in via the menu to manage your email preferences.")
 
 elif current_view == "premium":
     import database
@@ -5232,7 +5251,7 @@ elif current_view == "premium":
                 )
 
         if not st.user.is_logged_in:
-            st.info("Log in first (top right) so we know which account to upgrade.")
+            st.info("Log in via the menu first so we know which account to upgrade.")
         elif database.is_premium_user(st.user.email):
             st.success("You're already on Premium. Thank you!")
             customer_id = database.get_stripe_customer_id(st.user.email)
