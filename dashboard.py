@@ -1465,6 +1465,57 @@ def _hero_stat_tile_html(label: str, icon: str, ticker: str, pct: float, accent_
     )
 
 
+def _position_card_html(name: str, ticker: str, logo_url: str, shares_text: str, price_text: str,
+                         day_change_pct, value_text: str, pct_of_portfolio: float) -> str:
+    """
+    Bouwt 1 positie-kaart voor My Portfolio's Overview -- i.p.v. een
+    brede HTML-tabel met 7 kolommen, die op mobiel horizontaal scrollen
+    afdwingt. Logo + naam/ticker bovenaan, 4 kern-stats in een 2x2-grid
+    (zelfde patroon als de signaal-kaarten, voorkomt midden-doorbrekende
+    labels), en een weight-bar onderaan voor het portfolio-aandeel.
+    """
+    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" />' if logo_url else ""
+
+    if day_change_pct is None:
+        day_html = '<span style="color:#8992A3;">-</span>'
+    else:
+        day_color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
+        day_html = f'<span style="color:{day_color};">{day_change_pct:+.1f}%</span>'
+
+    bar_pct = min(pct_of_portfolio, 100)
+
+    return (
+        f'<div style="background: rgba(137,146,163,0.05); border: 1px solid rgba(137,146,163,0.2); '
+        f'border-radius: 12px; padding: 0.9rem 1rem;">'
+        f'<div style="display:flex; align-items:center; gap:0.55rem;">'
+        f'{logo_html}'
+        f'<div style="min-width:0;">'
+        f'<div style="font-weight:700; color:#EAEDF1; font-size:0.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{name}</div>'
+        f'<div style="font-size:0.72rem; color:#1FAE96; font-family:\'IBM Plex Mono\', monospace;">{ticker}</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; margin-top:10px; padding-top:8px; '
+        f'border-top:1px solid rgba(137,146,163,0.15);">'
+        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Shares</div>'
+        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{shares_text}</div></div>'
+        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Price</div>'
+        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{price_text}</div></div>'
+        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Day</div>'
+        f'<div style="font-size:0.82rem; font-weight:600; margin-top:2px;">{day_html}</div></div>'
+        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Value</div>'
+        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{value_text}</div></div>'
+        f'</div>'
+        f'<div style="margin-top:10px;">'
+        f'<div style="display:flex; justify-content:space-between; font-size:0.68rem; color:#8992A3;">'
+        f'<span>% of portfolio</span><span>{pct_of_portfolio:.0f}%</span></div>'
+        f'<div style="height:5px; background:rgba(137,146,163,0.15); border-radius:3px; margin-top:4px;">'
+        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:3px;"></div>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+
 def _radar_row_html(icon: str, text: str) -> str:
     """
     Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
@@ -3880,43 +3931,26 @@ elif current_view == "portfolio":
                 sym = "€" if holding.get("value_currency") == "EUR" else "$"
                 return f"{sym}{value / shares:,.2f}"
 
-            def _format_day_change(holding):
-                pct = holding.get("day_change_pct")
-                if pct is None:
-                    return '<span style="color:#8992A3;">-</span>'
-                color = "#1FAE96" if pct >= 0 else "#E5484D"
-                return f'<span style="color:{color}; font-weight:600;">{pct:+.1f}%</span>'
-
-            def _format_name_with_logo(holding):
-                logo_url = get_company_logo_url(holding["ticker"])
-                logo_html = f'<img src="{logo_url}" class="position-logo" />' if logo_url else ""
-                return f'{logo_html}{holding["naam"]}'
-
-            def _format_pct_with_bar(holding):
+            def _pct_of_portfolio(holding):
                 if total_value <= 0:
-                    return "-"
+                    return 0.0
                 value = holding.get("position_value") or 0
-                pct = value / total_value * 100
-                bar_pct = min(pct, 100)
-                return (
-                    f'<span class="weight-bar-track"><span class="weight-bar-fill" '
-                    f'style="width:{bar_pct:.0f}%;"></span></span>{pct:.0f}%'
-                )
+                return value / total_value * 100
 
-            rows_html = "".join(
-                f'<tr><td>{_format_name_with_logo(h)}</td><td><code>{h["ticker"]}</code></td>'
-                f'<td>{h.get("shares") or "-"}</td><td>{_format_price(h)}</td>'
-                f'<td>{_format_day_change(h)}</td>'
-                f'<td>{_format_value(h)}</td><td>{_format_pct_with_bar(h)}</td></tr>'
+            # Kaarten i.p.v. een brede HTML-tabel (7 kolommen) -- die dwong op
+            # mobiel horizontaal scrollen af, precies het probleem dat we bij de
+            # signaal-tabellen elders op de site al hebben opgelost.
+            position_cards_html = [
+                _position_card_html(
+                    h["naam"], h["ticker"], get_company_logo_url(h["ticker"]),
+                    str(h.get("shares") or "-"), _format_price(h), h.get("day_change_pct"),
+                    _format_value(h), _pct_of_portfolio(h),
+                )
                 for h in holdings
-            )
+            ]
             st.markdown(
-                f"""
-                <table class="positions-table">
-                    <thead><tr><th>Name</th><th>Ticker</th><th>Shares</th><th>Price</th><th>Day</th><th>Value</th><th>% of portfolio</th></tr></thead>
-                    <tbody>{rows_html}</tbody>
-                </table>
-                """,
+                f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); '
+                f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{"".join(position_cards_html)}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4261,10 +4295,12 @@ elif current_view == "portfolio":
             position_mode_options = (
                 ["Existing position", "New position"] if holdings else ["New position"]
             )
-            tx_position_mode = st.radio(
-                "Position", position_mode_options, horizontal=True,
-                key="tx_position_mode", label_visibility="collapsed",
+            tx_position_mode = st.segmented_control(
+                "Position", options=position_mode_options, selection_mode="single",
+                default=position_mode_options[0], key="tx_position_mode", label_visibility="collapsed",
             )
+            if tx_position_mode is None:
+                tx_position_mode = position_mode_options[0]
 
             tx_holding = None
             new_position_symbol = None
@@ -4276,9 +4312,12 @@ elif current_view == "portfolio":
                     "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
                 )
                 tx_holding = tx_holding_options[tx_label]
-                tx_type = st.radio(
-                    "Type", ["Buy", "Sell"], horizontal=True, key="tx_type_radio",
+                tx_type = st.segmented_control(
+                    "Type", options=["Buy", "Sell"], selection_mode="single",
+                    default="Buy", key="tx_type_radio",
                 )
+                if tx_type is None:
+                    tx_type = "Buy"
                 is_buy = tx_type == "Buy"
             else:
                 # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
@@ -4305,14 +4344,15 @@ elif current_view == "portfolio":
                     else:
                         st.caption("No results found for this search -- try a different name.")
 
-            tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-            with tcol1:
+            trow1_col1, trow1_col2 = st.columns(2)
+            with trow1_col1:
                 tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
-            with tcol2:
+            with trow1_col2:
                 tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
-            with tcol3:
+            trow2_col1, trow2_col2 = st.columns(2)
+            with trow2_col1:
                 tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
-            with tcol4:
+            with trow2_col2:
                 tx_date = st.date_input("Date", key="tx_date_input")
 
             can_save = (tx_holding is not None) or (new_position_symbol is not None)
@@ -4415,17 +4455,20 @@ elif current_view == "portfolio":
         watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
 
         if watchlist_items:
-            rows_html = "".join(
-                f'<tr><td>{w["naam"]}</td><td><code>{w["ticker"]}</code></td></tr>'
+            # Pills i.p.v. een tabel -- simpel genoeg (alleen naam+ticker) om
+            # geen kaart-grid nodig te hebben, maar wel consistent met de
+            # rest van de (inmiddels tegel-gebaseerde) pagina.
+            pills_html = "".join(
+                f'<div style="display:inline-flex; align-items:center; gap:0.4rem; '
+                f'background:rgba(137,146,163,0.08); border:1px solid rgba(137,146,163,0.25); '
+                f'border-radius:20px; padding:0.4rem 0.8rem;">'
+                f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem;">{w["naam"]}</span>'
+                f'<span style="color:#1FAE96; font-family:\'IBM Plex Mono\', monospace; font-size:0.75rem;">{w["ticker"]}</span>'
+                f'</div>'
                 for w in watchlist_items
             )
             st.markdown(
-                f"""
-                <table class="positions-table">
-                    <thead><tr><th>Name</th><th>Ticker</th></tr></thead>
-                    <tbody>{rows_html}</tbody>
-                </table>
-                """,
+                f'<div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">{pills_html}</div>',
                 unsafe_allow_html=True,
             )
         else:
