@@ -2,12 +2,18 @@ name: Dagelijkse screener
 
 on:
   schedule:
-    # Maandag t/m vrijdag. LET OP: de tijden staan BEWUST niet op :00/:30 --
-    # GitHub's eigen documentatie waarschuwt dat het hele uur (:00) het
-    # drukste moment is op heel GitHub Actions (gedeeld door alle repo's
-    # tegelijk), en dat geplande runs daardoor vertraagd of zelfs
-    # overgeslagen kunnen worden. Een paar minuten ernaast (bv. :07 i.p.v.
-    # :00) verkleint die kans aanzienlijk.
+    # Dinsdag t/m vrijdag -- BEWUST GEEN maandag. Maandagochtend zou
+    # sowieso alleen vrijdag's slotkoersen laten zien (over het weekend
+    # is er geen nieuwe handelsdag), en dat zit al in zaterdag's weekly-
+    # mail (via de daily-flips-merge). Een aparte maandagmail zou dus
+    # gewoon dezelfde, al-bekende data herhalen.
+    #
+    # LET OP: de tijden staan BEWUST niet op :00/:30 -- GitHub's eigen
+    # documentatie waarschuwt dat het hele uur (:00) het drukste moment
+    # is op heel GitHub Actions (gedeeld door alle repo's tegelijk), en
+    # dat geplande runs daardoor vertraagd of zelfs overgeslagen kunnen
+    # worden. Een paar minuten ernaast (bv. :07 i.p.v. :00) verkleint die
+    # kans aanzienlijk.
     #
     # 05:07 UTC = scan draaien + direct mail naar EU-gebruikers
     #             (~06:07 CET winter / ~07:07 CEST zomer)
@@ -17,10 +23,10 @@ on:
     #             05:07-run al gelukt is (voorkomt een dubbele mail).
     # 12:07 UTC = alleen mail naar VS-oost-gebruikers (~07:07-08:07 ET)
     # 15:07 UTC = alleen mail naar VS-west-gebruikers (~07:07-08:07 PT)
-    - cron: "7 5 * * 1-5"
-    - cron: "37 5 * * 1-5"
-    - cron: "7 12 * * 1-5"
-    - cron: "7 15 * * 1-5"
+    - cron: "7 5 * * 2-5"
+    - cron: "37 5 * * 2-5"
+    - cron: "7 12 * * 2-5"
+    - cron: "7 15 * * 2-5"
   workflow_dispatch:
     inputs:
       region:
@@ -65,11 +71,11 @@ jobs:
       - name: Regio bepalen, en of de scan/mail vandaag al gelukt zijn
         id: determine
         run: |
-          if [ "${{ github.event.schedule }}" = "7 5 * * 1-5" ] || [ "${{ github.event.schedule }}" = "37 5 * * 1-5" ]; then
+          if [ "${{ github.event.schedule }}" = "7 5 * * 2-5" ] || [ "${{ github.event.schedule }}" = "37 5 * * 2-5" ]; then
             REGION="EU"
-          elif [ "${{ github.event.schedule }}" = "7 12 * * 1-5" ]; then
+          elif [ "${{ github.event.schedule }}" = "7 12 * * 2-5" ]; then
             REGION="US_East"
-          elif [ "${{ github.event.schedule }}" = "7 15 * * 1-5" ]; then
+          elif [ "${{ github.event.schedule }}" = "7 15 * * 2-5" ]; then
             REGION="US_West"
           else
             REGION="${{ github.event.inputs.region }}"
