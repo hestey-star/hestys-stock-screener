@@ -663,6 +663,10 @@ def get_concentration_alert(holdings: list, max_position_pct: float = 25.0):
     normale dagen). Hergebruikt dezelfde logica als Analyze's Concentration
     Risk-kaart, maar dan alleen de 'is er iets mis'-check, niet de volledige
     uitleg/rebalancing-tip.
+
+    Geeft (tekst) terug ZONDER het eigen emoji ervoor -- de aanroeper
+    plakt daar zelf een icoon voor, consistent met de andere Today's
+    radar-items.
     """
     total_value = sum(h.get("position_value") or 0 for h in holdings)
     if total_value <= 0:
@@ -670,7 +674,7 @@ def get_concentration_alert(holdings: list, max_position_pct: float = 25.0):
     largest = max(holdings, key=lambda h: h.get("position_value") or 0)
     largest_pct = (largest.get("position_value") or 0) / total_value * 100
     if largest_pct > max_position_pct:
-        return f"⚖️ **{largest['naam']}** is now {largest_pct:.0f}% of your portfolio, above your {max_position_pct:.0f}% target."
+        return f"<b>{largest['naam']}</b> is now {largest_pct:.0f}% of your portfolio, above your {max_position_pct:.0f}% target."
     return None
 
 
@@ -1426,6 +1430,30 @@ def _render_signal_cards(cards_html: list) -> None:
         f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
         unsafe_allow_html=True,
     )
+
+
+def _radar_row_html(icon: str, text: str) -> str:
+    """
+    Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
+    st.markdown()-aanroepen per bullet (voelde als een lange, rommelige
+    wand van gemengde emoji-bullets, vooral op mobiel). 'text' mag HTML
+    bevatten (bv. <b>...</b> voor nadruk), wordt zo doorgegeven.
+    """
+    return (
+        f'<div style="display:flex; align-items:flex-start; gap:0.6rem; padding:7px 0; '
+        f'border-bottom:1px solid rgba(137,146,163,0.12);">'
+        f'<span style="font-size:1rem; flex-shrink:0; line-height:1.4;">{icon}</span>'
+        f'<span style="font-size:0.88rem; color:#EAEDF1; line-height:1.4;">{text}</span>'
+        f'</div>'
+    )
+
+
+def _render_radar_rows(rows_html: list) -> None:
+    """Rendert alle Today's radar-regels als 1 samenhangend blok i.p.v. losse st.markdown-aanroepen per regel."""
+    if not rows_html:
+        return
+    combined = "".join(rows_html)
+    st.markdown(f'<div>{combined}</div>', unsafe_allow_html=True)
 
 
 def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
@@ -3091,27 +3119,33 @@ if current_view == "today":
                             )
                         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
                         with st.expander("See more movers"):
-                            mcol1, mcol2 = st.columns(2)
-                            with mcol1:
-                                st.markdown("Top gainers")
-                                gainers = df_movers.sort_values("change_pct", ascending=False).head(5).rename(
-                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                                )
-                                st.dataframe(gainers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
-                            with mcol2:
-                                st.markdown("Top losers")
-                                losers = df_movers.sort_values("change_pct", ascending=True).head(5).rename(
-                                    columns={"ticker": "Ticker", "change_pct": "Change %"}
-                                )
-                                st.dataframe(losers.style.format({"Change %": "{:+.1f}%"}), width=220, hide_index=True)
+                            gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
+                            losers = df_movers.sort_values("change_pct", ascending=True).head(5)
+
+                            st.markdown("**Top gainers**")
+                            _render_signal_cards([
+                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", True, [])
+                                for _, row in gainers.iterrows()
+                            ])
+                            st.markdown("**Top losers**")
+                            _render_signal_cards([
+                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", False, [])
+                                for _, row in losers.iterrows()
+                            ])
                     else:
                         st.caption("No mover data available right now.")
                 else:
-                    st.caption("No data yet -- this updates once daily via the scheduled scan. Check back tomorrow.")
+                    st.caption("No data yet. This updates once daily via the scheduled scan. Check back tomorrow.")
 
             # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
             with st.container(border=True):
                 st.markdown("**Today's radar**")
+
+                # Alle items verzamelen i.p.v. losse st.markdown()-aanroepen
+                # per bullet -- dat voelde als een lange, rommelige wand van
+                # gemengde emoji-bullets, vooral op mobiel. Nu 1 samenhangend
+                # blok aan het eind.
+                radar_rows = []
 
                 macro_events = get_todays_macro_events(max_items=3)
                 with st.spinner("Checking today's radar..."):
@@ -3120,17 +3154,18 @@ if current_view == "today":
                 todays_events = macro_events + [
                     {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
                 ]
-                if todays_events:
-                    for event in todays_events[:3]:
-                        time_part = f" -- {event['time']}" if "time" in event else ""
-                        st.markdown(f"- 📅 {event['name']}{time_part}")
+                for event in todays_events[:3]:
+                    time_part = f" ({event['time']})" if "time" in event else ""
+                    radar_rows.append(_radar_row_html("📅", f"{event['name']}{time_part}"))
 
                 # Aankomende earnings deze week -- niet alleen vandaag, ook een
                 # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
                 upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, days_ahead=5, max_items=3)
                 for e in upcoming_earnings:
                     day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
-                    st.markdown(f"- 📆 **{e['naam']}** ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).")
+                    radar_rows.append(_radar_row_html(
+                        "📆", f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']})."
+                    ))
 
                 # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
                 # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
@@ -3138,13 +3173,15 @@ if current_view == "today":
                     risk_profile = database.get_risk_profile(user_email)
                     concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
                     if concentration_alert:
-                        st.markdown(f"- {concentration_alert}")
+                        radar_rows.append(_radar_row_html("⚖️", concentration_alert))
 
                 # Aankomende ex-dividend-data voor je HUIDIGE posities.
                 upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
                 for d in upcoming_ex_div:
                     day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
-                    st.markdown(f"- 💰 **{d['naam']}** goes ex-dividend {day_word} ({d['ex_div_date']}).")
+                    radar_rows.append(_radar_row_html(
+                        "💰", f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']})."
+                    ))
 
                 # 52-weken-record -- een leuk, opvallend signaal als een van je
                 # posities vandaag een nieuwe hoogte/laagte raakt.
@@ -3152,13 +3189,13 @@ if current_view == "today":
                 for r in records_52wk:
                     emoji = "🚀" if r["type"] == "high" else "📉"
                     label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    st.markdown(f"- {emoji} **{r['naam']}** ({r['ticker']}) just hit a {label}.")
+                    radar_rows.append(_radar_row_html(emoji, f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
 
                 # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
                 # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
                 deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
                 for t in deep_dive_triggers:
-                    st.markdown(f"- 🔔 **{t['naam']}** ({t['ticker']}) {t['detail']}.")
+                    radar_rows.append(_radar_row_html("🔔", f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
 
                 weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
                 last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
@@ -3168,13 +3205,14 @@ if current_view == "today":
 
                 opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
                 weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
-                st.write(
-                    f"- 🔍 **{opportunities['total_signals']}** signal(s) found "
-                    f"({opportunities['daily_signals']} daily{weekly_part}) -- "
-                    f"**{opportunities['in_portfolio_count']}** relate to your portfolio, "
-                    f"**{opportunities['in_watchlist_count']}** are on your watchlist, "
-                    f"**{opportunities['new_opportunities_count']}** are new ideas."
-                )
+                radar_rows.append(_radar_row_html(
+                    "🔍",
+                    f"<b>{opportunities['total_signals']}</b> signal(s) found "
+                    f"({opportunities['daily_signals']} daily{weekly_part}). "
+                    f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
+                    f"<b>{opportunities['in_watchlist_count']}</b> are on your watchlist, "
+                    f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
+                ))
 
                 def _is_recent_earnings(earnings_date_str, max_days=2):
                     try:
@@ -3192,7 +3230,9 @@ if current_view == "today":
                 ]
                 for s in personal_surprises[:3]:
                     emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    st.markdown(f"- {emoji} **{s['ticker']}**: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})")
+                    radar_rows.append(_radar_row_html(
+                        emoji, f"<b>{s['ticker']}</b>: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})"
+                    ))
 
                 # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
                 # strenger venster (1 dag i.p.v. 2), want minder persoonlijk relevant,
@@ -3203,10 +3243,11 @@ if current_view == "today":
                 ]
                 for s in market_wide_surprises[:2]:
                     emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    st.markdown(
-                        f"- {emoji} Also worth noting (not in your portfolio): "
-                        f"**{s['ticker']}** {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
-                    )
+                    radar_rows.append(_radar_row_html(
+                        emoji,
+                        f"Also worth noting (not in your portfolio): "
+                        f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
+                    ))
 
                 # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
                 # kan een koop-/verkoopmoment zijn.
@@ -3217,10 +3258,11 @@ if current_view == "today":
                     extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
                     region_suffix = f" ({alert['region']})" if alert.get("region") else ""
                     kind_label = "sector" if alert["kind"] == "sector" else "theme"
-                    st.markdown(
-                        f"- {move_emoji} **{alert['name']}**{region_suffix} ({kind_label}) is "
+                    radar_rows.append(_radar_row_html(
+                        move_emoji,
+                        f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
                         f"{alert['pct']:+.1f}% this month{extreme_marker}"
-                    )
+                    ))
 
                 if holdings:
                     weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
@@ -3246,7 +3288,12 @@ if current_view == "today":
                                         flipped.append(result)
                         for f in flipped[:3]:
                             emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                            st.markdown(f"- {emoji} **{f['naam']}** just flipped to {f['status']}")
+                            radar_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
+
+                if radar_rows:
+                    _render_radar_rows(radar_rows)
+                else:
+                    st.caption("Nothing new to flag right now. A quiet day on your radar.")
 
                 st.markdown(
                     'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
