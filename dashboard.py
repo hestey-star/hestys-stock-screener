@@ -1385,10 +1385,13 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
 
     if primary_positive is True:
         color = "#1FAE96"
+        accent_rgb = "31,174,150"
     elif primary_positive is False:
         color = "#E5484D"
+        accent_rgb = "229,72,77"
     else:
         color = "#EAEDF1"
+        accent_rgb = "137,146,163"
 
     # 2x2-grid i.p.v. alles op 1 rij -- bij 4 stats naast elkaar in een
     # smalle tegel was er te weinig ruimte per label, waardoor woorden
@@ -1403,9 +1406,19 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     )
 
     star_badge = ' <span style="font-size:0.9rem;">⭐</span>' if standout else ""
-    border_style = "1.5px solid rgba(31,174,150,0.6)" if standout else "1px solid rgba(137,146,163,0.25)"
-    box_shadow = "box-shadow:0 0 16px rgba(31,174,150,0.18); " if standout else ""
-    background = "background:rgba(31,174,150,0.06); " if standout else "background:rgba(137,146,163,0.05); "
+    # Achtergrond nu een KLEUR-GETINTE gradient (groen/rood/grijs, afhankelijk
+    # van primary_positive) i.p.v. altijd hetzelfde neutrale grijs -- geeft
+    # meer visuele 'pop', consistent met de rest van de app (opt-in-banner,
+    # rotatie-tegels). Standout-kaarten krijgen een STERKERE versie van
+    # DEZELFDE kleur (niet altijd jade, ook bij een negatieve standout).
+    if standout:
+        border_style = f"1.5px solid rgba({accent_rgb},0.6)"
+        box_shadow = f"box-shadow:0 0 16px rgba({accent_rgb},0.2); "
+        background = f"background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); "
+    else:
+        border_style = f"1px solid rgba({accent_rgb},0.3)"
+        box_shadow = ""
+        background = f"background: linear-gradient(135deg, rgba({accent_rgb},0.12), rgba({accent_rgb},0.02)); "
 
     # Geen voorloop-spaties/newlines -- zelfde reden als bij de rotatie-
     # tegels: Markdown zou dit anders als een code-blok interpreteren.
@@ -3085,36 +3098,34 @@ if current_view == "today":
             with st.container(border=True):
                 st.markdown("**Yesterday's biggest movers**")
                 if os.path.exists("top_movers.csv"):
-                    st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
                     df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
                     if not df_movers.empty:
                         top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
                         top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
+
+                        def _mover_hero_html(label, icon, ticker, pct, accent_rgb, color):
+                            """Fancy hero-tegel voor Top gainer/loser -- gradient + gloed + icoon-badge, i.p.v. een plat kleurblok."""
+                            return (
+                                f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
+                                f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 14px; '
+                                f'box-shadow: 0 0 18px rgba({accent_rgb},0.15); padding: 1rem 0.75rem; text-align:center;">'
+                                f'<div style="width:38px; height:38px; border-radius:50%; background:rgba({accent_rgb},0.18); '
+                                f'display:flex; align-items:center; justify-content:center; font-size:1.15rem; margin:0 auto;">{icon}</div>'
+                                f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px; margin-top:8px;">{label}</div>'
+                                f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{ticker}</div>'
+                                f'<div style="font-size:1.6rem; font-weight:800; color:{color}; margin-top:2px;">{pct:+.1f}%</div>'
+                                f'</div>'
+                            )
+
                         mover_col1, mover_col2 = st.columns(2)
                         with mover_col1:
                             st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'margin-bottom:0.5rem; background:rgba(31,174,150,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Top gainer</div>'
-                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{top_gainer["ticker"]}</div>'
-                                f'<div style="font-size:1.5rem; font-weight:800; color:#1FAE96;">'
-                                f'+{top_gainer["change_pct"]:.1f}%</div>'
-                                f'</div>',
+                                _mover_hero_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
                                 unsafe_allow_html=True,
                             )
                         with mover_col2:
                             st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'margin-bottom:0.5rem; background:rgba(229,72,77,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Top loser</div>'
-                                f'<div style="font-size:1.2rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{top_loser["ticker"]}</div>'
-                                f'<div style="font-size:1.5rem; font-weight:800; color:#E5484D;">'
-                                f'{top_loser["change_pct"]:.1f}%</div>'
-                                f'</div>',
+                                _mover_hero_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
                                 unsafe_allow_html=True,
                             )
                         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
@@ -3132,6 +3143,10 @@ if current_view == "today":
                                 _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", False, [])
                                 for _, row in losers.iterrows()
                             ])
+                        # 'Last updated' bewust ONDERAAN i.p.v. bovenaan -- de
+                        # belangrijkste info (de daadwerkelijke movers) hoort
+                        # als eerste in beeld te komen, niet een meta-regel.
+                        st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
                     else:
                         st.caption("No mover data available right now.")
                 else:
