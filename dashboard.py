@@ -1445,6 +1445,26 @@ def _render_signal_cards(cards_html: list) -> None:
     )
 
 
+def _hero_stat_tile_html(label: str, icon: str, ticker: str, pct: float, accent_rgb: str, color: str) -> str:
+    """
+    Fancy hero-tegel voor een enkele, uitgelichte stat (bv. Top gainer/
+    loser, Best/Worst today) -- gradient + gloed + icoon-badge, i.p.v.
+    een plat kleurblok. Gedeeld tussen 'Yesterday's biggest movers' en
+    'Your Portfolio Today', zodat beide er consistent uitzien.
+    """
+    return (
+        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
+        f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 14px; '
+        f'box-shadow: 0 0 18px rgba({accent_rgb},0.15); padding: 1rem 0.75rem; text-align:center;">'
+        f'<div style="width:38px; height:38px; border-radius:50%; background:rgba({accent_rgb},0.18); '
+        f'display:flex; align-items:center; justify-content:center; font-size:1.15rem; margin:0 auto;">{icon}</div>'
+        f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px; margin-top:8px;">{label}</div>'
+        f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{ticker}</div>'
+        f'<div style="font-size:1.6rem; font-weight:800; color:{color}; margin-top:2px;">{pct:+.1f}%</div>'
+        f'</div>'
+    )
+
+
 def _radar_row_html(icon: str, text: str) -> str:
     """
     Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
@@ -3057,15 +3077,10 @@ if current_view == "today":
                     with dcol2:
                         if daily_stats:
                             st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'margin-bottom:0.5rem; background:rgba(31,174,150,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Best today</div>'
-                                f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{daily_stats["best_performer"]}</div>'
-                                f'<div style="font-size:1.4rem; font-weight:800; color:#1FAE96;">'
-                                f'{daily_stats["best_change_pct"]:+.1f}%</div>'
-                                f'</div>',
+                                _hero_stat_tile_html(
+                                    "Best today", "🚀", daily_stats["best_performer"], daily_stats["best_change_pct"],
+                                    "31,174,150", "#1FAE96",
+                                ),
                                 unsafe_allow_html=True,
                             )
                         else:
@@ -3073,15 +3088,10 @@ if current_view == "today":
                     with dcol3:
                         if daily_stats:
                             st.markdown(
-                                f'<div style="text-align:center; padding:0.9rem 0.5rem; border-radius:10px; '
-                                f'margin-bottom:0.5rem; background:rgba(229,72,77,0.12);">'
-                                f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">'
-                                f'Worst today</div>'
-                                f'<div style="font-size:1.1rem; font-weight:700; color:#EAEDF1; margin-top:4px;">'
-                                f'{daily_stats["worst_performer"]}</div>'
-                                f'<div style="font-size:1.4rem; font-weight:800; color:#E5484D;">'
-                                f'{daily_stats["worst_change_pct"]:+.1f}%</div>'
-                                f'</div>',
+                                _hero_stat_tile_html(
+                                    "Worst today", "📉", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
+                                    "229,72,77", "#E5484D",
+                                ),
                                 unsafe_allow_html=True,
                             )
                         else:
@@ -3103,29 +3113,15 @@ if current_view == "today":
                         top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
                         top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
 
-                        def _mover_hero_html(label, icon, ticker, pct, accent_rgb, color):
-                            """Fancy hero-tegel voor Top gainer/loser -- gradient + gloed + icoon-badge, i.p.v. een plat kleurblok."""
-                            return (
-                                f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
-                                f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 14px; '
-                                f'box-shadow: 0 0 18px rgba({accent_rgb},0.15); padding: 1rem 0.75rem; text-align:center;">'
-                                f'<div style="width:38px; height:38px; border-radius:50%; background:rgba({accent_rgb},0.18); '
-                                f'display:flex; align-items:center; justify-content:center; font-size:1.15rem; margin:0 auto;">{icon}</div>'
-                                f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px; margin-top:8px;">{label}</div>'
-                                f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{ticker}</div>'
-                                f'<div style="font-size:1.6rem; font-weight:800; color:{color}; margin-top:2px;">{pct:+.1f}%</div>'
-                                f'</div>'
-                            )
-
                         mover_col1, mover_col2 = st.columns(2)
                         with mover_col1:
                             st.markdown(
-                                _mover_hero_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
+                                _hero_stat_tile_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
                                 unsafe_allow_html=True,
                             )
                         with mover_col2:
                             st.markdown(
-                                _mover_hero_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
+                                _hero_stat_tile_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
                                 unsafe_allow_html=True,
                             )
                         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
