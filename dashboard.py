@@ -3504,7 +3504,7 @@ elif current_view == "discover":
 
             st.markdown(
                 """
-                <div id="signup" style="background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+                <div id="signup" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
                             border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
                             box-shadow: 0 0 24px rgba(31,174,150,0.12);
                             padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
@@ -3545,19 +3545,19 @@ elif current_view == "discover":
 
         st.markdown(
             """
-            <div id="signals" style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
+            <div id="signals" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
                         border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
                     Hesty's Signature Signals
                 </div>
                 <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
-                    3 specially-built signals, each with its own investing style -- this is the core of Hesty's.
+                    3 specially-built signals, each with its own investing style. This is the core of Hesty's.
                 </div>
                 <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
-                    📡 <b style="color:#EAEDF1;">Momentocrats</b> -- momentum + quality, for swing trades (days-weeks)<br>
-                    🐦 <b style="color:#EAEDF1;">Snowballers</b> -- quality at a good price, for the long-term investor<br>
-                    🚀 <b style="color:#EAEDF1;">Rocket List</b> -- accelerating growth, for higher risk/reward
+                    📡 <b style="color:#EAEDF1;">Momentocrats</b>: momentum + quality, for swing trades (days-weeks)<br>
+                    🐦 <b style="color:#EAEDF1;">Snowballers</b>: quality at a good price, for the long-term investor<br>
+                    🚀 <b style="color:#EAEDF1;">Rocket List</b>: accelerating growth, for higher risk/reward
                 </div>
             </div>
             """,
@@ -3567,7 +3567,7 @@ elif current_view == "discover":
         def _email_pref_link(label: str):
             """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
             st.markdown(
-                f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} -- manage in '
+                f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} Manage in '
                 f'<a href="?view=settings" class="inline-link" target="_self">Settings</a>.</div>',
                 unsafe_allow_html=True,
             )
