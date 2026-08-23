@@ -2997,7 +2997,7 @@ with st.sidebar:
                 <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
                      style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
                 <div>
-                    <h1 style="font-size:1.35rem !important; font-weight:800 !important; letter-spacing:0.01em; font-family:'Inter', sans-serif !important; margin:0 !important; line-height:1.1 !important;">HESTYS</h1>
+                    <h1 style="font-size:1.35rem !important; font-weight:800 !important; letter-spacing:0.01em; font-family:'Inter', sans-serif !important; margin:0 !important; line-height:1.1 !important;">HESTYS TEST123</h1>
                     <div class="tagline" style="margin-top:0.02rem;">YOUR INVESTING EDGE</div>
                 </div>
             </a>
