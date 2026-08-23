@@ -81,7 +81,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 }
 .app-header-top {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 0.9rem;
     text-decoration: none !important;
     margin-bottom: 1rem;
@@ -2994,7 +2994,7 @@ with st.sidebar:
         f"""
         <div class="app-header" style="border-bottom:none; padding:0 0 0.5rem 0; margin-bottom:0.5rem;">
             <a href="?view={_default_view}" class="app-header-top" target="_self">
-                <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="30" height="36"
+                <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
                      style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
                 <div>
                     <h1 style="font-size:1.35rem !important; font-weight:800 !important; letter-spacing:0.01em; font-family:'Inter', sans-serif !important; margin:0 !important; line-height:1.1 !important;">HESTYS</h1>
