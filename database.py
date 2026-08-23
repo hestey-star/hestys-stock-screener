@@ -20,6 +20,7 @@ adres onthoudt -- zie ensure_user_identity() en get_real_email().
 """
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -757,10 +758,23 @@ def save_roic_trend_history(ticker_states: dict) -> None:
     if not ticker_states:
         return
     client = get_supabase_client()
+
+    def _clean(value):
+        """
+        NaN (bv. van een pandas-kolom waar de berekening niet lukte --
+        zoals bij een ticker met te weinig historische data) kan niet
+        naar JSON: Supabase's upsert crasht daar anders op met 'Out of
+        range float values are not JSON compliant: nan'. Zet 'm om naar
+        None (wordt keurig JSON null).
+        """
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return value
+
     rows = [
         {
-            "ticker": ticker, "last_roic_trend": state.get("roic_trend"),
-            "last_fair_value_bucket": state.get("fair_value_bucket"),
+            "ticker": ticker, "last_roic_trend": _clean(state.get("roic_trend")),
+            "last_fair_value_bucket": _clean(state.get("fair_value_bucket")),
             "last_checked_at": datetime.now().isoformat(),
         }
         for ticker, state in ticker_states.items()
