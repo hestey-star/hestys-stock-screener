@@ -244,6 +244,18 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 /* Knop-achtige link (voor bv. 'Buy smarter with DCA') -- oogt als een
    Streamlit-knop, is technisch een <a>, zodat 'ie in hetzelfde tabblad
    navigeert (st.link_button opent altijd een nieuw tabblad) */
+/* Google-logootje in de 'Continue with Google'-knop op de login-pagina --
+   st.button() ondersteunt geen custom afbeeldingen als icoon (alleen
+   emoji/Material Icons), dus via de .st-key-<key>-CSS-klasse (Streamlit's
+   eigen, officiele manier om 1 specifieke widget te targeten) een
+   achtergrond-afbeelding + linker-padding toegevoegd aan precies déze knop. */
+.st-key-login_page_google button {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbD0iIzQyODVGNCIgZD0iTTE3LjY0IDkuMmMwLS42MzctLjA1Ny0xLjI1MS0uMTY0LTEuODRIOXYzLjQ4MWg0Ljg0NGMtLjIwOSAxLjEyNS0uODQzIDIuMDc4LTEuNzk2IDIuNzE3djIuMjU4aDIuOTA4YzEuNzAyLTEuNTY3IDIuNjg0LTMuODc0IDIuNjg0LTYuNjE1eiIvPgo8cGF0aCBmaWxsPSIjMzRBODUzIiBkPSJNOSAxOGMyLjQzIDAgNC40NjctLjgwNiA1Ljk1Ni0yLjE4bC0yLjkwOC0yLjI1OWMtLjgwNi41NC0xLjgzNy44Ni0zLjA0OC44Ni0yLjM0NCAwLTQuMzI4LTEuNTg0LTUuMDM2LTMuNzExSC45NTd2Mi4zMzJDMi40MzggMTUuOTgzIDUuNDgyIDE4IDkgMTh6Ii8+CjxwYXRoIGZpbGw9IiNGQkJDMDUiIGQ9Ik0zLjk2NCAxMC43MWMtLjE4LS41NC0uMjgyLTEuMTE3LS4yODItMS43MXMuMTAyLTEuMTcuMjgyLTEuNzFWNC45NThILjk1N0MuMzQ3IDYuMTczIDAgNy41NDggMCA5cy4zNDggMi44MjcuOTU3IDQuMDQybDMuMDA3LTIuMzMyeiIvPgo8cGF0aCBmaWxsPSIjRUE0MzM1IiBkPSJNOSAzLjU4YzEuMzIxIDAgMi41MDguNDU0IDMuNDQgMS4zNDVsMi41ODItMi41OEMxMy40NjMuODkxIDExLjQyNiAwIDkgMCA1LjQ4MiAwIDIuNDM4IDIuMDE3Ljk1NyA0Ljk1OEwzLjk2NCA3LjI5QzQuNjcyIDUuMTYzIDYuNjU2IDMuNTggOSAzLjU4MHoiLz4KPC9zdmc+");
+    background-repeat: no-repeat;
+    background-position: 16px center;
+    padding-left: 42px !important;
+}
+
 .button-link, .button-link:visited {
     display: inline-block;
     font-family: 'Inter', sans-serif;
