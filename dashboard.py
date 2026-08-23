@@ -95,6 +95,22 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     line-height: 1.1;
     color: #EAEDF1 !important;
 }
+/* Specifieke klasse voor de logo-titel in de zijbalk -- Streamlit's
+   eigen interne CSS (een 'st-emotion-cache-...'-klasse) voegt standaard
+   padding:1.25rem 0 1rem toe aan ELKE h1 binnen een markdown-blok. Onze
+   eerdere margin:0-reset raakte dat niet (padding is een andere
+   eigenschap), wat een onverwacht grote ruimte tussen 'HESTYS' en de
+   tagline veroorzaakte. Een eigen, specifieke klasse (i.p.v. inline
+   stijlen, die Streamlit soms deels lijkt te filteren) is betrouwbaarder. */
+.sidebar-logo-title {
+    font-size: 1.35rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.01em !important;
+    font-family: 'Inter', sans-serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.1 !important;
+}
 .app-header .tagline {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.7rem;
@@ -2997,7 +3013,7 @@ with st.sidebar:
                 <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
                      style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
                 <div>
-                    <h1 style="font-size:1.35rem !important; font-weight:800 !important; letter-spacing:0.01em; font-family:'Inter', sans-serif !important; margin:0 !important; line-height:1.1 !important;">HESTYS</h1>
+                    <h1 class="sidebar-logo-title">HESTYS</h1>
                     <div class="tagline" style="margin-top:0.02rem;">YOUR INVESTING EDGE</div>
                 </div>
             </a>
