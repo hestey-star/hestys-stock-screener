@@ -20,6 +20,7 @@ adres onthoudt -- zie ensure_user_identity() en get_real_email().
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 
 import streamlit as st
@@ -30,8 +31,25 @@ from user_hashing import hash_email
 
 @st.cache_resource
 def get_supabase_client() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["anon_key"]
+    """
+    Haalt de Supabase-credentials op -- via st.secrets wanneer dit ECHT
+    binnen een draaiende Streamlit-app gebeurt (de live site), of via
+    omgevingsvariabelen wanneer dit bestand wordt aangeroepen vanuit een
+    los script BUITEN Streamlit (bv. weekly_batch.py/daily_batch.py via
+    GitHub Actions -- daar bestaat geen secrets.toml-bestand, wat
+    st.secrets anders laat crashen met 'No secrets found').
+
+    Deze fallback voorkomt structureel het probleem dat de wekelijkse
+    Portfolio Watch-mail liet crashen: get_roic_trend_history() (in dit
+    bestand) wordt ook vanuit weekly_batch.py aangeroepen, maar gebruikte
+    tot nu toe ALLEEN st.secrets via deze functie.
+    """
+    try:
+        url = st.secrets["supabase"]["url"]
+        key = st.secrets["supabase"]["anon_key"]
+    except Exception:
+        url = os.environ["SUPABASE_URL"]
+        key = os.environ["SUPABASE_ANON_KEY"]
     return create_client(url, key)
 
 
