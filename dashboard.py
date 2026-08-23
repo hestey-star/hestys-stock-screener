@@ -3019,6 +3019,35 @@ def create_billing_portal_session(customer_id: str):
     return session
 
 
+class _CurrentUser:
+    """
+    Uniforme 'huidige gebruiker'-representatie, ongeacht de inlogmethode
+    (Google-OAuth via st.user, OF e-mail+wachtwoord via een eigen
+    sessie-cookie). Heeft dezelfde 3 eigenschappen als st.user zelf
+    (is_logged_in/email/name), zodat de rest van de site niet hoeft te
+    weten HOE iemand precies is ingelogd.
+    """
+    def __init__(self, is_logged_in: bool, email, name):
+        self.is_logged_in = is_logged_in
+        self.email = email
+        self.name = name
+
+
+def get_current_user() -> "_CurrentUser":
+    """
+    Geeft de huidige gebruiker terug -- via Google (st.user, Streamlit's
+    eigen OAuth-mechanisme) OF via e-mail+wachtwoord (een eigen sessie,
+    bijgehouden in st.session_state en hersteld vanuit een cookie na een
+    paginaverversing). Google krijgt voorrang als BEIDE ooit toevallig
+    tegelijk actief zouden zijn (zou normaal nooit gebeuren).
+    """
+    if st.user.is_logged_in:
+        return _CurrentUser(True, st.user.email, st.user.name)
+    if st.session_state.get("password_auth_email"):
+        return _CurrentUser(True, st.session_state["password_auth_email"], st.session_state.get("password_auth_name") or "")
+    return _CurrentUser(False, None, None)
+
+
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
 #     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -3026,7 +3055,8 @@ def create_billing_portal_session(customer_id: str):
 #     afhankelijk van of je bent ingelogd. Niet ingelogd -> Discover (toont
 #     meteen echte waarde aan een nieuwe bezoeker, geen account nodig).
 #     Wel ingelogd -> Today (de gepersonaliseerde, dagelijkse pagina). ---
-_default_view = "today" if st.user.is_logged_in else "discover"
+current_user = get_current_user()
+_default_view = "today" if current_user.is_logged_in else "discover"
 current_view = st.query_params.get("view", _default_view)
 
 
@@ -3092,17 +3122,32 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
-    if st.user.is_logged_in:
+    if current_user.is_logged_in:
         import database as _database_for_identity
-        _database_for_identity.ensure_user_identity(st.user.email, st.user.name)
+        _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
         st.markdown(
             f'<a href="?view=settings" class="account-link {" active" if current_view == "settings" else ""}" '
-            f'target="_self">&#9881; {st.user.name}</a>',
+            f'target="_self">&#9881; {current_user.name}</a>',
             unsafe_allow_html=True,
         )
-        st.button("Log out", on_click=st.logout, key="header_logout")
+        if st.user.is_logged_in:
+            # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
+            st.button("Log out", on_click=st.logout, key="header_logout")
+        else:
+            # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
+            # (st.logout() is specifiek voor Google, raakt deze sessie niet).
+            def _password_logout():
+                st.session_state.pop("password_auth_email", None)
+                st.session_state.pop("password_auth_name", None)
+            st.button("Log out", on_click=_password_logout, key="header_logout_password")
     else:
         st.button("Log in", on_click=st.login, key="header_login_google", type="primary")
+        st.markdown(
+            '<a href="?view=login" class="inline-link" target="_self" '
+            'style="display:block; text-align:center; margin-top:6px; font-size:0.85rem;">'
+            'Or sign in with email</a>',
+            unsafe_allow_html=True,
+        )
 
 # ============================================================
 # VIEW: TODAY
@@ -3110,7 +3155,7 @@ with st.sidebar:
 if current_view == "today":
     st.markdown("### Today")
 
-    if not st.user.is_logged_in:
+    if not current_user.is_logged_in:
         st.markdown(
             """
             <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
@@ -3166,7 +3211,7 @@ if current_view == "today":
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
 
-        user_email = st.user.email
+        user_email = current_user.email
         holdings = filter_active_holdings(database.get_user_holdings(user_email))
         watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
 
@@ -3469,7 +3514,7 @@ if current_view == "today":
 # VIEW: SCREENER (public, no login required)
 # ============================================================
 elif current_view == "discover":
-    if not st.user.is_logged_in:
+    if not current_user.is_logged_in:
         # --- Hero-sectie: 1 gerichte, heldere binnenkomer voor nieuwe
         # bezoekers, vóór alle navigatie/content -- i.p.v. meteen met
         # tabbladen te beginnen. Zelfde HTML-op-1-regel-aanpak als de
@@ -3682,7 +3727,7 @@ elif current_view == "discover":
         #     Formulier direct zichtbaar (geen aparte 'onthul'-knop meer --
         #     dat gaf samen met de hero-knop het gevoel van '2x eenzelfde
         #     knop moeten indrukken' voor je bij het e-mailveld komt).
-        if not st.user.is_logged_in:
+        if not current_user.is_logged_in:
             import database as _database_for_optin
 
             st.markdown(
@@ -3764,10 +3809,10 @@ elif current_view == "discover":
             next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
             return next_date.strftime("%Y-%m-%d %H:%M UTC")
 
-        if st.user.is_logged_in:
+        if current_user.is_logged_in:
             import database
-            _current_prefs = database.get_user_preferences(st.user.email)
-            _is_premium_discover = database.is_premium_user(st.user.email)
+            _current_prefs = database.get_user_preferences(current_user.email)
+            _is_premium_discover = database.is_premium_user(current_user.email)
         else:
             _current_prefs = {}
             # Discover vereist bewust geen login -- maar tijdens de 'iedereen
@@ -3930,7 +3975,7 @@ elif current_view == "discover":
 # VIEW: MY PORTFOLIO (personal, login required)
 # ============================================================
 elif current_view == "portfolio":
-    if not st.user.is_logged_in:
+    if not current_user.is_logged_in:
         st.markdown(
             '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
@@ -3941,12 +3986,12 @@ elif current_view == "portfolio":
     import database
     from portfolio_watch import check_holding
 
-    user_email = st.user.email
+    user_email = current_user.email
     st.markdown(
         '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
         unsafe_allow_html=True,
     )
-    st.subheader(f"Welcome, {st.user.name}")
+    st.subheader(f"Welcome, {current_user.name}")
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
@@ -4619,7 +4664,7 @@ elif current_view == "portfolio":
 elif current_view == "analyze":
     st.markdown("### Analyze")
 
-    if not st.user.is_logged_in:
+    if not current_user.is_logged_in:
         st.markdown(
             '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
             unsafe_allow_html=True,
@@ -4647,7 +4692,7 @@ elif current_view == "analyze":
     if current_subview == "deepdives":
         import database
 
-        user_email = st.user.email
+        user_email = current_user.email
 
         st.markdown(
             """
@@ -4837,7 +4882,7 @@ elif current_view == "analyze":
     elif current_subview == "portfolio":
         import database
 
-        user_email = st.user.email
+        user_email = current_user.email
         holdings = filter_active_holdings(database.get_user_holdings(user_email))
         holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
         is_premium = database.is_premium_user(user_email)
@@ -4949,7 +4994,7 @@ elif current_view == "analyze":
     elif current_subview == "dividend":
         import database
 
-        user_email = st.user.email
+        user_email = current_user.email
         holdings = filter_active_holdings(database.get_user_holdings(user_email))
         holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
         is_premium = database.is_premium_user(user_email)
@@ -5000,7 +5045,7 @@ elif current_view == "analyze":
     else:
         import database
 
-        user_email = st.user.email
+        user_email = current_user.email
         holdings = filter_active_holdings(database.get_user_holdings(user_email))
         holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
         is_premium = database.is_premium_user(user_email)
@@ -5227,8 +5272,8 @@ elif current_view == "settings":
 
     st.markdown("### Settings")
 
-    if st.user.is_logged_in:
-        user_email = st.user.email
+    if current_user.is_logged_in:
+        user_email = current_user.email
         is_premium = database.is_premium_user(user_email)
 
         with st.container(border=True):
@@ -5393,7 +5438,7 @@ elif current_view == "premium":
                 "not a guarantee of future results."
             )
 
-        if st.user.is_logged_in and database.is_premium_user(st.user.email, ignore_free_for_all=True):
+        if current_user.is_logged_in and database.is_premium_user(current_user.email, ignore_free_for_all=True):
             try:
                 with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
                     pine_code = f.read()
@@ -5403,7 +5448,7 @@ elif current_view == "premium":
                 # compilatie kan verstoren, dus voor de zekerheid altijd erna.
                 lines = pine_code.split("\n", 1)
                 watermark = (
-                    f"// Licensed to: {st.user.email}\n"
+                    f"// Licensed to: {current_user.email}\n"
                     f"// Downloaded from Hesty's on {datetime.now().strftime('%Y-%m-%d')}\n"
                     f"// For personal use only -- do not redistribute or republish.\n"
                 )
@@ -5444,11 +5489,11 @@ elif current_view == "premium":
                     "please wait a few seconds and refresh this page."
                 )
 
-        if not st.user.is_logged_in:
+        if not current_user.is_logged_in:
             st.info("Log in via the menu first so we know which account to upgrade.")
-        elif database.is_premium_user(st.user.email):
+        elif database.is_premium_user(current_user.email):
             st.success("You're already on Premium. Thank you!")
-            customer_id = database.get_stripe_customer_id(st.user.email)
+            customer_id = database.get_stripe_customer_id(current_user.email)
             if customer_id:
                 if st.button("Manage subscription"):
                     with st.spinner("Preparing your subscription portal..."):
@@ -5465,7 +5510,7 @@ elif current_view == "premium":
                 if st.button("Subscribe monthly", key="sub_monthly"):
                     with st.spinner("Preparing checkout..."):
                         session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_monthly"], st.user.email,
+                            st.secrets["stripe"]["price_id_monthly"], current_user.email,
                         )
                     st.link_button("Continue to payment →", session.url, type="primary")
             with pcol2:
@@ -5473,7 +5518,7 @@ elif current_view == "premium":
                 if st.button("Subscribe yearly", key="sub_yearly"):
                     with st.spinner("Preparing checkout..."):
                         session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_yearly"], st.user.email,
+                            st.secrets["stripe"]["price_id_yearly"], current_user.email,
                         )
                     st.link_button("Continue to payment →", session.url, type="primary")
             st.caption("Payments are processed securely by Stripe -- we never see or store your card details. "
@@ -5630,6 +5675,80 @@ elif current_view == "privacy":
             "A login session cookie is used to keep you signed in -- that's required for "
             "Google/Microsoft login to work at all. We don't use tracking or advertising cookies."
         )
+
+elif current_view == "login":
+    if current_user.is_logged_in:
+        st.info("You're already logged in.")
+        st.markdown(
+            f'<a href="?view={_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
+            unsafe_allow_html=True,
+        )
+    else:
+        import database as _database_for_login
+
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Welcome back</h2>'
+            '<p style="color:#8992A3; margin-bottom:1.5rem;">Sign in or create an account with email</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        login_col_l, login_col_mid, login_col_r = st.columns([1, 2, 1])
+        with login_col_mid:
+            login_mode = st.segmented_control(
+                "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
+                default="Sign In", key="login_mode_toggle", label_visibility="collapsed",
+            )
+            if login_mode is None:
+                login_mode = "Sign In"
+
+            if login_mode == "Sign In":
+                login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
+                login_password = st.text_input("Password", type="password", key="login_password")
+                if st.button("Sign In", type="primary", key="login_submit"):
+                    if not login_email or not login_password:
+                        st.error("Enter both your email and password.")
+                    else:
+                        success, result = _database_for_login.verify_password_login(login_email, login_password)
+                        if success:
+                            st.session_state["password_auth_email"] = login_email
+                            st.session_state["password_auth_name"] = result
+                            st.query_params["view"] = "today"
+                            st.rerun()
+                        else:
+                            st.error(result)
+            else:
+                signup_name = st.text_input("Name", placeholder="Your name", key="signup_name")
+                signup_email = st.text_input("Email", placeholder="you@example.com", key="signup_email")
+                signup_password = st.text_input("Password", type="password", key="signup_password",
+                                                 help="At least 8 characters.")
+                signup_password_confirm = st.text_input("Confirm password", type="password", key="signup_password_confirm")
+                if st.button("Create account", type="primary", key="signup_submit"):
+                    if not signup_name or not signup_email or not signup_password:
+                        st.error("Fill in all fields.")
+                    elif "@" not in signup_email:
+                        st.error("Enter a valid email address.")
+                    elif len(signup_password) < 8:
+                        st.error("Password must be at least 8 characters.")
+                    elif signup_password != signup_password_confirm:
+                        st.error("Passwords don't match.")
+                    else:
+                        success, message = _database_for_login.sign_up_with_password(signup_email, signup_name, signup_password)
+                        if success:
+                            st.session_state["password_auth_email"] = signup_email
+                            st.session_state["password_auth_name"] = signup_name
+                            st.query_params["view"] = "today"
+                            st.rerun()
+                        else:
+                            st.error(message)
+
+            st.markdown(
+                '<div style="text-align:center; margin-top:1rem; color:#8992A3; font-size:0.85rem;">'
+                'Prefer Google? Use the "Log in" button in the menu instead.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
 elif current_view == "confirm":
     import database as _database_for_confirm

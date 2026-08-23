@@ -21,7 +21,9 @@ adres onthoudt -- zie ensure_user_identity() en get_real_email().
 from __future__ import annotations
 
 import math
+import hashlib
 import os
+import secrets
 from datetime import datetime, timedelta
 
 import streamlit as st
@@ -52,6 +54,83 @@ def get_supabase_client() -> Client:
         url = os.environ["SUPABASE_URL"]
         key = os.environ["SUPABASE_ANON_KEY"]
     return create_client(url, key)
+
+
+def _hash_password(password: str) -> str:
+    """
+    Hasht een wachtwoord met scrypt -- Python's ingebouwde, voor
+    wachtwoorden bedoelde hash-functie (traag met opzet, i.t.t. bv.
+    sha256, wat brute-force-aanvallen bemoeilijkt). Geen extra
+    dependency nodig. Geeft 1 string terug met salt+hash samengevoegd
+    (hex, gescheiden door ':'), zodat 1 kolom volstaat.
+    """
+    salt = os.urandom(16)
+    hashed = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
+    return f"{salt.hex()}:{hashed.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """
+    Controleert een ingevoerd wachtwoord tegen de opgeslagen salt+hash.
+    secrets.compare_digest() i.p.v. == voorkomt een timing-aanval (bij ==
+    zou een aanvaller uit de reactietijd kunnen afleiden hoeveel tekens
+    er al kloppen).
+    """
+    try:
+        salt_hex, hash_hex = stored.split(":")
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
+        return secrets.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
+def sign_up_with_password(email: str, name: str, password: str) -> tuple[bool, str]:
+    """
+    Maakt een nieuw account aan met e-mail+wachtwoord, of voegt een
+    wachtwoord toe aan een bestaande, via Google aangemaakte identiteit
+    (1 account, 2 inlogmethodes -- zelfde e-mailadres, dus dezelfde hash,
+    dus dezelfde portfolio/voorkeuren, ongeacht hoe je binnenkomt).
+
+    Geeft (False, reden) terug als er al een wachtwoord is ingesteld voor
+    dit e-mailadres (voorkomt per ongeluk overschrijven van een bestaand
+    account).
+    """
+    client = get_supabase_client()
+    email_hash = hash_email(email)
+    existing = client.table("user_identity").select("password_hash").eq("email_hash", email_hash).execute()
+    if existing.data and existing.data[0].get("password_hash"):
+        return False, "An account with this email already has a password set. Try signing in instead."
+
+    client.table("user_identity").upsert({
+        "email_hash": email_hash,
+        "email": email,
+        "name": name,
+        "password_hash": _hash_password(password),
+    }, on_conflict="email_hash").execute()
+    return True, "Account created!"
+
+
+def verify_password_login(email: str, password: str) -> tuple[bool, str]:
+    """
+    Controleert een e-mail+wachtwoord-combinatie. Geeft (True, echte naam)
+    terug bij succes, of (False, foutmelding) terug bij een verkeerd
+    e-mailadres/wachtwoord OF een account dat nog geen wachtwoord heeft
+    ingesteld (bv. een puur-Google-account) -- BEWUST dezelfde,
+    algemene foutmelding voor beide gevallen, zodat een aanvaller niet
+    kan afleiden welke e-mailadressen wel/niet bestaan.
+    """
+    client = get_supabase_client()
+    email_hash = hash_email(email)
+    response = client.table("user_identity").select("password_hash,name").eq("email_hash", email_hash).execute()
+    generic_error = "No account found with this email and password."
+    if not response.data or not response.data[0].get("password_hash"):
+        return False, generic_error
+    stored_hash = response.data[0]["password_hash"]
+    if _verify_password(password, stored_hash):
+        return True, response.data[0].get("name") or email.split("@")[0]
+    return False, generic_error
 
 
 def ensure_user_identity(email: str, name: str = None) -> None:
