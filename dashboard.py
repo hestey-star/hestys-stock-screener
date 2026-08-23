@@ -152,6 +152,45 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     border: 1px solid #1FAE96;
 }
 
+/* De hoofdnavigatie in de zijbalk krijgt een eigen, professionelere stijl
+   (iconen + linker accent-balk i.p.v. een rondom-rand) -- specifiek
+   gescoped op .nav-bar-vertical, zodat de horizontale sub-navigatie
+   (Discover/Analyze-tabbladen, die .nav-bar gebruiken) hun eigen, bij een
+   horizontale rij passende pil-stijl gewoon behouden. */
+.nav-bar-vertical .nav-link, .nav-bar-vertical .nav-link:visited, .nav-bar-vertical .nav-link:active {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 600;
+    padding: 0.6rem 0.9rem 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: none;
+    border-left: 3px solid transparent;
+}
+.nav-bar-vertical .nav-link svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+}
+.nav-bar-vertical .nav-link:hover {
+    border: none;
+    border-left: 3px solid transparent;
+    background: rgba(255,255,255,0.04);
+}
+.nav-bar-vertical .nav-link:hover svg {
+    opacity: 1;
+}
+.nav-bar-vertical .nav-link.active, .nav-bar-vertical .nav-link.active:visited {
+    border: none;
+    background: linear-gradient(90deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+    border-left: 3px solid #1FAE96;
+}
+.nav-bar-vertical .nav-link.active svg {
+    opacity: 1;
+}
+
 /* Mobiel: header + navigatie flink compacter -- op een smal scherm nam
    dit voorheen zoveel verticale ruimte in (logo + tagline + hoofdnav +
    sub-nav) dat bezoekers eerst een hele lading 'menu' moesten scrollen
@@ -3024,12 +3063,30 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="nav-bar-vertical" style="margin-top: 1.25rem;">
-            <a href="?view=discover" class="{_nav_class('discover')}" target="_self">Discover</a>
-            <a href="?view=today" class="{_nav_class('today')}" target="_self">Today</a>
-            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">My Portfolio</a>
-            <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">Analyze</a>
-            <a href="?view=support" class="{_nav_class('support')}" target="_self">Support</a>
-            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">Premium</a>
+            <a href="?view=discover" class="{_nav_class('discover')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Discover
+            </a>
+            <a href="?view=today" class="{_nav_class('today')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Today
+            </a>
+            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                My Portfolio
+            </a>
+            <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Analyze
+            </a>
+            <a href="?view=support" class="{_nav_class('support')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Support
+            </a>
+            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 8.5 22 9.5 17 14.5 18.5 21.5 12 18 5.5 21.5 7 14.5 2 9.5 9 8.5 12 2"/></svg>
+                Premium
+            </a>
         </div>
         """,
         unsafe_allow_html=True,
