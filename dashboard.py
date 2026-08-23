@@ -3124,7 +3124,7 @@ if current_view == "today":
                     else:
                         st.markdown("**Your Portfolio Today**")
 
-                    dcol2, dcol3 = st.columns(2)
+                    dcol2, dcol3 = st.columns(2, gap="medium")
                     with dcol2:
                         if daily_stats:
                             st.markdown(
@@ -3164,7 +3164,7 @@ if current_view == "today":
                         top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
                         top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
 
-                        mover_col1, mover_col2 = st.columns(2)
+                        mover_col1, mover_col2 = st.columns(2, gap="medium")
                         with mover_col1:
                             st.markdown(
                                 _hero_stat_tile_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
@@ -3886,23 +3886,42 @@ elif current_view == "portfolio":
     # ============================================================
     if holdings:
         with st.container(border=True):
-            st.markdown("**Overview**")
-            display_currency = st.selectbox("Display currency", ["EUR", "USD"], key="display_currency")
+            # 'Display currency' klein en opzij i.p.v. een grote, losstaande
+            # selectbox bovenaan -- het is een instelling, geen hoofdcontent,
+            # en hoorde niet als eerste, meest prominente ding in beeld te
+            # komen.
+            header_col1, header_col2 = st.columns([3, 1])
+            with header_col1:
+                st.markdown("**Overview**")
+            with header_col2:
+                display_currency = st.selectbox(
+                    "Display currency", ["EUR", "USD"], key="display_currency",
+                    label_visibility="collapsed", help="Display currency",
+                )
 
             total_value = sum(h.get("position_value") or 0 for h in holdings)
             stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
             currency_symbol = "€" if display_currency == "EUR" else "$"
             cash_value = database.get_cash_value(user_email)
 
+            # Total en Cash nu op aparte, eigen regels i.p.v. samengeperst op
+            # 1 regel met een '|'-scheidingsteken -- dat brak op mobiel
+            # lelijk af naar een 2e regel.
             if total_value > 0 and stored_currency == display_currency:
-                st.markdown(f"#### Total: {currency_symbol}{total_value:,.0f} "
-                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value</div>'
+                    f'<div style="font-size:1.9rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{currency_symbol}{total_value:,.0f}</div>'
+                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
+                    unsafe_allow_html=True,
+                )
             elif total_value > 0:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
-                st.markdown(f"#### Total: {'€' if stored_currency == 'EUR' else '$'}{total_value:,.0f} ({stored_currency}) "
-                            f"<span style='font-size:0.9rem; color:#8992A3; font-weight:400;'>"
-                            f"&nbsp;|&nbsp; Cash: €{cash_value:,.0f}</span>", unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value ({stored_currency})</div>'
+                    f'<div style="font-size:1.9rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{"€" if stored_currency == "EUR" else "$"}{total_value:,.0f}</div>'
+                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.caption("Click 'Update portfolio value' to fetch current prices.")
 
@@ -3963,7 +3982,7 @@ elif current_view == "portfolio":
             if selected_position_label != "-- Select a position --":
                 selected_holding = position_options[selected_position_label]
                 st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
-                detail_col1, detail_col2 = st.columns(2)
+                detail_col1, detail_col2 = st.columns(2, gap="medium")
 
                 with detail_col1:
                     with st.container(border=True):
