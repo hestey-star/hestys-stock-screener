@@ -3141,11 +3141,9 @@ with st.sidebar:
                 st.session_state.pop("password_auth_name", None)
             st.button("Log out", on_click=_password_logout, key="header_logout_password")
     else:
-        st.button("Log in", on_click=st.login, key="header_login_google", type="primary")
         st.markdown(
-            '<a href="?view=login" class="inline-link" target="_self" '
-            'style="display:block; text-align:center; margin-top:6px; font-size:0.85rem;">'
-            'Or sign in with email</a>',
+            '<a href="?view=login" class="button-link" target="_self" '
+            'style="display:block; text-align:center; width:100%; box-sizing:border-box;">Log in</a>',
             unsafe_allow_html=True,
         )
 
@@ -5744,11 +5742,14 @@ elif current_view == "login":
                             st.error(message)
 
             st.markdown(
-                '<div style="text-align:center; margin-top:1rem; color:#8992A3; font-size:0.85rem;">'
-                'Prefer Google? Use the "Log in" button in the menu instead.'
+                '<div style="display:flex; align-items:center; gap:0.75rem; margin:1.5rem 0 1rem 0;">'
+                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
+                '<span style="color:#8992A3; font-size:0.8rem;">OR</span>'
+                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
                 '</div>',
                 unsafe_allow_html=True,
             )
+            st.button("Continue with Google", on_click=st.login, key="login_page_google", width="stretch")
 
 elif current_view == "confirm":
     import database as _database_for_confirm
