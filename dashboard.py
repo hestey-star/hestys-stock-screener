@@ -81,7 +81,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 }
 .app-header-top {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.9rem;
     text-decoration: none !important;
     margin-bottom: 1rem;
