@@ -375,15 +375,23 @@ def build_email_body(df: pd.DataFrame) -> tuple:
         best_worst_bits = []
         if best_this_week is not None:
             best_worst_bits.append(
-                f"Best: <strong>{best_this_week['naam']} ({best_this_week['ticker']})</strong> "
-                f"<span style='color:#0F8F6E;'>{best_this_week['week_change_pct']:+.1f}%</span>"
+                f"<div style='margin-top:6px;'>Best: <strong>{best_this_week['naam']} ({best_this_week['ticker']})</strong> "
+                f"<span style='color:#0F8F6E;'>{best_this_week['week_change_pct']:+.1f}%</span></div>"
             )
         if worst_this_week is not None:
             best_worst_bits.append(
-                f"Worst: <strong>{worst_this_week['naam']} ({worst_this_week['ticker']})</strong> "
-                f"<span style='color:#C1524A;'>{worst_this_week['week_change_pct']:+.1f}%</span>"
+                f"<div style='margin-top:2px;'>Worst: <strong>{worst_this_week['naam']} ({worst_this_week['ticker']})</strong> "
+                f"<span style='color:#C1524A;'>{worst_this_week['week_change_pct']:+.1f}%</span></div>"
             )
-        best_worst_html = f"<p style='margin:6px 0 0 0; font-size:13px; color:#5B6472;'>{' &middot; '.join(best_worst_bits)}</p>" if best_worst_bits else ""
+        # Best/Worst nu elk in een eigen <div> (blok-elementen, stapelen
+        # dus altijd netjes onder elkaar) i.p.v. samengevoegd op 1 regel
+        # met een '&middot;'-scheidingsteken -- dat brak op smalle
+        # mobiele mail-schermen soms lelijk af, met alleen het percentage
+        # van 'Worst' op een eigen regel.
+        best_worst_html = (
+            f"<div style='font-size:13px; color:#5B6472;'>{''.join(best_worst_bits)}</div>"
+            if best_worst_bits else ""
+        )
         week_summary_html = f"""
         <div style="background:#F7F9FA; border-radius:8px; padding:14px 16px; margin-bottom:20px;">
             <span style="font-size:14px; color:#5B6472;">📈 Your portfolio this week</span><br/>

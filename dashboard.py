@@ -1521,13 +1521,13 @@ def _hero_stat_tile_html(label: str, icon: str, ticker: str, pct: float, accent_
     """
     return (
         f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
-        f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 14px; '
-        f'box-shadow: 0 0 18px rgba({accent_rgb},0.15); padding: 1rem 0.75rem; text-align:center;">'
-        f'<div style="width:38px; height:38px; border-radius:50%; background:rgba({accent_rgb},0.18); '
-        f'display:flex; align-items:center; justify-content:center; font-size:1.15rem; margin:0 auto;">{icon}</div>'
-        f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px; margin-top:8px;">{label}</div>'
-        f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{ticker}</div>'
-        f'<div style="font-size:1.6rem; font-weight:800; color:{color}; margin-top:2px;">{pct:+.1f}%</div>'
+        f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 12px; '
+        f'box-shadow: 0 0 14px rgba({accent_rgb},0.15); padding: 0.7rem 0.5rem; text-align:center;">'
+        f'<div style="width:30px; height:30px; border-radius:50%; background:rgba({accent_rgb},0.18); '
+        f'display:flex; align-items:center; justify-content:center; font-size:0.95rem; margin:0 auto;">{icon}</div>'
+        f'<div style="font-size:0.6rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.8px; margin-top:6px;">{label}</div>'
+        f'<div style="font-size:0.95rem; font-weight:800; color:#EAEDF1; margin-top:1px;">{ticker}</div>'
+        f'<div style="font-size:1.25rem; font-weight:800; color:{color}; margin-top:1px;">{pct:+.1f}%</div>'
         f'</div>'
     )
 
