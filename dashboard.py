@@ -5782,13 +5782,9 @@ elif current_view == "login":
                     # aanvaller niet kan afleiden welke e-mailadressen wel/
                     # niet bestaan.
                     st.success("If an account exists for this email, we've sent a reset link.")
-            st.markdown(
-                '<div style="text-align:center; margin-top:1rem;">'
-                '<a href="?view=login" class="inline-link" target="_self">Back to Sign In</a>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-            st.session_state.pop("show_forgot_password", None)
+            if st.button("Back to Sign In", key="back_to_signin_from_forgot"):
+                st.session_state.pop("show_forgot_password", None)
+                st.rerun()
     else:
         st.markdown(
             '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
