@@ -161,6 +161,98 @@ def get_real_email(email_hash: str) -> str:
     return None
 
 
+def create_session_token(email: str, days_valid: int = 30) -> str:
+    """
+    Maakt een nieuwe, willekeurige sessie-token aan voor deze gebruiker
+    en slaat 'm op met een vervaldatum -- wordt in een browser-cookie
+    gezet zodat een paginaverversing je niet meteen uitlogt (in
+    tegenstelling tot de kale st.session_state, die dat wel doet).
+    """
+    client = get_supabase_client()
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
+    client.table("auth_sessions").insert({
+        "token": token,
+        "email_hash": hash_email(email),
+        "expires_at": expires_at,
+    }).execute()
+    return token
+
+
+def get_user_from_session_token(token: str):
+    """
+    Zoekt (e-mailadres, naam) op bij een sessie-token, mits nog geldig
+    (niet verlopen). Geeft None terug als de token niet bestaat OF
+    verlopen is -- in beide gevallen betekent dat: niet ingelogd.
+    """
+    if not token:
+        return None
+    client = get_supabase_client()
+    response = client.table("auth_sessions").select("email_hash,expires_at").eq("token", token).execute()
+    if not response.data:
+        return None
+    row = response.data[0]
+    if datetime.fromisoformat(row["expires_at"]) < datetime.now():
+        return None
+    identity = client.table("user_identity").select("email,name").eq("email_hash", row["email_hash"]).execute()
+    if not identity.data:
+        return None
+    return identity.data[0]["email"], identity.data[0].get("name")
+
+
+def delete_session_token(token: str) -> None:
+    """Verwijdert een sessie-token (bij uitloggen -- voorkomt dat een oude cookie nog geldig zou blijven)."""
+    if not token:
+        return
+    client = get_supabase_client()
+    client.table("auth_sessions").delete().eq("token", token).execute()
+
+
+def create_password_reset_token(email: str):
+    """
+    Maakt een wachtwoord-reset-token aan, MAAR ALLEEN als er
+    daadwerkelijk een account MET een wachtwoord bestaat voor dit
+    e-mailadres. Geeft None terug als dat niet zo is -- de aanroepende
+    code toont ALTIJD dezelfde, algemene bevestiging aan de gebruiker
+    (ongeacht of er echt een mail verstuurd is), zodat een aanvaller niet
+    kan afleiden welke e-mailadressen wel/niet een account hebben.
+    """
+    client = get_supabase_client()
+    email_hash = hash_email(email)
+    existing = client.table("user_identity").select("password_hash").eq("email_hash", email_hash).execute()
+    if not existing.data or not existing.data[0].get("password_hash"):
+        return None
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now() + timedelta(hours=1)).isoformat()
+    client.table("user_identity").upsert({
+        "email_hash": email_hash,
+        "password_reset_token": token,
+        "password_reset_expires_at": expires_at,
+    }, on_conflict="email_hash").execute()
+    return token
+
+
+def reset_password_with_token(token: str, new_password: str) -> tuple[bool, str]:
+    """
+    Zet een nieuw wachtwoord, mits de reset-token geldig en niet verlopen
+    is (1 uur geldigheid). De token wordt na gebruik meteen gewist, zodat
+    'ie niet nogmaals gebruikt kan worden.
+    """
+    client = get_supabase_client()
+    response = client.table("user_identity").select("email_hash,password_reset_expires_at").eq("password_reset_token", token).execute()
+    if not response.data:
+        return False, "This reset link is invalid or has already been used."
+    row = response.data[0]
+    if not row.get("password_reset_expires_at") or datetime.fromisoformat(row["password_reset_expires_at"]) < datetime.now():
+        return False, "This reset link has expired. Please request a new one."
+    client.table("user_identity").update({
+        "password_hash": _hash_password(new_password),
+        "password_reset_token": None,
+        "password_reset_expires_at": None,
+    }).eq("email_hash", row["email_hash"]).execute()
+    return True, "Password updated! You can now sign in with your new password."
+
+
 def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]:
     """Geeft alle EIGEN posities (is_watchlist=False) of alle WATCHLIST-items (True) van deze gebruiker terug."""
     client = get_supabase_client()

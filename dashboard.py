@@ -3060,6 +3060,24 @@ def get_current_user() -> "_CurrentUser":
     return _CurrentUser(False, None, None)
 
 
+# --- Sessie herstellen vanuit een cookie (voor wachtwoord-login) -- lost
+#     het probleem op dat een kale st.session_state een paginaverversing
+#     niet overleeft (in tegenstelling tot Google-login, dat Streamlit's
+#     eigen sessie-mechanisme gebruikt). Gebeurt VOOR get_current_user(),
+#     zodat die de herstelde sessie meteen ziet. ---
+from streamlit_cookies_controller import CookieController
+
+_cookie_controller = CookieController(key="hestys_cookie_controller")
+
+if "password_auth_email" not in st.session_state:
+    _session_token = _cookie_controller.get("hestys_session_token")
+    if _session_token:
+        import database as _database_for_session_restore
+        _restored = _database_for_session_restore.get_user_from_session_token(_session_token)
+        if _restored:
+            st.session_state["password_auth_email"] = _restored[0]
+            st.session_state["password_auth_name"] = _restored[1]
+
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
 #     (zoals bij het eerste bezoek) betekent: nog geen tabblad gekozen. ---
 # --- Navigatie: leest de '?view=...'-parameter uit de URL. Geen parameter
@@ -3148,7 +3166,15 @@ with st.sidebar:
         else:
             # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
             # (st.logout() is specifiek voor Google, raakt deze sessie niet).
+            # Ook de sessie-token uit de database EN de cookie zelf
+            # verwijderen -- anders zou een oude cookie na 'uitloggen'
+            # je alsnog weer inloggen bij de volgende paginaverversing.
             def _password_logout():
+                import database as _database_for_logout
+                _old_token = _cookie_controller.get("hestys_session_token")
+                if _old_token:
+                    _database_for_logout.delete_session_token(_old_token)
+                    _cookie_controller.remove("hestys_session_token")
                 st.session_state.pop("password_auth_email", None)
                 st.session_state.pop("password_auth_name", None)
             st.button("Log out", on_click=_password_logout, key="header_logout_password")
@@ -5687,15 +5713,83 @@ elif current_view == "privacy":
         )
 
 elif current_view == "login":
+    import database as _database_for_login
+
+    _reset_token = st.query_params.get("reset_token")
+
     if current_user.is_logged_in:
         st.info("You're already logged in.")
         st.markdown(
             f'<a href="?view={_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
             unsafe_allow_html=True,
         )
+    elif _reset_token:
+        # --- Iemand kwam hier via de reset-link uit de e-mail -- toon
+        # het 'nieuw wachtwoord instellen'-formulier i.p.v. de normale
+        # Sign In/Sign Up-toggle. ---
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Set a new password</h2>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        reset_col_l, reset_col_mid, reset_col_r = st.columns([1, 2, 1])
+        with reset_col_mid:
+            new_password = st.text_input("New password", type="password", key="reset_new_password",
+                                          help="At least 8 characters.")
+            new_password_confirm = st.text_input("Confirm new password", type="password", key="reset_new_password_confirm")
+            if st.button("Set new password", type="primary", key="reset_submit"):
+                if len(new_password) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif new_password != new_password_confirm:
+                    st.error("Passwords don't match.")
+                else:
+                    success, message = _database_for_login.reset_password_with_token(_reset_token, new_password)
+                    if success:
+                        st.success(message)
+                        st.markdown(
+                            '<a href="?view=login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.error(message)
+    elif st.session_state.get("show_forgot_password"):
+        # --- 'Forgot password?' aangeklikt -- toon het e-mailadres-
+        # formulier om een reset-link aan te vragen. ---
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Reset your password</h2>'
+            '<p style="color:#8992A3; margin-bottom:1.5rem;">Enter your email and we\'ll send you a reset link</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        forgot_col_l, forgot_col_mid, forgot_col_r = st.columns([1, 2, 1])
+        with forgot_col_mid:
+            forgot_email = st.text_input("Email", placeholder="you@example.com", key="forgot_password_email")
+            if st.button("Send reset link", type="primary", key="forgot_password_submit"):
+                if not forgot_email:
+                    st.error("Enter your email address.")
+                else:
+                    reset_token = _database_for_login.create_password_reset_token(forgot_email)
+                    if reset_token:
+                        reset_url = f"https://hestys.streamlit.app/?view=login&reset_token={reset_token}"
+                        send_email(
+                            to=forgot_email, subject="Reset your Hesty's password",
+                            body=f"Click the link below to set a new password (valid for 1 hour):\n\n{reset_url}",
+                        )
+                    # BEWUST ALTIJD dezelfde, algemene bevestiging tonen --
+                    # ongeacht of er echt een account/mail was, zodat een
+                    # aanvaller niet kan afleiden welke e-mailadressen wel/
+                    # niet bestaan.
+                    st.success("If an account exists for this email, we've sent a reset link.")
+            st.markdown(
+                '<div style="text-align:center; margin-top:1rem;">'
+                '<a href="?view=login" class="inline-link" target="_self">Back to Sign In</a>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            st.session_state.pop("show_forgot_password", None)
     else:
-        import database as _database_for_login
-
         st.markdown(
             '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
             '<h2 style="margin-bottom:0.3rem;">Welcome back</h2>'
@@ -5716,6 +5810,9 @@ elif current_view == "login":
             if login_mode == "Sign In":
                 login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
                 login_password = st.text_input("Password", type="password", key="login_password")
+                if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
+                    st.session_state["show_forgot_password"] = True
+                    st.rerun()
                 if st.button("Sign In", type="primary", key="login_submit"):
                     if not login_email or not login_password:
                         st.error("Enter both your email and password.")
@@ -5724,6 +5821,8 @@ elif current_view == "login":
                         if success:
                             st.session_state["password_auth_email"] = login_email
                             st.session_state["password_auth_name"] = result
+                            _new_token = _database_for_login.create_session_token(login_email)
+                            _cookie_controller.set("hestys_session_token", _new_token)
                             st.query_params["view"] = "today"
                             st.rerun()
                         else:
@@ -5748,6 +5847,8 @@ elif current_view == "login":
                         if success:
                             st.session_state["password_auth_email"] = signup_email
                             st.session_state["password_auth_name"] = signup_name
+                            _new_token = _database_for_login.create_session_token(signup_email)
+                            _cookie_controller.set("hestys_session_token", _new_token)
                             st.query_params["view"] = "today"
                             st.rerun()
                         else:
