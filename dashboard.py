@@ -3121,22 +3121,27 @@ def render_analyze():
         st.info("Log in via the menu to track your own positions and analyze your portfolio. No one else can see what you add.")
         st.stop()
 
-    current_subview = st.query_params.get("subview", "performance")
-
-    def _subnav_class(subview_name):
-        return "nav-link active" if current_subview == subview_name else "nav-link"
-
-    st.markdown(
-        f"""
-        <div class="nav-bar" style="margin-bottom: 1.25rem;">
-            <a href="/analyze?subview=performance" class="{_subnav_class('performance')}" target="_self">Performance</a>
-            <a href="/analyze?subview=portfolio" class="{_subnav_class('portfolio')}" target="_self">Portfolio Overview</a>
-            <a href="/analyze?subview=dividend" class="{_subnav_class('dividend')}" target="_self">Dividend</a>
-            <a href="/analyze?subview=deepdives" class="{_subnav_class('deepdives')}" target="_self">Deep-dives</a>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Sub-navigatie via segmented_control i.p.v. HTML-links -- geen
+    # volledige pagina-herlading meer bij het wisselen van tabblad. De
+    # subview blijft leesbaar via de URL bij het EERSTE bezoek (bv. een
+    # gedeelde link naar /analyze?subview=dividend), maar daarna neemt
+    # de widget het zelf over via zijn eigen, key-gebaseerde sessie-status.
+    _analyze_subview_map = {
+        "Performance": "performance", "Portfolio Overview": "portfolio",
+        "Dividend": "dividend", "Deep-dives": "deepdives",
+    }
+    _analyze_subview_reverse = {v: k for k, v in _analyze_subview_map.items()}
+    _analyze_default_label = _analyze_subview_reverse.get(
+        st.query_params.get("subview", "performance"), "Performance",
     )
+    _analyze_selected_label = st.segmented_control(
+        "Analyze section", options=list(_analyze_subview_map.keys()),
+        selection_mode="single", default=_analyze_default_label,
+        key="analyze_subnav", label_visibility="collapsed",
+    )
+    if _analyze_selected_label is None:
+        _analyze_selected_label = "Performance"
+    current_subview = _analyze_subview_map[_analyze_selected_label]
 
     if current_subview == "deepdives":
         import database
@@ -3356,10 +3361,7 @@ def render_analyze():
                 if largest_pct_check > risk_profile["max_position_pct"]:
                     st.caption("One way to gradually correct an overweight position without a big, "
                                "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                    st.markdown(
-                        '<a href="/premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
+                    st.page_link(premium_page, label="🧠 Buy smarter with DCA")
 
         # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
         # --- Portfolio-samenstelling: Sectors + Asset Type + Region samen,
@@ -3422,10 +3424,7 @@ def render_analyze():
                 if dominant_sector_pct > risk_profile["max_sector_pct"]:
                     st.caption("Overweight in one sector? Steering future contributions toward other "
                                "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                    st.markdown(
-                        '<a href="/premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
+                    st.page_link(premium_page, label="🧠 Buy smarter with DCA")
 
         # --- Risico ---
         with st.expander("⚖️ Risk", key="risk_expander"):
@@ -3960,10 +3959,7 @@ def render_portfolio():
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
                     st.caption(f"📥 Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
             st.caption("Using a different broker?")
-            st.markdown(
-                '<a href="/support" class="button-link" target="_self">Go to Support &rarr;</a>',
-                unsafe_allow_html=True,
-            )
+            st.page_link(support_page, label="Go to Support")
             degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
 
             already_imported = st.session_state.get("degiro_imported_filenames", set())
@@ -4460,21 +4456,22 @@ def render_discover():
 
     st.markdown("### Discover")
 
-    current_discover_subview = st.query_params.get("subview", "discover")
-
-    def _discover_subnav_class(subview_name):
-        return "nav-link active" if current_discover_subview == subview_name else "nav-link"
-
-    st.markdown(
-        f"""
-        <div class="nav-bar" style="margin-bottom: 1.25rem;">
-            <a href="/discover?subview=discover" class="{_discover_subnav_class('discover')}" target="_self">Discover</a>
-            <a href="/discover?subview=sectors_themes" class="{_discover_subnav_class('sectors_themes')}" target="_self">Sectors &amp; Themes</a>
-            <a href="/discover?subview=earnings_surprises" class="{_discover_subnav_class('earnings_surprises')}" target="_self">Earnings Surprises</a>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    _discover_subview_map = {
+        "Discover": "discover", "Sectors & Themes": "sectors_themes",
+        "Earnings Surprises": "earnings_surprises",
+    }
+    _discover_subview_reverse = {v: k for k, v in _discover_subview_map.items()}
+    _discover_default_label = _discover_subview_reverse.get(
+        st.query_params.get("subview", "discover"), "Discover",
     )
+    _discover_selected_label = st.segmented_control(
+        "Discover section", options=list(_discover_subview_map.keys()),
+        selection_mode="single", default=_discover_default_label,
+        key="discover_subnav", label_visibility="collapsed",
+    )
+    if _discover_selected_label is None:
+        _discover_selected_label = "Discover"
+    current_discover_subview = _discover_subview_map[_discover_selected_label]
 
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation (nieuw) ---
@@ -4692,11 +4689,8 @@ def render_discover():
 
         def _email_pref_link(label: str):
             """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
-            st.markdown(
-                f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} Manage in '
-                f'<a href="/settings" class="inline-link" target="_self">Settings</a>.</div>',
-                unsafe_allow_html=True,
-            )
+            st.caption(f"📧 {label} Manage in:")
+            st.page_link(settings_page, label="Settings")
 
         def _next_weekly_scan_time() -> str:
             """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
@@ -4920,10 +4914,7 @@ def render_today():
             f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
             unsafe_allow_html=True,
         )
-        st.markdown(
-            '<a href="/discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
-            unsafe_allow_html=True,
-        )
+        st.page_link(discover_page, label="See what Hesty's can do (no login)")
         st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
                 "your Watchlist to unlock this.")
     else:
@@ -4986,10 +4977,7 @@ def render_today():
                         else:
                             st.metric("Worst today", "n/a")
 
-                    st.markdown(
-                        '<a href="/portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
+                    st.page_link(portfolio_page, label="View My Portfolio")
 
             # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
             # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
@@ -5195,10 +5183,8 @@ def render_today():
                 else:
                     st.caption("Nothing new to flag right now. A quiet day on your radar.")
 
-                st.markdown(
-                    'See the full signal lists under <a href="/discover" class="inline-link" target="_self">Discover</a>.',
-                    unsafe_allow_html=True,
-                )
+                st.caption("See the full signal lists under:")
+                st.page_link(discover_page, label="Discover")
 
             # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
             # met Market news voelde dit als een lange wand van tekst ---
@@ -5550,10 +5536,7 @@ def render_login():
                     success, message = _database_for_login.reset_password_with_token(_reset_token, new_password)
                     if success:
                         st.success(message)
-                        st.markdown(
-                            '<a href="/login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
-                            unsafe_allow_html=True,
-                        )
+                        st.page_link(login_page, label="Go to Sign In")
                     else:
                         st.error(message)
     elif st.session_state.get("show_forgot_password"):
@@ -5805,11 +5788,8 @@ def render_privacy():
 
     with st.expander("Your control over it", key="your_control_over_it_expander"):
         st.write("You can remove any position, watchlist item, or transaction yourself at any time.")
-        st.markdown(
-            'Want your entire account and its data deleted? Reach out via '
-            '<a href="/support" class="inline-link" target="_self">Support</a> and we\'ll take care of it.',
-            unsafe_allow_html=True,
-        )
+        st.caption("Want your entire account and its data deleted? Reach out via:")
+        st.page_link(support_page, label="Support")
 
     with st.expander("Cookies", key="cookies_expander"):
         st.write(
@@ -5918,11 +5898,7 @@ with st.sidebar:
     if current_user.is_logged_in:
         import database as _database_for_identity
         _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
-        st.markdown(
-            f'<a href="/settings" class="account-link {" active" if getattr(pg, "url_path", "") == "settings" else ""}" '
-            f'target="_self">&#9881; {current_user.name}</a>',
-            unsafe_allow_html=True,
-        )
+        st.page_link(settings_page, label=current_user.name, icon="⚙️")
         if st.user.is_logged_in:
             # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
             st.button("Log out", on_click=st.logout, key="header_logout")
@@ -5942,11 +5918,7 @@ with st.sidebar:
                 st.session_state.pop("password_auth_name", None)
             st.button("Log out", on_click=_password_logout, key="header_logout_password")
     else:
-        st.markdown(
-            '<a href="/login" class="button-link" target="_self" '
-            'style="display:block; text-align:center; width:100%; box-sizing:border-box;">Log in</a>',
-            unsafe_allow_html=True,
-        )
+        st.page_link(login_page, label="Log in")
 
 
 pg.run()
