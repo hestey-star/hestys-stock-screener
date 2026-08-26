@@ -3192,6 +3192,85 @@ with st.sidebar:
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def render_support():
+    st.markdown("### Support")
+    st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
+              "or send us a message directly. Business inquiries and partnerships are welcome too.")
+
+    st.markdown("#### Frequently asked questions")
+
+    with st.expander("What does Discover do?"):
+        st.write(
+            "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
+            "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
+            "and fundamental factors. It's public, no login required."
+        )
+
+    with st.expander("Can I import my transaction history from my broker?"):
+        st.write(
+            "Yes, for DEGIRO -- under My Portfolio, 'Import from a broker'. Using a different "
+            "broker? Let us know via the contact form below, and we'll look into adding it."
+        )
+
+    with st.expander("Is my portfolio data private?"):
+        st.write(
+            "Yes. Your tracked positions are only visible to you, tied to your Google account. "
+            "We never share or sell your data."
+        )
+
+    with st.expander("What's the difference between Free and Premium?"):
+        st.write(
+            "Free covers concentration, diversification, sector and asset mix, and up to 10 "
+            "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
+            "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
+            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full comparison."
+        )
+
+    with st.expander("How do I cancel my Premium subscription?"):
+        st.write(
+            "On the Premium page, under Subscription, click 'Manage subscription' -- this opens "
+            "Stripe's secure billing portal, where you can cancel anytime. You'll keep Premium "
+            "access until the end of your current billing period."
+        )
+
+    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
+        st.write(
+            "Premium members can download it directly from the Premium page, with setup "
+            "instructions for TradingView's Pine Editor."
+        )
+
+    with st.expander("How do I change what emails I receive?"):
+        st.write(
+            "Log in, go to Settings, and use the Email preferences section to toggle the weekly "
+            "screener, daily screener, and/or portfolio emails on or off."
+        )
+
+    st.markdown("#### Send us a message")
+    st.write("Found a bug, have an idea, or need help with something else? Let us know.")
+
+    contact_email = st.text_input("Your email")
+    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Business inquiry", "Other"])
+    message_body = st.text_area("Message", height=150)
+
+    if st.button("Send message", type="primary"):
+        if not contact_email or not message_body.strip():
+            st.error("Please fill in your email and a message before sending.")
+        else:
+            support_email = st.secrets.get("support", {}).get("email")
+            if not support_email:
+                st.error("Support inbox isn't configured yet -- please try again later.")
+            else:
+                success = send_email(
+                    subject=f"[Hesty's Support] {message_type} from {contact_email}",
+                    body_text=message_body,
+                    to_email=support_email,
+                )
+                if success:
+                    st.success("Thanks! Your message has been sent -- we'll get back to you by email.")
+                else:
+                    st.error("Something went wrong sending your message -- please try again later.")
+
+
 def render_privacy():
     st.markdown("### Privacy")
     st.caption("Plain language, not a legal document -- if you have questions beyond this, "
@@ -5643,82 +5722,7 @@ elif current_view == "premium":
                        "USD amounts shown are approximate (current EUR/USD rate) -- you're charged in EUR.")
 
 elif current_view == "support":
-    st.markdown("### Support")
-    st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
-              "or send us a message directly. Business inquiries and partnerships are welcome too.")
-
-    st.markdown("#### Frequently asked questions")
-
-    with st.expander("What does Discover do?"):
-        st.write(
-            "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
-            "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
-            "and fundamental factors. It's public, no login required."
-        )
-
-    with st.expander("Can I import my transaction history from my broker?"):
-        st.write(
-            "Yes, for DEGIRO -- under My Portfolio, 'Import from a broker'. Using a different "
-            "broker? Let us know via the contact form below, and we'll look into adding it."
-        )
-
-    with st.expander("Is my portfolio data private?"):
-        st.write(
-            "Yes. Your tracked positions are only visible to you, tied to your Google account. "
-            "We never share or sell your data."
-        )
-
-    with st.expander("What's the difference between Free and Premium?"):
-        st.write(
-            "Free covers concentration, diversification, sector and asset mix, and up to 10 "
-            "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
-            "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
-            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full comparison."
-        )
-
-    with st.expander("How do I cancel my Premium subscription?"):
-        st.write(
-            "On the Premium page, under Subscription, click 'Manage subscription' -- this opens "
-            "Stripe's secure billing portal, where you can cancel anytime. You'll keep Premium "
-            "access until the end of your current billing period."
-        )
-
-    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
-        st.write(
-            "Premium members can download it directly from the Premium page, with setup "
-            "instructions for TradingView's Pine Editor."
-        )
-
-    with st.expander("How do I change what emails I receive?"):
-        st.write(
-            "Log in, go to Settings, and use the Email preferences section to toggle the weekly "
-            "screener, daily screener, and/or portfolio emails on or off."
-        )
-
-    st.markdown("#### Send us a message")
-    st.write("Found a bug, have an idea, or need help with something else? Let us know.")
-
-    contact_email = st.text_input("Your email")
-    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Business inquiry", "Other"])
-    message_body = st.text_area("Message", height=150)
-
-    if st.button("Send message", type="primary"):
-        if not contact_email or not message_body.strip():
-            st.error("Please fill in your email and a message before sending.")
-        else:
-            support_email = st.secrets.get("support", {}).get("email")
-            if not support_email:
-                st.error("Support inbox isn't configured yet -- please try again later.")
-            else:
-                success = send_email(
-                    subject=f"[Hesty's Support] {message_type} from {contact_email}",
-                    body_text=message_body,
-                    to_email=support_email,
-                )
-                if success:
-                    st.success("Thanks! Your message has been sent -- we'll get back to you by email.")
-                else:
-                    st.error("Something went wrong sending your message -- please try again later.")
+    render_support()
 
 elif current_view == "privacy":
     render_privacy()
