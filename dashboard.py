@@ -3,14 +3,12 @@ Dashboard: visualiseert de resultaten van screener.py en portfolio_watch.py.
 (Deze code-commentaren blijven in het Nederlands -- alleen de daadwerkelijk
 zichtbare website-tekst is naar het Engels vertaald.)
 
-Navigatie is bewust GEEN st.tabs(): de opdracht was dat de startpagina
-leeg is totdat je expliciet op 'Welcome' (of een andere nav-link/het logo)
-klikt. Dat is met st.tabs() niet mogelijk (die toont altijd meteen de
-inhoud van het eerste tabblad) -- daarom gebruiken we hier een eigen
-navigatiebalk van HTML-links die de URL-query-parameter '?view=...'
-aanpassen, en tonen we inhoud alleen als die parameter overeenkomt.
-Dat maakt het logo ook op een natuurlijke manier klikbaar (het is zelf
-ook zo'n link, naar '?view=welcome').
+Navigatie gebruikt sinds de stap-B-herstructurering st.navigation() (met
+position="hidden") i.p.v. handmatige ?view=-query-param-routing -- elke
+pagina heeft nu een eigen URL-pad (bv. /discover, /today), en de zijbalk
+gebruikt st.page_link() i.p.v. gewone HTML-<a>-links. Dat voorkomt de
+volledige pagina-herlading (met bijbehorende zwarte flits) die er bij de
+oude opzet was.
 
 Lokaal draaien:
     streamlit run dashboard.py
@@ -2277,8 +2275,8 @@ def send_subscription_confirmation_email(email: str, confirmation_token: str, un
     niet hoeft te wachten op de eerste dagelijkse mail om zich weer af
     te melden.
     """
-    confirm_url = f"https://hestys.streamlit.app/?view=confirm&token={confirmation_token}"
-    unsubscribe_url = f"https://hestys.streamlit.app/?view=unsubscribe&token={unsubscribe_token}"
+    confirm_url = f"https://hestys.streamlit.app/confirm?token={confirmation_token}"
+    unsubscribe_url = f"https://hestys.streamlit.app/unsubscribe?token={unsubscribe_token}"
     text_body = (
         "Confirm your subscription to Hesty's Daily\n\n"
         "One more step: click the link below to confirm this is your email address.\n\n"
@@ -2988,8 +2986,8 @@ def create_checkout_session(price_id: str, customer_email: str):
         mode="subscription",
         line_items=[{"price": price_id, "quantity": 1}],
         customer_email=customer_email,
-        success_url=f"{app_url}/?view=premium&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{app_url}/?view=premium",
+        success_url=f"{app_url}/premium?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{app_url}/premium",
     )
     return session
 
@@ -3027,7 +3025,7 @@ def create_billing_portal_session(customer_id: str):
     app_url = st.secrets["app"]["url"]
     session = stripe.billing_portal.Session.create(
         customer=customer_id,
-        return_url=f"{app_url}/?view=premium",
+        return_url=f"{app_url}/premium",
     )
     return session
 
@@ -3105,87 +3103,6 @@ def _nav_class_any(view_names: list) -> str:
 _LOGO_ICON_B64 = "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"
 
 
-with st.sidebar:
-    st.markdown(
-        f"""
-        <div class="app-header" style="border-bottom:none; padding:0 0 0.5rem 0; margin-bottom:0.5rem;">
-            <a href="?view={_default_view}" class="app-header-top" target="_self">
-                <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
-                     style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
-                <div>
-                    <h1 class="sidebar-logo-title">HESTYS</h1>
-                    <div class="tagline" style="margin-top:0.02rem;">YOUR INVESTING EDGE</div>
-                </div>
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"""
-        <div class="nav-bar-vertical" style="margin-top: 1.25rem;">
-            <a href="?view=discover" class="{_nav_class('discover')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                Discover
-            </a>
-            <a href="?view=today" class="{_nav_class('today')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Today
-            </a>
-            <a href="?view=portfolio" class="{_nav_class('portfolio')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                My Portfolio
-            </a>
-            <a href="?view=analyze" class="{_nav_class('analyze')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Analyze
-            </a>
-            <a href="?view=support" class="{_nav_class('support')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Support
-            </a>
-            <a href="?view=premium" class="{_nav_class('premium')}" target="_self">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15 8.5 22 9.5 17 14.5 18.5 21.5 12 18 5.5 21.5 7 14.5 2 9.5 9 8.5 12 2"/></svg>
-                Premium
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.divider()
-    if current_user.is_logged_in:
-        import database as _database_for_identity
-        _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
-        st.markdown(
-            f'<a href="?view=settings" class="account-link {" active" if current_view == "settings" else ""}" '
-            f'target="_self">&#9881; {current_user.name}</a>',
-            unsafe_allow_html=True,
-        )
-        if st.user.is_logged_in:
-            # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
-            st.button("Log out", on_click=st.logout, key="header_logout")
-        else:
-            # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
-            # (st.logout() is specifiek voor Google, raakt deze sessie niet).
-            # Ook de sessie-token uit de database EN de cookie zelf
-            # verwijderen -- anders zou een oude cookie na 'uitloggen'
-            # je alsnog weer inloggen bij de volgende paginaverversing.
-            def _password_logout():
-                import database as _database_for_logout
-                _old_token = _cookie_controller.get("hestys_session_token")
-                if _old_token:
-                    _database_for_logout.delete_session_token(_old_token)
-                    _cookie_controller.remove("hestys_session_token")
-                st.session_state.pop("password_auth_email", None)
-                st.session_state.pop("password_auth_name", None)
-            st.button("Log out", on_click=_password_logout, key="header_logout_password")
-    else:
-        st.markdown(
-            '<a href="?view=login" class="button-link" target="_self" '
-            'style="display:block; text-align:center; width:100%; box-sizing:border-box;">Log in</a>',
-            unsafe_allow_html=True,
-        )
-
 # ============================================================
 # PAGINA-FUNCTIES (stap A van de navigatie-herstructurering: elke
 # pagina wordt een losse functie, ZONDER de routing zelf al te wijzigen
@@ -3212,10 +3129,10 @@ def render_analyze():
     st.markdown(
         f"""
         <div class="nav-bar" style="margin-bottom: 1.25rem;">
-            <a href="?view=analyze&subview=performance" class="{_subnav_class('performance')}" target="_self">Performance</a>
-            <a href="?view=analyze&subview=portfolio" class="{_subnav_class('portfolio')}" target="_self">Portfolio Overview</a>
-            <a href="?view=analyze&subview=dividend" class="{_subnav_class('dividend')}" target="_self">Dividend</a>
-            <a href="?view=analyze&subview=deepdives" class="{_subnav_class('deepdives')}" target="_self">Deep-dives</a>
+            <a href="/analyze?subview=performance" class="{_subnav_class('performance')}" target="_self">Performance</a>
+            <a href="/analyze?subview=portfolio" class="{_subnav_class('portfolio')}" target="_self">Portfolio Overview</a>
+            <a href="/analyze?subview=dividend" class="{_subnav_class('dividend')}" target="_self">Dividend</a>
+            <a href="/analyze?subview=deepdives" class="{_subnav_class('deepdives')}" target="_self">Deep-dives</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -3440,7 +3357,7 @@ def render_analyze():
                     st.caption("One way to gradually correct an overweight position without a big, "
                                "one-time move: adjust future contributions with the Smart DCA Assistant.")
                     st.markdown(
-                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                        '<a href="/premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
                         unsafe_allow_html=True,
                     )
 
@@ -3506,7 +3423,7 @@ def render_analyze():
                     st.caption("Overweight in one sector? Steering future contributions toward other "
                                "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
                     st.markdown(
-                        '<a href="?view=premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
+                        '<a href="/premium" class="button-link" target="_self">🧠 Buy smarter with DCA &rarr;</a>',
                         unsafe_allow_html=True,
                     )
 
@@ -4044,7 +3961,7 @@ def render_portfolio():
                     st.caption(f"📥 Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
             st.caption("Using a different broker?")
             st.markdown(
-                '<a href="?view=support" class="button-link" target="_self">Go to Support &rarr;</a>',
+                '<a href="/support" class="button-link" target="_self">Go to Support &rarr;</a>',
                 unsafe_allow_html=True,
             )
             degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
@@ -4551,9 +4468,9 @@ def render_discover():
     st.markdown(
         f"""
         <div class="nav-bar" style="margin-bottom: 1.25rem;">
-            <a href="?view=discover&subview=discover" class="{_discover_subnav_class('discover')}" target="_self">Discover</a>
-            <a href="?view=discover&subview=sectors_themes" class="{_discover_subnav_class('sectors_themes')}" target="_self">Sectors &amp; Themes</a>
-            <a href="?view=discover&subview=earnings_surprises" class="{_discover_subnav_class('earnings_surprises')}" target="_self">Earnings Surprises</a>
+            <a href="/discover?subview=discover" class="{_discover_subnav_class('discover')}" target="_self">Discover</a>
+            <a href="/discover?subview=sectors_themes" class="{_discover_subnav_class('sectors_themes')}" target="_self">Sectors &amp; Themes</a>
+            <a href="/discover?subview=earnings_surprises" class="{_discover_subnav_class('earnings_surprises')}" target="_self">Earnings Surprises</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -4777,7 +4694,7 @@ def render_discover():
             """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
             st.markdown(
                 f'<div style="color:#8992A3; font-size:0.85rem; margin-top:4px;">📧 {label} Manage in '
-                f'<a href="?view=settings" class="inline-link" target="_self">Settings</a>.</div>',
+                f'<a href="/settings" class="inline-link" target="_self">Settings</a>.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -5004,7 +4921,7 @@ def render_today():
             unsafe_allow_html=True,
         )
         st.markdown(
-            '<a href="?view=discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
+            '<a href="/discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
             unsafe_allow_html=True,
         )
         st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
@@ -5070,7 +4987,7 @@ def render_today():
                             st.metric("Worst today", "n/a")
 
                     st.markdown(
-                        '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
+                        '<a href="/portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
                         unsafe_allow_html=True,
                     )
 
@@ -5279,7 +5196,7 @@ def render_today():
                     st.caption("Nothing new to flag right now. A quiet day on your radar.")
 
                 st.markdown(
-                    'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
+                    'See the full signal lists under <a href="/discover" class="inline-link" target="_self">Discover</a>.',
                     unsafe_allow_html=True,
                 )
 
@@ -5571,6 +5488,33 @@ def render_settings():
         st.info("Log in via the menu to manage your email preferences.")
 
 
+def render_confirm():
+    import database as _database_for_confirm
+
+    st.markdown("### Confirm your subscription")
+    token = st.query_params.get("token", "")
+    if not token:
+        st.error("Missing confirmation link. Please use the link from your email.")
+    elif _database_for_confirm.confirm_email_subscriber(token):
+        st.success("✅ You're all set! You'll get today's new bullish signals in your inbox every weekday morning.")
+        st.page_link(discover_page, label="Back to Discover →")
+    else:
+        st.error("This confirmation link is invalid or has already been used.")
+
+
+def render_unsubscribe():
+    import database as _database_for_unsubscribe
+
+    st.markdown("### Unsubscribe")
+    token = st.query_params.get("token", "")
+    if not token:
+        st.error("Missing unsubscribe link. Please use the link from your email.")
+    elif _database_for_unsubscribe.unsubscribe_email_subscriber(token):
+        st.success("You've been unsubscribed. Sorry to see you go!")
+    else:
+        st.info("This link is invalid or you're already unsubscribed.")
+
+
 def render_login():
     import database as _database_for_login
 
@@ -5579,7 +5523,7 @@ def render_login():
     if current_user.is_logged_in:
         st.info("You're already logged in.")
         st.markdown(
-            f'<a href="?view={_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
+            f'<a href="/{_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
             unsafe_allow_html=True,
         )
     elif _reset_token:
@@ -5607,7 +5551,7 @@ def render_login():
                     if success:
                         st.success(message)
                         st.markdown(
-                            '<a href="?view=login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
+                            '<a href="/login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                     else:
@@ -5631,7 +5575,7 @@ def render_login():
                 else:
                     reset_token = _database_for_login.create_password_reset_token(forgot_email)
                     if reset_token:
-                        reset_url = f"https://hestys.streamlit.app/?view=login&reset_token={reset_token}"
+                        reset_url = f"https://hestys.streamlit.app/login?reset_token={reset_token}"
                         send_email(
                             to=forgot_email, subject="Reset your Hesty's password",
                             body=f"Click the link below to set a new password (valid for 1 hour):\n\n{reset_url}",
@@ -5863,7 +5807,7 @@ def render_privacy():
         st.write("You can remove any position, watchlist item, or transaction yourself at any time.")
         st.markdown(
             'Want your entire account and its data deleted? Reach out via '
-            '<a href="?view=support" class="inline-link" target="_self">Support</a> and we\'ll take care of it.',
+            '<a href="/support" class="inline-link" target="_self">Support</a> and we\'ll take care of it.',
             unsafe_allow_html=True,
         )
 
@@ -5875,77 +5819,141 @@ def render_privacy():
 
 
 # ============================================================
-# VIEW: TODAY
+# NAVIGATIE (stap B1): st.navigation i.p.v. handmatige ?view=-routing --
+# geen volledige pagina-herlading meer bij het klikken tussen pagina's.
+# Alle render_XXX()-functies hierboven (stap A) worden nu rechtstreeks
+# als pagina's geregistreerd.
 # ============================================================
-if current_view == "today":
-    render_today()
+today_page = st.Page(render_today, title="Today", url_path="today", default=current_user.is_logged_in)
+discover_page = st.Page(render_discover, title="Discover", url_path="discover", default=not current_user.is_logged_in)
+portfolio_page = st.Page(render_portfolio, title="My Portfolio", url_path="portfolio")
+analyze_page = st.Page(render_analyze, title="Analyze", url_path="analyze")
+settings_page = st.Page(render_settings, title="Settings", url_path="settings")
+premium_page = st.Page(render_premium, title="Premium", url_path="premium")
+support_page = st.Page(render_support, title="Support", url_path="support")
+privacy_page = st.Page(render_privacy, title="Privacy", url_path="privacy")
+login_page = st.Page(render_login, title="Login", url_path="login")
+confirm_page = st.Page(render_confirm, title="Confirm", url_path="confirm")
+unsubscribe_page = st.Page(render_unsubscribe, title="Unsubscribe", url_path="unsubscribe")
 
+all_pages = [
+    today_page, discover_page, portfolio_page, analyze_page, settings_page,
+    premium_page, support_page, privacy_page, login_page, confirm_page, unsubscribe_page,
+]
+pg = st.navigation(all_pages, position="hidden")
 
-# ============================================================
-# VIEW: SCREENER (public, no login required)
-# ============================================================
-elif current_view == "discover":
-    render_discover()
+with st.sidebar:
+    st.markdown(
+        f"""
+        <div class="app-header" style="border-bottom:none; padding:0 0 0.5rem 0; margin-bottom:0.5rem;">
+            <a href="{'/today' if current_user.is_logged_in else '/discover'}" class="app-header-top" target="_self">
+                <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
+                     style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
+                <div>
+                    <h1 class="sidebar-logo-title">HESTYS</h1>
+                    <div class="tagline" style="margin-top:0.02rem;">YOUR INVESTING EDGE</div>
+                </div>
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# ============================================================
-# VIEW: MY PORTFOLIO (personal, login required)
-# ============================================================
-elif current_view == "portfolio":
-    render_portfolio()
+    # --- Iconen (dezelfde SVG's als voorheen, nu als CSS-achtergrond-
+    # afbeelding geinjecteerd op de st.page_link-widgets via de .st-key-
+    # klasse -- dezelfde techniek als bij de Google-knop). De actieve
+    # pagina krijgt een linker accent-balk + jade tekstkleur, net als
+    # voorheen. ---
+    _nav_icons_b64 = {
+        "discover": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTEiIGN5PSIxMSIgcj0iNyIvPjxsaW5lIHgxPSIyMSIgeTE9IjIxIiB4Mj0iMTYuNjUiIHkyPSIxNi42NSIvPjwvc3ZnPg==",
+        "today": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxsaW5lIHgxPSIxNiIgeTE9IjIiIHgyPSIxNiIgeTI9IjYiLz48bGluZSB4MT0iOCIgeTE9IjIiIHgyPSI4IiB5Mj0iNiIvPjxsaW5lIHgxPSIzIiB5MT0iMTAiIHgyPSIyMSIgeTI9IjEwIi8+PC9zdmc+",
+        "portfolio": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMiIgeT0iNyIgd2lkdGg9IjIwIiBoZWlnaHQ9IjE0IiByeD0iMiIvPjxwYXRoIGQ9Ik0xNiAyMVY1YTIgMiAwIDAgMC0yLTJoLTRhMiAyIDAgMCAwLTIgMnYxNiIvPjwvc3ZnPg==",
+        "analyze": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGxpbmUgeDE9IjE4IiB5MT0iMjAiIHgyPSIxOCIgeTI9IjEwIi8+PGxpbmUgeDE9IjEyIiB5MT0iMjAiIHgyPSIxMiIgeTI9IjQiLz48bGluZSB4MT0iNiIgeTE9IjIwIiB4Mj0iNiIgeTI9IjE0Ii8+PC9zdmc+",
+        "support": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIyczgtNCA4LTEwVjVsLTgtMy04IDN2N2MwIDYgOCAxMCA4IDEweiIvPjwvc3ZnPg==",
+        "premium": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDE1IDguNSAyMiA5LjUgMTcgMTQuNSAxOC41IDIxLjUgMTIgMTggNS41IDIxLjUgNyAxNC41IDIgOS41IDkgOC41IDEyIDIiLz48L3N2Zz4=",
+    }
+    _active_url_path = getattr(pg, "url_path", "")
+    _nav_css_parts = ["""
+    <style>
+    div[data-testid="stSidebar"] div[class*="st-key-nav_"] {
+        margin-bottom: 3px;
+    }
+    div[data-testid="stSidebar"] div[class*="st-key-nav_"] a {
+        display: flex; align-items: center; gap: 0.75rem;
+        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
+        padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
+        text-decoration: none !important; color: #8992A3 !important;
+        border-left: 3px solid transparent;
+    }
+    div[data-testid="stSidebar"] div[class*="st-key-nav_"] a:hover {
+        background: rgba(255,255,255,0.04);
+    }
+    """]
+    for _icon_name, _icon_b64 in _nav_icons_b64.items():
+        _nav_css_parts.append(f"""
+    .st-key-nav_{_icon_name} a p::before {{
+        content: ""; display: inline-block; width: 18px; height: 18px;
+        background-image: url("data:image/svg+xml;base64,{_icon_b64}");
+        background-repeat: no-repeat; background-position: center; background-size: contain;
+        vertical-align: middle; margin-right: 0.75rem;
+    }}
+    """)
+    if _active_url_path in _nav_icons_b64:
+        _nav_css_parts.append(f"""
+    .st-key-nav_{_active_url_path} a {{
+        color: #1FAE96 !important;
+        background: linear-gradient(90deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+        border-left: 3px solid #1FAE96 !important;
+    }}
+    """)
+    _nav_css_parts.append("</style>")
+    st.markdown("".join(_nav_css_parts), unsafe_allow_html=True)
 
-
-elif current_view == "analyze":
-    render_analyze()
-
-
-elif current_view == "settings":
-    render_settings()
-
-elif current_view == "premium":
-    render_premium()
-
-elif current_view == "support":
-    render_support()
-
-elif current_view == "privacy":
-    render_privacy()
-
-elif current_view == "login":
-    render_login()
-
-elif current_view == "confirm":
-    import database as _database_for_confirm
-
-    st.markdown("### Confirm your subscription")
-    token = st.query_params.get("token", "")
-    if not token:
-        st.error("Missing confirmation link. Please use the link from your email.")
-    elif _database_for_confirm.confirm_email_subscriber(token):
-        st.success("✅ You're all set! You'll get today's new bullish signals in your inbox every weekday morning.")
+    st.page_link(discover_page, label="Discover", key="nav_discover")
+    st.page_link(today_page, label="Today", key="nav_today")
+    st.page_link(portfolio_page, label="My Portfolio", key="nav_portfolio")
+    st.page_link(analyze_page, label="Analyze", key="nav_analyze")
+    st.page_link(support_page, label="Support", key="nav_support")
+    st.page_link(premium_page, label="Premium", key="nav_premium")
+    st.divider()
+    if current_user.is_logged_in:
+        import database as _database_for_identity
+        _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
         st.markdown(
-            '<a href="?view=discover" class="button-link" target="_self">Back to Discover &rarr;</a>',
+            f'<a href="/settings" class="account-link {" active" if getattr(pg, "url_path", "") == "settings" else ""}" '
+            f'target="_self">&#9881; {current_user.name}</a>',
             unsafe_allow_html=True,
         )
+        if st.user.is_logged_in:
+            # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
+            st.button("Log out", on_click=st.logout, key="header_logout")
+        else:
+            # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
+            # (st.logout() is specifiek voor Google, raakt deze sessie niet).
+            # Ook de sessie-token uit de database EN de cookie zelf
+            # verwijderen -- anders zou een oude cookie na 'uitloggen'
+            # je alsnog weer inloggen bij de volgende paginaverversing.
+            def _password_logout():
+                import database as _database_for_logout
+                _old_token = _cookie_controller.get("hestys_session_token")
+                if _old_token:
+                    _database_for_logout.delete_session_token(_old_token)
+                    _cookie_controller.remove("hestys_session_token")
+                st.session_state.pop("password_auth_email", None)
+                st.session_state.pop("password_auth_name", None)
+            st.button("Log out", on_click=_password_logout, key="header_logout_password")
     else:
-        st.error("This confirmation link is invalid or has already been used.")
+        st.markdown(
+            '<a href="/login" class="button-link" target="_self" '
+            'style="display:block; text-align:center; width:100%; box-sizing:border-box;">Log in</a>',
+            unsafe_allow_html=True,
+        )
 
-elif current_view == "unsubscribe":
-    import database as _database_for_unsubscribe
 
-    st.markdown("### Unsubscribe")
-    token = st.query_params.get("token", "")
-    if not token:
-        st.error("Missing unsubscribe link. Please use the link from your email.")
-    elif _database_for_unsubscribe.unsubscribe_email_subscriber(token):
-        st.success("You've been unsubscribed. Sorry to see you go!")
-    else:
-        st.info("This link is invalid or you're already unsubscribed.")
+pg.run()
 
 st.divider()
 st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "
            "you research faster. It's not an automated trading strategy, and nothing here is "
            "personalized financial advice.")
-st.markdown(
-    '<a href="?view=privacy" class="inline-link" target="_self">Privacy</a>',
-    unsafe_allow_html=True,
-)
+st.page_link(privacy_page, label="Privacy")
