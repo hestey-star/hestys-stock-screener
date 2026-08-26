@@ -3192,6 +3192,364 @@ with st.sidebar:
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def render_today():
+    st.markdown("### Today")
+
+    if not current_user.is_logged_in:
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
+                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+                        padding: 1.5rem 1.75rem; margin: 0.5rem 0 1.25rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    What you're missing
+                </div>
+                <div style="color:#EAEDF1; font-size:1.4rem; font-weight:700; margin-top:6px; line-height:1.35;">
+                    Your own, personalized morning briefing.
+                </div>
+                <div style="color:#8992A3; font-size:0.95rem; margin-top:10px; line-height:1.6; max-width: 560px;">
+                    Log in and add your positions to get a Today page built around YOUR portfolio:
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Tegels i.p.v. een bullet-lijst -- die voelde op mobiel al snel
+        # 'supervol' aan met 6 losse regels + icoontjes. Zelfde stijl als
+        # de hero-tegels (icoon-badge + titel + subtekst), en het overzicht
+        # is meteen ook completer/actueler dan de oude lijst (mistte
+        # 'nieuwe, persoonlijke signalen' -- een van de kernfeatures).
+        today_points = [
+            ("📊", "Your daily performance", "best/worst positions, vs. yesterday"),
+            ("📅", "Earnings & dividends ahead", "for your actual holdings"),
+            ("⚖️", "Risk & concentration alerts", "when a position outgrows your target"),
+            ("🚀", "52-week highs & lows", "the moment they happen"),
+            ("🔍", "New signals, personalized", "matched to what you hold or watch"),
+            ("📰", "News, filtered to your tickers", "no noise"),
+        ]
+        today_points_html = "".join(
+            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
+            f'border-radius:12px; padding:0.85rem 1rem;">'
+            f'<div style="width:32px; height:32px; border-radius:50%; background:rgba(31,174,150,0.18); '
+            f'display:flex; align-items:center; justify-content:center; font-size:1rem;">{emoji}</div>'
+            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:8px; line-height:1.3;">{title}</div>'
+            f'<div style="color:#8992A3; font-size:0.73rem; margin-top:2px; line-height:1.3;">{sub}</div>'
+            f'</div>'
+            for emoji, title, sub in today_points
+        )
+        st.markdown(
+            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<a href="?view=discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
+            unsafe_allow_html=True,
+        )
+        st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
+                "your Watchlist to unlock this.")
+    else:
+        import database
+        import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
+
+        user_email = current_user.email
+        holdings = filter_active_holdings(database.get_user_holdings(user_email))
+        watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
+
+        st.write("Here are your daily points that deserve your attention.")
+
+        if not holdings and not watchlist_items:
+            st.info("Add assets under My Portfolio or your Watchlist to get personal signals and news here.")
+        else:
+            tracked_items = holdings + watchlist_items
+
+            # --- Your portfolio today (nu in een eigen kader, net als Yesterday's
+            # biggest movers -- consistente stijl over de hele Today-pagina) ---
+            if holdings:
+                with st.spinner("Checking today's price moves..."):
+                    daily_stats = build_daily_portfolio_stats(holdings)
+
+                with st.container(border=True):
+                    if daily_stats:
+                        vs_yesterday_pct = daily_stats["portfolio_change_pct"]
+                        vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
+                        st.markdown(
+                            f'<div style="display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap;">'
+                            f'<span style="font-weight:700;">Your Portfolio Today</span>'
+                            f'<span style="font-size:0.85rem; font-weight:700; color:{vs_yesterday_color};">'
+                            f'{vs_yesterday_pct:+.1f}%</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown("**Your Portfolio Today**")
+
+                    dcol2, dcol3 = st.columns(2, gap="medium")
+                    with dcol2:
+                        if daily_stats:
+                            st.markdown(
+                                _hero_stat_tile_html(
+                                    "Best today", "🚀", daily_stats["best_performer"], daily_stats["best_change_pct"],
+                                    "31,174,150", "#1FAE96",
+                                ),
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.metric("Best today", "n/a")
+                    with dcol3:
+                        if daily_stats:
+                            st.markdown(
+                                _hero_stat_tile_html(
+                                    "Worst today", "📉", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
+                                    "229,72,77", "#E5484D",
+                                ),
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.metric("Worst today", "n/a")
+
+                    st.markdown(
+                        '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
+                        unsafe_allow_html=True,
+                    )
+
+            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
+            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
+            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
+            with st.container(border=True):
+                st.markdown("**Yesterday's biggest movers**")
+                if os.path.exists("top_movers.csv"):
+                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
+                    if not df_movers.empty:
+                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
+                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
+
+                        mover_col1, mover_col2 = st.columns(2, gap="medium")
+                        with mover_col1:
+                            st.markdown(
+                                _hero_stat_tile_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
+                                unsafe_allow_html=True,
+                            )
+                        with mover_col2:
+                            st.markdown(
+                                _hero_stat_tile_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+                        with st.expander("See more movers"):
+                            gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
+                            losers = df_movers.sort_values("change_pct", ascending=True).head(5)
+
+                            st.markdown("**Top gainers**")
+                            _render_signal_cards([
+                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", True, [])
+                                for _, row in gainers.iterrows()
+                            ])
+                            st.markdown("**Top losers**")
+                            _render_signal_cards([
+                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", False, [])
+                                for _, row in losers.iterrows()
+                            ])
+                        # 'Last updated' bewust ONDERAAN i.p.v. bovenaan -- de
+                        # belangrijkste info (de daadwerkelijke movers) hoort
+                        # als eerste in beeld te komen, niet een meta-regel.
+                        st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
+                    else:
+                        st.caption("No mover data available right now.")
+                else:
+                    st.caption("No data yet. This updates once daily via the scheduled scan. Check back tomorrow.")
+
+            # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
+            with st.container(border=True):
+                st.markdown("**Today's radar**")
+
+                # Alle items verzamelen i.p.v. losse st.markdown()-aanroepen
+                # per bullet -- dat voelde als een lange, rommelige wand van
+                # gemengde emoji-bullets, vooral op mobiel. Nu 1 samenhangend
+                # blok aan het eind.
+                radar_rows = []
+
+                macro_events = get_todays_macro_events(max_items=3)
+                with st.spinner("Checking today's radar..."):
+                    earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
+                    infos = get_tickers_info(holdings) if holdings else {}
+                todays_events = macro_events + [
+                    {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
+                ]
+                for event in todays_events[:3]:
+                    time_part = f" ({event['time']})" if "time" in event else ""
+                    radar_rows.append(_radar_row_html("📅", f"{event['name']}{time_part}"))
+
+                # Aankomende earnings deze week -- niet alleen vandaag, ook een
+                # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
+                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, days_ahead=5, max_items=3)
+                for e in upcoming_earnings:
+                    day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
+                    radar_rows.append(_radar_row_html(
+                        "📆", f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']})."
+                    ))
+
+                # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
+                # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
+                if holdings:
+                    risk_profile = database.get_risk_profile(user_email)
+                    concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
+                    if concentration_alert:
+                        radar_rows.append(_radar_row_html("⚖️", concentration_alert))
+
+                # Aankomende ex-dividend-data voor je HUIDIGE posities.
+                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
+                for d in upcoming_ex_div:
+                    day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
+                    radar_rows.append(_radar_row_html(
+                        "💰", f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']})."
+                    ))
+
+                # 52-weken-record -- een leuk, opvallend signaal als een van je
+                # posities vandaag een nieuwe hoogte/laagte raakt.
+                records_52wk = get_52_week_records(holdings, infos, max_items=3) if holdings else []
+                for r in records_52wk:
+                    emoji = "🚀" if r["type"] == "high" else "📉"
+                    label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
+                    radar_rows.append(_radar_row_html(emoji, f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
+
+                # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
+                # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
+                deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
+                for t in deep_dive_triggers:
+                    radar_rows.append(_radar_row_html("🔔", f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
+
+                weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
+                last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
+                weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
+                if weekly_is_new:
+                    database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
+
+                opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
+                weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
+                radar_rows.append(_radar_row_html(
+                    "🔍",
+                    f"<b>{opportunities['total_signals']}</b> signal(s) found "
+                    f"({opportunities['daily_signals']} daily{weekly_part}). "
+                    f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
+                    f"<b>{opportunities['in_watchlist_count']}</b> are on your watchlist, "
+                    f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
+                ))
+
+                def _is_recent_earnings(earnings_date_str, max_days=2):
+                    try:
+                        earnings_date = pd.to_datetime(earnings_date_str).date()
+                        days_since = (datetime.now().date() - earnings_date).days
+                        return 0 <= days_since <= max_days
+                    except Exception:
+                        return False
+
+                tracked_tickers = {item["ticker"] for item in tracked_items}
+                all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
+                personal_surprises = [
+                    s for s in all_recent_surprises
+                    if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
+                ]
+                for s in personal_surprises[:3]:
+                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    radar_rows.append(_radar_row_html(
+                        emoji, f"<b>{s['ticker']}</b>: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})"
+                    ))
+
+                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
+                # strenger venster (1 dag i.p.v. 2), want minder persoonlijk relevant,
+                # maar toch de moeite waard om even te vermelden.
+                market_wide_surprises = [
+                    s for s in all_recent_surprises
+                    if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
+                ]
+                for s in market_wide_surprises[:2]:
+                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    radar_rows.append(_radar_row_html(
+                        emoji,
+                        f"Also worth noting (not in your portfolio): "
+                        f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
+                    ))
+
+                # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
+                # kan een koop-/verkoopmoment zijn.
+                with st.spinner("Checking for sector/theme extremes..."):
+                    threshold_alerts = get_sector_theme_threshold_alerts()
+                for alert in threshold_alerts[:3]:
+                    move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
+                    extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
+                    region_suffix = f" ({alert['region']})" if alert.get("region") else ""
+                    kind_label = "sector" if alert["kind"] == "sector" else "theme"
+                    radar_rows.append(_radar_row_html(
+                        move_emoji,
+                        f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
+                        f"{alert['pct']:+.1f}% this month{extreme_marker}"
+                    ))
+
+                if holdings:
+                    weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
+                    weekly_scan_within_days = (
+                        weekly_scan_recent_date is not None
+                        and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
+                    )
+                    if weekly_scan_within_days:
+                        from portfolio_watch import check_holding
+                        # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
+                        # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
+                        # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
+                        # berekend op basis van de exacte flip-datum ('sinds').
+                        FLIP_VISIBLE_DAYS_ON_TODAY = 2
+                        today_date = datetime.now().date()
+                        with st.spinner("Checking for trend flips..."):
+                            flipped = []
+                            for h in holdings:
+                                result = check_holding(h["naam"], h["ticker"])
+                                if result and result.get("sinds"):
+                                    days_since_flip = (today_date - result["sinds"]).days
+                                    if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
+                                        flipped.append(result)
+                        for f in flipped[:3]:
+                            emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
+                            radar_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
+
+                if radar_rows:
+                    _render_radar_rows(radar_rows)
+                else:
+                    st.caption("Nothing new to flag right now. A quiet day on your radar.")
+
+                st.markdown(
+                    'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
+                    unsafe_allow_html=True,
+                )
+
+            # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
+            # met Market news voelde dit als een lange wand van tekst ---
+            with st.expander("📰 Top news for you", expanded=False):
+                st.caption("The 5 most recent news items across your portfolio and watchlist "
+                           "(up to 3 per position, from the last 3 days), most recent first.")
+                with st.spinner("Checking news..."):
+                    top_news = get_top_news_for_tickers(tracked_items, max_items=5)
+                if top_news:
+                    for n in top_news:
+                        pub_date = n["published"].strftime("%Y-%m-%d")
+                        st.markdown(f"- **{n['naam']}**: [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
+                else:
+                    st.caption("No recent news found for your tracked positions.")
+
+            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
+            with st.expander("🌐 Market news", expanded=False):
+                with st.spinner("Checking market news..."):
+                    market_news = get_top_news_for_tickers(
+                        [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
+                        max_items=3,
+                    )
+                if market_news:
+                    for n in market_news:
+                        pub_date = n["published"].strftime("%Y-%m-%d")
+                        st.markdown(f"- [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
+                else:
+                    st.caption("No market news available right now.")
+
+
 def render_premium():
     import database
 
@@ -3758,361 +4116,7 @@ def render_privacy():
 # VIEW: TODAY
 # ============================================================
 if current_view == "today":
-    st.markdown("### Today")
-
-    if not current_user.is_logged_in:
-        st.markdown(
-            """
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
-                        padding: 1.5rem 1.75rem; margin: 0.5rem 0 1.25rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    What you're missing
-                </div>
-                <div style="color:#EAEDF1; font-size:1.4rem; font-weight:700; margin-top:6px; line-height:1.35;">
-                    Your own, personalized morning briefing.
-                </div>
-                <div style="color:#8992A3; font-size:0.95rem; margin-top:10px; line-height:1.6; max-width: 560px;">
-                    Log in and add your positions to get a Today page built around YOUR portfolio:
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        # Tegels i.p.v. een bullet-lijst -- die voelde op mobiel al snel
-        # 'supervol' aan met 6 losse regels + icoontjes. Zelfde stijl als
-        # de hero-tegels (icoon-badge + titel + subtekst), en het overzicht
-        # is meteen ook completer/actueler dan de oude lijst (mistte
-        # 'nieuwe, persoonlijke signalen' -- een van de kernfeatures).
-        today_points = [
-            ("📊", "Your daily performance", "best/worst positions, vs. yesterday"),
-            ("📅", "Earnings & dividends ahead", "for your actual holdings"),
-            ("⚖️", "Risk & concentration alerts", "when a position outgrows your target"),
-            ("🚀", "52-week highs & lows", "the moment they happen"),
-            ("🔍", "New signals, personalized", "matched to what you hold or watch"),
-            ("📰", "News, filtered to your tickers", "no noise"),
-        ]
-        today_points_html = "".join(
-            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
-            f'border-radius:12px; padding:0.85rem 1rem;">'
-            f'<div style="width:32px; height:32px; border-radius:50%; background:rgba(31,174,150,0.18); '
-            f'display:flex; align-items:center; justify-content:center; font-size:1rem;">{emoji}</div>'
-            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:8px; line-height:1.3;">{title}</div>'
-            f'<div style="color:#8992A3; font-size:0.73rem; margin-top:2px; line-height:1.3;">{sub}</div>'
-            f'</div>'
-            for emoji, title, sub in today_points
-        )
-        st.markdown(
-            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            '<a href="?view=discover" class="button-link" target="_self">See what Hesty\'s can do (no login) &rarr;</a>',
-            unsafe_allow_html=True,
-        )
-        st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
-                "your Watchlist to unlock this.")
-    else:
-        import database
-        import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
-
-        user_email = current_user.email
-        holdings = filter_active_holdings(database.get_user_holdings(user_email))
-        watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
-
-        st.write("Here are your daily points that deserve your attention.")
-
-        if not holdings and not watchlist_items:
-            st.info("Add assets under My Portfolio or your Watchlist to get personal signals and news here.")
-        else:
-            tracked_items = holdings + watchlist_items
-
-            # --- Your portfolio today (nu in een eigen kader, net als Yesterday's
-            # biggest movers -- consistente stijl over de hele Today-pagina) ---
-            if holdings:
-                with st.spinner("Checking today's price moves..."):
-                    daily_stats = build_daily_portfolio_stats(holdings)
-
-                with st.container(border=True):
-                    if daily_stats:
-                        vs_yesterday_pct = daily_stats["portfolio_change_pct"]
-                        vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
-                        st.markdown(
-                            f'<div style="display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap;">'
-                            f'<span style="font-weight:700;">Your Portfolio Today</span>'
-                            f'<span style="font-size:0.85rem; font-weight:700; color:{vs_yesterday_color};">'
-                            f'{vs_yesterday_pct:+.1f}%</span>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown("**Your Portfolio Today**")
-
-                    dcol2, dcol3 = st.columns(2, gap="medium")
-                    with dcol2:
-                        if daily_stats:
-                            st.markdown(
-                                _hero_stat_tile_html(
-                                    "Best today", "🚀", daily_stats["best_performer"], daily_stats["best_change_pct"],
-                                    "31,174,150", "#1FAE96",
-                                ),
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.metric("Best today", "n/a")
-                    with dcol3:
-                        if daily_stats:
-                            st.markdown(
-                                _hero_stat_tile_html(
-                                    "Worst today", "📉", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
-                                    "229,72,77", "#E5484D",
-                                ),
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.metric("Worst today", "n/a")
-
-                    st.markdown(
-                        '<a href="?view=portfolio" class="button-link" target="_self">View My Portfolio &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
-
-            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
-            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
-            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
-            with st.container(border=True):
-                st.markdown("**Yesterday's biggest movers**")
-                if os.path.exists("top_movers.csv"):
-                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-                    if not df_movers.empty:
-                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
-                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
-
-                        mover_col1, mover_col2 = st.columns(2, gap="medium")
-                        with mover_col1:
-                            st.markdown(
-                                _hero_stat_tile_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
-                                unsafe_allow_html=True,
-                            )
-                        with mover_col2:
-                            st.markdown(
-                                _hero_stat_tile_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
-                                unsafe_allow_html=True,
-                            )
-                        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-                        with st.expander("See more movers"):
-                            gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
-                            losers = df_movers.sort_values("change_pct", ascending=True).head(5)
-
-                            st.markdown("**Top gainers**")
-                            _render_signal_cards([
-                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", True, [])
-                                for _, row in gainers.iterrows()
-                            ])
-                            st.markdown("**Top losers**")
-                            _render_signal_cards([
-                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", False, [])
-                                for _, row in losers.iterrows()
-                            ])
-                        # 'Last updated' bewust ONDERAAN i.p.v. bovenaan -- de
-                        # belangrijkste info (de daadwerkelijke movers) hoort
-                        # als eerste in beeld te komen, niet een meta-regel.
-                        st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
-                    else:
-                        st.caption("No mover data available right now.")
-                else:
-                    st.caption("No data yet. This updates once daily via the scheduled scan. Check back tomorrow.")
-
-            # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
-            with st.container(border=True):
-                st.markdown("**Today's radar**")
-
-                # Alle items verzamelen i.p.v. losse st.markdown()-aanroepen
-                # per bullet -- dat voelde als een lange, rommelige wand van
-                # gemengde emoji-bullets, vooral op mobiel. Nu 1 samenhangend
-                # blok aan het eind.
-                radar_rows = []
-
-                macro_events = get_todays_macro_events(max_items=3)
-                with st.spinner("Checking today's radar..."):
-                    earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
-                    infos = get_tickers_info(holdings) if holdings else {}
-                todays_events = macro_events + [
-                    {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
-                ]
-                for event in todays_events[:3]:
-                    time_part = f" ({event['time']})" if "time" in event else ""
-                    radar_rows.append(_radar_row_html("📅", f"{event['name']}{time_part}"))
-
-                # Aankomende earnings deze week -- niet alleen vandaag, ook een
-                # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
-                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, days_ahead=5, max_items=3)
-                for e in upcoming_earnings:
-                    day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
-                    radar_rows.append(_radar_row_html(
-                        "📆", f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']})."
-                    ))
-
-                # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
-                # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
-                if holdings:
-                    risk_profile = database.get_risk_profile(user_email)
-                    concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
-                    if concentration_alert:
-                        radar_rows.append(_radar_row_html("⚖️", concentration_alert))
-
-                # Aankomende ex-dividend-data voor je HUIDIGE posities.
-                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
-                for d in upcoming_ex_div:
-                    day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
-                    radar_rows.append(_radar_row_html(
-                        "💰", f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']})."
-                    ))
-
-                # 52-weken-record -- een leuk, opvallend signaal als een van je
-                # posities vandaag een nieuwe hoogte/laagte raakt.
-                records_52wk = get_52_week_records(holdings, infos, max_items=3) if holdings else []
-                for r in records_52wk:
-                    emoji = "🚀" if r["type"] == "high" else "📉"
-                    label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    radar_rows.append(_radar_row_html(emoji, f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
-
-                # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
-                # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
-                deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
-                for t in deep_dive_triggers:
-                    radar_rows.append(_radar_row_html("🔔", f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
-
-                weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
-                last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
-                weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
-                if weekly_is_new:
-                    database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
-
-                opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
-                weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
-                radar_rows.append(_radar_row_html(
-                    "🔍",
-                    f"<b>{opportunities['total_signals']}</b> signal(s) found "
-                    f"({opportunities['daily_signals']} daily{weekly_part}). "
-                    f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
-                    f"<b>{opportunities['in_watchlist_count']}</b> are on your watchlist, "
-                    f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
-                ))
-
-                def _is_recent_earnings(earnings_date_str, max_days=2):
-                    try:
-                        earnings_date = pd.to_datetime(earnings_date_str).date()
-                        days_since = (datetime.now().date() - earnings_date).days
-                        return 0 <= days_since <= max_days
-                    except Exception:
-                        return False
-
-                tracked_tickers = {item["ticker"] for item in tracked_items}
-                all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
-                personal_surprises = [
-                    s for s in all_recent_surprises
-                    if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
-                ]
-                for s in personal_surprises[:3]:
-                    emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    radar_rows.append(_radar_row_html(
-                        emoji, f"<b>{s['ticker']}</b>: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})"
-                    ))
-
-                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
-                # strenger venster (1 dag i.p.v. 2), want minder persoonlijk relevant,
-                # maar toch de moeite waard om even te vermelden.
-                market_wide_surprises = [
-                    s for s in all_recent_surprises
-                    if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
-                ]
-                for s in market_wide_surprises[:2]:
-                    emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    radar_rows.append(_radar_row_html(
-                        emoji,
-                        f"Also worth noting (not in your portfolio): "
-                        f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
-                    ))
-
-                # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
-                # kan een koop-/verkoopmoment zijn.
-                with st.spinner("Checking for sector/theme extremes..."):
-                    threshold_alerts = get_sector_theme_threshold_alerts()
-                for alert in threshold_alerts[:3]:
-                    move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
-                    extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
-                    region_suffix = f" ({alert['region']})" if alert.get("region") else ""
-                    kind_label = "sector" if alert["kind"] == "sector" else "theme"
-                    radar_rows.append(_radar_row_html(
-                        move_emoji,
-                        f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
-                        f"{alert['pct']:+.1f}% this month{extreme_marker}"
-                    ))
-
-                if holdings:
-                    weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
-                    weekly_scan_within_days = (
-                        weekly_scan_recent_date is not None
-                        and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
-                    )
-                    if weekly_scan_within_days:
-                        from portfolio_watch import check_holding
-                        # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
-                        # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
-                        # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
-                        # berekend op basis van de exacte flip-datum ('sinds').
-                        FLIP_VISIBLE_DAYS_ON_TODAY = 2
-                        today_date = datetime.now().date()
-                        with st.spinner("Checking for trend flips..."):
-                            flipped = []
-                            for h in holdings:
-                                result = check_holding(h["naam"], h["ticker"])
-                                if result and result.get("sinds"):
-                                    days_since_flip = (today_date - result["sinds"]).days
-                                    if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
-                                        flipped.append(result)
-                        for f in flipped[:3]:
-                            emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                            radar_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
-
-                if radar_rows:
-                    _render_radar_rows(radar_rows)
-                else:
-                    st.caption("Nothing new to flag right now. A quiet day on your radar.")
-
-                st.markdown(
-                    'See the full signal lists under <a href="?view=discover" class="inline-link" target="_self">Discover</a>.',
-                    unsafe_allow_html=True,
-                )
-
-            # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
-            # met Market news voelde dit als een lange wand van tekst ---
-            with st.expander("📰 Top news for you", expanded=False):
-                st.caption("The 5 most recent news items across your portfolio and watchlist "
-                           "(up to 3 per position, from the last 3 days), most recent first.")
-                with st.spinner("Checking news..."):
-                    top_news = get_top_news_for_tickers(tracked_items, max_items=5)
-                if top_news:
-                    for n in top_news:
-                        pub_date = n["published"].strftime("%Y-%m-%d")
-                        st.markdown(f"- **{n['naam']}**: [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
-                else:
-                    st.caption("No recent news found for your tracked positions.")
-
-            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
-            with st.expander("🌐 Market news", expanded=False):
-                with st.spinner("Checking market news..."):
-                    market_news = get_top_news_for_tickers(
-                        [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
-                        max_items=3,
-                    )
-                if market_news:
-                    for n in market_news:
-                        pub_date = n["published"].strftime("%Y-%m-%d")
-                        st.markdown(f"- [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
-                else:
-                    st.caption("No market news available right now.")
+    render_today()
 
 
 # ============================================================
