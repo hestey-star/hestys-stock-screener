@@ -3192,6 +3192,126 @@ with st.sidebar:
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def render_settings():
+    import database
+
+    st.markdown("### Settings")
+
+    if current_user.is_logged_in:
+        user_email = current_user.email
+        is_premium = database.is_premium_user(user_email)
+
+        with st.container(border=True):
+            st.markdown("#### Email preferences")
+            prefs = database.get_user_preferences(user_email)
+
+            st.caption("Weekly signals (choose which ones you want -- delivered in 1 combined email)")
+            wants_momentocrats = st.checkbox(
+                "📡 Momentocrats -- technical momentum + fundamental quality combo",
+                value=prefs.get("wants_momentocrats_email", False),
+            )
+            wants_snowball = st.checkbox(
+                "🐦 Snowballers -- quality stocks below fair value, for the long term",
+                value=prefs.get("wants_snowball_email", False),
+            )
+            wants_rocket = st.checkbox(
+                "🚀 Rocket List -- accelerating growth + momentum",
+                value=prefs.get("wants_rocket_email", False),
+            )
+
+            wants_daily = st.checkbox(
+                "Receive the daily screener email (swing-trade signals, weekdays)",
+                value=prefs.get("wants_daily_email", False),
+            )
+            region_options = ["EU", "US_East", "US_West"]
+            region_labels = {
+                "EU": "Europe (~07:00 CET / 08:00 CEST)",
+                "US_East": "US East (~07:00 ET)",
+                "US_West": "US West (~07:00 PT)",
+            }
+            email_region = st.selectbox(
+                "Morning delivery time (for the daily email)",
+                region_options,
+                index=region_options.index(prefs.get("email_region", "EU")),
+                format_func=lambda x: region_labels[x],
+            )
+            wants_portfolio = st.checkbox(
+                "Receive the weekly portfolio email (status + news for your own positions)",
+                value=prefs["wants_portfolio_email"],
+            )
+            if st.button("Save preferences"):
+                database.set_user_preferences(
+                    user_email, wants_portfolio,
+                    wants_daily_email=wants_daily, email_region=email_region,
+                    wants_momentocrats_email=wants_momentocrats,
+                    wants_snowball_email=wants_snowball, wants_rocket_email=wants_rocket,
+                )
+                st.success("Preferences saved!")
+
+            if is_premium:
+                st.markdown("---")
+                st.markdown("**Cash / uninvested amount**")
+                current_cash = database.get_cash_value(user_email)
+                new_cash = st.number_input(
+                    "Cash not currently invested (used for the cash% check in Analyze)",
+                    min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
+                )
+                if st.button("Save cash amount"):
+                    database.set_cash_value(user_email, new_cash)
+                    st.success("Saved!")
+
+        with st.container(border=True):
+            st.markdown("#### Risk profile")
+            st.caption("Used to personalize your Concentration Risk and Sectors analysis under "
+                       "Analyze. Not a one-time thing -- update it anytime your situation changes.")
+
+            profile = database.get_risk_profile(user_email)
+            horizon_options = ["short", "medium", "long"]
+            horizon_labels = {"short": "Short (< 2 years)", "medium": "Medium (2-7 years)", "long": "Long (7+ years)"}
+            horizon = st.selectbox(
+                "Investment horizon", horizon_options,
+                index=horizon_options.index(profile["investment_horizon"]),
+                format_func=lambda x: horizon_labels[x],
+                help="How long do you plan to hold most of your investments?",
+            )
+
+            tolerance_options = ["conservative", "balanced", "aggressive"]
+            tolerance = st.selectbox(
+                "Risk tolerance", tolerance_options,
+                index=tolerance_options.index(profile["risk_tolerance"]),
+                format_func=lambda x: x.capitalize(),
+                help="How comfortable are you with short-term swings for potentially higher returns?",
+            )
+
+            max_position = st.slider(
+                "Max % you're comfortable with in a single position", 5, 100,
+                int(profile["max_position_pct"]),
+                help="A common rule of thumb is 20-25%, but this is personal.",
+            )
+            max_sector = st.slider(
+                "Max % you're comfortable with in a single sector", 5, 100,
+                int(profile["max_sector_pct"]),
+                help="A common rule of thumb is 30-40%.",
+            )
+            target_cash = st.slider(
+                "Target cash buffer %", 0, 100, int(profile["target_cash_pct"]),
+                help="How much of your total portfolio do you want to keep as uninvested cash?",
+            )
+
+            wcol1, wcol2 = st.columns(2)
+            with wcol1:
+                if st.button("Save risk profile", type="primary"):
+                    database.set_risk_profile(user_email, horizon, tolerance, max_position, max_sector, target_cash)
+                    st.success("Saved!")
+            with wcol2:
+                if st.button("Reset to defaults"):
+                    database.reset_risk_profile(user_email)
+                    st.success("Reset to defaults!")
+                    st.rerun()
+    else:
+        st.info("Log in via the menu to manage your email preferences.")
+
+
 def render_login():
     import database as _database_for_login
 
@@ -5614,123 +5734,7 @@ elif current_view == "analyze":
                             st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
 
 elif current_view == "settings":
-    import database
-
-    st.markdown("### Settings")
-
-    if current_user.is_logged_in:
-        user_email = current_user.email
-        is_premium = database.is_premium_user(user_email)
-
-        with st.container(border=True):
-            st.markdown("#### Email preferences")
-            prefs = database.get_user_preferences(user_email)
-
-            st.caption("Weekly signals (choose which ones you want -- delivered in 1 combined email)")
-            wants_momentocrats = st.checkbox(
-                "📡 Momentocrats -- technical momentum + fundamental quality combo",
-                value=prefs.get("wants_momentocrats_email", False),
-            )
-            wants_snowball = st.checkbox(
-                "🐦 Snowballers -- quality stocks below fair value, for the long term",
-                value=prefs.get("wants_snowball_email", False),
-            )
-            wants_rocket = st.checkbox(
-                "🚀 Rocket List -- accelerating growth + momentum",
-                value=prefs.get("wants_rocket_email", False),
-            )
-
-            wants_daily = st.checkbox(
-                "Receive the daily screener email (swing-trade signals, weekdays)",
-                value=prefs.get("wants_daily_email", False),
-            )
-            region_options = ["EU", "US_East", "US_West"]
-            region_labels = {
-                "EU": "Europe (~07:00 CET / 08:00 CEST)",
-                "US_East": "US East (~07:00 ET)",
-                "US_West": "US West (~07:00 PT)",
-            }
-            email_region = st.selectbox(
-                "Morning delivery time (for the daily email)",
-                region_options,
-                index=region_options.index(prefs.get("email_region", "EU")),
-                format_func=lambda x: region_labels[x],
-            )
-            wants_portfolio = st.checkbox(
-                "Receive the weekly portfolio email (status + news for your own positions)",
-                value=prefs["wants_portfolio_email"],
-            )
-            if st.button("Save preferences"):
-                database.set_user_preferences(
-                    user_email, wants_portfolio,
-                    wants_daily_email=wants_daily, email_region=email_region,
-                    wants_momentocrats_email=wants_momentocrats,
-                    wants_snowball_email=wants_snowball, wants_rocket_email=wants_rocket,
-                )
-                st.success("Preferences saved!")
-
-            if is_premium:
-                st.markdown("---")
-                st.markdown("**Cash / uninvested amount**")
-                current_cash = database.get_cash_value(user_email)
-                new_cash = st.number_input(
-                    "Cash not currently invested (used for the cash% check in Analyze)",
-                    min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
-                )
-                if st.button("Save cash amount"):
-                    database.set_cash_value(user_email, new_cash)
-                    st.success("Saved!")
-
-        with st.container(border=True):
-            st.markdown("#### Risk profile")
-            st.caption("Used to personalize your Concentration Risk and Sectors analysis under "
-                       "Analyze. Not a one-time thing -- update it anytime your situation changes.")
-
-            profile = database.get_risk_profile(user_email)
-            horizon_options = ["short", "medium", "long"]
-            horizon_labels = {"short": "Short (< 2 years)", "medium": "Medium (2-7 years)", "long": "Long (7+ years)"}
-            horizon = st.selectbox(
-                "Investment horizon", horizon_options,
-                index=horizon_options.index(profile["investment_horizon"]),
-                format_func=lambda x: horizon_labels[x],
-                help="How long do you plan to hold most of your investments?",
-            )
-
-            tolerance_options = ["conservative", "balanced", "aggressive"]
-            tolerance = st.selectbox(
-                "Risk tolerance", tolerance_options,
-                index=tolerance_options.index(profile["risk_tolerance"]),
-                format_func=lambda x: x.capitalize(),
-                help="How comfortable are you with short-term swings for potentially higher returns?",
-            )
-
-            max_position = st.slider(
-                "Max % you're comfortable with in a single position", 5, 100,
-                int(profile["max_position_pct"]),
-                help="A common rule of thumb is 20-25%, but this is personal.",
-            )
-            max_sector = st.slider(
-                "Max % you're comfortable with in a single sector", 5, 100,
-                int(profile["max_sector_pct"]),
-                help="A common rule of thumb is 30-40%.",
-            )
-            target_cash = st.slider(
-                "Target cash buffer %", 0, 100, int(profile["target_cash_pct"]),
-                help="How much of your total portfolio do you want to keep as uninvested cash?",
-            )
-
-            wcol1, wcol2 = st.columns(2)
-            with wcol1:
-                if st.button("Save risk profile", type="primary"):
-                    database.set_risk_profile(user_email, horizon, tolerance, max_position, max_sector, target_cash)
-                    st.success("Saved!")
-            with wcol2:
-                if st.button("Reset to defaults"):
-                    database.reset_risk_profile(user_email)
-                    st.success("Reset to defaults!")
-                    st.rerun()
-    else:
-        st.info("Log in via the menu to manage your email preferences.")
+    render_settings()
 
 elif current_view == "premium":
     import database
