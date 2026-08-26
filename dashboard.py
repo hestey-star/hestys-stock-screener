@@ -3325,7 +3325,7 @@ def render_analyze():
                                 """,
                                 unsafe_allow_html=True,
                             )
-                            with st.expander("View history", key="view_history_expander"):
+                            with st.expander("View history", key=f"view_history_expander_{entry['ticker']}"):
                                 history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
                                 st.caption(f"{len(history)} version(s) logged, most recent first.")
                                 for version in history:
