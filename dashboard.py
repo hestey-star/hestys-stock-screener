@@ -38,6 +38,7 @@ import streamlit as st
 import yfinance as yf
 
 from emailer import send_email
+import database
 
 st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 
