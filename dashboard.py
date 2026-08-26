@@ -3192,6 +3192,145 @@ with st.sidebar:
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def render_premium():
+    import database
+
+    st.markdown("### Premium")
+
+    _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
+    if _premium_free_for_all:
+        st.success("🚀 Everything is unlocked for free while we're still getting started -- "
+                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
+
+    st.write(
+        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
+    )
+
+    st.markdown(
+        """
+        <table class="positions-table">
+            <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
+            <tbody>
+                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>All results</td></tr>
+                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>All results</td></tr>
+                <tr><td>Tracked positions (My Portfolio)</td><td>Up to 10</td><td>Unlimited</td></tr>
+                <tr><td>Concentration, Diversification, Sectors, Performance (Analyze)</td><td>&#10003;</td><td>&#10003;</td></tr>
+                <tr><td>Dividend income overview (Analyze)</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Weighted valuation (P/E) &amp; correlation matrix (Analyze)</td><td>--</td><td>&#10003;</td></tr>
+                <tr><td>Smart DCA Assistant (TradingView indicator download)</td><td>--</td><td>&#10003;</td></tr>
+            </tbody>
+        </table>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.container(border=True):
+        st.markdown("##### Smart DCA Assistant -- TradingView indicator")
+        st.write(
+            "A TradingView indicator that adjusts your periodic contribution based on how "
+            "cheap or expensive the market looks (moving average distance, RSI, drawdown) -- "
+            "buying a bit more when things look cheap, and holding back when they don't. Includes "
+            "a built-in comparison against a fixed, regular DCA strategy."
+        )
+        with st.expander("See it running on a real chart"):
+            try:
+                st.image("premium_content/dca_screenshot.jpg", width=500)
+            except Exception:
+                pass
+            st.caption(
+                "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
+                "suggested contribution at each point, and the panel on the right compares Smart DCA "
+                "against a fixed, regular DCA over the same period. This is one historical example, "
+                "not a guarantee of future results."
+            )
+
+        if current_user.is_logged_in and database.is_premium_user(current_user.email, ignore_free_for_all=True):
+            try:
+                with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
+                    pine_code = f.read()
+
+                # Watermerk wordt NA de //@version=6-regel geplaatst (niet ervoor) --
+                # bronnen spreken elkaar tegen of commentaar vóór die regel de
+                # compilatie kan verstoren, dus voor de zekerheid altijd erna.
+                lines = pine_code.split("\n", 1)
+                watermark = (
+                    f"// Licensed to: {current_user.email}\n"
+                    f"// Downloaded from Hesty's on {datetime.now().strftime('%Y-%m-%d')}\n"
+                    f"// For personal use only -- do not redistribute or republish.\n"
+                )
+                if len(lines) == 2:
+                    watermarked_code = lines[0] + "\n" + watermark + lines[1]
+                else:
+                    watermarked_code = pine_code + "\n" + watermark
+
+                st.download_button(
+                    "Download smart_dca_assistant.pine",
+                    data=watermarked_code,
+                    file_name="smart_dca_assistant.pine",
+                    mime="text/plain",
+                )
+                st.caption(
+                    "Open TradingView -> Pine Editor -> New blank indicator -> paste the file contents -> "
+                    "Add to chart. Right-click the indicator name in the chart legend and 'Pin to scale' "
+                    "to the same scale as your candles."
+                )
+            except FileNotFoundError:
+                st.caption("Indicator file not found -- contact support.")
+        else:
+            st.caption("🔒 Available for Premium members -- see Subscription below.")
+
+    with st.container(border=True):
+        st.markdown("##### Subscription")
+
+        # --- Terugkeer van Stripe: verifieer de sessie en zet premium aan ---
+        returned_session_id = st.query_params.get("session_id")
+        if returned_session_id:
+            with st.spinner("Confirming your payment..."):
+                success, paid_email = verify_and_activate_premium(returned_session_id)
+            if success:
+                st.success(f"🎉 Payment confirmed! Premium is now active for {paid_email}.")
+            else:
+                st.warning(
+                    "We couldn't confirm this payment yet. If you just completed checkout, "
+                    "please wait a few seconds and refresh this page."
+                )
+
+        if not current_user.is_logged_in:
+            st.info("Log in via the menu first so we know which account to upgrade.")
+        elif database.is_premium_user(current_user.email):
+            st.success("You're already on Premium. Thank you!")
+            customer_id = database.get_stripe_customer_id(current_user.email)
+            if customer_id:
+                if st.button("Manage subscription"):
+                    with st.spinner("Preparing your subscription portal..."):
+                        portal_session = create_billing_portal_session(customer_id)
+                    st.link_button("Open subscription portal →", portal_session.url, type="primary")
+                st.caption("Cancel anytime -- you'll keep Premium access until the end of your current billing period.")
+            else:
+                st.caption("Manage your subscription by contacting support -- see below.")
+        else:
+            st.write("Choose a plan:")
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                st.markdown("**Monthly -- €7.99/mo** *(~$8.99)*")
+                if st.button("Subscribe monthly", key="sub_monthly"):
+                    with st.spinner("Preparing checkout..."):
+                        session = create_checkout_session(
+                            st.secrets["stripe"]["price_id_monthly"], current_user.email,
+                        )
+                    st.link_button("Continue to payment →", session.url, type="primary")
+            with pcol2:
+                st.markdown("**Yearly -- €75/yr** *(~$85)*")
+                if st.button("Subscribe yearly", key="sub_yearly"):
+                    with st.spinner("Preparing checkout..."):
+                        session = create_checkout_session(
+                            st.secrets["stripe"]["price_id_yearly"], current_user.email,
+                        )
+                    st.link_button("Continue to payment →", session.url, type="primary")
+            st.caption("Payments are processed securely by Stripe -- we never see or store your card details. "
+                       "USD amounts shown are approximate (current EUR/USD rate) -- you're charged in EUR.")
+
+
 def render_settings():
     import database
 
@@ -5737,142 +5876,7 @@ elif current_view == "settings":
     render_settings()
 
 elif current_view == "premium":
-    import database
-
-    st.markdown("### Premium")
-
-    _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
-    if _premium_free_for_all:
-        st.success("🚀 Everything is unlocked for free while we're still getting started -- "
-                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
-
-    st.write(
-        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
-    )
-
-    st.markdown(
-        """
-        <table class="positions-table">
-            <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
-            <tbody>
-                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>All results</td></tr>
-                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>All results</td></tr>
-                <tr><td>Tracked positions (My Portfolio)</td><td>Up to 10</td><td>Unlimited</td></tr>
-                <tr><td>Concentration, Diversification, Sectors, Performance (Analyze)</td><td>&#10003;</td><td>&#10003;</td></tr>
-                <tr><td>Dividend income overview (Analyze)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Weighted valuation (P/E) &amp; correlation matrix (Analyze)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Smart DCA Assistant (TradingView indicator download)</td><td>--</td><td>&#10003;</td></tr>
-            </tbody>
-        </table>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    with st.container(border=True):
-        st.markdown("##### Smart DCA Assistant -- TradingView indicator")
-        st.write(
-            "A TradingView indicator that adjusts your periodic contribution based on how "
-            "cheap or expensive the market looks (moving average distance, RSI, drawdown) -- "
-            "buying a bit more when things look cheap, and holding back when they don't. Includes "
-            "a built-in comparison against a fixed, regular DCA strategy."
-        )
-        with st.expander("See it running on a real chart"):
-            try:
-                st.image("premium_content/dca_screenshot.jpg", width=500)
-            except Exception:
-                pass
-            st.caption(
-                "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
-                "suggested contribution at each point, and the panel on the right compares Smart DCA "
-                "against a fixed, regular DCA over the same period. This is one historical example, "
-                "not a guarantee of future results."
-            )
-
-        if current_user.is_logged_in and database.is_premium_user(current_user.email, ignore_free_for_all=True):
-            try:
-                with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
-                    pine_code = f.read()
-
-                # Watermerk wordt NA de //@version=6-regel geplaatst (niet ervoor) --
-                # bronnen spreken elkaar tegen of commentaar vóór die regel de
-                # compilatie kan verstoren, dus voor de zekerheid altijd erna.
-                lines = pine_code.split("\n", 1)
-                watermark = (
-                    f"// Licensed to: {current_user.email}\n"
-                    f"// Downloaded from Hesty's on {datetime.now().strftime('%Y-%m-%d')}\n"
-                    f"// For personal use only -- do not redistribute or republish.\n"
-                )
-                if len(lines) == 2:
-                    watermarked_code = lines[0] + "\n" + watermark + lines[1]
-                else:
-                    watermarked_code = pine_code + "\n" + watermark
-
-                st.download_button(
-                    "Download smart_dca_assistant.pine",
-                    data=watermarked_code,
-                    file_name="smart_dca_assistant.pine",
-                    mime="text/plain",
-                )
-                st.caption(
-                    "Open TradingView -> Pine Editor -> New blank indicator -> paste the file contents -> "
-                    "Add to chart. Right-click the indicator name in the chart legend and 'Pin to scale' "
-                    "to the same scale as your candles."
-                )
-            except FileNotFoundError:
-                st.caption("Indicator file not found -- contact support.")
-        else:
-            st.caption("🔒 Available for Premium members -- see Subscription below.")
-
-    with st.container(border=True):
-        st.markdown("##### Subscription")
-
-        # --- Terugkeer van Stripe: verifieer de sessie en zet premium aan ---
-        returned_session_id = st.query_params.get("session_id")
-        if returned_session_id:
-            with st.spinner("Confirming your payment..."):
-                success, paid_email = verify_and_activate_premium(returned_session_id)
-            if success:
-                st.success(f"🎉 Payment confirmed! Premium is now active for {paid_email}.")
-            else:
-                st.warning(
-                    "We couldn't confirm this payment yet. If you just completed checkout, "
-                    "please wait a few seconds and refresh this page."
-                )
-
-        if not current_user.is_logged_in:
-            st.info("Log in via the menu first so we know which account to upgrade.")
-        elif database.is_premium_user(current_user.email):
-            st.success("You're already on Premium. Thank you!")
-            customer_id = database.get_stripe_customer_id(current_user.email)
-            if customer_id:
-                if st.button("Manage subscription"):
-                    with st.spinner("Preparing your subscription portal..."):
-                        portal_session = create_billing_portal_session(customer_id)
-                    st.link_button("Open subscription portal →", portal_session.url, type="primary")
-                st.caption("Cancel anytime -- you'll keep Premium access until the end of your current billing period.")
-            else:
-                st.caption("Manage your subscription by contacting support -- see below.")
-        else:
-            st.write("Choose a plan:")
-            pcol1, pcol2 = st.columns(2)
-            with pcol1:
-                st.markdown("**Monthly -- €7.99/mo** *(~$8.99)*")
-                if st.button("Subscribe monthly", key="sub_monthly"):
-                    with st.spinner("Preparing checkout..."):
-                        session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_monthly"], current_user.email,
-                        )
-                    st.link_button("Continue to payment →", session.url, type="primary")
-            with pcol2:
-                st.markdown("**Yearly -- €75/yr** *(~$85)*")
-                if st.button("Subscribe yearly", key="sub_yearly"):
-                    with st.spinner("Preparing checkout..."):
-                        session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_yearly"], current_user.email,
-                        )
-                    st.link_button("Continue to payment →", session.url, type="primary")
-            st.caption("Payments are processed securely by Stripe -- we never see or store your card details. "
-                       "USD amounts shown are approximate (current EUR/USD rate) -- you're charged in EUR.")
+    render_premium()
 
 elif current_view == "support":
     render_support()
