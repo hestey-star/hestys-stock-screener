@@ -3192,6 +3192,155 @@ with st.sidebar:
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def render_login():
+    import database as _database_for_login
+
+    _reset_token = st.query_params.get("reset_token")
+
+    if current_user.is_logged_in:
+        st.info("You're already logged in.")
+        st.markdown(
+            f'<a href="?view={_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
+            unsafe_allow_html=True,
+        )
+    elif _reset_token:
+        # --- Iemand kwam hier via de reset-link uit de e-mail -- toon
+        # het 'nieuw wachtwoord instellen'-formulier i.p.v. de normale
+        # Sign In/Sign Up-toggle. ---
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Set a new password</h2>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        reset_col_l, reset_col_mid, reset_col_r = st.columns([1, 2, 1])
+        with reset_col_mid:
+            new_password = st.text_input("New password", type="password", key="reset_new_password",
+                                          help="At least 8 characters.")
+            new_password_confirm = st.text_input("Confirm new password", type="password", key="reset_new_password_confirm")
+            if st.button("Set new password", type="primary", key="reset_submit"):
+                if len(new_password) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif new_password != new_password_confirm:
+                    st.error("Passwords don't match.")
+                else:
+                    success, message = _database_for_login.reset_password_with_token(_reset_token, new_password)
+                    if success:
+                        st.success(message)
+                        st.markdown(
+                            '<a href="?view=login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.error(message)
+    elif st.session_state.get("show_forgot_password"):
+        # --- 'Forgot password?' aangeklikt -- toon het e-mailadres-
+        # formulier om een reset-link aan te vragen. ---
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Reset your password</h2>'
+            '<p style="color:#8992A3; margin-bottom:1.5rem;">Enter your email and we\'ll send you a reset link</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        forgot_col_l, forgot_col_mid, forgot_col_r = st.columns([1, 2, 1])
+        with forgot_col_mid:
+            forgot_email = st.text_input("Email", placeholder="you@example.com", key="forgot_password_email")
+            if st.button("Send reset link", type="primary", key="forgot_password_submit"):
+                if not forgot_email:
+                    st.error("Enter your email address.")
+                else:
+                    reset_token = _database_for_login.create_password_reset_token(forgot_email)
+                    if reset_token:
+                        reset_url = f"https://hestys.streamlit.app/?view=login&reset_token={reset_token}"
+                        send_email(
+                            to=forgot_email, subject="Reset your Hesty's password",
+                            body=f"Click the link below to set a new password (valid for 1 hour):\n\n{reset_url}",
+                        )
+                    # BEWUST ALTIJD dezelfde, algemene bevestiging tonen --
+                    # ongeacht of er echt een account/mail was, zodat een
+                    # aanvaller niet kan afleiden welke e-mailadressen wel/
+                    # niet bestaan.
+                    st.success("If an account exists for this email, we've sent a reset link.")
+            if st.button("Back to Sign In", key="back_to_signin_from_forgot"):
+                st.session_state.pop("show_forgot_password", None)
+                st.rerun()
+    else:
+        st.markdown(
+            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
+            '<h2 style="margin-bottom:0.3rem;">Welcome back</h2>'
+            '<p style="color:#8992A3; margin-bottom:1.5rem;">Sign in or create an account with email</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        login_col_l, login_col_mid, login_col_r = st.columns([1, 2, 1])
+        with login_col_mid:
+            login_mode = st.segmented_control(
+                "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
+                default="Sign In", key="login_mode_toggle", label_visibility="collapsed",
+            )
+            if login_mode is None:
+                login_mode = "Sign In"
+
+            if login_mode == "Sign In":
+                login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
+                login_password = st.text_input("Password", type="password", key="login_password")
+                if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
+                    st.session_state["show_forgot_password"] = True
+                    st.rerun()
+                if st.button("Sign In", type="primary", key="login_submit"):
+                    if not login_email or not login_password:
+                        st.error("Enter both your email and password.")
+                    else:
+                        success, result = _database_for_login.verify_password_login(login_email, login_password)
+                        if success:
+                            st.session_state["password_auth_email"] = login_email
+                            st.session_state["password_auth_name"] = result
+                            _new_token = _database_for_login.create_session_token(login_email)
+                            _cookie_controller.set("hestys_session_token", _new_token)
+                            st.query_params["view"] = "today"
+                            st.rerun()
+                        else:
+                            st.error(result)
+            else:
+                signup_name = st.text_input("Name", placeholder="Your name", key="signup_name")
+                signup_email = st.text_input("Email", placeholder="you@example.com", key="signup_email")
+                signup_password = st.text_input("Password", type="password", key="signup_password",
+                                                 help="At least 8 characters.")
+                signup_password_confirm = st.text_input("Confirm password", type="password", key="signup_password_confirm")
+                if st.button("Create account", type="primary", key="signup_submit"):
+                    if not signup_name or not signup_email or not signup_password:
+                        st.error("Fill in all fields.")
+                    elif "@" not in signup_email:
+                        st.error("Enter a valid email address.")
+                    elif len(signup_password) < 8:
+                        st.error("Password must be at least 8 characters.")
+                    elif signup_password != signup_password_confirm:
+                        st.error("Passwords don't match.")
+                    else:
+                        success, message = _database_for_login.sign_up_with_password(signup_email, signup_name, signup_password)
+                        if success:
+                            st.session_state["password_auth_email"] = signup_email
+                            st.session_state["password_auth_name"] = signup_name
+                            _new_token = _database_for_login.create_session_token(signup_email)
+                            _cookie_controller.set("hestys_session_token", _new_token)
+                            st.query_params["view"] = "today"
+                            st.rerun()
+                        else:
+                            st.error(message)
+
+            st.markdown(
+                '<div style="display:flex; align-items:center; gap:0.75rem; margin:1.5rem 0 1rem 0;">'
+                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
+                '<span style="color:#8992A3; font-size:0.8rem;">OR</span>'
+                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            st.button("Continue with Google", on_click=st.login, key="login_page_google", width="stretch")
+
+
 def render_support():
     st.markdown("### Support")
     st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
@@ -5728,152 +5877,7 @@ elif current_view == "privacy":
     render_privacy()
 
 elif current_view == "login":
-    import database as _database_for_login
-
-    _reset_token = st.query_params.get("reset_token")
-
-    if current_user.is_logged_in:
-        st.info("You're already logged in.")
-        st.markdown(
-            f'<a href="?view={_default_view}" class="button-link" target="_self">Go to your dashboard &rarr;</a>',
-            unsafe_allow_html=True,
-        )
-    elif _reset_token:
-        # --- Iemand kwam hier via de reset-link uit de e-mail -- toon
-        # het 'nieuw wachtwoord instellen'-formulier i.p.v. de normale
-        # Sign In/Sign Up-toggle. ---
-        st.markdown(
-            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
-            '<h2 style="margin-bottom:0.3rem;">Set a new password</h2>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        reset_col_l, reset_col_mid, reset_col_r = st.columns([1, 2, 1])
-        with reset_col_mid:
-            new_password = st.text_input("New password", type="password", key="reset_new_password",
-                                          help="At least 8 characters.")
-            new_password_confirm = st.text_input("Confirm new password", type="password", key="reset_new_password_confirm")
-            if st.button("Set new password", type="primary", key="reset_submit"):
-                if len(new_password) < 8:
-                    st.error("Password must be at least 8 characters.")
-                elif new_password != new_password_confirm:
-                    st.error("Passwords don't match.")
-                else:
-                    success, message = _database_for_login.reset_password_with_token(_reset_token, new_password)
-                    if success:
-                        st.success(message)
-                        st.markdown(
-                            '<a href="?view=login" class="button-link" target="_self">Go to Sign In &rarr;</a>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.error(message)
-    elif st.session_state.get("show_forgot_password"):
-        # --- 'Forgot password?' aangeklikt -- toon het e-mailadres-
-        # formulier om een reset-link aan te vragen. ---
-        st.markdown(
-            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
-            '<h2 style="margin-bottom:0.3rem;">Reset your password</h2>'
-            '<p style="color:#8992A3; margin-bottom:1.5rem;">Enter your email and we\'ll send you a reset link</p>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        forgot_col_l, forgot_col_mid, forgot_col_r = st.columns([1, 2, 1])
-        with forgot_col_mid:
-            forgot_email = st.text_input("Email", placeholder="you@example.com", key="forgot_password_email")
-            if st.button("Send reset link", type="primary", key="forgot_password_submit"):
-                if not forgot_email:
-                    st.error("Enter your email address.")
-                else:
-                    reset_token = _database_for_login.create_password_reset_token(forgot_email)
-                    if reset_token:
-                        reset_url = f"https://hestys.streamlit.app/?view=login&reset_token={reset_token}"
-                        send_email(
-                            to=forgot_email, subject="Reset your Hesty's password",
-                            body=f"Click the link below to set a new password (valid for 1 hour):\n\n{reset_url}",
-                        )
-                    # BEWUST ALTIJD dezelfde, algemene bevestiging tonen --
-                    # ongeacht of er echt een account/mail was, zodat een
-                    # aanvaller niet kan afleiden welke e-mailadressen wel/
-                    # niet bestaan.
-                    st.success("If an account exists for this email, we've sent a reset link.")
-            if st.button("Back to Sign In", key="back_to_signin_from_forgot"):
-                st.session_state.pop("show_forgot_password", None)
-                st.rerun()
-    else:
-        st.markdown(
-            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
-            '<h2 style="margin-bottom:0.3rem;">Welcome back</h2>'
-            '<p style="color:#8992A3; margin-bottom:1.5rem;">Sign in or create an account with email</p>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        login_col_l, login_col_mid, login_col_r = st.columns([1, 2, 1])
-        with login_col_mid:
-            login_mode = st.segmented_control(
-                "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
-                default="Sign In", key="login_mode_toggle", label_visibility="collapsed",
-            )
-            if login_mode is None:
-                login_mode = "Sign In"
-
-            if login_mode == "Sign In":
-                login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
-                login_password = st.text_input("Password", type="password", key="login_password")
-                if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
-                    st.session_state["show_forgot_password"] = True
-                    st.rerun()
-                if st.button("Sign In", type="primary", key="login_submit"):
-                    if not login_email or not login_password:
-                        st.error("Enter both your email and password.")
-                    else:
-                        success, result = _database_for_login.verify_password_login(login_email, login_password)
-                        if success:
-                            st.session_state["password_auth_email"] = login_email
-                            st.session_state["password_auth_name"] = result
-                            _new_token = _database_for_login.create_session_token(login_email)
-                            _cookie_controller.set("hestys_session_token", _new_token)
-                            st.query_params["view"] = "today"
-                            st.rerun()
-                        else:
-                            st.error(result)
-            else:
-                signup_name = st.text_input("Name", placeholder="Your name", key="signup_name")
-                signup_email = st.text_input("Email", placeholder="you@example.com", key="signup_email")
-                signup_password = st.text_input("Password", type="password", key="signup_password",
-                                                 help="At least 8 characters.")
-                signup_password_confirm = st.text_input("Confirm password", type="password", key="signup_password_confirm")
-                if st.button("Create account", type="primary", key="signup_submit"):
-                    if not signup_name or not signup_email or not signup_password:
-                        st.error("Fill in all fields.")
-                    elif "@" not in signup_email:
-                        st.error("Enter a valid email address.")
-                    elif len(signup_password) < 8:
-                        st.error("Password must be at least 8 characters.")
-                    elif signup_password != signup_password_confirm:
-                        st.error("Passwords don't match.")
-                    else:
-                        success, message = _database_for_login.sign_up_with_password(signup_email, signup_name, signup_password)
-                        if success:
-                            st.session_state["password_auth_email"] = signup_email
-                            st.session_state["password_auth_name"] = signup_name
-                            _new_token = _database_for_login.create_session_token(signup_email)
-                            _cookie_controller.set("hestys_session_token", _new_token)
-                            st.query_params["view"] = "today"
-                            st.rerun()
-                        else:
-                            st.error(message)
-
-            st.markdown(
-                '<div style="display:flex; align-items:center; gap:0.75rem; margin:1.5rem 0 1rem 0;">'
-                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
-                '<span style="color:#8992A3; font-size:0.8rem;">OR</span>'
-                '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-            st.button("Continue with Google", on_click=st.login, key="login_page_google", width="stretch")
+    render_login()
 
 elif current_view == "confirm":
     import database as _database_for_confirm
