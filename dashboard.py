@@ -5860,10 +5860,10 @@ with st.sidebar:
     )
 
     # --- Iconen (dezelfde SVG's als voorheen, nu als CSS-achtergrond-
-    # afbeelding geinjecteerd op de st.page_link-widgets via de .st-key-
-    # klasse -- dezelfde techniek als bij de Google-knop). De actieve
-    # pagina krijgt een linker accent-balk + jade tekstkleur, net als
-    # voorheen. ---
+    # afbeelding geinjecteerd via een CSS-selector op het href-attribuut
+    # (st.page_link ondersteunt GEEN key-parameter, dus de eerdere
+    # .st-key-aanpak werkt hier niet -- dat gaf de TypeError-crash). De
+    # actieve pagina krijgt een linker accent-balk + jade tekstkleur. ---
     _nav_icons_b64 = {
         "discover": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTEiIGN5PSIxMSIgcj0iNyIvPjxsaW5lIHgxPSIyMSIgeTE9IjIxIiB4Mj0iMTYuNjUiIHkyPSIxNi42NSIvPjwvc3ZnPg==",
         "today": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxsaW5lIHgxPSIxNiIgeTE9IjIiIHgyPSIxNiIgeTI9IjYiLz48bGluZSB4MT0iOCIgeTE9IjIiIHgyPSI4IiB5Mj0iNiIvPjxsaW5lIHgxPSIzIiB5MT0iMTAiIHgyPSIyMSIgeTI9IjEwIi8+PC9zdmc+",
@@ -5875,32 +5875,31 @@ with st.sidebar:
     _active_url_path = getattr(pg, "url_path", "")
     _nav_css_parts = ["""
     <style>
-    div[data-testid="stSidebar"] div[class*="st-key-nav_"] {
-        margin-bottom: 3px;
-    }
-    div[data-testid="stSidebar"] div[class*="st-key-nav_"] a {
+    div[data-testid="stSidebarNav"] { display: none; }
+    div[data-testid="stSidebar"] a[href$="/discover"],
+    div[data-testid="stSidebar"] a[href$="/today"],
+    div[data-testid="stSidebar"] a[href$="/portfolio"],
+    div[data-testid="stSidebar"] a[href$="/analyze"],
+    div[data-testid="stSidebar"] a[href$="/support"],
+    div[data-testid="stSidebar"] a[href$="/premium"] {
         display: flex; align-items: center; gap: 0.75rem;
         font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
         text-decoration: none !important; color: #8992A3 !important;
-        border-left: 3px solid transparent;
+        border-left: 3px solid transparent; margin-bottom: 3px;
     }
-    div[data-testid="stSidebar"] div[class*="st-key-nav_"] a:hover {
+    div[data-testid="stSidebar"] a[href$="/discover"]:hover,
+    div[data-testid="stSidebar"] a[href$="/today"]:hover,
+    div[data-testid="stSidebar"] a[href$="/portfolio"]:hover,
+    div[data-testid="stSidebar"] a[href$="/analyze"]:hover,
+    div[data-testid="stSidebar"] a[href$="/support"]:hover,
+    div[data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
     """]
-    for _icon_name, _icon_b64 in _nav_icons_b64.items():
-        _nav_css_parts.append(f"""
-    .st-key-nav_{_icon_name} a p::before {{
-        content: ""; display: inline-block; width: 18px; height: 18px;
-        background-image: url("data:image/svg+xml;base64,{_icon_b64}");
-        background-repeat: no-repeat; background-position: center; background-size: contain;
-        vertical-align: middle; margin-right: 0.75rem;
-    }}
-    """)
     if _active_url_path in _nav_icons_b64:
         _nav_css_parts.append(f"""
-    .st-key-nav_{_active_url_path} a {{
+    div[data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
         color: #1FAE96 !important;
         background: linear-gradient(90deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
         border-left: 3px solid #1FAE96 !important;
@@ -5909,12 +5908,12 @@ with st.sidebar:
     _nav_css_parts.append("</style>")
     st.markdown("".join(_nav_css_parts), unsafe_allow_html=True)
 
-    st.page_link(discover_page, label="Discover", key="nav_discover")
-    st.page_link(today_page, label="Today", key="nav_today")
-    st.page_link(portfolio_page, label="My Portfolio", key="nav_portfolio")
-    st.page_link(analyze_page, label="Analyze", key="nav_analyze")
-    st.page_link(support_page, label="Support", key="nav_support")
-    st.page_link(premium_page, label="Premium", key="nav_premium")
+    st.page_link(discover_page, label="Discover", icon="🔍")
+    st.page_link(today_page, label="Today", icon="📅")
+    st.page_link(portfolio_page, label="My Portfolio", icon="💼")
+    st.page_link(analyze_page, label="Analyze", icon="📊")
+    st.page_link(support_page, label="Support", icon="🛟")
+    st.page_link(premium_page, label="Premium", icon="⭐")
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
