@@ -3243,7 +3243,7 @@ def render_analyze():
             unsafe_allow_html=True,
         )
 
-        with st.expander("➕ Add a new deep-dive (or update)", expanded=False):
+        with st.expander("➕ Add a new deep-dive (or update)", expanded=False, key="add_a_new_deep_dive_or_update_expander"):
             dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
             # Automatisch de bedrijfsnaam invullen zodra de ticker verandert
@@ -3403,7 +3403,7 @@ def render_analyze():
                                 """,
                                 unsafe_allow_html=True,
                             )
-                            with st.expander("View history"):
+                            with st.expander("View history", key="view_history_expander"):
                                 history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
                                 st.caption(f"{len(history)} version(s) logged, most recent first.")
                                 for version in history:
@@ -3428,7 +3428,7 @@ def render_analyze():
             infos = get_tickers_info(holdings)
 
         # --- Concentratie Risk ---
-        with st.expander("🎯 Concentration Risk", expanded=True):
+        with st.expander("🎯 Concentration Risk", expanded=True, key="concentration_risk_expander"):
             for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
                 st.markdown(f"- {finding}")
 
@@ -3450,7 +3450,7 @@ def render_analyze():
         # breedte sectie. Elke categorie toont nu ook de tickers erachter
         # (bv. welk ETF, welke positie telt als 'Future') i.p.v. alleen een
         # kaal percentage. ---
-        with st.expander("🏭 Portfolio Composition", expanded=True):
+        with st.expander("🏭 Portfolio Composition", expanded=True, key="portfolio_composition_expander"):
             sector_groups, type_groups, region_groups = {}, {}, {}
             for h in holdings:
                 value = h.get("position_value") or 0
@@ -3511,7 +3511,7 @@ def render_analyze():
                     )
 
         # --- Risico ---
-        with st.expander("⚖️ Risk"):
+        with st.expander("⚖️ Risk", key="risk_expander"):
             for finding in analyze_risk(holdings, infos):
                 st.markdown(f"- {finding}")
 
@@ -3551,7 +3551,7 @@ def render_analyze():
         with st.spinner("Loading dividend data..."):
             infos = get_tickers_info(holdings)
 
-        with st.expander("💰 Dividend"):
+        with st.expander("💰 Dividend", key="dividend_expander"):
             if is_premium:
                 dividend_result = analyze_dividend(holdings, infos)
                 for finding in dividend_result["findings"]:
@@ -3599,7 +3599,7 @@ def render_analyze():
         # en van yfinance bekend traag is). Zo verschijnt Performance
         # meteen, terwijl de rest van de pagina (Sectors/Diversification/
         # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
-        with st.expander("📈 Performance", expanded=True):
+        with st.expander("📈 Performance", expanded=True, key="performance_expander"):
             st.caption("Your real return, based on the buy/sell transactions you've logged under "
                        "My Portfolio -- excludes dividends. Includes fully closed positions. "
                        "Positions without logged transactions won't show a return here.")
@@ -4025,7 +4025,7 @@ def render_portfolio():
         st.markdown("**Manage**")
 
         # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-        with st.expander("Import from a broker", expanded=False):
+        with st.expander("Import from a broker", expanded=False, key="import_from_a_broker_expander"):
             st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
                        "(CSV) to import your full buy/sell history in one go, instead of "
                        "logging each one by hand.")
@@ -4257,7 +4257,7 @@ def render_portfolio():
         # --- Log a transaction (werkt ook zonder bestaande posities -- een
         # nieuwe positie kan direct via een eerste 'Log a buy' worden
         # aangemaakt) ---
-        with st.expander("Log a transaction", expanded=False):
+        with st.expander("Log a transaction", expanded=False, key="log_a_transaction_expander"):
             st.caption("Log your actual buys and sells to see your real return under Analyze. "
                        "Optional -- positions without transactions logged just won't show a return.")
 
@@ -4417,7 +4417,7 @@ def render_portfolio():
     # ============================================================
     # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
     # ============================================================
-    with st.expander("Watchlist", expanded=False):
+    with st.expander("Watchlist", expanded=False, key="watchlist_expander"):
         st.caption("Track tickers you don't own yet -- they'll show up with personalized "
                    "signals and news on the Today page.")
 
@@ -4561,7 +4561,7 @@ def render_discover():
 
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation (nieuw) ---
-        with st.expander("🔄 Sector rotation"):
+        with st.expander("🔄 Sector rotation", key="sector_rotation_expander"):
             st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
             region = st.segmented_control(
                 "Region", options=["US", "EU"], selection_mode="single",
@@ -4623,7 +4623,7 @@ def render_discover():
 
         # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
         # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
-        with st.expander("💡 Themes"):
+        with st.expander("💡 Themes", key="themes_expander"):
             st.caption("How popular investing themes are doing right now (1-month trailing).")
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
@@ -4680,7 +4680,7 @@ def render_discover():
                 st.caption("No trend data available right now.")
 
     elif current_discover_subview == "earnings_surprises":
-        with st.expander("💰 Earnings surprises"):
+        with st.expander("💰 Earnings surprises", key="earnings_surprises_expander"):
             st.caption("Notable earnings beats/misses among today's and this week's signals -- "
                        "only shown during earnings season (last 60 days).")
             surprises = get_earnings_surprises_from_signals(max_items=5)
@@ -4870,7 +4870,7 @@ def render_discover():
             _email_pref_link("Want this weekly by email?")
 
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-        with st.expander("🐦 Snowballers"):
+        with st.expander("🐦 Snowballers", key="snowballers_expander"):
             st.caption("Quality companies trading below fair value, with low volatility. For the "
                        "long-term investor -- no fresh trend flip required.")
             if os.path.exists("snowball_signals.csv"):
@@ -4915,7 +4915,7 @@ def render_discover():
             _email_pref_link("Want this weekly by email?")
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
-        with st.expander("🚀 Rocket List"):
+        with st.expander("🚀 Rocket List", key="rocket_list_expander"):
             st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
                        "with more risk in exchange for growth potential.")
             if os.path.exists("rocket_list_signals.csv"):
@@ -5097,7 +5097,7 @@ def render_today():
                                 unsafe_allow_html=True,
                             )
                         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-                        with st.expander("See more movers"):
+                        with st.expander("See more movers", key="see_more_movers_expander"):
                             gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
                             losers = df_movers.sort_values("change_pct", ascending=True).head(5)
 
@@ -5285,7 +5285,7 @@ def render_today():
 
             # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
             # met Market news voelde dit als een lange wand van tekst ---
-            with st.expander("📰 Top news for you", expanded=False):
+            with st.expander("📰 Top news for you", expanded=False, key="top_news_for_you_expander"):
                 st.caption("The 5 most recent news items across your portfolio and watchlist "
                            "(up to 3 per position, from the last 3 days), most recent first.")
                 with st.spinner("Checking news..."):
@@ -5298,7 +5298,7 @@ def render_today():
                     st.caption("No recent news found for your tracked positions.")
 
             # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
-            with st.expander("🌐 Market news", expanded=False):
+            with st.expander("🌐 Market news", expanded=False, key="market_news_expander"):
                 with st.spinner("Checking market news..."):
                     market_news = get_top_news_for_tickers(
                         [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
@@ -5352,7 +5352,7 @@ def render_premium():
             "buying a bit more when things look cheap, and holding back when they don't. Includes "
             "a built-in comparison against a fixed, regular DCA strategy."
         )
-        with st.expander("See it running on a real chart"):
+        with st.expander("See it running on a real chart", key="see_it_running_on_a_real_chart_expander"):
             try:
                 st.image("premium_content/dca_screenshot.jpg", width=500)
             except Exception:
@@ -5727,26 +5727,26 @@ def render_support():
 
     st.markdown("#### Frequently asked questions")
 
-    with st.expander("What does Discover do?"):
+    with st.expander("What does Discover do?", key="what_does_discover_do_expander"):
         st.write(
             "It scans the AEX, Nasdaq-100, S&P 500, DAX, and CAC 40 (weekly and daily variants) "
             "for stocks that just turned bullish on a Supertrend indicator, scored on technical "
             "and fundamental factors. It's public, no login required."
         )
 
-    with st.expander("Can I import my transaction history from my broker?"):
+    with st.expander("Can I import my transaction history from my broker?", key="can_i_import_my_transaction_history_from_my_broker_expander"):
         st.write(
             "Yes, for DEGIRO -- under My Portfolio, 'Import from a broker'. Using a different "
             "broker? Let us know via the contact form below, and we'll look into adding it."
         )
 
-    with st.expander("Is my portfolio data private?"):
+    with st.expander("Is my portfolio data private?", key="is_my_portfolio_data_private_expander"):
         st.write(
             "Yes. Your tracked positions are only visible to you, tied to your Google account. "
             "We never share or sell your data."
         )
 
-    with st.expander("What's the difference between Free and Premium?"):
+    with st.expander("What's the difference between Free and Premium?", key="what_s_the_difference_between_free_and_premium_expander"):
         st.write(
             "Free covers concentration, diversification, sector and asset mix, and up to 10 "
             "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
@@ -5754,20 +5754,20 @@ def render_support():
             "the Smart DCA Assistant TradingView indicator. See the Premium page for the full comparison."
         )
 
-    with st.expander("How do I cancel my Premium subscription?"):
+    with st.expander("How do I cancel my Premium subscription?", key="how_do_i_cancel_my_premium_subscription_expander"):
         st.write(
             "On the Premium page, under Subscription, click 'Manage subscription' -- this opens "
             "Stripe's secure billing portal, where you can cancel anytime. You'll keep Premium "
             "access until the end of your current billing period."
         )
 
-    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?"):
+    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?", key="how_do_i_get_the_smart_dca_assistant_tradingview_indicator_expander"):
         st.write(
             "Premium members can download it directly from the Premium page, with setup "
             "instructions for TradingView's Pine Editor."
         )
 
-    with st.expander("How do I change what emails I receive?"):
+    with st.expander("How do I change what emails I receive?", key="how_do_i_change_what_emails_i_receive_expander"):
         st.write(
             "Log in, go to Settings, and use the Email preferences section to toggle the weekly "
             "screener, daily screener, and/or portfolio emails on or off."
@@ -5825,7 +5825,7 @@ def render_privacy():
         unsafe_allow_html=True,
     )
 
-    with st.expander("What we collect"):
+    with st.expander("What we collect", key="what_we_collect_expander"):
         st.write(
             "When you log in (via Google or Microsoft), we get your email address and name. "
             "Beyond that, we only store what you actively enter: the positions and watchlist "
@@ -5834,7 +5834,7 @@ def render_privacy():
             "one in."
         )
 
-    with st.expander("Why we collect it"):
+    with st.expander("Why we collect it", key="why_we_collect_it_expander"):
         st.write(
             "Purely to show you your own data back (My Portfolio, Analyze, your personalized "
             "Today briefing), and to send you the daily/weekly emails you've opted into. "
@@ -5842,7 +5842,7 @@ def render_privacy():
             "on Hesty's, and there never will be."
         )
 
-    with st.expander("Who can see it"):
+    with st.expander("Who can see it", key="who_can_see_it_expander"):
         st.write(
             "Only you, when logged into your own account. As explained above, your portfolio "
             "and transaction data is stored under a hashed identifier, not your readable email "
@@ -5851,7 +5851,7 @@ def render_privacy():
             "anything ourselves to fix a bug or help with a support question."
         )
 
-    with st.expander("Third parties involved"):
+    with st.expander("Third parties involved", key="third_parties_involved_expander"):
         st.write(
             "Supabase hosts our database. Google or Microsoft handle the login itself (we "
             "never see your password). Stripe will handle payments once Premium is actually "
@@ -5859,7 +5859,7 @@ def render_privacy():
             "personal data is sent there, just ticker symbols."
         )
 
-    with st.expander("Your control over it"):
+    with st.expander("Your control over it", key="your_control_over_it_expander"):
         st.write("You can remove any position, watchlist item, or transaction yourself at any time.")
         st.markdown(
             'Want your entire account and its data deleted? Reach out via '
@@ -5867,7 +5867,7 @@ def render_privacy():
             unsafe_allow_html=True,
         )
 
-    with st.expander("Cookies"):
+    with st.expander("Cookies", key="cookies_expander"):
         st.write(
             "A login session cookie is used to keep you signed in -- that's required for "
             "Google/Microsoft login to work at all. We don't use tracking or advertising cookies."
