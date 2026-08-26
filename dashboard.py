@@ -3477,7 +3477,11 @@ def render_analyze():
                     chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
                     if chart_values:
                         fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
-                        st.plotly_chart(fig)
+                        # Unieke key nodig -- deze functie wordt 3x aangeroepen
+                        # (Sectors/Asset Type/Region) en st.plotly_chart() zonder
+                        # key kan dan met StreamlitDuplicateElementId crashen.
+                        chart_key = "breakdown_chart_" + title.lower().replace(" ", "_")
+                        st.plotly_chart(fig, key=chart_key)
 
             comp_col1, comp_col2 = st.columns(2)
             with comp_col1:
