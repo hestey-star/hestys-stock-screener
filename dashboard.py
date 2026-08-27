@@ -1540,7 +1540,10 @@ def _position_card_html(name: str, ticker: str, logo_url: str, shares_text: str,
     (zelfde patroon als de signaal-kaarten, voorkomt midden-doorbrekende
     labels), en een weight-bar onderaan voor het portfolio-aandeel.
     """
-    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" />' if logo_url else ""
+    # onerror verbergt het plaatje netjes als het gegokte domein niet
+    # klopt (de naam-gok-terugval is niet perfect), i.p.v. een kapot
+    # plaatje-icoon te tonen.
+    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" onerror="this.style.display=\'none\'" />' if logo_url else ""
 
     if day_change_pct is None:
         day_html = '<span style="color:#8992A3;">-</span>'
@@ -3308,9 +3311,15 @@ def render_analyze():
                             conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
                             tile_overall_score = _compute_deep_dive_overall_score(entry)
 
+                            # Als het gegokte domein niet klopt (de naam-gok-
+                            # terugval is niet perfect), toont onerror
+                            # netjes het icoontje i.p.v. een kapot plaatje.
                             logo_html = (
                                 f'<img src="{logo_url}" width="56" height="56" '
-                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
+                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" '
+                                f'onerror="this.outerHTML=\'<div style=&quot;width:56px; height:56px; '
+                                f'border-radius:12px; background:rgba(31,174,150,0.12); display:flex; '
+                                f'align-items:center; justify-content:center; font-size:1.4rem;&quot;>📈</div>\'" />'
                                 if logo_url else
                                 '<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
                                 'display:flex; align-items:center; justify-content:center; font-size:1.4rem;">📈</div>'
@@ -5850,19 +5859,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # --- Iconen (dezelfde SVG's als voorheen, nu als CSS-achtergrond-
-    # afbeelding geinjecteerd via een CSS-selector op het href-attribuut
-    # (st.page_link ondersteunt GEEN key-parameter, dus de eerdere
-    # .st-key-aanpak werkt hier niet -- dat gaf de TypeError-crash). De
-    # actieve pagina krijgt een linker accent-balk + jade tekstkleur. ---
-    _nav_icons_b64 = {
-        "discover": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGNpcmNsZSBjeD0iMTEiIGN5PSIxMSIgcj0iNyIvPjxsaW5lIHgxPSIyMSIgeTE9IjIxIiB4Mj0iMTYuNjUiIHkyPSIxNi42NSIvPjwvc3ZnPg==",
-        "today": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iNCIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIvPjxsaW5lIHgxPSIxNiIgeTE9IjIiIHgyPSIxNiIgeTI9IjYiLz48bGluZSB4MT0iOCIgeTE9IjIiIHgyPSI4IiB5Mj0iNiIvPjxsaW5lIHgxPSIzIiB5MT0iMTAiIHgyPSIyMSIgeTI9IjEwIi8+PC9zdmc+",
-        "portfolio": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMiIgeT0iNyIgd2lkdGg9IjIwIiBoZWlnaHQ9IjE0IiByeD0iMiIvPjxwYXRoIGQ9Ik0xNiAyMVY1YTIgMiAwIDAgMC0yLTJoLTRhMiAyIDAgMCAwLTIgMnYxNiIvPjwvc3ZnPg==",
-        "analyze": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PGxpbmUgeDE9IjE4IiB5MT0iMjAiIHgyPSIxOCIgeTI9IjEwIi8+PGxpbmUgeDE9IjEyIiB5MT0iMjAiIHgyPSIxMiIgeTI9IjQiLz48bGluZSB4MT0iNiIgeTE9IjIwIiB4Mj0iNiIgeTI9IjE0Ii8+PC9zdmc+",
-        "support": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIyczgtNCA4LTEwVjVsLTgtMy04IDN2N2MwIDYgOCAxMCA4IDEweiIvPjwvc3ZnPg==",
-        "premium": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjODk5MkEzIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDE1IDguNSAyMiA5LjUgMTcgMTQuNSAxOC41IDIxLjUgMTIgMTggNS41IDIxLjUgNyAxNC41IDIgOS41IDkgOC41IDEyIDIiLz48L3N2Zz4=",
-    }
+    # --- Actieve pagina krijgt een linker accent-balk + jade tekstkleur. ---
     _active_url_path = getattr(pg, "url_path", "")
     _nav_css_parts = ["""
     <style>
@@ -5888,19 +5885,7 @@ with st.sidebar:
         background: rgba(255,255,255,0.04);
     }
     """]
-    # De emoji-iconen (via icon=) waren te speels -- de originele, subtiele
-    # SVG-lijniconen komen terug via CSS ::before op het href-attribuut
-    # (st.page_link ondersteunt geen key-parameter, dus geen st-key-aanpak
-    # mogelijk zoals bij de Google-knop -- href-matching is het alternatief).
-    for _icon_path, _icon_b64 in _nav_icons_b64.items():
-        _nav_css_parts.append(f"""
-    div[data-testid="stSidebar"] a[href$="/{_icon_path}"]::before {{
-        content: ""; display: inline-block; width: 18px; height: 18px; flex-shrink: 0;
-        background-image: url("data:image/svg+xml;base64,{_icon_b64}");
-        background-repeat: no-repeat; background-position: center; background-size: contain;
-    }}
-    """)
-    if _active_url_path in _nav_icons_b64:
+    if _active_url_path:
         _nav_css_parts.append(f"""
     div[data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
         color: #1FAE96 !important;
@@ -5911,12 +5896,17 @@ with st.sidebar:
     _nav_css_parts.append("</style>")
     st.markdown("".join(_nav_css_parts), unsafe_allow_html=True)
 
-    st.page_link(discover_page, label="Discover")
-    st.page_link(today_page, label="Today")
-    st.page_link(portfolio_page, label="My Portfolio")
-    st.page_link(analyze_page, label="Analyze")
-    st.page_link(support_page, label="Support")
-    st.page_link(premium_page, label="Premium")
+    # CSS-injectie van de originele SVG-lijniconen bleek onbetrouwbaar
+    # (verscheen soms helemaal niet) -- overgestapt op Streamlit's officieel
+    # ondersteunde Material Symbols (via icon=":material/xxx:"), die een
+    # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
+    # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
+    st.page_link(discover_page, label="Discover", icon=":material/search:")
+    st.page_link(today_page, label="Today", icon=":material/calendar_today:")
+    st.page_link(portfolio_page, label="My Portfolio", icon=":material/work:")
+    st.page_link(analyze_page, label="Analyze", icon=":material/bar_chart:")
+    st.page_link(support_page, label="Support", icon=":material/support_agent:")
+    st.page_link(premium_page, label="Premium", icon=":material/star:")
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
