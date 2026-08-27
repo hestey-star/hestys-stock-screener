@@ -4780,7 +4780,7 @@ def render_discover():
 
 
         st.markdown(
-            """
+            f"""
             <div id="signals" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
                         border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
@@ -4791,9 +4791,9 @@ def render_discover():
                     3 specially-built signals, each with its own investing style. This is the core of Hesty's.
                 </div>
                 <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
-                    📡 <b style="color:#EAEDF1;">Momentocrats</b>: momentum + quality, for swing trades (days-weeks)<br>
-                    🐦 <b style="color:#EAEDF1;">Snowballers</b>: quality at a good price, for the long-term investor<br>
-                    🚀 <b style="color:#EAEDF1;">Rocket List</b>: accelerating growth, for higher risk/reward
+                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Momentocrats</b>: momentum + quality, for swing trades (days-weeks)<br>
+                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Snowballers</b>: quality at a good price, for the long-term investor<br>
+                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Rocket List</b>: accelerating growth, for higher risk/reward
                 </div>
             </div>
             """,
@@ -4830,7 +4830,7 @@ def render_discover():
         _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
         # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-        with st.expander("📡 Momentocrats", expanded=False, key="momentocrats_expander"):
+        with st.expander("Momentocrats", expanded=False, key="momentocrats_expander", icon=":material/sensors:"):
             st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
 
             # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
@@ -4894,7 +4894,7 @@ def render_discover():
             _email_pref_link("Want this weekly by email?")
 
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-        with st.expander("🐦 Snowballers", key="snowballers_expander"):
+        with st.expander("Snowballers", key="snowballers_expander", icon=":material/savings:"):
             st.caption("Quality companies trading below fair value, with low volatility. For the "
                        "long-term investor -- no fresh trend flip required.")
             if os.path.exists("snowball_signals.csv"):
@@ -4939,7 +4939,7 @@ def render_discover():
             _email_pref_link("Want this weekly by email?")
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
-        with st.expander("🚀 Rocket List", key="rocket_list_expander"):
+        with st.expander("Rocket List", key="rocket_list_expander", icon=":material/rocket_launch:"):
             st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
                        "with more risk in exchange for growth potential.")
             if os.path.exists("rocket_list_signals.csv"):
@@ -5335,8 +5335,9 @@ def render_premium():
 
     _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
     if _premium_free_for_all:
-        st.success("🚀 Everything is unlocked for free while we're still getting started -- "
-                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!")
+        st.success("Everything is unlocked for free while we're still getting started -- "
+                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!",
+                   icon=":material/auto_awesome:")
 
     st.write(
         "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
@@ -5482,15 +5483,15 @@ def render_settings():
 
             st.caption("Weekly signals (choose which ones you want -- delivered in 1 combined email)")
             wants_momentocrats = st.checkbox(
-                "📡 Momentocrats -- technical momentum + fundamental quality combo",
+                "Momentocrats -- technical momentum + fundamental quality combo",
                 value=prefs.get("wants_momentocrats_email", False),
             )
             wants_snowball = st.checkbox(
-                "🐦 Snowballers -- quality stocks below fair value, for the long term",
+                "Snowballers -- quality stocks below fair value, for the long term",
                 value=prefs.get("wants_snowball_email", False),
             )
             wants_rocket = st.checkbox(
-                "🚀 Rocket List -- accelerating growth + momentum",
+                "Rocket List -- accelerating growth + momentum",
                 value=prefs.get("wants_rocket_email", False),
             )
 
