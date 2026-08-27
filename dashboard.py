@@ -2156,12 +2156,32 @@ def get_company_logo_url(ticker: str, company_name: str = None) -> str:
         # Naam ophalen: eerst proberen via yfinance, met de ZELF-BEKENDE
         # company_name als terugval als .info leeg is.
         name = info.get("shortName") or info.get("longName") or company_name
-        guessed_domain = _guess_domain_from_name(name)
-        if not guessed_domain:
+        if not name:
             return None
-        candidate_url = f"https://www.google.com/s2/favicons?domain={guessed_domain}&sz=256"
-        if _verify_logo_url(candidate_url):
-            return candidate_url
+
+        # Meerdere domein-varianten proberen, niet slechts 1 gok -- de
+        # VOLLEDIGE naam ('Grab Holdings Limited' -> 'grabholdings.com')
+        # klopt lang niet altijd (echt: grab.com); het EERSTE WOORD
+        # alleen ('grab.com') is vaak een betere gok voor bedrijven met
+        # generieke, beschrijvende extra woorden in hun officiele naam
+        # (Holdings/Health/Technologies/Clean/etc.). Volledige naam eerst
+        # geprobeerd (specifieker, dus minder kans op een TOEVALLIGE
+        # match met een ander, bestaand bedrijf), eerste-woord als
+        # terugval.
+        candidate_domains = []
+        full_guess = _guess_domain_from_name(name)
+        if full_guess:
+            candidate_domains.append(full_guess)
+        first_word = name.split()[0] if name.split() else None
+        if first_word:
+            first_word_guess = _guess_domain_from_name(first_word)
+            if first_word_guess and first_word_guess not in candidate_domains:
+                candidate_domains.append(first_word_guess)
+
+        for guessed_domain in candidate_domains:
+            candidate_url = f"https://www.google.com/s2/favicons?domain={guessed_domain}&sz=256"
+            if _verify_logo_url(candidate_url):
+                return candidate_url
         return None
     except Exception:
         return None
