@@ -45,6 +45,21 @@ st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
+
+.material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    vertical-align: middle;
+}
 
 html, body, p, span, div, label {
     font-family: 'Inter', sans-serif;
@@ -1512,19 +1527,38 @@ def _render_signal_cards(cards_html: list) -> None:
     )
 
 
-def _hero_stat_tile_html(label: str, icon: str, ticker: str, pct: float, accent_rgb: str, color: str) -> str:
+def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str:
+    """
+    Geeft 1 icoon terug uit dezelfde, consistente lijn-icoon-bibliotheek
+    als de zijbalk (Material Symbols) -- i.p.v. losse emoji, die overal
+    net anders ogen (kleurrijk, verschillende stijlen door elkaar). Werkt
+    overal waar unsafe_allow_html gebruikt wordt (dus ook buiten
+    st.page_link, waar Streamlit's eigen :material/naam:-syntax beperkt
+    tot is).
+    """
+    return (
+        f'<span class="material-symbols-outlined" '
+        f'style="font-size:{size_px}px; color:{color};">{name}</span>'
+    )
+
+
+def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, accent_rgb: str, color: str) -> str:
     """
     Fancy hero-tegel voor een enkele, uitgelichte stat (bv. Top gainer/
     loser, Best/Worst today) -- gradient + gloed + icoon-badge, i.p.v.
     een plat kleurblok. Gedeeld tussen 'Yesterday's biggest movers' en
     'Your Portfolio Today', zodat beide er consistent uitzien.
+
+    'icon_name' is een Material Symbol-naam (bv. 'trending_up'), niet
+    een rauwe emoji -- consistent met de zijbalk en de andere hero-
+    tegels elders op de site.
     """
     return (
         f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
         f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 12px; '
         f'box-shadow: 0 0 14px rgba({accent_rgb},0.15); padding: 0.7rem 0.5rem; text-align:center;">'
         f'<div style="width:30px; height:30px; border-radius:50%; background:rgba({accent_rgb},0.18); '
-        f'display:flex; align-items:center; justify-content:center; font-size:0.95rem; margin:0 auto;">{icon}</div>'
+        f'display:flex; align-items:center; justify-content:center; margin:0 auto;">{_icon_span(icon_name, size_px=16, color=color)}</div>'
         f'<div style="font-size:0.6rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.8px; margin-top:6px;">{label}</div>'
         f'<div style="font-size:0.95rem; font-weight:800; color:#EAEDF1; margin-top:1px;">{ticker}</div>'
         f'<div style="font-size:1.25rem; font-weight:800; color:{color}; margin-top:1px;">{pct:+.1f}%</div>'
@@ -4492,23 +4526,25 @@ def render_discover():
         # thema-tegels (voorkomt dat Markdown het als code-blok
         # interpreteert door voorloop-spaties/newlines). ---
         hero_points = [
-            ("🔍", "Discover new ideas", "signals, themes, trends"),
-            ("📊", "Analyze your own portfolio", "performance, risk, allocation"),
-            ("📬", "Tailored daily & weekly updates", "matched to your investing style"),
-            ("🚀", "Expanding every week", "new signals, always improving"),
+            ("search", "Discover new ideas", "signals, themes, trends"),
+            ("bar_chart", "Analyze your own portfolio", "performance, risk, allocation"),
+            ("mail", "Tailored daily & weekly updates", "matched to your investing style"),
+            ("trending_up", "Expanding every week", "new signals, always improving"),
         ]
         # 2x2-grid i.p.v. flex-wrap (dat gaf op brede schermen 4 platte,
         # dunne vakjes op 1 rij -- saai). Een icoon-badge (gekleurde
-        # cirkel) achter elke emoji geeft meer visueel gewicht.
+        # cirkel) met dezelfde Material Symbol-lijniconen als de zijbalk
+        # (i.p.v. losse emoji, die te speels oogden en niet aansloten
+        # bij de rest van de site) geeft meer visueel gewicht.
         hero_points_html = "".join(
             f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
             f'border-radius:12px; padding:1rem 1.1rem;">'
             f'<div style="width:36px; height:36px; border-radius:50%; background:rgba(31,174,150,0.18); '
-            f'display:flex; align-items:center; justify-content:center; font-size:1.15rem;">{emoji}</div>'
+            f'display:flex; align-items:center; justify-content:center;">{_icon_span(icon_name, size_px=18, color="#1FAE96")}</div>'
             f'<div style="color:#EAEDF1; font-size:0.88rem; font-weight:700; margin-top:9px; line-height:1.3;">{title}</div>'
             f'<div style="color:#8992A3; font-size:0.75rem; margin-top:3px; line-height:1.35;">{sub}</div>'
             f'</div>'
-            for emoji, title, sub in hero_points
+            for icon_name, title, sub in hero_points
         )
         st.markdown(
             '<div style="text-align:center; padding: 1.5rem 0.5rem 1rem 0.5rem;">'
@@ -4703,13 +4739,13 @@ def render_discover():
             import database as _database_for_optin
 
             st.markdown(
-                """
+                f"""
                 <div id="signup" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
                             border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
                             box-shadow: 0 0 24px rgba(31,174,150,0.12);
                             padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
                     <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
-                        📬 Free daily signals
+                        {_icon_span("mail", size_px=14, color="#1FAE96")} Free daily signals
                     </div>
                     <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
                         Quality stocks turning bullish today.
@@ -4970,22 +5006,22 @@ def render_today():
         # is meteen ook completer/actueler dan de oude lijst (mistte
         # 'nieuwe, persoonlijke signalen' -- een van de kernfeatures).
         today_points = [
-            ("📊", "Your daily performance", "best/worst positions, vs. yesterday"),
-            ("📅", "Earnings & dividends ahead", "for your actual holdings"),
-            ("⚖️", "Risk & concentration alerts", "when a position outgrows your target"),
-            ("🚀", "52-week highs & lows", "the moment they happen"),
-            ("🔍", "New signals, personalized", "matched to what you hold or watch"),
-            ("📰", "News, filtered to your tickers", "no noise"),
+            ("bar_chart", "Your daily performance", "best/worst positions, vs. yesterday"),
+            ("event", "Earnings & dividends ahead", "for your actual holdings"),
+            ("balance", "Risk & concentration alerts", "when a position outgrows your target"),
+            ("candlestick_chart", "52-week highs & lows", "the moment they happen"),
+            ("search", "New signals, personalized", "matched to what you hold or watch"),
+            ("newspaper", "News, filtered to your tickers", "no noise"),
         ]
         today_points_html = "".join(
             f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
             f'border-radius:12px; padding:0.85rem 1rem;">'
             f'<div style="width:32px; height:32px; border-radius:50%; background:rgba(31,174,150,0.18); '
-            f'display:flex; align-items:center; justify-content:center; font-size:1rem;">{emoji}</div>'
+            f'display:flex; align-items:center; justify-content:center;">{_icon_span(icon_name, size_px=16, color="#1FAE96")}</div>'
             f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:8px; line-height:1.3;">{title}</div>'
             f'<div style="color:#8992A3; font-size:0.73rem; margin-top:2px; line-height:1.3;">{sub}</div>'
             f'</div>'
-            for emoji, title, sub in today_points
+            for icon_name, title, sub in today_points
         )
         st.markdown(
             f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
@@ -5035,7 +5071,7 @@ def render_today():
                         if daily_stats:
                             st.markdown(
                                 _hero_stat_tile_html(
-                                    "Best today", "🚀", daily_stats["best_performer"], daily_stats["best_change_pct"],
+                                    "Best today", "trending_up", daily_stats["best_performer"], daily_stats["best_change_pct"],
                                     "31,174,150", "#1FAE96",
                                 ),
                                 unsafe_allow_html=True,
@@ -5046,7 +5082,7 @@ def render_today():
                         if daily_stats:
                             st.markdown(
                                 _hero_stat_tile_html(
-                                    "Worst today", "📉", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
+                                    "Worst today", "trending_down", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
                                     "229,72,77", "#E5484D",
                                 ),
                                 unsafe_allow_html=True,
@@ -5070,12 +5106,12 @@ def render_today():
                         mover_col1, mover_col2 = st.columns(2, gap="medium")
                         with mover_col1:
                             st.markdown(
-                                _hero_stat_tile_html("Top gainer", "🚀", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
+                                _hero_stat_tile_html("Top gainer", "trending_up", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
                                 unsafe_allow_html=True,
                             )
                         with mover_col2:
                             st.markdown(
-                                _hero_stat_tile_html("Top loser", "📉", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
+                                _hero_stat_tile_html("Top loser", "trending_down", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
                                 unsafe_allow_html=True,
                             )
                         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
