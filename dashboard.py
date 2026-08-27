@@ -4588,7 +4588,7 @@ def render_discover():
 
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation (nieuw) ---
-        with st.expander("🔄 Sector rotation", key="sector_rotation_expander"):
+        with st.expander("Sector rotation", key="sector_rotation_expander", icon=":material/sync:"):
             st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
             region = st.segmented_control(
                 "Region", options=["US", "EU"], selection_mode="single",
@@ -4650,7 +4650,7 @@ def render_discover():
 
         # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
         # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
-        with st.expander("💡 Themes", key="themes_expander"):
+        with st.expander("Themes", key="themes_expander", icon=":material/lightbulb:"):
             st.caption("How popular investing themes are doing right now (1-month trailing).")
             with st.spinner("Checking theme performance..."):
                 theme_rotation = build_theme_rotation()
@@ -4707,7 +4707,7 @@ def render_discover():
                 st.caption("No trend data available right now.")
 
     elif current_discover_subview == "earnings_surprises":
-        with st.expander("💰 Earnings surprises", key="earnings_surprises_expander"):
+        with st.expander("Earnings surprises", key="earnings_surprises_expander", icon=":material/payments:"):
             st.caption("Notable earnings beats/misses among today's and this week's signals -- "
                        "only shown during earnings season (last 60 days).")
             surprises = get_earnings_surprises_from_signals(max_items=5)
