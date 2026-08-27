@@ -31,6 +31,7 @@ from datetime import datetime, timezone, timedelta, date
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import requests
 import stripe
 import streamlit as st
 import yfinance as yf
@@ -1543,7 +1544,11 @@ def _position_card_html(name: str, ticker: str, logo_url: str, shares_text: str,
     # onerror verbergt het plaatje netjes als het gegokte domein niet
     # klopt (de naam-gok-terugval is niet perfect), i.p.v. een kapot
     # plaatje-icoon te tonen.
-    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" onerror="this.style.display=\'none\'" />' if logo_url else ""
+    # logo_url is nu server-kant al geverifieerd (get_company_logo_url),
+    # dus altijd bruikbaar als 'ie niet None is -- geen client-side
+    # onerror-fallback meer nodig (die werkte toch niet: Streamlit's
+    # HTML-sanitisatie verwijdert inline event-handlers zoals onerror).
+    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" />' if logo_url else ""
 
     if day_change_pct is None:
         day_html = '<span style="color:#8992A3;">-</span>'
@@ -2099,20 +2104,51 @@ def get_company_logo_url(ticker: str, company_name: str = None) -> str:
     is (zoals deep-dives), is dit een veel betrouwbaardere bron dan
     volledig op yfinance's .info te vertrouwen.
 
+    BELANGRIJK: de gegokte logo-URL wordt hier VOORAF (server-kant)
+    daadwerkelijk opgehaald en gecontroleerd, in plaats van te
+    vertrouwen op een client-side onerror-fallback in de HTML -- die
+    laatste werkt namelijk NIET in Streamlit, want unsafe_allow_html
+    saniteert de HTML met DOMPurify, dat standaard ALLE inline
+    event-handlers (onerror, onclick, etc.) verwijdert. Zonder deze
+    server-kant-check zou een verkeerd gegokt domein een kapot-plaatje-
+    icoontje tonen i.p.v. netjes terug te vallen.
+
     24-uur gecached (i.p.v. de standaard 5 minuten van get_cached_ticker_info
     zelf) -- een logo verandert vrijwel nooit, en deze functie wordt nu ook
     gebruikt in My Portfolio's tabel (die bij ELK paginabezoek rendert), dus
-    een lange cache voorkomt dat het paginabezoek zelf traag wordt.
+    een lange cache voorkomt dat het paginabezoek zelf traag wordt. De
+    verificatie-aanroep zelf gebeurt daardoor ook maar 1x per ticker per dag.
     """
+    def _verify_logo_url(url: str) -> bool:
+        """
+        Haalt de URL daadwerkelijk op en controleert of 'ie een bruikbare
+        afbeelding oplevert. Google's favicon-dienst geeft bij een niet-
+        bestaand domein vaak een heel klein, generiek 'globe'-icoontje
+        terug (i.p.v. een fout) -- een te klein bestand duidt dus op een
+        mislukte gok, geen echt logo.
+        """
+        try:
+            response = requests.get(url, timeout=3)
+            if response.status_code != 200:
+                return False
+            if len(response.content) < 300:
+                return False
+            return True
+        except Exception:
+            return False
+
     try:
         info = get_cached_ticker_info(ticker)
         website = info.get("website")
         if website:
             domain = website.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-            return f"https://www.google.com/s2/favicons?domain={domain}&sz=256"
+            candidate_url = f"https://www.google.com/s2/favicons?domain={domain}&sz=256"
+            if _verify_logo_url(candidate_url):
+                return candidate_url
 
-        # Terugval: geen 'website'-veld -- crypto-achtige tickers (geen
-        # bedrijf, dus geen zinvol domein te gokken) slaan we bewust over.
+        # Terugval: geen 'website'-veld (of niet geverifieerd) --
+        # crypto-achtige tickers (geen bedrijf, dus geen zinvol domein te
+        # gokken) slaan we bewust over.
         ticker_suffix = ticker.rsplit("-", 1)[-1].upper() if "-" in ticker else ""
         if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
             return None
@@ -2123,7 +2159,10 @@ def get_company_logo_url(ticker: str, company_name: str = None) -> str:
         guessed_domain = _guess_domain_from_name(name)
         if not guessed_domain:
             return None
-        return f"https://www.google.com/s2/favicons?domain={guessed_domain}&sz=256"
+        candidate_url = f"https://www.google.com/s2/favicons?domain={guessed_domain}&sz=256"
+        if _verify_logo_url(candidate_url):
+            return candidate_url
+        return None
     except Exception:
         return None
 
@@ -3311,15 +3350,13 @@ def render_analyze():
                             conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
                             tile_overall_score = _compute_deep_dive_overall_score(entry)
 
-                            # Als het gegokte domein niet klopt (de naam-gok-
-                            # terugval is niet perfect), toont onerror
-                            # netjes het icoontje i.p.v. een kapot plaatje.
+                            # logo_url is nu server-kant al geverifieerd
+                            # (get_company_logo_url), dus altijd bruikbaar
+                            # als 'ie niet None is -- geen client-side
+                            # onerror-fallback meer nodig.
                             logo_html = (
                                 f'<img src="{logo_url}" width="56" height="56" '
-                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" '
-                                f'onerror="this.outerHTML=\'<div style=&quot;width:56px; height:56px; '
-                                f'border-radius:12px; background:rgba(31,174,150,0.12); display:flex; '
-                                f'align-items:center; justify-content:center; font-size:1.4rem;&quot;>📈</div>\'" />'
+                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
                                 if logo_url else
                                 '<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
                                 'display:flex; align-items:center; justify-content:center; font-size:1.4rem;">📈</div>'
