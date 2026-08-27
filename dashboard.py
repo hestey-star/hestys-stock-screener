@@ -2076,7 +2076,7 @@ def _guess_domain_from_name(name: str) -> str:
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def get_company_logo_url(ticker: str) -> str:
+def get_company_logo_url(ticker: str, company_name: str = None) -> str:
     """
     Geeft een logo-URL terug via Google's eigen, gratis favicon-dienst --
     geen aanmelding/API-sleutel nodig, en betrouwbaarder dan een kleine,
@@ -2086,6 +2086,15 @@ def get_company_logo_url(ticker: str) -> str:
     een domein-gok uit de bedrijfsnaam, want 'website' bleek in de
     praktijk regelmatig te ontbreken (bekende yfinance-onbetrouwbaarheid).
     Geeft None terug als er geen domein af te leiden is (bv. crypto).
+
+    'company_name' is een OPTIONELE, AL-BEKENDE bedrijfsnaam (bv. uit een
+    eigen database-record) -- gebruikt als extra terugval wanneer
+    yfinance's .info HELEMAAL leeg/onbereikbaar is (niet alleen het
+    'website'-veld, maar ook 'shortName'/'longName' zelf). yfinance's
+    .info-endpoint is namelijk aanzienlijk flakier dan .history() (vaker
+    leeg/rate-limited) -- dus voor plekken waar de naam toch al bekend
+    is (zoals deep-dives), is dit een veel betrouwbaardere bron dan
+    volledig op yfinance's .info te vertrouwen.
 
     24-uur gecached (i.p.v. de standaard 5 minuten van get_cached_ticker_info
     zelf) -- een logo verandert vrijwel nooit, en deze functie wordt nu ook
@@ -2105,7 +2114,9 @@ def get_company_logo_url(ticker: str) -> str:
         if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
             return None
 
-        name = info.get("shortName") or info.get("longName")
+        # Naam ophalen: eerst proberen via yfinance, met de ZELF-BEKENDE
+        # company_name als terugval als .info leeg is.
+        name = info.get("shortName") or info.get("longName") or company_name
         guessed_domain = _guess_domain_from_name(name)
         if not guessed_domain:
             return None
@@ -3293,7 +3304,7 @@ def render_analyze():
                 for tile_col, entry in zip(tile_cols, row_entries):
                     with tile_col:
                         with st.container(border=True):
-                            logo_url = get_company_logo_url(entry["ticker"])
+                            logo_url = get_company_logo_url(entry["ticker"], entry.get("naam"))
                             conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
                             tile_overall_score = _compute_deep_dive_overall_score(entry)
 
@@ -3827,7 +3838,7 @@ def render_portfolio():
             # signaal-tabellen elders op de site al hebben opgelost.
             position_cards_html = [
                 _position_card_html(
-                    h["naam"], h["ticker"], get_company_logo_url(h["ticker"]),
+                    h["naam"], h["ticker"], get_company_logo_url(h["ticker"], h.get("naam")),
                     str(h.get("shares") or "-"), _format_price(h), h.get("day_change_pct"),
                     _format_value(h), _pct_of_portfolio(h),
                 )
@@ -5877,6 +5888,18 @@ with st.sidebar:
         background: rgba(255,255,255,0.04);
     }
     """]
+    # De emoji-iconen (via icon=) waren te speels -- de originele, subtiele
+    # SVG-lijniconen komen terug via CSS ::before op het href-attribuut
+    # (st.page_link ondersteunt geen key-parameter, dus geen st-key-aanpak
+    # mogelijk zoals bij de Google-knop -- href-matching is het alternatief).
+    for _icon_path, _icon_b64 in _nav_icons_b64.items():
+        _nav_css_parts.append(f"""
+    div[data-testid="stSidebar"] a[href$="/{_icon_path}"]::before {{
+        content: ""; display: inline-block; width: 18px; height: 18px; flex-shrink: 0;
+        background-image: url("data:image/svg+xml;base64,{_icon_b64}");
+        background-repeat: no-repeat; background-position: center; background-size: contain;
+    }}
+    """)
     if _active_url_path in _nav_icons_b64:
         _nav_css_parts.append(f"""
     div[data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
@@ -5888,12 +5911,12 @@ with st.sidebar:
     _nav_css_parts.append("</style>")
     st.markdown("".join(_nav_css_parts), unsafe_allow_html=True)
 
-    st.page_link(discover_page, label="Discover", icon="🔍")
-    st.page_link(today_page, label="Today", icon="📅")
-    st.page_link(portfolio_page, label="My Portfolio", icon="💼")
-    st.page_link(analyze_page, label="Analyze", icon="📊")
-    st.page_link(support_page, label="Support", icon="🛟")
-    st.page_link(premium_page, label="Premium", icon="⭐")
+    st.page_link(discover_page, label="Discover")
+    st.page_link(today_page, label="Today")
+    st.page_link(portfolio_page, label="My Portfolio")
+    st.page_link(analyze_page, label="Analyze")
+    st.page_link(support_page, label="Support")
+    st.page_link(premium_page, label="Premium")
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
