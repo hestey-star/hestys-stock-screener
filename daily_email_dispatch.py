@@ -76,7 +76,7 @@ def _append_unsubscribe_footer(text_body: str, html_body: str, unsubscribe_token
     ingelogde abonnees (login-gekoppelde gebruikers beheren hun
     voorkeur via Settings, die hebben geen los token nodig).
     """
-    unsubscribe_url = f"https://hestys.streamlit.app/?view=unsubscribe&token={unsubscribe_token}"
+    unsubscribe_url = f"https://hestys.streamlit.app/unsubscribe?token={unsubscribe_token}"
     text_with_footer = text_body + f"\n\nUnsubscribe: {unsubscribe_url}"
     html_with_footer = html_body + (
         f'<p style="max-width:600px; margin:12px auto 0 auto; text-align:center; '

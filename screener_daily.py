@@ -303,11 +303,11 @@ def build_no_signals_email_daily(name: str = None) -> tuple:
             </p>
             {macro_line_html}
             <p style="margin-top:16px; font-size:14px; color:#5B6472; line-height:1.5;">
-                Check <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
+                Check <a href="https://hestys.streamlit.app/discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a>
                 for sector/theme rotation and earnings surprises,
-                <a href="https://hestys.streamlit.app/?view=today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
+                <a href="https://hestys.streamlit.app/today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
                 for macro events and yesterday's biggest movers, or
-                <a href="https://hestys.streamlit.app/?view=analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
+                <a href="https://hestys.streamlit.app/analyze" style="color:#1FAE96; font-weight:600; text-decoration:none;">Analyse</a> for your own portfolio.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
             <p style="margin-top:16px; font-size:12px; color:#9AA1AC; font-style:italic;">This is a screener, not investment advice.</p>
@@ -409,8 +409,8 @@ def build_email_body_daily(df_hits: pd.DataFrame, name: str = None) -> tuple:
             </table>
             <p style="margin-top:20px; font-size:14px; color:#5B6472; line-height:1.5;">
                 Want sector/theme rotation and earnings surprises too? Check
-                <a href="https://hestys.streamlit.app/?view=discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site,
-                or see <a href="https://hestys.streamlit.app/?view=today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
+                <a href="https://hestys.streamlit.app/discover" style="color:#1FAE96; font-weight:600; text-decoration:none;">Discover</a> on the site,
+                or see <a href="https://hestys.streamlit.app/today" style="color:#1FAE96; font-weight:600; text-decoration:none;">Today</a>
                 for macro events and yesterday's biggest movers.
             </p>
             <p style="margin-top:24px; font-size:14px; color:#101825; font-weight:600;">&mdash; Hesty's, your personal investment assistant</p>
