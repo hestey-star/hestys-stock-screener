@@ -933,11 +933,11 @@ def analyze_risk(holdings: list, infos: dict) -> list:
     if pe_entries:
         weighted_pe = sum(e["pe"] * e["weight"] for e in pe_entries) / sum(e["weight"] for e in pe_entries)
         if weighted_pe >= 25:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
+            findings.append(f"{_icon_span('bar_chart', size_px=14, color='#8992A3')} Weighted average P/E: {weighted_pe:.1f}x -- relatively expensive vs. the long-term market average (roughly 15-20x).")
         elif weighted_pe <= 12:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
+            findings.append(f"{_icon_span('bar_chart', size_px=14, color='#8992A3')} Weighted average P/E: {weighted_pe:.1f}x -- relatively cheap vs. the long-term market average (roughly 15-20x).")
         else:
-            findings.append(f"📊 Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
+            findings.append(f"{_icon_span('bar_chart', size_px=14, color='#8992A3')} Weighted average P/E: {weighted_pe:.1f}x -- roughly in line with the long-term market average.")
 
         # Context: WELKE positie beinvloedt dit getal het meest? Een gewogen
         # gemiddelde zonder deze context kan misleidend zijn -- een enkele,
@@ -946,7 +946,7 @@ def analyze_risk(holdings: list, infos: dict) -> list:
         dominant_weight_pct = dominant_entry["weight"] / total_value * 100
         if dominant_weight_pct >= 30:
             findings.append(
-                f"⚠️ This is mostly driven by **{dominant_entry['naam']} ({dominant_entry['ticker']})** "
+                f"{_icon_span('warning', size_px=14, color='#8992A3')} This is mostly driven by **{dominant_entry['naam']} ({dominant_entry['ticker']})** "
                 f"-- {dominant_weight_pct:.0f}% of your portfolio, P/E {dominant_entry['pe']:.1f}x."
             )
     else:
@@ -1026,7 +1026,7 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
             if conversion_failed else ""
         )
         findings.append(
-            f"💰 Estimated annual dividend income: ~{currency_symbol}{total_annual_dividend:,.0f}{underestimate_note}."
+            f"{_icon_span('payments', size_px=14, color='#8992A3')} Estimated annual dividend income: ~{currency_symbol}{total_annual_dividend:,.0f}{underestimate_note}."
         )
         if upcoming:
             upcoming.sort(key=lambda x: x[1])
@@ -1787,15 +1787,15 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 trigger_parts.append(f"at {ticker_currency_symbol}{version['sell_trigger_price']:.2f}")
             if version.get("sell_trigger_date"):
                 trigger_parts.append(f"by {version['sell_trigger_date']}")
-            st.caption(f"🔔 Sell trigger set: {' or '.join(trigger_parts)} -- you'll see this on Today once reached.")
+            st.caption(f"Sell trigger set: {' or '.join(trigger_parts)} -- you'll see this on Today once reached.")
 
         edit_col, delete_col = st.columns(2)
         with edit_col:
-            if st.button("✏️ Edit", key=f"dd_edit_btn_{version_id}"):
+            if st.button("Edit", key=f"dd_edit_btn_{version_id}"):
                 st.session_state[edit_key] = True
                 st.rerun()
         with delete_col:
-            if st.button("🗑️ Delete", key=f"dd_delete_{version_id}"):
+            if st.button("Delete", key=f"dd_delete_{version_id}"):
                 database.delete_deep_dive(version_id, user_email)
                 st.success("Version deleted.")
                 st.rerun()
@@ -1862,7 +1862,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
         save_col, cancel_col = st.columns(2)
         with save_col:
-            if st.button("💾 Save changes", type="primary", key=f"dd_save_edit_{version_id}"):
+            if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}"):
                 database.update_deep_dive(
                     version_id, user_email,
                     business_overview=edit_business or None,
@@ -1900,7 +1900,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
         for i, img in enumerate(existing_images):
             with img_cols[i % len(img_cols)]:
                 st.image(img["image_url"], caption=img.get("caption") or None)
-                if st.button("🗑️ Remove image", key=f"dd_img_delete_{img['id']}"):
+                if st.button("Remove image", key=f"dd_img_delete_{img['id']}"):
                     database.delete_deep_dive_image(img["id"], user_email)
                     st.rerun()
 
@@ -3256,12 +3256,12 @@ def render_analyze():
         user_email = current_user.email
 
         st.markdown(
-            """
+            f"""
             <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
                         border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 1rem 0;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    📓 Deep-dives
+                    {_icon_span("menu_book", size_px=14, color="#1FAE96")} Deep-dives
                 </div>
                 <div style="color:#8992A3; font-size:0.9rem; margin-top:6px; line-height:1.5;">
                     Log your own research per stock -- every time you update it, the previous
@@ -3272,7 +3272,7 @@ def render_analyze():
             unsafe_allow_html=True,
         )
 
-        with st.expander("➕ Add a new deep-dive (or update)", expanded=False, key="add_a_new_deep_dive_or_update_expander"):
+        with st.expander("Add a new deep-dive (or update)", expanded=False, icon=":material/add:", key="add_a_new_deep_dive_or_update_expander"):
             dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
             # Automatisch de bedrijfsnaam invullen zodra de ticker verandert
@@ -3412,8 +3412,8 @@ def render_analyze():
                                 f'<img src="{logo_url}" width="56" height="56" '
                                 f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
                                 if logo_url else
-                                '<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
-                                'display:flex; align-items:center; justify-content:center; font-size:1.4rem;">📈</div>'
+                                f'<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
+                                f'display:flex; align-items:center; justify-content:center;">{_icon_span("candlestick_chart", size_px=24, color="#1FAE96")}</div>'
                             )
                             if tile_overall_score is not None:
                                 score_color = _deep_dive_score_color(tile_overall_score)
@@ -3461,7 +3461,7 @@ def render_analyze():
             infos = get_tickers_info(holdings)
 
         # --- Concentratie Risk ---
-        with st.expander("🎯 Concentration Risk", expanded=True, key="concentration_risk_expander"):
+        with st.expander("Concentration Risk", expanded=True, key="concentration_risk_expander", icon=":material/target:"):
             for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
                 st.markdown(f"- {finding}")
 
@@ -3472,7 +3472,7 @@ def render_analyze():
                 if largest_pct_check > risk_profile["max_position_pct"]:
                     st.caption("One way to gradually correct an overweight position without a big, "
                                "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                    st.page_link(premium_page, label="🧠 Buy smarter with DCA")
+                    st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
 
         # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
         # --- Portfolio-samenstelling: Sectors + Asset Type + Region samen,
@@ -3480,7 +3480,7 @@ def render_analyze():
         # breedte sectie. Elke categorie toont nu ook de tickers erachter
         # (bv. welk ETF, welke positie telt als 'Future') i.p.v. alleen een
         # kaal percentage. ---
-        with st.expander("🏭 Portfolio Composition", expanded=True, key="portfolio_composition_expander"):
+        with st.expander("Portfolio Composition", expanded=True, key="portfolio_composition_expander", icon=":material/pie_chart:"):
             sector_groups, type_groups, region_groups = {}, {}, {}
             for h in holdings:
                 value = h.get("position_value") or 0
@@ -3535,12 +3535,12 @@ def render_analyze():
                 if dominant_sector_pct > risk_profile["max_sector_pct"]:
                     st.caption("Overweight in one sector? Steering future contributions toward other "
                                "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                    st.page_link(premium_page, label="🧠 Buy smarter with DCA")
+                    st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
 
         # --- Risico ---
-        with st.expander("⚖️ Risk", key="risk_expander"):
+        with st.expander("Risk", key="risk_expander", icon=":material/balance:"):
             for finding in analyze_risk(holdings, infos):
-                st.markdown(f"- {finding}")
+                st.markdown(f"- {finding}", unsafe_allow_html=True)
 
             if is_premium:
                 if len(holdings) >= 2:
@@ -3551,7 +3551,7 @@ def render_analyze():
                 else:
                     st.caption("Add at least 2 positions to see a correlation matrix.")
             else:
-                st.info("🔒 Upgrade to Premium for a correlation matrix (which positions move together?).")
+                st.info("Upgrade to Premium for a correlation matrix (which positions move together?).", icon=":material/lock:")
 
 
     elif current_subview == "dividend":
@@ -3578,11 +3578,11 @@ def render_analyze():
         with st.spinner("Loading dividend data..."):
             infos = get_tickers_info(holdings)
 
-        with st.expander("💰 Dividend", key="dividend_expander"):
+        with st.expander("Dividend", key="dividend_expander", icon=":material/payments:"):
             if is_premium:
                 dividend_result = analyze_dividend(holdings, infos)
                 for finding in dividend_result["findings"]:
-                    st.markdown(f"- {finding}")
+                    st.markdown(f"- {finding}", unsafe_allow_html=True)
                 if dividend_result["per_position"]:
                     if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
                         df_div = pd.DataFrame(dividend_result["per_position"])
@@ -3602,7 +3602,7 @@ def render_analyze():
                             height=min(38 * (len(df_display) + 1), 300),
                         )
             else:
-                st.info("🔒 Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.")
+                st.info("Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.", icon=":material/lock:")
 
 
     else:
@@ -3626,7 +3626,7 @@ def render_analyze():
         # en van yfinance bekend traag is). Zo verschijnt Performance
         # meteen, terwijl de rest van de pagina (Sectors/Diversification/
         # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
-        with st.expander("📈 Performance", expanded=True, key="performance_expander"):
+        with st.expander("Performance", expanded=True, key="performance_expander", icon=":material/monitoring:"):
             st.caption("Your real return, based on the buy/sell transactions you've logged under "
                        "My Portfolio -- excludes dividends. Includes fully closed positions. "
                        "Positions without logged transactions won't show a return here.")
@@ -3639,7 +3639,7 @@ def render_analyze():
                 else:
                     st.caption("Calculating your performance for the first time...")
             with refresh_col2:
-                refresh_clicked = st.button("🔄 Refresh", key="perf_refresh_btn")
+                refresh_clicked = st.button("Refresh", key="perf_refresh_btn")
 
             if refresh_clicked or not snapshot:
                 # VOLLEDIGE (trage) herberekening -- alleen op expliciet verzoek
@@ -3677,8 +3677,11 @@ def render_analyze():
                         excluded_no_price.append(h["naam"])
 
                 if excluded_no_price:
-                    st.caption(f"⚠️ Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
-                               f"excluded from the totals below until that's available again.")
+                    st.caption(
+                        f"{_icon_span('warning', size_px=13, color='#8992A3')} Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
+                        f"excluded from the totals below until that's available again.",
+                        unsafe_allow_html=True,
+                    )
 
                 if performance_rows:
                     overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
@@ -4068,7 +4071,7 @@ def render_portfolio():
                 if last_csv_import:
                     import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
-                    st.caption(f"📥 Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
+                    st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
             st.caption("Using a different broker?")
             st.page_link(support_page, label="Go to Support")
             degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
@@ -4076,7 +4079,7 @@ def render_portfolio():
             already_imported = st.session_state.get("degiro_imported_filenames", set())
 
             if degiro_file is not None and degiro_file.name in already_imported:
-                st.success(f"✅ '{degiro_file.name}' was already imported.")
+                st.success(f"'{degiro_file.name}' was already imported.", icon=":material/check_circle:")
                 if st.button("Process this file again anyway"):
                     already_imported.discard(degiro_file.name)
                     st.session_state["degiro_imported_filenames"] = already_imported
@@ -4133,9 +4136,12 @@ def render_portfolio():
                         + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
                         for key in unmatched_keys
                     )
-                    st.warning(f"⚠️ **{len(unmatched_keys)} security/securities need your attention** "
-                               f"-- no ticker could be auto-matched. Fill these in manually below, "
-                               f"or they'll be skipped:\n\n{unmatched_lines}")
+                    st.warning(
+                        f"**{len(unmatched_keys)} security/securities need your attention** "
+                        f"-- no ticker could be auto-matched. Fill these in manually below, "
+                        f"or they'll be skipped:\n\n{unmatched_lines}",
+                        icon=":material/warning:",
+                    )
 
                 st.markdown("**Review the ticker for each security** (auto-suggested -- please "
                              "double-check and correct if wrong before importing). "
@@ -4147,8 +4153,8 @@ def render_portfolio():
                 for key, group in sorted_items:
                     dcol1, dcol2 = st.columns([3, 2])
                     with dcol1:
-                        prefix = "⚠️ " if key in unmatched_keys else ""
-                        st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)")
+                        prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
+                        st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
                     with dcol2:
                         candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
                         if len(candidates) >= 2:
@@ -4202,7 +4208,7 @@ def render_portfolio():
 
                     for i, (key, group) in enumerate(to_import):
                         ticker = st.session_state["degiro_ticker_matches"][key].strip()
-                        status_text.markdown(f"📥 **Importing {group['product']}...** ({i + 1} of {len(to_import)})")
+                        status_text.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(to_import)})")
 
                         # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
                         # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
@@ -4424,7 +4430,7 @@ def render_portfolio():
                                 st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
                                            f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
                             with hcol2:
-                                if st.button("🗑️", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                if st.button("✕", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
                                     database.delete_transaction(t["id"], user_email)
                                     remaining = [x for x in tx_history if x["id"] != t["id"]]
                                     if not remaining:
@@ -4802,7 +4808,7 @@ def render_discover():
 
         def _email_pref_link(label: str):
             """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
-            st.caption(f"📧 {label} Manage in:")
+            st.caption(f"{label} Manage in:")
             st.page_link(settings_page, label="Settings")
 
         def _next_weekly_scan_time() -> str:
@@ -4887,8 +4893,8 @@ def render_discover():
                 st.caption(f"{len(filtered)} of {total_matching} shown, updated {file_last_modified(csv_file)}. "
                            "⭐ = score 8+, usually the ones worth a closer look.")
                 if not _is_premium_discover and total_matching > _signal_display_limit:
-                    st.info(f"🔒 Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                            f"Upgrade to Premium to see all {total_matching}.")
+                    st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                            f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
             st.divider()
             _email_pref_link("Want this weekly by email?")
@@ -4928,8 +4934,8 @@ def render_discover():
                     st.caption(f"{len(df_snowball)} of {total_snowball} shown, updated {file_last_modified('snowball_signals.csv')}. "
                                f"⭐ = 20%+ below fair value. Next update: {_next_weekly_scan_time()}.")
                     if not _is_premium_discover and total_snowball > _signal_display_limit:
-                        st.info(f"🔒 Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                                f"Upgrade to Premium to see all {total_snowball}.")
+                        st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                                f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
                 else:
                     st.caption("No stocks currently meet the Snowballers criteria.")
             else:
@@ -4966,8 +4972,8 @@ def render_discover():
                     st.caption(f"{len(df_rocket)} of {total_rocket} shown, updated {file_last_modified('rocket_list_signals.csv')}. "
                                f"⭐ = 25%+ growth. Next update: {_next_weekly_scan_time()}.")
                     if not _is_premium_discover and total_rocket > _signal_display_limit:
-                        st.info(f"🔒 Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                                f"Upgrade to Premium to see all {total_rocket}.")
+                        st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                                f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
                 else:
                     st.caption("No stocks currently meet the Rocket List criteria.")
             else:
@@ -5157,7 +5163,7 @@ def render_today():
                 ]
                 for event in todays_events[:3]:
                     time_part = f" ({event['time']})" if "time" in event else ""
-                    radar_rows.append(_radar_row_html("📅", f"{event['name']}{time_part}"))
+                    radar_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
 
                 # Aankomende earnings deze week -- niet alleen vandaag, ook een
                 # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
@@ -5165,7 +5171,8 @@ def render_today():
                 for e in upcoming_earnings:
                     day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
                     radar_rows.append(_radar_row_html(
-                        "📆", f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']})."
+                        _icon_span("calendar_month", size_px=15, color="#8992A3"),
+                        f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).",
                     ))
 
                 # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
@@ -5174,29 +5181,31 @@ def render_today():
                     risk_profile = database.get_risk_profile(user_email)
                     concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
                     if concentration_alert:
-                        radar_rows.append(_radar_row_html("⚖️", concentration_alert))
+                        radar_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
 
                 # Aankomende ex-dividend-data voor je HUIDIGE posities.
                 upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
                 for d in upcoming_ex_div:
                     day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
                     radar_rows.append(_radar_row_html(
-                        "💰", f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']})."
+                        _icon_span("payments", size_px=15, color="#8992A3"),
+                        f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']}).",
                     ))
 
                 # 52-weken-record -- een leuk, opvallend signaal als een van je
                 # posities vandaag een nieuwe hoogte/laagte raakt.
                 records_52wk = get_52_week_records(holdings, infos, max_items=3) if holdings else []
                 for r in records_52wk:
-                    emoji = "🚀" if r["type"] == "high" else "📉"
+                    icon_name = "trending_up" if r["type"] == "high" else "trending_down"
+                    icon_color = "#1FAE96" if r["type"] == "high" else "#E5484D"
                     label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    radar_rows.append(_radar_row_html(emoji, f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
+                    radar_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
 
                 # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
                 # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
                 deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
                 for t in deep_dive_triggers:
-                    radar_rows.append(_radar_row_html("🔔", f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
+                    radar_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
 
                 weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
                 last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
@@ -5207,7 +5216,7 @@ def render_today():
                 opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
                 weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
                 radar_rows.append(_radar_row_html(
-                    "🔍",
+                    _icon_span("search", size_px=15, color="#8992A3"),
                     f"<b>{opportunities['total_signals']}</b> signal(s) found "
                     f"({opportunities['daily_signals']} daily{weekly_part}). "
                     f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
@@ -5301,7 +5310,7 @@ def render_today():
 
             # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
             # met Market news voelde dit als een lange wand van tekst ---
-            with st.expander("📰 Top news for you", expanded=False, key="top_news_for_you_expander"):
+            with st.expander("Top news for you", expanded=False, key="top_news_for_you_expander", icon=":material/newspaper:"):
                 st.caption("The 5 most recent news items across your portfolio and watchlist "
                            "(up to 3 per position, from the last 3 days), most recent first.")
                 with st.spinner("Checking news..."):
@@ -5314,7 +5323,7 @@ def render_today():
                     st.caption("No recent news found for your tracked positions.")
 
             # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
-            with st.expander("🌐 Market news", expanded=False, key="market_news_expander"):
+            with st.expander("Market news", expanded=False, key="market_news_expander", icon=":material/public:"):
                 with st.spinner("Checking market news..."):
                     market_news = get_top_news_for_tickers(
                         [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
@@ -5414,7 +5423,7 @@ def render_premium():
             except FileNotFoundError:
                 st.caption("Indicator file not found -- contact support.")
         else:
-            st.caption("🔒 Available for Premium members -- see Subscription below.")
+            st.caption("Available for Premium members -- see Subscription below.")
 
     with st.container(border=True):
         st.markdown("##### Subscription")
@@ -5425,7 +5434,7 @@ def render_premium():
             with st.spinner("Confirming your payment..."):
                 success, paid_email = verify_and_activate_premium(returned_session_id)
             if success:
-                st.success(f"🎉 Payment confirmed! Premium is now active for {paid_email}.")
+                st.success(f"Payment confirmed! Premium is now active for {paid_email}.", icon=":material/celebration:")
             else:
                 st.warning(
                     "We couldn't confirm this payment yet. If you just completed checkout, "
@@ -5596,7 +5605,7 @@ def render_confirm():
     if not token:
         st.error("Missing confirmation link. Please use the link from your email.")
     elif _database_for_confirm.confirm_email_subscriber(token):
-        st.success("✅ You're all set! You'll get today's new bullish signals in your inbox every weekday morning.")
+        st.success("You're all set! You'll get today's new bullish signals in your inbox every weekday morning.")
         st.page_link(discover_page, label="Back to Discover →")
     else:
         st.error("This confirmation link is invalid or has already been used.")
@@ -5846,12 +5855,12 @@ def render_privacy():
                "just ask via Support.")
 
     st.markdown(
-        """
+        f"""
         <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
                     border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
                     padding: 1.25rem 1.5rem; margin: 0.75rem 0 1.25rem 0;">
             <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                🔒 Your data is pseudonymized
+                {_icon_span("lock", size_px=14, color="#1FAE96")} Your data is pseudonymized
             </div>
             <div style="color:#EAEDF1; font-size:1rem; font-weight:600; margin-top:6px; line-height:1.5;">
                 Your email address is never stored in readable form alongside your portfolio.
@@ -6005,7 +6014,7 @@ with st.sidebar:
     if current_user.is_logged_in:
         import database as _database_for_identity
         _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
-        st.page_link(settings_page, label=current_user.name, icon="⚙️")
+        st.page_link(settings_page, label=current_user.name, icon=":material/settings:")
         if st.user.is_logged_in:
             # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
             st.button("Log out", on_click=st.logout, key="header_logout")
