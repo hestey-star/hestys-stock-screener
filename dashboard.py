@@ -1492,64 +1492,6 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
     )
 
 
-def _position_card_html(name: str, ticker: str, logo_url: str, shares_text: str, price_text: str,
-                         day_change_pct, value_text: str, pct_of_portfolio: float) -> str:
-    """
-    Bouwt 1 positie-kaart voor My Portfolio's Overview -- i.p.v. een
-    brede HTML-tabel met 7 kolommen, die op mobiel horizontaal scrollen
-    afdwingt. Logo + naam/ticker bovenaan, 4 kern-stats in een 2x2-grid
-    (zelfde patroon als de signaal-kaarten, voorkomt midden-doorbrekende
-    labels), en een weight-bar onderaan voor het portfolio-aandeel.
-    """
-    # onerror verbergt het plaatje netjes als het gegokte domein niet
-    # klopt (de naam-gok-terugval is niet perfect), i.p.v. een kapot
-    # plaatje-icoon te tonen.
-    # logo_url is nu server-kant al geverifieerd (get_company_logo_url),
-    # dus altijd bruikbaar als 'ie niet None is -- geen client-side
-    # onerror-fallback meer nodig (die werkte toch niet: Streamlit's
-    # HTML-sanitisatie verwijdert inline event-handlers zoals onerror).
-    logo_html = f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:6px; object-fit:contain; background:#fff; padding:2px; flex-shrink:0;" />' if logo_url else ""
-
-    if day_change_pct is None:
-        day_html = '<span style="color:#8992A3;">-</span>'
-    else:
-        day_color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
-        day_html = f'<span style="color:{day_color};">{day_change_pct:+.1f}%</span>'
-
-    bar_pct = min(pct_of_portfolio, 100)
-
-    return (
-        f'<div style="background: rgba(137,146,163,0.05); border: 1px solid rgba(137,146,163,0.2); '
-        f'border-radius: 12px; padding: 0.9rem 1rem;">'
-        f'<div style="display:flex; align-items:center; gap:0.55rem;">'
-        f'{logo_html}'
-        f'<div style="min-width:0;">'
-        f'<div style="font-weight:700; color:#EAEDF1; font-size:0.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{name}</div>'
-        f'<div style="font-size:0.72rem; color:#1FAE96; font-family:\'IBM Plex Mono\', monospace;">{ticker}</div>'
-        f'</div>'
-        f'</div>'
-        f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; margin-top:10px; padding-top:8px; '
-        f'border-top:1px solid rgba(137,146,163,0.15);">'
-        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Shares</div>'
-        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{shares_text}</div></div>'
-        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Price</div>'
-        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{price_text}</div></div>'
-        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Day</div>'
-        f'<div style="font-size:0.82rem; font-weight:600; margin-top:2px;">{day_html}</div></div>'
-        f'<div><div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.03em;">Value</div>'
-        f'<div style="font-size:0.82rem; font-weight:600; color:#EAEDF1; margin-top:2px;">{value_text}</div></div>'
-        f'</div>'
-        f'<div style="margin-top:10px;">'
-        f'<div style="display:flex; justify-content:space-between; font-size:0.68rem; color:#8992A3;">'
-        f'<span>% of portfolio</span><span>{pct_of_portfolio:.0f}%</span></div>'
-        f'<div style="height:5px; background:rgba(137,146,163,0.15); border-radius:3px; margin-top:4px;">'
-        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:3px;"></div>'
-        f'</div>'
-        f'</div>'
-        f'</div>'
-    )
-
-
 def _radar_row_html(icon: str, text: str) -> str:
     """
     Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
@@ -3862,21 +3804,49 @@ def render_portfolio():
                 value = holding.get("position_value") or 0
                 return value / total_value * 100
 
-            # Kaarten i.p.v. een brede HTML-tabel (7 kolommen) -- die dwong op
-            # mobiel horizontaal scrollen af, precies het probleem dat we bij de
-            # signaal-tabellen elders op de site al hebben opgelost.
-            position_cards_html = [
-                _position_card_html(
-                    h["naam"], h["ticker"], get_company_logo_url(h["ticker"], h.get("naam")),
-                    str(h.get("shares") or "-"), _format_price(h), h.get("day_change_pct"),
-                    _format_value(h), _pct_of_portfolio(h),
-                )
+            # Tabel i.p.v. dikke kaarten -- veel sneller scanbaar bij meerdere
+            # posities. st.dataframe handelt responsief gedrag zelf al netjes
+            # af (geen geforceerd horizontaal scrollen zoals een losse HTML-
+            # tabel zou geven), dus het mobiel-probleem dat de kaarten-aanpak
+            # destijds oploste speelt hier niet opnieuw. Logo's + een
+            # voortgangsbalk voor het portfolio-aandeel via column_config
+            # geven een modern, "fintech-dashboard"-gevoel -- pandas Styler
+            # (voor kleur op dag%) kan HELAAS niet gecombineerd worden met
+            # column_config (een bekende Streamlit-beperking), dus dag% staat
+            # als gewoon getal met +/- i.p.v. rood/groen gekleurd.
+            table_rows = [
+                {
+                    "Logo": get_company_logo_url(h["ticker"], h.get("naam")) or None,
+                    "Name": h["naam"],
+                    "Ticker": h["ticker"],
+                    "Shares": h.get("shares") or 0.0,
+                    "Price": _format_price(h),
+                    "Day %": h.get("day_change_pct") if h.get("day_change_pct") is not None else 0.0,
+                    "Value": _format_value(h),
+                    "% of Portfolio": round(_pct_of_portfolio(h), 1),
+                }
                 for h in holdings
             ]
-            st.markdown(
-                f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); '
-                f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{"".join(position_cards_html)}</div>',
-                unsafe_allow_html=True,
+            df_positions = pd.DataFrame(table_rows)
+            if not df_positions.empty:
+                df_positions = df_positions.sort_values("% of Portfolio", ascending=False)
+
+            st.dataframe(
+                df_positions,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Logo": st.column_config.ImageColumn("", width="small"),
+                    "Name": st.column_config.TextColumn("Name", width="medium"),
+                    "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                    "Shares": st.column_config.NumberColumn("Shares", format="%.3f"),
+                    "Price": st.column_config.TextColumn("Price"),
+                    "Day %": st.column_config.NumberColumn("Day %", format="%+.1f%%"),
+                    "Value": st.column_config.TextColumn("Value"),
+                    "% of Portfolio": st.column_config.ProgressColumn(
+                        "% of Portfolio", format="%.1f%%", min_value=0, max_value=100,
+                    ),
+                },
             )
 
             # --- Positie-detail: transacties + rendement + mini-koersgrafiek ---
