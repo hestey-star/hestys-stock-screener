@@ -1492,6 +1492,60 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
     )
 
 
+def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
+                        day_change_pct: float = None, avg_cost: float = None,
+                        current_price: float = None, all_time_pct: float = None) -> str:
+    """
+    Compacte positie-rij voor My Portfolio -- bold ticker + vage
+    bedrijfsnaam (net als het aangereikte voorbeeld), i.p.v. een saaie
+    st.dataframe-tabel of dikke kaarten. Schakelt tussen 'Daily' (dag-
+    rendement, voor een snelle check 'wat beweegt er vandaag') en
+    'All-time' (rendement sinds aankoop, met Avg cost -> Current price
+    erbij -- alleen zinvol als er gelogde transacties zijn, anders een
+    nette '-'-terugval).
+    """
+    bar_pct = min(pct_of_portfolio, 100)
+
+    if mode == "Daily":
+        if day_change_pct is None:
+            change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
+        else:
+            color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
+            arrow = "&#9650;" if day_change_pct >= 0 else "&#9660;"
+            change_html = f'<span style="color:{color}; font-weight:700;">{day_change_pct:+.1f}% {arrow}</span>'
+        subtitle_html = f'<span style="color:#8992A3;">{name}</span>'
+    else:  # "All-time"
+        if avg_cost is not None and current_price is not None and all_time_pct is not None:
+            color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
+            arrow = "&#9650;" if all_time_pct >= 0 else "&#9660;"
+            change_html = f'<span style="color:{color}; font-weight:700;">{all_time_pct:+.1f}% {arrow}</span>'
+            subtitle_html = (
+                f'<span style="color:#8992A3;">{name}</span>'
+                f'<span style="color:#8992A3;"> &middot; </span>'
+                f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">'
+                f'${avg_cost:,.2f} &rarr; ${current_price:,.2f}</span>'
+            )
+        else:
+            change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
+            subtitle_html = f'<span style="color:#8992A3;">{name} (no logged purchase)</span>'
+
+    return (
+        f'<div style="padding:0.65rem 0; border-bottom:1px solid rgba(137,146,163,0.15);">'
+        f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
+        f'<span style="font-weight:800; color:#EAEDF1; font-size:0.95rem; letter-spacing:0.01em;">{ticker}</span>'
+        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.9rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
+        f'</div>'
+        f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
+        f'<span style="font-size:0.78rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{subtitle_html}</span>'
+        f'<span style="font-size:0.82rem; white-space:nowrap;">{change_html}</span>'
+        f'</div>'
+        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:7px;">'
+        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+        f'</div>'
+        f'</div>'
+    )
+
+
 def _radar_row_html(icon: str, text: str) -> str:
     """
     Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
@@ -3804,52 +3858,52 @@ def render_portfolio():
                 value = holding.get("position_value") or 0
                 return value / total_value * 100
 
-            # Tabel i.p.v. dikke kaarten -- veel sneller scanbaar bij meerdere
-            # posities. st.dataframe handelt responsief gedrag zelf al netjes
-            # af (geen geforceerd horizontaal scrollen zoals een losse HTML-
-            # tabel zou geven), dus het mobiel-probleem dat de kaarten-aanpak
-            # destijds oploste speelt hier niet opnieuw. GEEN logo-kolom (de
-            # logo-gok-terugval faalt te vaak voor crypto/kleine tickers, en
-            # het oogde sowieso niet strak) -- Ticker (bold, kort) + Name
-            # (secundair) geven al genoeg houvast, net als in het aangereikte
-            # voorbeeld. Alle kolommen expliciet smal, voor een dichte,
-            # strakke tabel i.p.v. de brede standaard-kolombreedtes. Een
-            # voortgangsbalk voor het portfolio-aandeel via column_config
-            # geeft een modern, "fintech-dashboard"-gevoel -- pandas Styler
-            # (voor kleur op dag%) kan HELAAS niet gecombineerd worden met
-            # column_config (een bekende Streamlit-beperking), dus dag% staat
-            # als gewoon getal met +/- i.p.v. rood/groen gekleurd.
-            table_rows = [
-                {
-                    "Ticker": h["ticker"],
-                    "Name": h["naam"],
-                    "Shares": h.get("shares") or 0.0,
-                    "Price": _format_price(h),
-                    "Day %": h.get("day_change_pct") if h.get("day_change_pct") is not None else 0.0,
-                    "Value": _format_value(h),
-                    "% of Portfolio": round(_pct_of_portfolio(h), 1),
-                }
-                for h in holdings
-            ]
-            df_positions = pd.DataFrame(table_rows)
-            if not df_positions.empty:
-                df_positions = df_positions.sort_values("% of Portfolio", ascending=False)
+            # Compacte rij-lijst i.p.v. een saaie st.dataframe-tabel of dikke
+            # kaarten -- bold ticker + vage bedrijfsnaam (zoals het
+            # aangereikte voorbeeld), met een schakelaar tussen Daily
+            # (dagrendement, voor een snelle 'wat beweegt er vandaag'-check)
+            # en All-time (rendement sinds aankoop, met Avg cost -> Current
+            # price erbij). Custom HTML i.p.v. st.dataframe, want die laatste
+            # oogt onvermijdelijk generiek/spreadsheet-achtig, hoe je de
+            # kolommen ook configureert -- dit geeft volledige controle over
+            # typografie/kleur, en is van nature mobielvriendelijk (1 kolom,
+            # geen horizontaal scrollen).
+            portfolio_view_mode = st.segmented_control(
+                "View", options=["Daily", "All-time"], default="Daily",
+                key="portfolio_view_mode", label_visibility="collapsed",
+            )
+            if portfolio_view_mode is None:
+                portfolio_view_mode = "Daily"
 
-            st.dataframe(
-                df_positions,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                    "Name": st.column_config.TextColumn("Name", width="small"),
-                    "Shares": st.column_config.NumberColumn("Shares", format="%.3f", width="small"),
-                    "Price": st.column_config.TextColumn("Price", width="small"),
-                    "Day %": st.column_config.NumberColumn("Day %", format="%+.1f%%", width="small"),
-                    "Value": st.column_config.TextColumn("Value", width="small"),
-                    "% of Portfolio": st.column_config.ProgressColumn(
-                        "% of Portfolio", format="%.1f%%", min_value=0, max_value=100, width="small",
+            position_rows_data = []
+            for h in holdings:
+                current_price_num = None
+                shares = h.get("shares")
+                pos_value = h.get("position_value")
+                if shares and pos_value:
+                    current_price_num = pos_value / shares
+
+                avg_cost = None
+                all_time_pct = None
+                if portfolio_view_mode == "All-time":
+                    tx = database.get_transactions_for_holding(user_email, h["id"])
+                    perf = compute_holding_performance(tx, current_price_num) if tx else None
+                    if perf:
+                        avg_cost = perf["avg_cost_per_share"]
+                        all_time_pct = perf["total_return_pct"]
+
+                position_rows_data.append({
+                    "pct": _pct_of_portfolio(h),
+                    "html": _position_row_html(
+                        h["ticker"], h["naam"], _format_value(h), _pct_of_portfolio(h),
+                        portfolio_view_mode, day_change_pct=h.get("day_change_pct"),
+                        avg_cost=avg_cost, current_price=current_price_num, all_time_pct=all_time_pct,
                     ),
-                },
+                })
+            position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
+            st.markdown(
+                "".join(r["html"] for r in position_rows_data),
+                unsafe_allow_html=True,
             )
 
             # --- Positie-detail: transacties + rendement + mini-koersgrafiek ---
