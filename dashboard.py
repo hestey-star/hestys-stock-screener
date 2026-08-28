@@ -3808,17 +3808,21 @@ def render_portfolio():
             # posities. st.dataframe handelt responsief gedrag zelf al netjes
             # af (geen geforceerd horizontaal scrollen zoals een losse HTML-
             # tabel zou geven), dus het mobiel-probleem dat de kaarten-aanpak
-            # destijds oploste speelt hier niet opnieuw. Logo's + een
+            # destijds oploste speelt hier niet opnieuw. GEEN logo-kolom (de
+            # logo-gok-terugval faalt te vaak voor crypto/kleine tickers, en
+            # het oogde sowieso niet strak) -- Ticker (bold, kort) + Name
+            # (secundair) geven al genoeg houvast, net als in het aangereikte
+            # voorbeeld. Alle kolommen expliciet smal, voor een dichte,
+            # strakke tabel i.p.v. de brede standaard-kolombreedtes. Een
             # voortgangsbalk voor het portfolio-aandeel via column_config
-            # geven een modern, "fintech-dashboard"-gevoel -- pandas Styler
+            # geeft een modern, "fintech-dashboard"-gevoel -- pandas Styler
             # (voor kleur op dag%) kan HELAAS niet gecombineerd worden met
             # column_config (een bekende Streamlit-beperking), dus dag% staat
             # als gewoon getal met +/- i.p.v. rood/groen gekleurd.
             table_rows = [
                 {
-                    "Logo": get_company_logo_url(h["ticker"], h.get("naam")) or None,
-                    "Name": h["naam"],
                     "Ticker": h["ticker"],
+                    "Name": h["naam"],
                     "Shares": h.get("shares") or 0.0,
                     "Price": _format_price(h),
                     "Day %": h.get("day_change_pct") if h.get("day_change_pct") is not None else 0.0,
@@ -3836,15 +3840,14 @@ def render_portfolio():
                 hide_index=True,
                 width="stretch",
                 column_config={
-                    "Logo": st.column_config.ImageColumn("", width="small"),
-                    "Name": st.column_config.TextColumn("Name", width="medium"),
                     "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                    "Shares": st.column_config.NumberColumn("Shares", format="%.3f"),
-                    "Price": st.column_config.TextColumn("Price"),
-                    "Day %": st.column_config.NumberColumn("Day %", format="%+.1f%%"),
-                    "Value": st.column_config.TextColumn("Value"),
+                    "Name": st.column_config.TextColumn("Name", width="small"),
+                    "Shares": st.column_config.NumberColumn("Shares", format="%.3f", width="small"),
+                    "Price": st.column_config.TextColumn("Price", width="small"),
+                    "Day %": st.column_config.NumberColumn("Day %", format="%+.1f%%", width="small"),
+                    "Value": st.column_config.TextColumn("Value", width="small"),
                     "% of Portfolio": st.column_config.ProgressColumn(
-                        "% of Portfolio", format="%.1f%%", min_value=0, max_value=100,
+                        "% of Portfolio", format="%.1f%%", min_value=0, max_value=100, width="small",
                     ),
                 },
             )
