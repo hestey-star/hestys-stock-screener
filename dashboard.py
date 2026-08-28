@@ -1493,8 +1493,10 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
 
 
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
-                        day_change_pct: float = None, current_price: float = None,
-                        avg_cost: float = None, all_time_pct: float = None) -> str:
+                        currency_symbol: str = "$", logo_url: str = None,
+                        day_change_pct: float = None, day_change_value: float = None,
+                        current_price: float = None, avg_cost: float = None,
+                        all_time_pct: float = None, all_time_pnl: float = None) -> str:
     """
     Compacte positie-rij voor My Portfolio -- bold ticker + vage
     bedrijfsnaam (net als het aangereikte voorbeeld), i.p.v. een saaie
@@ -1503,10 +1505,32 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     vandaag') en 'All-time' (rendement sinds aankoop, met Avg cost ->
     Current price erbij -- alleen zinvol als er gelogde transacties
     zijn, anders een nette '-'-terugval). Een zachte, subtiele
-    achtergrond (i.p.v. alleen een dunne onderrand) geeft elk blok meer
-    body/gewicht -- voorkomt dat het te leeg/dun oogt.
+    achtergrond geeft elk blok meer body/gewicht.
+
+    Logo links naast ticker/naam -- met een nette, jade-getinte cirkel-
+    met-letter-terugval als er geen logo beschikbaar is (i.p.v. een
+    kapot plaatje of gewoon niks): dit is anders dan de eerder afgekeurde
+    aparte kolom in een dataframe-tabel, hier past een klein icoontje
+    natuurlijker in de layout.
+
+    Toont zowel het dollarbedrag als het percentage naast elkaar (i.p.v.
+    alleen het percentage) -- 'day_change_value'/'all_time_pnl' zijn de
+    voorafberekende dollarbedragen, in dezelfde valuta als 'value_text'.
     """
     bar_pct = min(pct_of_portfolio, 100)
+
+    if logo_url:
+        logo_html = (
+            f'<img src="{logo_url}" style="width:30px; height:30px; border-radius:8px; '
+            f'object-fit:contain; background:#fff; padding:3px; flex-shrink:0;" />'
+        )
+    else:
+        first_letter = (ticker[0] if ticker else "?").upper()
+        logo_html = (
+            f'<div style="width:30px; height:30px; border-radius:8px; background:rgba(31,174,150,0.15); '
+            f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
+            f'<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">{first_letter}</span></div>'
+        )
 
     if mode == "Daily":
         if day_change_pct is None:
@@ -1514,12 +1538,19 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         else:
             color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
             arrow = "&#9650;" if day_change_pct >= 0 else "&#9660;"
-            change_html = f'<span style="color:{color}; font-weight:700;">{day_change_pct:+.1f}% {arrow}</span>'
+            value_part = (
+                f'{currency_symbol}{abs(day_change_value):,.0f} ' if day_change_value is not None else ""
+            )
+            sign = "+" if day_change_pct >= 0 else "-"
+            change_html = (
+                f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
+                f'({day_change_pct:+.1f}%) {arrow}</span>'
+            )
         if current_price is not None:
             subtitle_html = (
                 f'<span style="color:#8992A3;">{name}</span>'
                 f'<span style="color:#8992A3;"> &middot; </span>'
-                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">${current_price:,.2f}</span>'
+                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">{currency_symbol}{current_price:,.2f}</span>'
             )
         else:
             subtitle_html = f'<span style="color:#8992A3;">{name}</span>'
@@ -1527,12 +1558,19 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         if avg_cost is not None and current_price is not None and all_time_pct is not None:
             color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
             arrow = "&#9650;" if all_time_pct >= 0 else "&#9660;"
-            change_html = f'<span style="color:{color}; font-weight:700;">{all_time_pct:+.1f}% {arrow}</span>'
+            value_part = (
+                f'{currency_symbol}{abs(all_time_pnl):,.0f} ' if all_time_pnl is not None else ""
+            )
+            sign = "+" if all_time_pct >= 0 else "-"
+            change_html = (
+                f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
+                f'({all_time_pct:+.1f}%) {arrow}</span>'
+            )
             subtitle_html = (
                 f'<span style="color:#8992A3;">{name}</span>'
                 f'<span style="color:#8992A3;"> &middot; </span>'
                 f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">'
-                f'${avg_cost:,.2f} &rarr; ${current_price:,.2f}</span>'
+                f'{currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}</span>'
             )
         else:
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
@@ -1540,16 +1578,21 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
 
     return (
         f'<div style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
+        f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
+        f'{logo_html}'
+        f'<div style="flex:1; min-width:0;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
         f'<span style="font-weight:800; color:#EAEDF1; font-size:0.95rem; letter-spacing:0.01em;">{ticker}</span>'
         f'<span style="font-weight:700; color:#EAEDF1; font-size:0.9rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
         f'</div>'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
         f'<span style="font-size:0.78rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{subtitle_html}</span>'
-        f'<span style="font-size:0.82rem; white-space:nowrap;">{change_html}</span>'
+        f'<span style="font-size:0.8rem; white-space:nowrap;">{change_html}</span>'
         f'</div>'
         f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:8px;">'
         f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+        f'</div>'
+        f'</div>'
         f'</div>'
         f'</div>'
     )
@@ -3892,21 +3935,36 @@ def render_portfolio():
                 if shares and pos_value:
                     current_price_num = pos_value / shares
 
+                # Dagelijkse dollarverandering afleiden uit het dagpercentage
+                # (niet los opgeslagen) -- gisteren se waarde = huidige
+                # waarde / (1 + pct/100), verschil daarmee is de verandering.
+                day_change_value = None
+                day_change_pct = h.get("day_change_pct")
+                if day_change_pct is not None and pos_value is not None and (1 + day_change_pct / 100) != 0:
+                    prev_value = pos_value / (1 + day_change_pct / 100)
+                    day_change_value = pos_value - prev_value
+
                 avg_cost = None
                 all_time_pct = None
+                all_time_pnl = None
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
                     perf = compute_holding_performance(tx, current_price_num) if tx else None
                     if perf:
                         avg_cost = perf["avg_cost_per_share"]
                         all_time_pct = perf["total_return_pct"]
+                        all_time_pnl = perf["total_pnl"]
 
                 position_rows_data.append({
                     "pct": _pct_of_portfolio(h),
                     "html": _position_row_html(
                         h["ticker"], h["naam"], _format_value(h), _pct_of_portfolio(h),
-                        portfolio_view_mode, day_change_pct=h.get("day_change_pct"),
-                        avg_cost=avg_cost, current_price=current_price_num, all_time_pct=all_time_pct,
+                        portfolio_view_mode,
+                        currency_symbol="€" if h.get("value_currency") == "EUR" else "$",
+                        logo_url=get_company_logo_url(h["ticker"], h.get("naam")),
+                        day_change_pct=day_change_pct, day_change_value=day_change_value,
+                        current_price=current_price_num, avg_cost=avg_cost,
+                        all_time_pct=all_time_pct, all_time_pnl=all_time_pnl,
                     ),
                 })
             position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
