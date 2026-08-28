@@ -44,8 +44,27 @@ st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 # --- Visuele identiteit: donkere 'kluis/terminal'-stijl, geen standaard-look ---
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
+
+/* --- Ontwerptaal-fundament: kleuren als CSS-variabelen, 1 centrale
+   plek om het palet te definieren i.p.v. losse rgba(...)-waarden overal
+   door de code heen. Jade is bewust GERESERVEERD voor primaire acties,
+   positieve waarden en het merk zelf -- secundaire elementen (randen,
+   info-boxjes) gebruiken de neutrale grijsblauwe kleuren, zodat jade
+   opvalt wanneer het verschijnt i.p.v. overal tegelijk te 'wassen'. ---
+*/
+:root {
+    --color-jade: #1FAE96;
+    --color-jade-soft: rgba(31, 174, 150, 0.12);
+    --color-negative: #E5484D;
+    --color-warning: #D4A857;
+    --color-warning-soft: rgba(212, 168, 87, 0.12);
+    --color-text-primary: #EAEDF1;
+    --color-text-secondary: #8992A3;
+    --color-border-neutral: rgba(137, 146, 163, 0.25);
+    --color-bg-elevated: rgba(255, 255, 255, 0.03);
+}
 
 .material-symbols-outlined {
     font-family: 'Material Symbols Outlined';
@@ -67,7 +86,20 @@ html, body, p, span, div, label {
 h1, h2, h3 {
     font-family: 'Fraunces', serif !important;
     font-weight: 600 !important;
+    font-optical-sizing: auto;
     letter-spacing: -0.01em;
+}
+/* Grote, prominente koppen (hero-headlines) krijgen een zwaarder
+   Fraunces-gewicht (700 i.p.v. 600) -- maakt het serif-karakter
+   duidelijker zichtbaar en onderscheidend, i.p.v. bijna sans-serif-
+   ogend bij een lichter gewicht. Toegepast via een aparte klasse i.p.v.
+   alle h1 aan te passen, want kleinere koppen (h2/h3 in expanders etc.)
+   ogen beter bij het lichtere gewicht. */
+.hero-headline {
+    font-family: 'Fraunces', serif !important;
+    font-weight: 700 !important;
+    font-optical-sizing: auto;
+    letter-spacing: -0.015em;
 }
 code, .stDataFrame, [data-testid="stMetricValue"] {
     font-family: 'IBM Plex Mono', monospace !important;
@@ -133,86 +165,10 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     color: #8992A3 !important;
     margin-top: 0.15rem;
 }
-.nav-bar {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-.nav-bar-vertical {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-.nav-bar-vertical .nav-link {
-    width: 100%;
-    box-sizing: border-box;
-}
-.nav-link, .nav-link:visited, .nav-link:active {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 500;
-    padding: 0.4rem 1rem;
-    border-radius: 6px;
-    text-decoration: none !important;
-    color: #8992A3 !important;
-    border: 1px solid transparent;
-}
-.nav-link:hover {
-    color: #EAEDF1 !important;
-    border: 1px solid #1FAE96;
-}
-.nav-link.active, .nav-link.active:visited {
-    color: #1FAE96 !important;
-    background: rgba(31, 174, 150, 0.1);
-    border: 1px solid #1FAE96;
-}
 
-/* De hoofdnavigatie in de zijbalk krijgt een eigen, professionelere stijl
-   (iconen + linker accent-balk i.p.v. een rondom-rand) -- specifiek
-   gescoped op .nav-bar-vertical, zodat de horizontale sub-navigatie
-   (Discover/Analyze-tabbladen, die .nav-bar gebruiken) hun eigen, bij een
-   horizontale rij passende pil-stijl gewoon behouden. */
-.nav-bar-vertical .nav-link, .nav-bar-vertical .nav-link:visited, .nav-bar-vertical .nav-link:active {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-weight: 600;
-    padding: 0.6rem 0.9rem 0.6rem 0.75rem;
-    border-radius: 8px;
-    border: none;
-    border-left: 3px solid transparent;
-}
-.nav-bar-vertical .nav-link svg {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    opacity: 0.7;
-    transition: opacity 0.15s ease;
-}
-.nav-bar-vertical .nav-link:hover {
-    border: none;
-    border-left: 3px solid transparent;
-    background: rgba(255,255,255,0.04);
-}
-.nav-bar-vertical .nav-link:hover svg {
-    opacity: 1;
-}
-.nav-bar-vertical .nav-link.active, .nav-bar-vertical .nav-link.active:visited {
-    border: none;
-    background: linear-gradient(90deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-    border-left: 3px solid #1FAE96;
-}
-.nav-bar-vertical .nav-link.active svg {
-    opacity: 1;
-}
-
-/* Mobiel: header + navigatie flink compacter -- op een smal scherm nam
-   dit voorheen zoveel verticale ruimte in (logo + tagline + hoofdnav +
-   sub-nav) dat bezoekers eerst een hele lading 'menu' moesten scrollen
-   voordat ze bij daadwerkelijke content kwamen (bv. de dagelijkse-mail-
-   opt-in op Discover). Deze regel raakt ZOWEL de hoofdnavigatie als elke
-   sub-navigatie (Discover/Analyze), want die delen dezelfde .nav-bar/
-   .nav-link-klassen. */
+/* Mobiel: header flink compacter -- op een smal scherm nam dit voorheen
+   zoveel verticale ruimte in dat bezoekers eerst moesten scrollen
+   voordat ze bij daadwerkelijke content kwamen. */
 @media (max-width: 640px) {
     .app-header {
         padding: 0.7rem 0 0.5rem 0;
@@ -231,13 +187,6 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     }
     .app-header .tagline {
         font-size: 0.55rem;
-    }
-    .nav-bar {
-        gap: 0.3rem;
-    }
-    .nav-link, .nav-link:visited, .nav-link:active {
-        font-size: 0.78rem;
-        padding: 0.3rem 0.6rem;
     }
 }
 
@@ -285,29 +234,6 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 }
 .button-link:hover {
     background: #24C4A8;
-}
-
-/* Naam/account-link in de kop (rechtsboven) -- verwijst naar Settings,
-   gestyled als een subtiele pil i.p.v. platte tekst */
-.account-link, .account-link:visited {
-    display: inline-block;
-    font-family: 'Inter', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #8992A3 !important;
-    text-decoration: none !important;
-    padding: 0.35rem 0.7rem;
-    border-radius: 6px;
-    border: 1px solid transparent;
-}
-.account-link:hover {
-    color: #EAEDF1 !important;
-    border-color: #1FAE96;
-}
-.account-link.active {
-    color: #1FAE96 !important;
-    border-color: #1FAE96;
-    background: rgba(31, 174, 150, 0.1);
 }
 
 /* Compacte, met lijntjes gescheiden posities-lijst in 'Your positions' */
@@ -4557,7 +4483,7 @@ def render_discover():
             '<div style="display:inline-block; background:rgba(31,174,150,0.12); border:1px solid rgba(31,174,150,0.4); '
             'border-radius:20px; padding:5px 14px; color:#1FAE96; font-size:0.8rem; font-weight:600;">'
             'Free &mdash; no credit card needed</div>'
-            '<h1 style="font-size:2.2rem; font-weight:800; margin:0.9rem 0 0 0; line-height:1.25; color:#EAEDF1;">'
+            '<h1 class="hero-headline" style="font-size:2.2rem; margin:0.9rem 0 0 0; line-height:1.25; color:#EAEDF1;">'
             'Your Investing Edge,<br/><span style="color:#1FAE96;">Built Around You</span></h1>'
             '<div style="max-width:520px; margin:0 auto;">'
             f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.7rem; margin-top:1.5rem;">{hero_points_html}</div>'
@@ -5697,7 +5623,7 @@ def render_login():
     else:
         st.markdown(
             '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
-            '<h2 style="margin-bottom:0.3rem;">Welcome back</h2>'
+            '<h2 class="hero-headline" style="margin-bottom:0.3rem;">Welcome back</h2>'
             '<p style="color:#8992A3; margin-bottom:1.5rem;">Sign in or create an account with email</p>'
             '</div>',
             unsafe_allow_html=True,
