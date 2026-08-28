@@ -1493,16 +1493,18 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
 
 
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
-                        day_change_pct: float = None, avg_cost: float = None,
-                        current_price: float = None, all_time_pct: float = None) -> str:
+                        day_change_pct: float = None, current_price: float = None,
+                        avg_cost: float = None, all_time_pct: float = None) -> str:
     """
     Compacte positie-rij voor My Portfolio -- bold ticker + vage
     bedrijfsnaam (net als het aangereikte voorbeeld), i.p.v. een saaie
     st.dataframe-tabel of dikke kaarten. Schakelt tussen 'Daily' (dag-
-    rendement, voor een snelle check 'wat beweegt er vandaag') en
-    'All-time' (rendement sinds aankoop, met Avg cost -> Current price
-    erbij -- alleen zinvol als er gelogde transacties zijn, anders een
-    nette '-'-terugval).
+    rendement + huidige koers, voor een snelle check 'wat beweegt er
+    vandaag') en 'All-time' (rendement sinds aankoop, met Avg cost ->
+    Current price erbij -- alleen zinvol als er gelogde transacties
+    zijn, anders een nette '-'-terugval). Een zachte, subtiele
+    achtergrond (i.p.v. alleen een dunne onderrand) geeft elk blok meer
+    body/gewicht -- voorkomt dat het te leeg/dun oogt.
     """
     bar_pct = min(pct_of_portfolio, 100)
 
@@ -1513,7 +1515,14 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
             arrow = "&#9650;" if day_change_pct >= 0 else "&#9660;"
             change_html = f'<span style="color:{color}; font-weight:700;">{day_change_pct:+.1f}% {arrow}</span>'
-        subtitle_html = f'<span style="color:#8992A3;">{name}</span>'
+        if current_price is not None:
+            subtitle_html = (
+                f'<span style="color:#8992A3;">{name}</span>'
+                f'<span style="color:#8992A3;"> &middot; </span>'
+                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">${current_price:,.2f}</span>'
+            )
+        else:
+            subtitle_html = f'<span style="color:#8992A3;">{name}</span>'
     else:  # "All-time"
         if avg_cost is not None and current_price is not None and all_time_pct is not None:
             color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
@@ -1530,7 +1539,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             subtitle_html = f'<span style="color:#8992A3;">{name} (no logged purchase)</span>'
 
     return (
-        f'<div style="padding:0.65rem 0; border-bottom:1px solid rgba(137,146,163,0.15);">'
+        f'<div style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
         f'<span style="font-weight:800; color:#EAEDF1; font-size:0.95rem; letter-spacing:0.01em;">{ticker}</span>'
         f'<span style="font-weight:700; color:#EAEDF1; font-size:0.9rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
@@ -1539,7 +1548,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<span style="font-size:0.78rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{subtitle_html}</span>'
         f'<span style="font-size:0.82rem; white-space:nowrap;">{change_html}</span>'
         f'</div>'
-        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:7px;">'
+        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:8px;">'
         f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
         f'</div>'
         f'</div>'
