@@ -1547,13 +1547,12 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                 f'({day_change_pct:+.1f}%) {arrow}</span>'
             )
         if current_price is not None:
-            subtitle_html = (
-                f'<span style="color:#8992A3;">{name}</span>'
-                f'<span style="color:#8992A3;"> &middot; </span>'
-                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">{currency_symbol}{current_price:,.2f}</span>'
+            detail_html = (
+                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
+                f'&middot; {currency_symbol}{current_price:,.2f}</span>'
             )
         else:
-            subtitle_html = f'<span style="color:#8992A3;">{name}</span>'
+            detail_html = ""
     else:  # "All-time"
         if avg_cost is not None and current_price is not None and all_time_pct is not None:
             color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
@@ -1566,15 +1565,27 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                 f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
                 f'({all_time_pct:+.1f}%) {arrow}</span>'
             )
-            subtitle_html = (
-                f'<span style="color:#8992A3;">{name}</span>'
-                f'<span style="color:#8992A3;"> &middot; </span>'
-                f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem;">'
-                f'{currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}</span>'
+            detail_html = (
+                f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
+                f'&middot; {currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}</span>'
             )
         else:
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
-            subtitle_html = f'<span style="color:#8992A3;">{name} (no logged purchase)</span>'
+            name = f"{name} (no logged purchase)"
+            detail_html = ""
+
+    # De naam (variabele, soms erg lange lengte -- bv. ETF-namen) en het
+    # prijsdetail (koers, of avg-cost-pijl) staan in GENESTE flex-items:
+    # de naam mag inkorten met '...' als het niet past, maar het
+    # prijsdetail (flex-shrink:0) blijft ALTIJD volledig zichtbaar --
+    # voorkomt dat op mobiel de koers wegvalt doordat de HELE regel
+    # (naam+koers samen) werd afgekapt.
+    subtitle_html = (
+        f'<div style="display:flex; align-items:baseline; gap:0.3rem; min-width:0; flex:1;">'
+        f'<span style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{name}</span>'
+        f'{detail_html}'
+        f'</div>'
+    )
 
     return (
         f'<div style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
@@ -1586,8 +1597,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<span style="font-weight:700; color:#EAEDF1; font-size:0.9rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
         f'</div>'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
-        f'<span style="font-size:0.78rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{subtitle_html}</span>'
-        f'<span style="font-size:0.8rem; white-space:nowrap;">{change_html}</span>'
+        f'{subtitle_html}'
+        f'<span style="font-size:0.8rem; white-space:nowrap; flex-shrink:0;">{change_html}</span>'
         f'</div>'
         f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:8px;">'
         f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
