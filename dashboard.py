@@ -1016,32 +1016,45 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
     return {"findings": findings, "per_position": per_position, "currency_symbol": currency_symbol}
 
 
-def build_daily_portfolio_stats(holdings: list):
-    """Dag-op-dag statistieken: totale verandering, en beste/slechtste presteerder van gisteren."""
+def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
+    """
+    Dag-op-dag statistieken: totale verandering, en beste/slechtste
+    presteerder van gisteren.
+
+    'market_data' is het resultaat van database.get_market_data_for_tickers()
+    -- de door het achtergrond-sync-script (elke 15 min) ververste, GEDEELDE
+    tabel. Dit vervangt de vroegere LIVE yfinance-aanroep tijdens het laden
+    van de pagina (traag) door een snelle database-lookup. Voor tickers die
+    nog niet gesynchroniseerd zijn (net toegevoegd, of de eerste sync-run
+    moet nog draaien) valt de functie netjes terug op de oude, live aanpak
+    -- dus nooit een harde afhankelijkheid van de sync-tabel.
+    """
     performers = []
     total_value_today = 0.0
     total_value_yesterday = 0.0
+    market_data = market_data or {}
 
     for h in holdings:
         shares = h.get("shares") or 0
         if not shares:
             continue
         try:
-            # regularMarketPrice/regularMarketPreviousClose uit .info EERST
-            # geprobeerd -- dezelfde, verse bron die My Portfolio inmiddels
-            # ook gebruikt voor dagrendement. .history()'s laatste 2
-            # slotkoersen bleek in de praktijk soms nog verouderd, zelfs via
-            # de betrouwbaardere Ticker().history()-methode (precies het
-            # probleem dat eerder bij HIMS werd gevonden op My Portfolio).
-            info = get_cached_ticker_info(h["ticker"])
-            price_today = info.get("regularMarketPrice")
-            price_yesterday = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            data = market_data.get(h["ticker"], {})
+            price_today = data.get("current_price")
+            price_yesterday = data.get("previous_close")
+
             if price_today is None or not price_yesterday:
-                hist = get_cached_ticker_history(h["ticker"], period="5d")
-                if len(hist) < 2:
-                    continue
-                price_today = float(hist["Close"].iloc[-1])
-                price_yesterday = float(hist["Close"].iloc[-2])
+                # Terugval: ticker nog niet (of nog niet recent) gesynchroniseerd
+                # -- dezelfde, al-bevestigd-betrouwbare live-aanpak als voorheen.
+                info = get_cached_ticker_info(h["ticker"])
+                price_today = info.get("regularMarketPrice")
+                price_yesterday = info.get("regularMarketPreviousClose") or info.get("previousClose")
+                if price_today is None or not price_yesterday:
+                    hist = get_cached_ticker_history(h["ticker"], period="5d")
+                    if len(hist) < 2:
+                        continue
+                    price_today = float(hist["Close"].iloc[-1])
+                    price_yesterday = float(hist["Close"].iloc[-2])
             # Sommige dagen ontbreekt een koers (bv. rond een feestdag/data-gat) --
             # yfinance geeft dan NaN terug. Zonder deze check zou 1 NaN de HELE
             # portfolio-som NaN maken (NaN + iets = NaN), en 'total_value_yesterday
@@ -2328,25 +2341,44 @@ def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 
 from macro_events import MACRO_EVENTS_2026, get_todays_macro_events
 
 
-def get_upcoming_ex_dividend_dates(holdings: list, infos: dict, days_ahead: int = 5, max_items: int = 3) -> list:
+def get_upcoming_ex_dividend_dates(holdings: list, market_data: dict, days_ahead: int = 5, max_items: int = 3) -> list:
     """
     Checkt of een van je HUIDIGE posities binnen 'days_ahead' dagen
     ex-dividend gaat -- zelfde 'alleen daadwerkelijk toekomstige datums'-
     filtering als Analyze's Dividend-kaart (yfinance's exDividendDate is
     soms de meest recente, al-gepasseerde datum i.p.v. een toekomstige).
+
+    'market_data' komt uit database.get_market_data_for_tickers() (de
+    achtergrond-gesynchroniseerde tabel) -- valt netjes terug op een live
+    aanroep voor een ticker die daar nog niet in staat.
     """
     today = datetime.now().date()
     results = []
     for h in holdings:
-        info = infos.get(h["ticker"], {})
-        ex_div = info.get("exDividendDate")
-        if not ex_div:
+        ticker = h["ticker"]
+        if ticker in market_data:
+            ex_div_str = market_data[ticker].get("ex_dividend_date")
+        else:
+            # Terugval: ticker zit HELEMAAL niet in market_data (nog niet
+            # gesynchroniseerd) -- live proberen. Zit de ticker er wel in,
+            # maar is dit veld leeg, dan betekent dat 'geen dividend
+            # bekend' (een geldig, gesynchroniseerd antwoord) -- geen live
+            # aanroep nodig, dat zou hetzelfde resultaat gewoon herhalen.
+            ex_div_str = None
+            try:
+                info = get_cached_ticker_info(ticker)
+                ex_div_unix = info.get("exDividendDate")
+                if ex_div_unix:
+                    ex_div_str = pd.Timestamp(ex_div_unix, unit="s").date().isoformat()
+            except Exception:
+                pass
+        if not ex_div_str:
             continue
         try:
-            ex_div_date = pd.Timestamp(ex_div, unit="s").date()
+            ex_div_date = pd.Timestamp(ex_div_str).date()
             days_until = (ex_div_date - today).days
             if 0 <= days_until <= days_ahead:
-                results.append({"naam": h["naam"], "ticker": h["ticker"],
+                results.append({"naam": h["naam"], "ticker": ticker,
                                  "ex_div_date": ex_div_date, "days_until": days_until})
         except Exception:
             continue
@@ -2354,22 +2386,34 @@ def get_upcoming_ex_dividend_dates(holdings: list, infos: dict, days_ahead: int 
     return results[:max_items]
 
 
-def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> list:
+def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_items: int = 3) -> list:
     """
-    Checkt of een van je posities/watchlist-items VANDAAG earnings rapporteert
-    (yfinance geeft ook toekomstige, aangekondigde earnings-datums terug).
+    Checkt of een van je posities/watchlist-items VANDAAG earnings rapporteert.
+
+    'market_data' komt uit database.get_market_data_for_tickers() (de
+    achtergrond-gesynchroniseerde tabel, 'next_earnings_date'-veld) --
+    valt netjes terug op een live aanroep voor een ticker die daar nog
+    niet in staat.
     """
     today = datetime.now().date()
     results = []
     for item in tracked_items:
+        ticker = item["ticker"]
         try:
-            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
-            if dates_df is None or dates_df.empty:
-                continue
-            for earnings_date in dates_df.index:
-                if earnings_date.date() == today:
-                    results.append({"naam": item["naam"], "ticker": item["ticker"]})
-                    break
+            if ticker in market_data:
+                next_date_str = market_data[ticker].get("next_earnings_date")
+                if next_date_str and pd.Timestamp(next_date_str).date() == today:
+                    results.append({"naam": item["naam"], "ticker": ticker})
+            else:
+                # Terugval: ticker zit helemaal niet in market_data (nog
+                # niet gesynchroniseerd) -- live proberen.
+                dates_df = get_cached_earnings_dates(ticker, limit=8)
+                if dates_df is None or dates_df.empty:
+                    continue
+                for earnings_date in dates_df.index:
+                    if earnings_date.date() == today:
+                        results.append({"naam": item["naam"], "ticker": ticker})
+                        break
         except Exception:
             continue
         if len(results) >= max_items:
@@ -2377,39 +2421,57 @@ def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> li
     return results[:max_items]
 
 
-def get_upcoming_portfolio_earnings(tracked_items: list, days_ahead: int = 5, max_items: int = 3) -> list:
+def get_upcoming_portfolio_earnings(tracked_items: list, market_data: dict, days_ahead: int = 5, max_items: int = 3) -> list:
     """
     Checkt of een van je posities/watchlist-items binnen 'days_ahead' dagen
     earnings rapporteert (VANDAAG zelf niet meegeteld -- dat toont
     get_todays_portfolio_earnings al apart). Geeft een korte vooraankondiging,
     zodat je niet pas op de dag zelf verrast wordt.
+
+    'market_data' komt uit database.get_market_data_for_tickers() -- valt
+    netjes terug op een live aanroep voor een ticker die daar nog niet in
+    staat.
     """
     today = datetime.now().date()
     results = []
     for item in tracked_items:
+        ticker = item["ticker"]
         try:
-            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
-            if dates_df is None or dates_df.empty:
-                continue
-            for earnings_date in dates_df.index:
-                days_until = (earnings_date.date() - today).days
-                if 1 <= days_until <= days_ahead:
-                    results.append({"naam": item["naam"], "ticker": item["ticker"],
-                                     "earnings_date": earnings_date.date(), "days_until": days_until})
-                    break
+            if ticker in market_data:
+                next_date_str = market_data[ticker].get("next_earnings_date")
+                if next_date_str:
+                    earnings_date = pd.Timestamp(next_date_str).date()
+                    days_until = (earnings_date - today).days
+                    if 1 <= days_until <= days_ahead:
+                        results.append({"naam": item["naam"], "ticker": ticker,
+                                         "earnings_date": earnings_date, "days_until": days_until})
+            else:
+                # Terugval: ticker zit helemaal niet in market_data.
+                dates_df = get_cached_earnings_dates(ticker, limit=8)
+                if dates_df is None or dates_df.empty:
+                    continue
+                for earnings_date_ts in dates_df.index:
+                    days_until = (earnings_date_ts.date() - today).days
+                    if 1 <= days_until <= days_ahead:
+                        results.append({"naam": item["naam"], "ticker": ticker,
+                                         "earnings_date": earnings_date_ts.date(), "days_until": days_until})
+                        break
         except Exception:
             continue
     results.sort(key=lambda r: r["days_until"])
     return results[:max_items]
 
 
-def get_recent_earnings_surprises_for_tracked_items(tracked_items: list, max_days_old: int = 7, max_items: int = 3) -> list:
+def get_recent_earnings_surprises_for_tracked_items(tracked_items: list, market_data: dict, max_days_old: int = 7, max_items: int = 3) -> list:
     """
     Checkt of een van je posities/watchlist-items RECENT (binnen
     max_days_old dagen) earnings heeft gerapporteerd met een noemenswaardige
-    winst-verrassing -- rechtstreeks via yfinance's .get_earnings_dates()
-    (dezelfde, al-gecachete data als get_todays_portfolio_earnings/
-    get_upcoming_portfolio_earnings, dus geen extra netwerk-aanroepen).
+    winst-verrassing.
+
+    'market_data' komt uit database.get_market_data_for_tickers() (de
+    achtergrond-gesynchroniseerde tabel, 'last_earnings_date'/
+    'last_earnings_surprise_pct'-velden) -- valt netjes terug op een live
+    aanroep voor een ticker die daar nog niet in staat.
 
     Dit is bewust een ANDERE, directere bron dan de bestaande
     get_earnings_surprises_from_signals() (die leunt op de supertrend-
@@ -2422,53 +2484,86 @@ def get_recent_earnings_surprises_for_tracked_items(tracked_items: list, max_day
     today = datetime.now().date()
     results = []
     for item in tracked_items:
+        ticker = item["ticker"]
         try:
-            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
-            if dates_df is None or dates_df.empty or "Surprise(%)" not in dates_df.columns:
-                continue
-            for earnings_date, row in dates_df.iterrows():
-                days_since = (today - earnings_date.date()).days
-                if not (0 <= days_since <= max_days_old):
+            if ticker in market_data:
+                last_date_str = market_data[ticker].get("last_earnings_date")
+                surprise_pct = market_data[ticker].get("last_earnings_surprise_pct")
+                if last_date_str and surprise_pct is not None:
+                    days_since = (today - pd.Timestamp(last_date_str).date()).days
+                    if 0 <= days_since <= max_days_old:
+                        results.append({
+                            "naam": item["naam"], "ticker": ticker,
+                            "earnings_date": pd.Timestamp(last_date_str).date(), "surprise_pct": float(surprise_pct),
+                            "beat": surprise_pct >= 0,
+                        })
+            else:
+                # Terugval: ticker zit helemaal niet in market_data.
+                dates_df = get_cached_earnings_dates(ticker, limit=8)
+                if dates_df is None or dates_df.empty or "Surprise(%)" not in dates_df.columns:
                     continue
-                surprise_pct = row.get("Surprise(%)")
-                if pd.isna(surprise_pct):
-                    continue  # nog niet gerapporteerd, of geen schatting beschikbaar
-                results.append({
-                    "naam": item["naam"], "ticker": item["ticker"],
-                    "earnings_date": earnings_date.date(), "surprise_pct": float(surprise_pct),
-                    "beat": surprise_pct >= 0,
-                })
-                break  # per ticker maar 1x tellen (de meest recente relevante datum)
+                for earnings_date, row in dates_df.iterrows():
+                    days_since = (today - earnings_date.date()).days
+                    if not (0 <= days_since <= max_days_old):
+                        continue
+                    row_surprise = row.get("Surprise(%)")
+                    if pd.isna(row_surprise):
+                        continue
+                    results.append({
+                        "naam": item["naam"], "ticker": ticker,
+                        "earnings_date": earnings_date.date(), "surprise_pct": float(row_surprise),
+                        "beat": row_surprise >= 0,
+                    })
+                    break
         except Exception:
             continue
     results.sort(key=lambda r: abs(r["surprise_pct"]), reverse=True)
     return results[:max_items]
 
 
-def get_52_week_records(holdings: list, infos: dict, max_items: int = 3) -> list:
+def get_52_week_records(holdings: list, market_data: dict, max_items: int = 3) -> list:
     """
     Checkt of een van je posities vandaag een nieuwe 52-weken-hoogte of
     -laagte heeft geraakt. yfinance's fiftyTwoWeekHigh/Low weerspiegelen
     het ROLLENDE 52-weken-record t/m de laatste koers -- als de huidige
     prijs daaraan gelijk is (of eroverheen), is vandaag het nieuwe record.
+
+    'market_data' komt uit database.get_market_data_for_tickers() -- valt
+    netjes terug op een live aanroep voor een ticker die daar nog niet in
+    staat.
     """
     results = []
     for h in holdings:
-        info = infos.get(h["ticker"], {})
-        high_52wk = info.get("fiftyTwoWeekHigh")
-        low_52wk = info.get("fiftyTwoWeekLow")
-        current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+        ticker = h["ticker"]
+        if ticker in market_data:
+            high_52wk = market_data[ticker].get("fifty_two_week_high")
+            low_52wk = market_data[ticker].get("fifty_two_week_low")
+            current_price = market_data[ticker].get("current_price")
+        else:
+            high_52wk = low_52wk = current_price = None
+
         if current_price is None:
+            # Terugval: ticker zit helemaal niet in market_data, OF de
+            # sync-rij mist toevallig current_price (zou niet moeten
+            # voorkomen, maar current_price is te essentieel om zonder
+            # verder te gaan) -- live proberen.
             try:
-                fallback_hist = get_cached_ticker_history(h["ticker"], period="5d")
-                if fallback_hist is not None and not fallback_hist.empty:
-                    current_price = float(fallback_hist["Close"].iloc[-1])
+                info = get_cached_ticker_info(ticker)
+                if high_52wk is None:
+                    high_52wk = info.get("fiftyTwoWeekHigh")
+                if low_52wk is None:
+                    low_52wk = info.get("fiftyTwoWeekLow")
+                current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+                if current_price is None:
+                    fallback_hist = get_cached_ticker_history(ticker, period="5d")
+                    if fallback_hist is not None and not fallback_hist.empty:
+                        current_price = float(fallback_hist["Close"].iloc[-1])
             except Exception:
                 continue
         if current_price is None:
             continue
         if high_52wk and current_price >= high_52wk:
-            results.append({"naam": h["naam"], "ticker": h["ticker"], "type": "high"})
+            results.append({"naam": h["naam"], "ticker": ticker, "type": "high"})
         elif low_52wk and current_price <= low_52wk:
             results.append({"naam": h["naam"], "ticker": h["ticker"], "type": "low"})
     return results[:max_items]
@@ -3955,6 +4050,12 @@ def render_portfolio():
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
     is_premium = database.is_premium_user(user_email)
 
+    # Achtergrond-gesynchroniseerde marktdata (elke 15 min ververst) --
+    # zie render_today() voor de volledige toelichting op deze
+    # architectuur. Hier gebruikt voor de koers/dagrendement-weergave in
+    # de Daily-modus.
+    market_data = database.get_market_data_for_tickers([h["ticker"] for h in holdings])
+
     if not holdings:
         st.info("You haven't added any positions yet -- add your first one under 'Manage' below.")
 
@@ -4052,41 +4153,40 @@ def render_portfolio():
 
             position_rows_data = []
             for h in holdings:
-                current_price_num = None
+                market_row = market_data.get(h["ticker"], {})
+                current_price_num = market_row.get("current_price")
                 shares = h.get("shares")
                 pos_value = h.get("position_value")
-                if shares and pos_value:
+                if current_price_num is None and shares and pos_value:
+                    # Terugval: ticker nog niet gesynchroniseerd -- de
+                    # laatst-opgeslagen (mogelijk wat oudere) waarde uit de
+                    # database, i.p.v. helemaal geen koers te tonen.
                     current_price_num = pos_value / shares
 
-                # Dagrendement LIVE berekend i.p.v. de opgeslagen database-
-                # waarde -- die laatste wordt namelijk ALLEEN bijgewerkt bij
-                # een klik op 'Update portfolio value', en kan dus dagen oud
-                # zijn (precies het eerder gemelde probleem: HIMS/ADUR
-                # toonden een verkeerd/verouderd dagrendement).
-                #
-                # Berekend uit .info's regularMarketPrice vs
-                # regularMarketPreviousClose/previousClose -- CONSISTENT met
-                # hoe de koers zelf inmiddels ook bepaald wordt (zie
-                # refresh_portfolio_values) -- i.p.v. uit .history()'s
-                # laatste 2 slotkoersen, want die bleek OOK nog verouderd te
-                # kunnen zijn (zelfs via de al-gecorrigeerde Ticker().
-                # history()-methode), waardoor koers en dagrendement uit 2
-                # verschillende, niet-overeenkomende databronnen kwamen --
-                # precies het gemelde 'koers klopt nu wel, dagrendement niet'
-                # -probleem. get_cached_ticker_info is al 5 min gecached.
+                # Dagrendement komt nu uit market_data (de achtergrond-
+                # gesynchroniseerde tabel, elke 15 min ververst) i.p.v. een
+                # LIVE yfinance-aanroep tijdens het laden van de pagina --
+                # dit is de kern van de snelheid-fix. Valt netjes terug op
+                # een live aanroep voor een ticker die nog niet
+                # gesynchroniseerd is (net toegevoegd, of de eerste sync-
+                # run moet nog draaien).
                 day_change_value = None
                 day_change_pct = None
                 if portfolio_view_mode == "Daily":
-                    info = get_cached_ticker_info(h["ticker"])
-                    fresh_price = info.get("regularMarketPrice")
-                    prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-                    if fresh_price is not None and prev_close:
-                        day_change_pct = (fresh_price - prev_close) / prev_close * 100
+                    if h["ticker"] in market_data:
+                        day_change_pct = market_row.get("day_change_pct")
                     else:
-                        # Terugval: .info leeg (bekende yfinance-
-                        # onbetrouwbaarheid) -- geschiedenis-gebaseerde aanpak.
-                        hist = get_cached_ticker_history(h["ticker"], period="5d")
-                        day_change_pct = compute_day_change_pct(hist)
+                        info = get_cached_ticker_info(h["ticker"])
+                        fresh_price = info.get("regularMarketPrice")
+                        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+                        if fresh_price is not None and prev_close:
+                            day_change_pct = (fresh_price - prev_close) / prev_close * 100
+                        else:
+                            # Terugval binnen de terugval: .info leeg (bekende
+                            # yfinance-onbetrouwbaarheid) -- geschiedenis-
+                            # gebaseerde aanpak.
+                            hist = get_cached_ticker_history(h["ticker"], period="5d")
+                            day_change_pct = compute_day_change_pct(hist)
                     if day_change_pct is not None and pos_value is not None and (1 + day_change_pct / 100) != 0:
                         prev_value = pos_value / (1 + day_change_pct / 100)
                         day_change_value = pos_value - prev_value
@@ -5218,11 +5318,24 @@ def render_today():
         else:
             tracked_items = holdings + watchlist_items
 
+            # 1x, centraal, de achtergrond-gesynchroniseerde marktdata ophalen
+            # voor ALLE gevolgde tickers (holdings + watchlist) -- i.p.v. dat
+            # elke functie hieronder zijn eigen, LIVE yfinance-aanroepen doet.
+            # Dit is de kern van de snelheid-fix: 1 snelle database-query
+            # i.p.v. tientallen losse, live netwerk-aanroepen tijdens het
+            # laden van de pagina. Elke functie hieronder valt zelf nog
+            # netjes terug op een live aanroep voor een ticker die (nog)
+            # niet in de tabel staat (net toegevoegd, of sync moet nog
+            # draaien) -- dus nooit een harde afhankelijkheid.
+            market_data = database.get_market_data_for_tickers(
+                [item["ticker"] for item in tracked_items]
+            )
+
             # --- Your portfolio today (nu in een eigen kader, net als Yesterday's
             # biggest movers -- consistente stijl over de hele Today-pagina) ---
             if holdings:
                 with st.spinner("Checking today's price moves..."):
-                    daily_stats = build_daily_portfolio_stats(holdings)
+                    daily_stats = build_daily_portfolio_stats(holdings, market_data)
 
                 with st.container(border=True):
                     if daily_stats:
@@ -5324,8 +5437,7 @@ def render_today():
 
                 macro_events = get_todays_macro_events(max_items=3)
                 with st.spinner("Checking today's radar..."):
-                    earnings_today = get_todays_portfolio_earnings(tracked_items, max_items=3)
-                    infos = get_tickers_info(holdings) if holdings else {}
+                    earnings_today = get_todays_portfolio_earnings(tracked_items, market_data, max_items=3)
                 todays_events = macro_events + [
                     {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
                 ]
@@ -5335,7 +5447,7 @@ def render_today():
 
                 # Aankomende earnings deze week -- niet alleen vandaag, ook een
                 # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
-                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, days_ahead=5, max_items=3)
+                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, market_data, days_ahead=5, max_items=3)
                 for e in upcoming_earnings:
                     day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
                     radar_rows.append(_radar_row_html(
@@ -5352,7 +5464,7 @@ def render_today():
                         radar_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
 
                 # Aankomende ex-dividend-data voor je HUIDIGE posities.
-                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, infos, days_ahead=5, max_items=3)
+                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3)
                 for d in upcoming_ex_div:
                     day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
                     radar_rows.append(_radar_row_html(
@@ -5362,7 +5474,7 @@ def render_today():
 
                 # 52-weken-record -- een leuk, opvallend signaal als een van je
                 # posities vandaag een nieuwe hoogte/laagte raakt.
-                records_52wk = get_52_week_records(holdings, infos, max_items=3) if holdings else []
+                records_52wk = get_52_week_records(holdings, market_data, max_items=3) if holdings else []
                 for r in records_52wk:
                     icon_name = "trending_up" if r["type"] == "high" else "trending_down"
                     icon_color = "#1FAE96" if r["type"] == "high" else "#E5484D"
@@ -5401,7 +5513,7 @@ def render_today():
                 # (de oude aanpak miste een verrassing als de ticker net
                 # niet aan de signaal-criteria voldeed).
                 personal_surprises = get_recent_earnings_surprises_for_tracked_items(
-                    tracked_items, max_days_old=7, max_items=3,
+                    tracked_items, market_data, max_days_old=7, max_items=3,
                 )
                 for s in personal_surprises:
                     icon_name = "trending_up" if s["beat"] else "trending_down"
