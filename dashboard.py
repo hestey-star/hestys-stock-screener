@@ -1011,11 +1011,21 @@ def build_daily_portfolio_stats(holdings: list):
         if not shares:
             continue
         try:
-            hist = get_cached_ticker_history(h["ticker"], period="5d")
-            if len(hist) < 2:
-                continue
-            price_today = float(hist["Close"].iloc[-1])
-            price_yesterday = float(hist["Close"].iloc[-2])
+            # regularMarketPrice/regularMarketPreviousClose uit .info EERST
+            # geprobeerd -- dezelfde, verse bron die My Portfolio inmiddels
+            # ook gebruikt voor dagrendement. .history()'s laatste 2
+            # slotkoersen bleek in de praktijk soms nog verouderd, zelfs via
+            # de betrouwbaardere Ticker().history()-methode (precies het
+            # probleem dat eerder bij HIMS werd gevonden op My Portfolio).
+            info = get_cached_ticker_info(h["ticker"])
+            price_today = info.get("regularMarketPrice")
+            price_yesterday = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if price_today is None or not price_yesterday:
+                hist = get_cached_ticker_history(h["ticker"], period="5d")
+                if len(hist) < 2:
+                    continue
+                price_today = float(hist["Close"].iloc[-1])
+                price_yesterday = float(hist["Close"].iloc[-2])
             # Sommige dagen ontbreekt een koers (bv. rond een feestdag/data-gat) --
             # yfinance geeft dan NaN terug. Zonder deze check zou 1 NaN de HELE
             # portfolio-som NaN maken (NaN + iets = NaN), en 'total_value_yesterday
