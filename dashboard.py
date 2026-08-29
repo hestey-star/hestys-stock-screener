@@ -2112,7 +2112,10 @@ def get_company_logo_url(ticker: str, company_name: str = None) -> str:
     bedrijfsdomein uit yfinance's 'website'-veld -- met een terugval op
     een domein-gok uit de bedrijfsnaam, want 'website' bleek in de
     praktijk regelmatig te ontbreken (bekende yfinance-onbetrouwbaarheid).
-    Geeft None terug als er geen domein af te leiden is (bv. crypto).
+    Crypto-tickers (bv. BTC-USD) krijgen een apart munt-icoon via de
+    gratis cryptocurrency-icons-bibliotheek (geen bedrijfsdomein om te
+    gokken, maar wel vaak een bekend munt-icoon beschikbaar). Geeft None
+    terug als er helemaal geen logo te vinden is.
 
     'company_name' is een OPTIONELE, AL-BEKENDE bedrijfsnaam (bv. uit een
     eigen database-record) -- gebruikt als extra terugval wanneer
@@ -2166,10 +2169,20 @@ def get_company_logo_url(ticker: str, company_name: str = None) -> str:
                 return candidate_url
 
         # Terugval: geen 'website'-veld (of niet geverifieerd) --
-        # crypto-achtige tickers (geen bedrijf, dus geen zinvol domein te
-        # gokken) slaan we bewust over.
+        # crypto-achtige tickers (bv. BTC-USD, SOL-USD) hebben geen
+        # zinvol bedrijfsdomein om te gokken, maar WEL vaak een bekend
+        # munt-icoon. Probeer eerst de gratis, betrouwbare
+        # cryptocurrency-icons-bibliotheek (500+ munten, via jsdelivr's
+        # CDN) op basis van het munt-symbool, vóórdat we deze tickers
+        # helemaal overslaan.
         ticker_suffix = ticker.rsplit("-", 1)[-1].upper() if "-" in ticker else ""
         if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC"):
+            coin_symbol = ticker.rsplit("-", 1)[0].lower()
+            crypto_icon_url = (
+                f"https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/{coin_symbol}.png"
+            )
+            if _verify_logo_url(crypto_icon_url):
+                return crypto_icon_url
             return None
 
         # Naam ophalen: eerst proberen via yfinance, met de ZELF-BEKENDE
