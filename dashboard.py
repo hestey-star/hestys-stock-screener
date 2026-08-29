@@ -3993,16 +3993,32 @@ def render_portfolio():
                 # Dagrendement LIVE berekend i.p.v. de opgeslagen database-
                 # waarde -- die laatste wordt namelijk ALLEEN bijgewerkt bij
                 # een klik op 'Update portfolio value', en kan dus dagen oud
-                # zijn (precies het gemelde probleem: HIMS/ADUR toonden een
-                # verkeerd/verouderd dagrendement). get_cached_ticker_history
-                # is al 5 minuten gecached, dus dit blijft licht qua
-                # netwerkverkeer, ook al wordt het nu bij elk paginabezoek
-                # opnieuw opgehaald i.p.v. alleen bij een handmatige refresh.
+                # zijn (precies het eerder gemelde probleem: HIMS/ADUR
+                # toonden een verkeerd/verouderd dagrendement).
+                #
+                # Berekend uit .info's regularMarketPrice vs
+                # regularMarketPreviousClose/previousClose -- CONSISTENT met
+                # hoe de koers zelf inmiddels ook bepaald wordt (zie
+                # refresh_portfolio_values) -- i.p.v. uit .history()'s
+                # laatste 2 slotkoersen, want die bleek OOK nog verouderd te
+                # kunnen zijn (zelfs via de al-gecorrigeerde Ticker().
+                # history()-methode), waardoor koers en dagrendement uit 2
+                # verschillende, niet-overeenkomende databronnen kwamen --
+                # precies het gemelde 'koers klopt nu wel, dagrendement niet'
+                # -probleem. get_cached_ticker_info is al 5 min gecached.
                 day_change_value = None
                 day_change_pct = None
                 if portfolio_view_mode == "Daily":
-                    hist = get_cached_ticker_history(h["ticker"], period="5d")
-                    day_change_pct = compute_day_change_pct(hist)
+                    info = get_cached_ticker_info(h["ticker"])
+                    fresh_price = info.get("regularMarketPrice")
+                    prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+                    if fresh_price is not None and prev_close:
+                        day_change_pct = (fresh_price - prev_close) / prev_close * 100
+                    else:
+                        # Terugval: .info leeg (bekende yfinance-
+                        # onbetrouwbaarheid) -- geschiedenis-gebaseerde aanpak.
+                        hist = get_cached_ticker_history(h["ticker"], period="5d")
+                        day_change_pct = compute_day_change_pct(hist)
                     if day_change_pct is not None and pos_value is not None and (1 + day_change_pct / 100) != 0:
                         prev_value = pos_value / (1 + day_change_pct / 100)
                         day_change_value = pos_value - prev_value
