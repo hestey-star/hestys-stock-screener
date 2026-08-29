@@ -561,6 +561,14 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     if not tickers_to_fetch:
         return False, "No positions with shares to update."
 
+    # De onderliggende koers-cache (_batch_download_history) staat 1 uur
+    # vast -- prima voor gewone paginabezoeken, maar een EXPLICIETE klik op
+    # 'Update portfolio value' moet gegarandeerd verse data ophalen, niet
+    # mogelijk een tot 1 uur oude cache-hit teruggeven (voelde anders aan
+    # alsof de knop niks deed). get_fx_rate() staat los en heeft zijn eigen,
+    # kortere 5-min-cache, dus die hoeft hier niet geleegd te worden.
+    _batch_download_history.clear()
+
     shared_prices = get_shared_history_for_holdings(
         [{"ticker": t} for t in tickers_to_fetch], period="5d"
     )
