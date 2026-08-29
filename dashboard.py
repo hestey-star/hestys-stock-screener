@@ -582,8 +582,21 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
         if not holding.get("shares"):
             continue
         try:
+            # 'regularMarketPrice' (of 'currentPrice' als terugval-veldnaam)
+            # uit yfinance's .info wordt EERST geprobeerd -- dit veld
+            # weerspiegelt specifiek de MEEST RECENTE koers (vergelijkbaar
+            # met hoe Yahoo Finance's eigen site het toont), en bleek in de
+            # praktijk BETROUWBAARDER/VERSER dan .history() alleen (die in
+            # sommige gevallen ook nog een dag kan achterlopen, zelfs via
+            # de al-gecorrigeerde Ticker().history()-methode). We vallen
+            # terug op de geschiedenis-gebaseerde aanpak (_price_near_date)
+            # als .info leeg is (een bekende, terugkerende yfinance-
+            # onbetrouwbaarheid) of het veld ontbreekt.
+            info = get_cached_ticker_info(holding["ticker"])
+            native_price = info.get("regularMarketPrice") or info.get("currentPrice")
             hist = shared_prices.get(holding["ticker"])
-            native_price = _price_near_date(hist, today, tolerance_days=10) if hist is not None else None
+            if native_price is None:
+                native_price = _price_near_date(hist, today, tolerance_days=10) if hist is not None else None
             if native_price is None:
                 continue
             native_currency = get_cached_ticker_currency(holding["ticker"])
