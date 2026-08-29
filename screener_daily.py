@@ -62,7 +62,13 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
     handelsdag, rekening houdend met het weekend, plus 1 dag speling voor
     incidentele feestdagen.
     """
-    df = yf.download(ticker, period=f"{years}y", interval="1d", auto_adjust=True, progress=False)
+    # Ticker().history() i.p.v. yf.download() -- die laatste bleek in
+    # yfinance's eigen GitHub-issues bevestigd de laatste handelsdag te
+    # kunnen missen (structureel 1+ dag achterlopend), een fix die eerder
+    # al is toegepast op de live portfolio-data in dashboard.py. Hier
+    # minder kritiek (supertrend-signalen kijken naar meerdaagse/wekelijkse
+    # patronen, niet dag-op-dag), maar voor consistentie ook hier toegepast.
+    df = yf.Ticker(ticker).history(period=f"{years}y", interval="1d", auto_adjust=True)
     if df.empty:
         return df
     if isinstance(df.columns, pd.MultiIndex):

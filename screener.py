@@ -267,7 +267,10 @@ def build_ticker_list():
 
 
 def fetch_weekly(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
-    df = yf.download(ticker, period=f"{years}y", interval="1d", auto_adjust=True, progress=False)
+    # Ticker().history() i.p.v. yf.download() -- zie fetch_daily() in
+    # screener_daily.py voor de volledige toelichting (bevestigde
+    # yfinance-staleness-bug bij yf.download()).
+    df = yf.Ticker(ticker).history(period=f"{years}y", interval="1d", auto_adjust=True)
     if df.empty:
         return df
     if isinstance(df.columns, pd.MultiIndex):
@@ -431,15 +434,6 @@ def get_earnings_surprise(ticker: str) -> dict:
         latest = df.iloc[0]
 
         surprise_pct = float(latest[surprise_col]) if surprise_col and pd.notna(latest[surprise_col]) else None
-        # Zelfde soort near-zero-basis-vertekening als bij de Rocket List-
-        # groei-bug (AFL): als de geschatte winst per aandeel heel dicht bij
-        # nul lag, geeft yfinance's eigen 'Surprise(%)'-veld een wiskundig
-        # 'correcte' maar praktisch betekenisloze, extreme %. Waarden boven
-        # de 150% zijn voor een gevestigd, zwaar-gevolgd bedrijf vrijwel
-        # zeker zo'n vertekening, geen echte verrassing -- behandelen we
-        # als onbekend i.p.v. als een misleidend groot getal te tonen.
-        if surprise_pct is not None and abs(surprise_pct) > 150:
-            surprise_pct = None
         beat = (surprise_pct is not None and surprise_pct > 0)
 
         return {"surprise_pct": surprise_pct, "beat": beat, "earnings_date": df.index[0]}
@@ -557,15 +551,6 @@ def check_ticker_rocket(ticker: str, df: pd.DataFrame, benchmark_returns: dict) 
         g for g in [info.get("revenueGrowth"), info.get("earningsGrowth")] if g is not None
     ]
     growth = max(growth_candidates) if growth_candidates else None
-    # Groei-percentages ver boven de 300% zijn vrijwel altijd een reken-
-    # artefact, niet een echte prestatie -- als de vergelijkingsbasis
-    # (vorige periode) bijna nul was, geeft een op zich normale absolute
-    # toename een wiskundig 'correcte' maar praktisch betekenisloze,
-    # extreme %. Zo'n waarde behandelen we als onbetrouwbaar i.p.v. als
-    # een echt signaal (zag dit bv. bij AFL, dat wekenlang exact +3860%
-    # bleef tonen).
-    if growth is not None and growth > 3.0:
-        growth = None
     if growth is None or growth < 0.20:
         return None
 
