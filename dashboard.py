@@ -2766,37 +2766,33 @@ def _price_near_date(history: pd.DataFrame, target_date, tolerance_days: int = 1
 @st.cache_data(ttl=3600, show_spinner=False)
 def _batch_download_history(tickers_tuple: tuple, period: str = "max") -> dict:
     """
-    Haalt de koersgeschiedenis van MEERDERE tickers op in 1 netwerk-
-    aanroep (yfinance's batch-download), i.p.v. een aparte aanroep per
-    ticker -- dit was de resterende bron van traagheid nadat de eerdere
-    fix (1x per periode i.p.v. per periode-per-positie) al hielp, maar bij
-    veel posities nog steeds 1 aanroep per positie deed.
+    Haalt de koersgeschiedenis van meerdere tickers op, 1x per ticker via
+    get_cached_ticker_history() (die zelf 5 minuten gecached is en
+    yf.Ticker().history() gebruikt).
+
+    LET OP: gebruikte VROEGER yf.download() (yfinance's eigen batch-
+    download, 1 netwerk-aanroep voor alle tickers tegelijk) voor
+    snelheid -- maar dat bleek een BEVESTIGDE, in yfinance's eigen
+    GitHub-issues gedocumenteerde bug te hebben: yf.download() loopt
+    structureel 1+ dag ACHTER op yf.Ticker().history() (de laatste
+    handelsdag ontbreekt soms compleet). Concreet gevolg: 'Update
+    portfolio value' bleef VEROUDERDE koersen tonen, ook na het oplossen
+    van de eigen caching-problemen (want yfinance zelf gaf al verouderde
+    data terug, nog vóórdat onze eigen cache er iets mee deed). Nu dus
+    per ticker via de betrouwbaardere .history()-methode, met een kleine
+    snelheids-kost (meerdere kleine aanroepen i.p.v. 1 grote) die voor
+    een doorsnee portfolio (een tiental posities) niet merkbaar is.
     """
     tickers = list(tickers_tuple)
     if not tickers:
         return {}
-    try:
-        if len(tickers) == 1:
-            data = yf.download(tickers[0], period=period, progress=False)
-            return {tickers[0]: data}
-        data = yf.download(tickers, period=period, progress=False, group_by="ticker")
-        result = {}
-        for ticker in tickers:
-            try:
-                result[ticker] = data[ticker]
-            except Exception:
-                result[ticker] = None
-        return result
-    except Exception:
-        # Terugval: als de batch-download als geheel faalt, toch 1-voor-1
-        # proberen -- trager, maar beter dan helemaal geen data.
-        result = {}
-        for ticker in tickers:
-            try:
-                result[ticker] = get_cached_ticker_history(ticker, period=period)
-            except Exception:
-                result[ticker] = None
-        return result
+    result = {}
+    for ticker in tickers:
+        try:
+            result[ticker] = get_cached_ticker_history(ticker, period=period)
+        except Exception:
+            result[ticker] = None
+    return result
 
 
 def get_shared_history_for_holdings(holdings: list, period: str = "max") -> dict:
