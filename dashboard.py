@@ -398,14 +398,28 @@ def load_portfolio_news():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_fx_rate(from_currency: str, to_currency: str):
-    """Haalt de actuele wisselkoers op (5 min gecached). Geeft None terug als het niet lukt (i.p.v. een gok te doen)."""
+    """
+    Haalt de actuele wisselkoers op (5 min gecached). Geeft None terug
+    als het niet lukt (i.p.v. een gok te doen).
+
+    Gebruikt een venster van 5 dagen i.p.v. alleen 'vandaag' (period=
+    '1d') -- op een weekend/feestdag kan er geen forex-candle voor
+    EXACT vandaag bestaan, waardoor period='1d' een lege DataFrame
+    teruggaf en de conversie stilzwijgend faalde. Concreet gevolg
+    zonder deze fix: 'Update portfolio value' leek voor VALUTA-
+    CONVERTERENDE posities (bv. EUR-aandelen bij een USD-weergave)
+    niks te doen in het weekend, terwijl USD-genoteerde crypto (geen
+    conversie nodig, from_currency==to_currency) wel gewoon bijwerkte
+    -- exact het gemelde patroon.
+    """
     if from_currency == to_currency:
         return 1.0
     pair_ticker = f"{from_currency}{to_currency}=X"
     try:
-        data = yf.Ticker(pair_ticker).history(period="1d")
-        if not data.empty:
-            return float(data["Close"].iloc[-1])
+        data = yf.Ticker(pair_ticker).history(period="5d")
+        valid_closes = data["Close"].dropna()
+        if not valid_closes.empty:
+            return float(valid_closes.iloc[-1])
     except Exception:
         pass
     return None
