@@ -3959,14 +3959,22 @@ def render_portfolio():
                 if shares and pos_value:
                     current_price_num = pos_value / shares
 
-                # Dagelijkse dollarverandering afleiden uit het dagpercentage
-                # (niet los opgeslagen) -- gisteren se waarde = huidige
-                # waarde / (1 + pct/100), verschil daarmee is de verandering.
+                # Dagrendement LIVE berekend i.p.v. de opgeslagen database-
+                # waarde -- die laatste wordt namelijk ALLEEN bijgewerkt bij
+                # een klik op 'Update portfolio value', en kan dus dagen oud
+                # zijn (precies het gemelde probleem: HIMS/ADUR toonden een
+                # verkeerd/verouderd dagrendement). get_cached_ticker_history
+                # is al 5 minuten gecached, dus dit blijft licht qua
+                # netwerkverkeer, ook al wordt het nu bij elk paginabezoek
+                # opnieuw opgehaald i.p.v. alleen bij een handmatige refresh.
                 day_change_value = None
-                day_change_pct = h.get("day_change_pct")
-                if day_change_pct is not None and pos_value is not None and (1 + day_change_pct / 100) != 0:
-                    prev_value = pos_value / (1 + day_change_pct / 100)
-                    day_change_value = pos_value - prev_value
+                day_change_pct = None
+                if portfolio_view_mode == "Daily":
+                    hist = get_cached_ticker_history(h["ticker"], period="5d")
+                    day_change_pct = compute_day_change_pct(hist)
+                    if day_change_pct is not None and pos_value is not None and (1 + day_change_pct / 100) != 0:
+                        prev_value = pos_value / (1 + day_change_pct / 100)
+                        day_change_value = pos_value - prev_value
 
                 avg_cost = None
                 all_time_pct = None
