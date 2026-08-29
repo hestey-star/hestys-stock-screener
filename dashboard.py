@@ -650,6 +650,22 @@ def get_cached_ticker_history(ticker: str, period: str = None, start: str = None
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_cached_earnings_dates(ticker: str, limit: int = 8):
+    """
+    Cachet yfinance's .get_earnings_dates() per ticker voor 1 uur (langer
+    dan de meeste andere caches, want earnings-datums veranderen zelden
+    binnen dezelfde dag). Was voorheen NIET gecached en werd bovendien
+    DUBBEL aangeroepen (1x in get_todays_portfolio_earnings, 1x in
+    get_upcoming_portfolio_earnings) -- bij meerdere posities/watchlist-
+    items telde dat flink op en maakte Today's radar merkbaar traag.
+    """
+    try:
+        return yf.Ticker(ticker).get_earnings_dates(limit=limit)
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get_cached_ticker_dividends(ticker: str):
     """Cachet yfinance's .dividends (historische, per-share dividendbetalingen) per ticker voor 5 minuten."""
@@ -2347,7 +2363,7 @@ def get_todays_portfolio_earnings(tracked_items: list, max_items: int = 3) -> li
     results = []
     for item in tracked_items:
         try:
-            dates_df = yf.Ticker(item["ticker"]).get_earnings_dates(limit=8)
+            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
             if dates_df is None or dates_df.empty:
                 continue
             for earnings_date in dates_df.index:
@@ -2372,7 +2388,7 @@ def get_upcoming_portfolio_earnings(tracked_items: list, days_ahead: int = 5, ma
     results = []
     for item in tracked_items:
         try:
-            dates_df = yf.Ticker(item["ticker"]).get_earnings_dates(limit=8)
+            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
             if dates_df is None or dates_df.empty:
                 continue
             for earnings_date in dates_df.index:
@@ -2384,6 +2400,48 @@ def get_upcoming_portfolio_earnings(tracked_items: list, days_ahead: int = 5, ma
         except Exception:
             continue
     results.sort(key=lambda r: r["days_until"])
+    return results[:max_items]
+
+
+def get_recent_earnings_surprises_for_tracked_items(tracked_items: list, max_days_old: int = 7, max_items: int = 3) -> list:
+    """
+    Checkt of een van je posities/watchlist-items RECENT (binnen
+    max_days_old dagen) earnings heeft gerapporteerd met een noemenswaardige
+    winst-verrassing -- rechtstreeks via yfinance's .get_earnings_dates()
+    (dezelfde, al-gecachete data als get_todays_portfolio_earnings/
+    get_upcoming_portfolio_earnings, dus geen extra netwerk-aanroepen).
+
+    Dit is bewust een ANDERE, directere bron dan de bestaande
+    get_earnings_surprises_from_signals() (die leunt op de supertrend-
+    signalen-CSV) -- die laatste toont een verrassing ALLEEN als de ticker
+    toevallig OOK als supertrend-signaal is gemarkeerd, dus voor JOUW
+    eigen posities specifiek kon een verrassing gemist worden als de
+    ticker net niet aan de signaal-criteria voldeed. Deze functie werkt
+    voor ELKE gevolgde ticker, ongeacht of 'ie ook een signaal is.
+    """
+    today = datetime.now().date()
+    results = []
+    for item in tracked_items:
+        try:
+            dates_df = get_cached_earnings_dates(item["ticker"], limit=8)
+            if dates_df is None or dates_df.empty or "Surprise(%)" not in dates_df.columns:
+                continue
+            for earnings_date, row in dates_df.iterrows():
+                days_since = (today - earnings_date.date()).days
+                if not (0 <= days_since <= max_days_old):
+                    continue
+                surprise_pct = row.get("Surprise(%)")
+                if pd.isna(surprise_pct):
+                    continue  # nog niet gerapporteerd, of geen schatting beschikbaar
+                results.append({
+                    "naam": item["naam"], "ticker": item["ticker"],
+                    "earnings_date": earnings_date.date(), "surprise_pct": float(surprise_pct),
+                    "beat": surprise_pct >= 0,
+                })
+                break  # per ticker maar 1x tellen (de meest recente relevante datum)
+        except Exception:
+            continue
+    results.sort(key=lambda r: abs(r["surprise_pct"]), reverse=True)
     return results[:max_items]
 
 
@@ -5205,6 +5263,7 @@ def render_today():
                         else:
                             st.metric("Worst today", "n/a")
 
+                    st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
                     st.page_link(portfolio_page, label="View My Portfolio")
 
             # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
@@ -5333,7 +5392,31 @@ def render_today():
                     f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
                 ))
 
-                def _is_recent_earnings(earnings_date_str, max_days=2):
+                tracked_tickers = {item["ticker"] for item in tracked_items}
+
+                # Persoonlijke earnings-surprises: rechtstreeks via yfinance
+                # (get_recent_earnings_surprises_for_tracked_items) i.p.v.
+                # de supertrend-signalen-CSV -- werkt zo voor ELKE gevolgde
+                # ticker, ongeacht of 'ie toevallig ook een signaal is
+                # (de oude aanpak miste een verrassing als de ticker net
+                # niet aan de signaal-criteria voldeed).
+                personal_surprises = get_recent_earnings_surprises_for_tracked_items(
+                    tracked_items, max_days_old=7, max_items=3,
+                )
+                for s in personal_surprises:
+                    icon_name = "trending_up" if s["beat"] else "trending_down"
+                    icon_color = "#1FAE96" if s["beat"] else "#E5484D"
+                    radar_rows.append(_radar_row_html(
+                        _icon_span(icon_name, size_px=15, color=icon_color),
+                        f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
+                    ))
+
+                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
+                # strenger venster (1 dag i.p.v. 7), want minder persoonlijk relevant,
+                # maar toch de moeite waard om even te vermelden. Blijft via de
+                # supertrend-signalen-CSV (niet elke marktticker is live te
+                # bevragen zonder de pagina traag te maken).
+                def _is_recent_earnings(earnings_date_str, max_days=1):
                     try:
                         earnings_date = pd.to_datetime(earnings_date_str).date()
                         days_since = (datetime.now().date() - earnings_date).days
@@ -5341,29 +5424,16 @@ def render_today():
                     except Exception:
                         return False
 
-                tracked_tickers = {item["ticker"] for item in tracked_items}
                 all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
-                personal_surprises = [
-                    s for s in all_recent_surprises
-                    if s["ticker"] in tracked_tickers and _is_recent_earnings(s["earnings_date"])
-                ]
-                for s in personal_surprises[:3]:
-                    emoji = "🟢" if s["earnings_beat"] else "🔴"
-                    radar_rows.append(_radar_row_html(
-                        emoji, f"<b>{s['ticker']}</b>: {s['earnings_surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})"
-                    ))
-
-                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
-                # strenger venster (1 dag i.p.v. 2), want minder persoonlijk relevant,
-                # maar toch de moeite waard om even te vermelden.
                 market_wide_surprises = [
                     s for s in all_recent_surprises
                     if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
                 ]
                 for s in market_wide_surprises[:2]:
-                    emoji = "🟢" if s["earnings_beat"] else "🔴"
+                    icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
+                    icon_color = "#1FAE96" if s["earnings_beat"] else "#E5484D"
                     radar_rows.append(_radar_row_html(
-                        emoji,
+                        _icon_span(icon_name, size_px=15, color=icon_color),
                         f"Also worth noting (not in your portfolio): "
                         f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
                     ))
@@ -6058,14 +6128,14 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="app-header" style="border-bottom:none; padding:0 0 0.5rem 0; margin-bottom:0.5rem;">
-            <a href="{'/today' if current_user.is_logged_in else '/discover'}" class="app-header-top" target="_self">
+            <div class="app-header-top">
                 <img src="data:image/png;base64,{_LOGO_ICON_B64}" width="31" height="38"
                      style="object-fit:contain; flex-shrink:0;" alt="Hestys logo" />
                 <div>
                     <h1 class="sidebar-logo-title">HESTYS</h1>
                     <div class="tagline" style="margin-top:0.02rem;">YOUR INVESTING EDGE</div>
                 </div>
-            </a>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
