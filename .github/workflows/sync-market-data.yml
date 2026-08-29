@@ -1,0 +1,37 @@
+name: Marktdata-sync
+
+on:
+  schedule:
+    # Elke 15 minuten, 24/7 -- BEWUST NIET op :00/:15/:30/:45 (het
+    # standaardrooster), want jullie eigen daily.yml waarschuwt al
+    # terecht dat het hele/halve uur het drukste moment is op heel
+    # GitHub Actions (gedeeld door alle repo's tegelijk), waardoor
+    # geplande runs vertraagd of overgeslagen kunnen worden. Een paar
+    # minuten ernaast (:07/:22/:37/:52) verkleint die kans, exact
+    # dezelfde aanpak als bij de dagelijkse scan.
+    #
+    # 24/7 i.p.v. alleen beursuren, want crypto handelt altijd door --
+    # en op een publieke repo zijn Actions-minuten toch onbeperkt.
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch: {}  # handmatig te starten, handig om meteen te testen
+
+jobs:
+  sync-market-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Marktdata-sync draaien
+        run: python sync_market_data.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

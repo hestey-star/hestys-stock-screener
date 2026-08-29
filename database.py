@@ -20,10 +20,7 @@ adres onthoudt -- zie ensure_user_identity() en get_real_email().
 """
 from __future__ import annotations
 
-import math
-import hashlib
 import os
-import secrets
 from datetime import datetime, timedelta
 
 import streamlit as st
@@ -35,17 +32,13 @@ from user_hashing import hash_email
 @st.cache_resource
 def get_supabase_client() -> Client:
     """
-    Haalt de Supabase-credentials op -- via st.secrets wanneer dit ECHT
-    binnen een draaiende Streamlit-app gebeurt (de live site), of via
-    omgevingsvariabelen wanneer dit bestand wordt aangeroepen vanuit een
-    los script BUITEN Streamlit (bv. weekly_batch.py/daily_batch.py via
-    GitHub Actions -- daar bestaat geen secrets.toml-bestand, wat
-    st.secrets anders laat crashen met 'No secrets found').
-
-    Deze fallback voorkomt structureel het probleem dat de wekelijkse
-    Portfolio Watch-mail liet crashen: get_roic_trend_history() (in dit
-    bestand) wordt ook vanuit weekly_batch.py aangeroepen, maar gebruikte
-    tot nu toe ALLEEN st.secrets via deze functie.
+    Probeert eerst st.secrets (werkt binnen de Streamlit-app), valt
+    terug op de omgevingsvariabelen SUPABASE_URL/SUPABASE_ANON_KEY als
+    dat niet lukt -- nodig voor batch-scripts die BUITEN een Streamlit-
+    context draaien (bv. via GitHub Actions, zoals sync_market_data.py).
+    st.secrets gooit buiten een Streamlit-runtime een fout (geen
+    secrets.toml aanwezig) -- vandaar de try/except i.p.v. een simpele
+    'of'-constructie.
     """
     try:
         url = st.secrets["supabase"]["url"]
@@ -54,83 +47,6 @@ def get_supabase_client() -> Client:
         url = os.environ["SUPABASE_URL"]
         key = os.environ["SUPABASE_ANON_KEY"]
     return create_client(url, key)
-
-
-def _hash_password(password: str) -> str:
-    """
-    Hasht een wachtwoord met scrypt -- Python's ingebouwde, voor
-    wachtwoorden bedoelde hash-functie (traag met opzet, i.t.t. bv.
-    sha256, wat brute-force-aanvallen bemoeilijkt). Geen extra
-    dependency nodig. Geeft 1 string terug met salt+hash samengevoegd
-    (hex, gescheiden door ':'), zodat 1 kolom volstaat.
-    """
-    salt = os.urandom(16)
-    hashed = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
-    return f"{salt.hex()}:{hashed.hex()}"
-
-
-def _verify_password(password: str, stored: str) -> bool:
-    """
-    Controleert een ingevoerd wachtwoord tegen de opgeslagen salt+hash.
-    secrets.compare_digest() i.p.v. == voorkomt een timing-aanval (bij ==
-    zou een aanvaller uit de reactietijd kunnen afleiden hoeveel tekens
-    er al kloppen).
-    """
-    try:
-        salt_hex, hash_hex = stored.split(":")
-        salt = bytes.fromhex(salt_hex)
-        expected = bytes.fromhex(hash_hex)
-        actual = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=16384, r=8, p=1, dklen=32)
-        return secrets.compare_digest(actual, expected)
-    except Exception:
-        return False
-
-
-def sign_up_with_password(email: str, name: str, password: str) -> tuple[bool, str]:
-    """
-    Maakt een nieuw account aan met e-mail+wachtwoord, of voegt een
-    wachtwoord toe aan een bestaande, via Google aangemaakte identiteit
-    (1 account, 2 inlogmethodes -- zelfde e-mailadres, dus dezelfde hash,
-    dus dezelfde portfolio/voorkeuren, ongeacht hoe je binnenkomt).
-
-    Geeft (False, reden) terug als er al een wachtwoord is ingesteld voor
-    dit e-mailadres (voorkomt per ongeluk overschrijven van een bestaand
-    account).
-    """
-    client = get_supabase_client()
-    email_hash = hash_email(email)
-    existing = client.table("user_identity").select("password_hash").eq("email_hash", email_hash).execute()
-    if existing.data and existing.data[0].get("password_hash"):
-        return False, "An account with this email already has a password set. Try signing in instead."
-
-    client.table("user_identity").upsert({
-        "email_hash": email_hash,
-        "email": email,
-        "name": name,
-        "password_hash": _hash_password(password),
-    }, on_conflict="email_hash").execute()
-    return True, "Account created!"
-
-
-def verify_password_login(email: str, password: str) -> tuple[bool, str]:
-    """
-    Controleert een e-mail+wachtwoord-combinatie. Geeft (True, echte naam)
-    terug bij succes, of (False, foutmelding) terug bij een verkeerd
-    e-mailadres/wachtwoord OF een account dat nog geen wachtwoord heeft
-    ingesteld (bv. een puur-Google-account) -- BEWUST dezelfde,
-    algemene foutmelding voor beide gevallen, zodat een aanvaller niet
-    kan afleiden welke e-mailadressen wel/niet bestaan.
-    """
-    client = get_supabase_client()
-    email_hash = hash_email(email)
-    response = client.table("user_identity").select("password_hash,name").eq("email_hash", email_hash).execute()
-    generic_error = "No account found with this email and password."
-    if not response.data or not response.data[0].get("password_hash"):
-        return False, generic_error
-    stored_hash = response.data[0]["password_hash"]
-    if _verify_password(password, stored_hash):
-        return True, response.data[0].get("name") or email.split("@")[0]
-    return False, generic_error
 
 
 def ensure_user_identity(email: str, name: str = None) -> None:
@@ -159,98 +75,6 @@ def get_real_email(email_hash: str) -> str:
     if response.data:
         return response.data[0]["email"]
     return None
-
-
-def create_session_token(email: str, days_valid: int = 30) -> str:
-    """
-    Maakt een nieuwe, willekeurige sessie-token aan voor deze gebruiker
-    en slaat 'm op met een vervaldatum -- wordt in een browser-cookie
-    gezet zodat een paginaverversing je niet meteen uitlogt (in
-    tegenstelling tot de kale st.session_state, die dat wel doet).
-    """
-    client = get_supabase_client()
-    token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
-    client.table("auth_sessions").insert({
-        "token": token,
-        "email_hash": hash_email(email),
-        "expires_at": expires_at,
-    }).execute()
-    return token
-
-
-def get_user_from_session_token(token: str):
-    """
-    Zoekt (e-mailadres, naam) op bij een sessie-token, mits nog geldig
-    (niet verlopen). Geeft None terug als de token niet bestaat OF
-    verlopen is -- in beide gevallen betekent dat: niet ingelogd.
-    """
-    if not token:
-        return None
-    client = get_supabase_client()
-    response = client.table("auth_sessions").select("email_hash,expires_at").eq("token", token).execute()
-    if not response.data:
-        return None
-    row = response.data[0]
-    if datetime.fromisoformat(row["expires_at"]) < datetime.now():
-        return None
-    identity = client.table("user_identity").select("email,name").eq("email_hash", row["email_hash"]).execute()
-    if not identity.data:
-        return None
-    return identity.data[0]["email"], identity.data[0].get("name")
-
-
-def delete_session_token(token: str) -> None:
-    """Verwijdert een sessie-token (bij uitloggen -- voorkomt dat een oude cookie nog geldig zou blijven)."""
-    if not token:
-        return
-    client = get_supabase_client()
-    client.table("auth_sessions").delete().eq("token", token).execute()
-
-
-def create_password_reset_token(email: str):
-    """
-    Maakt een wachtwoord-reset-token aan, MAAR ALLEEN als er
-    daadwerkelijk een account MET een wachtwoord bestaat voor dit
-    e-mailadres. Geeft None terug als dat niet zo is -- de aanroepende
-    code toont ALTIJD dezelfde, algemene bevestiging aan de gebruiker
-    (ongeacht of er echt een mail verstuurd is), zodat een aanvaller niet
-    kan afleiden welke e-mailadressen wel/niet een account hebben.
-    """
-    client = get_supabase_client()
-    email_hash = hash_email(email)
-    existing = client.table("user_identity").select("password_hash").eq("email_hash", email_hash).execute()
-    if not existing.data or not existing.data[0].get("password_hash"):
-        return None
-    token = secrets.token_urlsafe(32)
-    expires_at = (datetime.now() + timedelta(hours=1)).isoformat()
-    client.table("user_identity").upsert({
-        "email_hash": email_hash,
-        "password_reset_token": token,
-        "password_reset_expires_at": expires_at,
-    }, on_conflict="email_hash").execute()
-    return token
-
-
-def reset_password_with_token(token: str, new_password: str) -> tuple[bool, str]:
-    """
-    Zet een nieuw wachtwoord, mits de reset-token geldig en niet verlopen
-    is (1 uur geldigheid). De token wordt na gebruik meteen gewist, zodat
-    'ie niet nogmaals gebruikt kan worden.
-    """
-    client = get_supabase_client()
-    response = client.table("user_identity").select("email_hash,password_reset_expires_at").eq("password_reset_token", token).execute()
-    if not response.data:
-        return False, "This reset link is invalid or has already been used."
-    row = response.data[0]
-    if not row.get("password_reset_expires_at") or datetime.fromisoformat(row["password_reset_expires_at"]) < datetime.now():
-        return False, "This reset link has expired. Please request a new one."
-    client.table("user_identity").update({
-        "password_hash": _hash_password(new_password),
-        "password_reset_token": None,
-        "password_reset_expires_at": None,
-    }).eq("email_hash", row["email_hash"]).execute()
-    return True, "Password updated! You can now sign in with your new password."
 
 
 def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]:
@@ -893,93 +717,36 @@ def save_performance_snapshot(
     }).execute()
 
 
-def get_roic_trend_history(tickers: list) -> dict:
+def get_market_data_for_tickers(tickers: list) -> dict:
     """
-    Haalt de LAATST BEKENDE ROIC-trend EN fair-value-status per ticker op
-    (van de vorige Portfolio Watch-run) -- gebruikt om te bepalen of een
-    signalering deze week ECHT NIEUW is, i.p.v. elke week opnieuw dezelfde,
-    al-langer-bekende stand te tonen. Per TICKER bijgehouden (niet per
-    gebruiker) -- deze waardes zijn voor iedereen hetzelfde, dus geen zin
-    om ze per gebruiker te dupliceren.
-
-    Geeft per ticker een dict terug: {'roic_trend': ..., 'fair_value_bucket': ...}
+    Haalt de achtergrond-gesynchroniseerde marktdata op voor een lijst
+    tickers, in 1 query -- i.p.v. live yfinance-aanroepen tijdens het
+    laden van een pagina. Gedeelde tabel (geen user_email), gevuld door
+    het nieuwe sync_market_data.py-script (elke 15 min via GitHub
+    Actions). Geeft een dict terug, geindexeerd op ticker, zodat de
+    aanroeper 'result.get(ticker, {})' kan doen -- ontbrekende/nog niet
+    gesynchroniseerde tickers geven gewoon een lege dict terug i.p.v. een
+    KeyError.
     """
     if not tickers:
         return {}
     client = get_supabase_client()
-    response = (
-        client.table("roic_trend_history")
-        .select("ticker,last_roic_trend,last_fair_value_bucket")
-        .in_("ticker", tickers)
-        .execute()
-    )
-    return {
-        row["ticker"]: {"roic_trend": row["last_roic_trend"], "fair_value_bucket": row.get("last_fair_value_bucket")}
-        for row in response.data
-    }
+    response = client.table("ticker_market_data").select("*").in_("ticker", list(set(tickers))).execute()
+    return {row["ticker"]: row for row in (response.data or [])}
 
 
-def save_roic_trend_history(ticker_states: dict) -> None:
+def upsert_ticker_market_data(rows: list) -> None:
     """
-    Slaat de HUIDIGE ROIC-trend EN fair-value-status per ticker op, als
-    'vorige stand' voor de volgende Portfolio Watch-run.
-
-    ticker_states: {ticker: {'roic_trend': ..., 'fair_value_bucket': ...}}
+    Schrijft (of werkt bij) marktdata voor 1 of meer tickers in de
+    gedeelde ticker_market_data-tabel -- gebruikt door het achtergrond-
+    sync-script, niet door het dashboard zelf. 'rows' is een lijst dicts,
+    elk met minimaal een 'ticker'-sleutel (de overige velden zijn
+    optioneel -- ontbrekende velden worden simpelweg niet bijgewerkt voor
+    die rij, dankzij upsert's merge-gedrag op bestaande rijen).
     """
-    if not ticker_states:
+    if not rows:
         return
     client = get_supabase_client()
-
-    def _clean(value):
-        """
-        NaN (bv. van een pandas-kolom waar de berekening niet lukte --
-        zoals bij een ticker met te weinig historische data) kan niet
-        naar JSON: Supabase's upsert crasht daar anders op met 'Out of
-        range float values are not JSON compliant: nan'. Zet 'm om naar
-        None (wordt keurig JSON null).
-        """
-        if isinstance(value, float) and math.isnan(value):
-            return None
-        return value
-
-    rows = [
-        {
-            "ticker": ticker, "last_roic_trend": _clean(state.get("roic_trend")),
-            "last_fair_value_bucket": _clean(state.get("fair_value_bucket")),
-            "last_checked_at": datetime.now().isoformat(),
-        }
-        for ticker, state in ticker_states.items()
-    ]
-    client.table("roic_trend_history").upsert(rows, on_conflict="ticker").execute()
-
-
-def get_last_csv_import(user_email: str) -> dict | None:
-    """
-    Geeft tijdstip + bestandsnaam van de laatste broker-CSV-import terug
-    (of None als nog nooit gedaan) -- zelfde patroon als
-    get_last_price_refresh(), maar dan voor de 'Import from a broker'-
-    functie.
-    """
-    client = get_supabase_client()
-    response = (
-        client.table("user_preferences")
-        .select("last_csv_import_at,last_csv_import_filename")
-        .eq("user_email", hash_email(user_email))
-        .execute()
-    )
-    if response.data and response.data[0].get("last_csv_import_at"):
-        return {
-            "timestamp": response.data[0]["last_csv_import_at"],
-            "filename": response.data[0].get("last_csv_import_filename"),
-        }
-    return None
-
-
-def set_last_csv_import(user_email: str, timestamp_iso: str, filename: str) -> None:
-    """Slaat tijdstip + bestandsnaam van een zojuist afgeronde broker-CSV-import op."""
-    client = get_supabase_client()
-    client.table("user_preferences").upsert({
-        "user_email": hash_email(user_email),
-        "last_csv_import_at": timestamp_iso,
-        "last_csv_import_filename": filename,
-    }).execute()
+    for row in rows:
+        row_with_timestamp = {**row, "last_updated": datetime.now().isoformat()}
+        client.table("ticker_market_data").upsert(row_with_timestamp, on_conflict="ticker").execute()
