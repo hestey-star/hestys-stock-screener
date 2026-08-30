@@ -44,7 +44,7 @@ st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 # --- Visuele identiteit: donkere 'kluis/terminal'-stijl, geen standaard-look ---
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
 
 /* --- Ontwerptaal-fundament: kleuren als CSS-variabelen, 1 centrale
@@ -1735,7 +1735,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<div style="flex:1; min-width:0;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
         f'<span style="font-weight:800; color:#EAEDF1; font-size:1rem; letter-spacing:0.01em;">{ticker}</span>'
-        f'<span style="font-weight:800; color:#EAEDF1; font-size:0.98rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
+        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.98rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
         f'</div>'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
         f'{subtitle_html}'
@@ -1761,7 +1761,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
         f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
         f'<div style="font-size:0.85rem;">{change_html}</div>'
-        f'<div style="color:#EAEDF1; font-weight:800; font-size:1rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+        f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
         f'<div>'
         f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
         f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
@@ -4170,13 +4170,10 @@ def render_portfolio():
     # ============================================================
     if holdings:
         with st.container(border=True):
-            # 'Display currency' klein en opzij i.p.v. een grote, losstaande
-            # selectbox bovenaan -- het is een instelling, geen hoofdcontent,
-            # en hoorde niet als eerste, meest prominente ding in beeld te
-            # komen.
+            # De currency-selector rechtsboven, zonder een overbodig
+            # 'Overview'-label ernaast (voegde niets toe -- de hele pagina
+            # IS het overzicht).
             header_col1, header_col2 = st.columns([3, 1])
-            with header_col1:
-                st.markdown("**Overview**")
             with header_col2:
                 display_currency = st.selectbox(
                     "Display currency", ["EUR", "USD"], key="display_currency",
@@ -4191,12 +4188,11 @@ def render_portfolio():
             if total_value > 0 and stored_currency != display_currency:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
 
-            # Total value/Cash, Update-knop, en de Daily/All-time-toggle
-            # nu naast elkaar i.p.v. onder elkaar -- gebruikt de
-            # beschikbare breedte op desktop. Streamlit's kolommen
-            # stapelen vanzelf verticaal op een smal (mobiel) scherm, dus
-            # dit werkt daar nog steeds hetzelfde als voorheen.
-            overview_col1, overview_col2, overview_col3 = st.columns([2, 1, 1])
+            # Total value/Cash LINKS (de kerncijfers), Update-knop +
+            # Daily/All-time-toggle SAMEN gegroepeerd RECHTS (de acties) --
+            # i.p.v. 3 losse kolommen die elk 1 element gecentreerd lieten
+            # zweven zonder duidelijke onderlinge relatie.
+            overview_col1, overview_col2 = st.columns([2, 1])
             with overview_col1:
                 if total_value > 0:
                     shown_currency = display_currency if stored_currency == display_currency else stored_currency
@@ -4204,15 +4200,20 @@ def render_portfolio():
                     label_suffix = "" if stored_currency == display_currency else f" ({stored_currency})"
                     st.markdown(
                         f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
-                        f'<div style="font-size:2.1rem; font-weight:800; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
+                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
                         f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
                         unsafe_allow_html=True,
                     )
                 else:
                     st.caption("Click 'Update portfolio value' to fetch current prices.")
             with overview_col2:
-                st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
-                if st.button("Update portfolio value"):
+                portfolio_view_mode = st.segmented_control(
+                    "View", options=["Daily", "All-time"], default="Daily",
+                    key="portfolio_view_mode", label_visibility="collapsed",
+                )
+                if portfolio_view_mode is None:
+                    portfolio_view_mode = "Daily"
+                if st.button("Update portfolio value", width="stretch"):
                     with st.spinner("Fetching current prices and exchange rates..."):
                         success, message = refresh_portfolio_values(holdings, user_email, display_currency)
                     if success:
@@ -4220,14 +4221,6 @@ def render_portfolio():
                         st.rerun()
                     else:
                         st.warning(message)
-            with overview_col3:
-                st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
-                portfolio_view_mode = st.segmented_control(
-                    "View", options=["Daily", "All-time"], default="Daily",
-                    key="portfolio_view_mode", label_visibility="collapsed",
-                )
-                if portfolio_view_mode is None:
-                    portfolio_view_mode = "Daily"
 
             def _format_value(holding):
                 value = holding.get("position_value")
