@@ -6387,7 +6387,36 @@ with st.sidebar:
 pg.run()
 
 st.divider()
+
+footer_col1, footer_col2, footer_col3, footer_col4 = st.columns(4)
+with footer_col1:
+    st.markdown("**PRODUCT**")
+    st.page_link(discover_page, label="Discover")
+    st.page_link(today_page, label="Today")
+    st.page_link(portfolio_page, label="My Portfolio")
+    st.page_link(analyze_page, label="Analyze")
+with footer_col2:
+    st.markdown("**ACCOUNT**")
+    st.page_link(settings_page, label="Settings")
+    st.page_link(premium_page, label="Premium")
+with footer_col3:
+    st.markdown("**SUPPORT**")
+    st.page_link(support_page, label="Support")
+    st.page_link(privacy_page, label="Privacy Policy")
+with footer_col4:
+    st.markdown("**SOCIALS**")
+    # Externe URL -- gewoon een rauwe <a>-link is hier veilig (in
+    # tegenstelling tot interne Streamlit-paden, die st.page_link()
+    # MOETEN gebruiken om de eerder gevonden 'Page Not Found'-bug te
+    # vermijden).
+    st.markdown(
+        '<a href="https://x.com/HestysInvest" target="_blank" style="text-decoration:none; '
+        'color:#8992A3; font-size:0.9rem;">X (@HestysInvest)</a>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
 st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "
            "you research faster. It's not an automated trading strategy, and nothing here is "
            "personalized financial advice.")
-st.page_link(privacy_page, label="Privacy")
+st.caption(f"© {datetime.now().year} Hesty's. All rights reserved.")
