@@ -619,6 +619,7 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     fx_cache = {}
     updated_count = 0
     skipped_currencies = set()
+    fresh_market_data_rows = []
 
     for holding in holdings:
         if not holding.get("shares"):
@@ -657,8 +658,25 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
                 holding["id"], user_email, new_value, value_currency=display_currency, day_change_pct=day_change_pct
             )
             updated_count += 1
+
+            # GEVONDEN BUG: My Portfolio's rij-weergave leest de 'Price'-
+            # kolom uit de GEDEELDE ticker_market_data-tabel (de
+            # achtergrond-sync, elke 15 min ververst) -- NIET uit deze
+            # zojuist bijgewerkte position_value. Zonder dit zou de Price-
+            # kolom dus de OUDE, achtergrond-gesynchroniseerde waarde
+            # blijven tonen tot de volgende scheduled sync draait, ook al
+            # werkte de knop 'achter de schermen' wel (position_value/
+            # Total portfolio value klopten al meteen). native_price is
+            # in de NATIEVE valuta (voor FX-conversie), consistent met hoe
+            # sync_market_data.py dit ook opslaat -- geen conversie nodig.
+            fresh_market_data_rows.append({
+                "ticker": holding["ticker"], "current_price": native_price, "day_change_pct": day_change_pct,
+            })
         except Exception:
             continue
+
+    if fresh_market_data_rows:
+        database.upsert_ticker_market_data(fresh_market_data_rows)
 
     database.set_last_price_refresh(user_email, datetime.now(timezone.utc).isoformat())
 
