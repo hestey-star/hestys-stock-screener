@@ -6386,6 +6386,7 @@ with st.sidebar:
 
 pg.run()
 
+st.markdown("<div style='height: 4rem'></div>", unsafe_allow_html=True)
 st.divider()
 
 footer_col1, footer_col2, footer_col3, footer_col4 = st.columns(4)
