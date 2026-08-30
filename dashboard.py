@@ -324,6 +324,40 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 [data-testid="stDataFrame"] * {
     font-size: 0.85rem !important;
 }
+
+/* --- My Portfolio positierijen: responsief -- mobiel-eerst gestapeld
+   (compacte kaart, huidige stijl), vanaf 768px een brede, meerkoloms-
+   tabelweergave die de beschikbare breedte daadwerkelijk gebruikt i.p.v.
+   een dunne strook met veel lege ruimte ertussen. Beide versies staan in
+   de HTML (elke rij rendert 1x), CSS beslist welke zichtbaar is --
+   Streamlit kent geen server-side viewport-detectie, dus dit is de
+   standaard, betrouwbare aanpak. --- */
+.portfolio-row-desktop { display: none; }
+.portfolio-row-mobile { display: block; }
+.portfolio-row-header { display: none; }
+
+@media (min-width: 768px) {
+    .portfolio-row-mobile { display: none; }
+    .portfolio-row-desktop, .portfolio-row-header {
+        display: grid;
+        grid-template-columns: 40px 2.2fr 1fr 1.3fr 1fr 1.2fr;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .portfolio-row-desktop {
+        background: rgba(137,146,163,0.05);
+        border-radius: 10px;
+        padding: 0.7rem 1rem;
+        margin-bottom: 0.4rem;
+    }
+    .portfolio-row-header {
+        padding: 0 1rem 0.4rem 1rem;
+        color: #8992A3;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1600,24 +1634,25 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                         current_price: float = None, avg_cost: float = None,
                         all_time_pct: float = None, all_time_pnl: float = None) -> str:
     """
-    Compacte positie-rij voor My Portfolio -- bold ticker + vage
-    bedrijfsnaam (net als het aangereikte voorbeeld), i.p.v. een saaie
-    st.dataframe-tabel of dikke kaarten. Schakelt tussen 'Daily' (dag-
-    rendement + huidige koers, voor een snelle check 'wat beweegt er
-    vandaag') en 'All-time' (rendement sinds aankoop, met Avg cost ->
-    Current price erbij -- alleen zinvol als er gelogde transacties
-    zijn, anders een nette '-'-terugval). Een zachte, subtiele
-    achtergrond geeft elk blok meer body/gewicht.
+    Positie-rij voor My Portfolio -- rendert BEIDE een compacte, gestapelde
+    mobiele versie EN een brede, meerkoloms desktop-tabelversie (CSS
+    beslist welke zichtbaar is via de .portfolio-row-mobile/-desktop-
+    klassen in de hoofdstylesheet). Voorheen 1 vaste layout die op mobiel
+    goed werkte maar op desktop een dunne strook met veel lege ruimte
+    ertussen gaf -- de brede versie gebruikt de beschikbare breedte nu
+    daadwerkelijk (aparte kolommen voor koers/verandering/waarde/
+    allocatie i.p.v. alles samengeperst links+rechts).
 
-    Logo links naast ticker/naam -- met een nette, jade-getinte cirkel-
-    met-letter-terugval als er geen logo beschikbaar is (i.p.v. een
-    kapot plaatje of gewoon niks): dit is anders dan de eerder afgekeurde
-    aparte kolom in een dataframe-tabel, hier past een klein icoontje
-    natuurlijker in de layout.
+    Schakelt tussen 'Daily' (dagrendement + huidige koers) en 'All-time'
+    (rendement sinds aankoop, met Avg cost -> Current price -- alleen
+    zinvol als er gelogde transacties zijn, anders een nette '-'-terugval).
 
-    Toont zowel het dollarbedrag als het percentage naast elkaar (i.p.v.
-    alleen het percentage) -- 'day_change_value'/'all_time_pnl' zijn de
-    voorafberekende dollarbedragen, in dezelfde valuta als 'value_text'.
+    Logo links naast ticker/naam -- met een nette letter-cirkel-terugval
+    als er geen logo beschikbaar is.
+
+    Toont zowel het dollarbedrag als het percentage naast elkaar --
+    'day_change_value'/'all_time_pnl' zijn de voorafberekende
+    dollarbedragen, in dezelfde valuta als 'value_text'.
     """
     bar_pct = min(pct_of_portfolio, 100)
 
@@ -1634,6 +1669,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<span style="color:#8992A3; font-weight:700; font-size:0.8rem;">{first_letter}</span></div>'
         )
 
+    price_display = None
     if mode == "Daily":
         if day_change_pct is None:
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
@@ -1649,9 +1685,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                 f'({day_change_pct:+.1f}%) {arrow}</span>'
             )
         if current_price is not None:
+            price_display = f'{currency_symbol}{current_price:,.2f}'
             detail_html = (
                 f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
-                f'&middot; {currency_symbol}{current_price:,.2f}</span>'
+                f'&middot; {price_display}</span>'
             )
         else:
             detail_html = ""
@@ -1667,14 +1704,16 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                 f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
                 f'({all_time_pct:+.1f}%) {arrow}</span>'
             )
+            price_display = f'{currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}'
             detail_html = (
                 f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
-                f'&middot; {currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}</span>'
+                f'&middot; {price_display}</span>'
             )
         else:
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
             name = f"{name} (no logged purchase)"
             detail_html = ""
+            price_display = "-"
 
     # De naam (variabele, soms erg lange lengte -- bv. ETF-namen) en het
     # prijsdetail (koers, of avg-cost-pijl) staan in GENESTE flex-items:
@@ -1689,14 +1728,14 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
     )
 
-    return (
-        f'<div style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
+    mobile_html = (
+        f'<div class="portfolio-row-mobile" style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
         f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
         f'{logo_html}'
         f'<div style="flex:1; min-width:0;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
-        f'<span style="font-weight:800; color:#EAEDF1; font-size:0.95rem; letter-spacing:0.01em;">{ticker}</span>'
-        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.9rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
+        f'<span style="font-weight:800; color:#EAEDF1; font-size:1rem; letter-spacing:0.01em;">{ticker}</span>'
+        f'<span style="font-weight:800; color:#EAEDF1; font-size:0.98rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
         f'</div>'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
         f'{subtitle_html}'
@@ -1709,6 +1748,30 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
         f'</div>'
     )
+
+    # Desktop: brede grid-tabel-weergave -- Logo | Ticker+Naam | Koers |
+    # Verandering | Waarde | Allocatie%+balk, elk in een eigen kolom,
+    # gebruikt de beschikbare breedte i.p.v. lege ruimte ertussen.
+    desktop_html = (
+        f'<div class="portfolio-row-desktop">'
+        f'{logo_html}'
+        f'<div style="min-width:0;">'
+        f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
+        f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
+        f'</div>'
+        f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
+        f'<div style="font-size:0.85rem;">{change_html}</div>'
+        f'<div style="color:#EAEDF1; font-weight:800; font-size:1rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+        f'<div>'
+        f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
+        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
+        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+        f'</div>'
+        f'</div>'
+        f'</div>'
+    )
+
+    return mobile_html + desktop_html
 
 
 def _radar_row_html(icon: str, text: str) -> str:
@@ -4125,35 +4188,46 @@ def render_portfolio():
             currency_symbol = "€" if display_currency == "EUR" else "$"
             cash_value = database.get_cash_value(user_email)
 
-            # Total en Cash nu op aparte, eigen regels i.p.v. samengeperst op
-            # 1 regel met een '|'-scheidingsteken -- dat brak op mobiel
-            # lelijk af naar een 2e regel.
-            if total_value > 0 and stored_currency == display_currency:
-                st.markdown(
-                    f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value</div>'
-                    f'<div style="font-size:1.9rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{currency_symbol}{total_value:,.0f}</div>'
-                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
-                    unsafe_allow_html=True,
-                )
-            elif total_value > 0:
+            if total_value > 0 and stored_currency != display_currency:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
-                st.markdown(
-                    f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value ({stored_currency})</div>'
-                    f'<div style="font-size:1.9rem; font-weight:800; color:#EAEDF1; margin-top:2px;">{"€" if stored_currency == "EUR" else "$"}{total_value:,.0f}</div>'
-                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption("Click 'Update portfolio value' to fetch current prices.")
 
-            if st.button("Update portfolio value"):
-                with st.spinner("Fetching current prices and exchange rates..."):
-                    success, message = refresh_portfolio_values(holdings, user_email, display_currency)
-                if success:
-                    st.success(message)
-                    st.rerun()
+            # Total value/Cash, Update-knop, en de Daily/All-time-toggle
+            # nu naast elkaar i.p.v. onder elkaar -- gebruikt de
+            # beschikbare breedte op desktop. Streamlit's kolommen
+            # stapelen vanzelf verticaal op een smal (mobiel) scherm, dus
+            # dit werkt daar nog steeds hetzelfde als voorheen.
+            overview_col1, overview_col2, overview_col3 = st.columns([2, 1, 1])
+            with overview_col1:
+                if total_value > 0:
+                    shown_currency = display_currency if stored_currency == display_currency else stored_currency
+                    shown_symbol = "€" if shown_currency == "EUR" else "$"
+                    label_suffix = "" if stored_currency == display_currency else f" ({stored_currency})"
+                    st.markdown(
+                        f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
+                        f'<div style="font-size:2.1rem; font-weight:800; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
+                        f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.warning(message)
+                    st.caption("Click 'Update portfolio value' to fetch current prices.")
+            with overview_col2:
+                st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
+                if st.button("Update portfolio value"):
+                    with st.spinner("Fetching current prices and exchange rates..."):
+                        success, message = refresh_portfolio_values(holdings, user_email, display_currency)
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.warning(message)
+            with overview_col3:
+                st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
+                portfolio_view_mode = st.segmented_control(
+                    "View", options=["Daily", "All-time"], default="Daily",
+                    key="portfolio_view_mode", label_visibility="collapsed",
+                )
+                if portfolio_view_mode is None:
+                    portfolio_view_mode = "Daily"
 
             def _format_value(holding):
                 value = holding.get("position_value")
@@ -4176,23 +4250,6 @@ def render_portfolio():
                     return 0.0
                 value = holding.get("position_value") or 0
                 return value / total_value * 100
-
-            # Compacte rij-lijst i.p.v. een saaie st.dataframe-tabel of dikke
-            # kaarten -- bold ticker + vage bedrijfsnaam (zoals het
-            # aangereikte voorbeeld), met een schakelaar tussen Daily
-            # (dagrendement, voor een snelle 'wat beweegt er vandaag'-check)
-            # en All-time (rendement sinds aankoop, met Avg cost -> Current
-            # price erbij). Custom HTML i.p.v. st.dataframe, want die laatste
-            # oogt onvermijdelijk generiek/spreadsheet-achtig, hoe je de
-            # kolommen ook configureert -- dit geeft volledige controle over
-            # typografie/kleur, en is van nature mobielvriendelijk (1 kolom,
-            # geen horizontaal scrollen).
-            portfolio_view_mode = st.segmented_control(
-                "View", options=["Daily", "All-time"], default="Daily",
-                key="portfolio_view_mode", label_visibility="collapsed",
-            )
-            if portfolio_view_mode is None:
-                portfolio_view_mode = "Daily"
 
             position_rows_data = []
             for h in holdings:
@@ -4258,6 +4315,12 @@ def render_portfolio():
                     ),
                 })
             position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
+            st.markdown(
+                '<div class="portfolio-row-header">'
+                '<div></div><div>Position</div><div>Price</div><div>Change</div><div>Value</div><div>Allocation</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
             st.markdown(
                 "".join(r["html"] for r in position_rows_data),
                 unsafe_allow_html=True,
