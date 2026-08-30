@@ -5009,25 +5009,28 @@ def render_discover():
             st.caption("No trend data available right now.")
 
     elif current_discover_subview == "earnings_surprises":
-        with st.expander("Earnings surprises", key="earnings_surprises_expander", icon=":material/payments:"):
-            st.caption("Notable earnings beats/misses among today's and this week's signals -- "
-                       "only shown during earnings season (last 60 days).")
-            surprises = get_earnings_surprises_from_signals(max_items=5)
-            if surprises:
-                cards_html = [
-                    _signal_card_html(
-                        s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
-                        s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
-                        standout=abs(s["earnings_surprise_pct"]) >= 15.0,
-                    )
-                    for s in surprises
-                ]
-                _render_signal_cards(cards_html)
-                st.caption(f"Updated {file_last_modified('supertrend_signals_daily.csv')} (daily), "
-                           f"{file_last_modified('supertrend_signals.csv')} (weekly). "
-                           "⭐ = 15%+ surprise, in either direction.")
-            else:
-                st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
+        st.markdown(
+            _flowing_section_header_html("Earnings surprises", "payments", is_first=True),
+            unsafe_allow_html=True,
+        )
+        st.caption("Notable earnings beats/misses among today's and this week's signals -- "
+                   "only shown during earnings season (last 60 days).")
+        surprises = get_earnings_surprises_from_signals(max_items=5)
+        if surprises:
+            cards_html = [
+                _signal_card_html(
+                    s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
+                    s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
+                    standout=abs(s["earnings_surprise_pct"]) >= 15.0,
+                )
+                for s in surprises
+            ]
+            _render_signal_cards(cards_html)
+            st.caption(f"Updated {file_last_modified('supertrend_signals_daily.csv')} (daily), "
+                       f"{file_last_modified('supertrend_signals.csv')} (weekly). "
+                       "⭐ = 15%+ surprise, in either direction.")
+        else:
+            st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
 
     else:
         # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
@@ -5132,151 +5135,160 @@ def render_discover():
         _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
 
         # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-        with st.expander("Momentocrats", expanded=False, key="momentocrats_expander", icon=":material/sensors:"):
-            st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
+        st.markdown(
+            _flowing_section_header_html("Momentocrats", "sensors", is_first=False),
+            unsafe_allow_html=True,
+        )
+        st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
 
-            # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
-            # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
-            # <a href="?...">), waardoor de expander steeds weer dichtklapte.
-            # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
-            # (geen page-reload), dus de expander-status blijft nu intact --
-            # en ziet er nog steeds modern/pill-achtig uit, geen oldschool
-            # radio-bolletjes.
-            current_timeframe = st.segmented_control(
-                "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
-                default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
-            )
-            if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
-                current_timeframe = "Daily"
-            csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
+        # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
+        # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
+        # <a href="?...">), waardoor de expander steeds weer dichtklapte.
+        # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
+        # (geen page-reload), dus de expander-status blijft nu intact --
+        # en ziet er nog steeds modern/pill-achtig uit, geen oldschool
+        # radio-bolletjes.
+        current_timeframe = st.segmented_control(
+            "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
+            default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
+        )
+        if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
+            current_timeframe = "Daily"
+        csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
 
-            df_screener = load_screener_data(csv_file)
-            if df_screener is None or df_screener.empty:
-                st.info("No results yet -- check back after the next scheduled scan.")
-            else:
-                df_screener = df_screener.sort_values("score", ascending=False)
+        df_screener = load_screener_data(csv_file)
+        if df_screener is None or df_screener.empty:
+            st.info("No results yet -- check back after the next scheduled scan.")
+        else:
+            df_screener = df_screener.sort_values("score", ascending=False)
 
-                # De 'minimum score'-slider is weg -- bleek in de praktijk
-                # nauwelijks gebruikt te worden. Toont nu gewoon alle
-                # matchende signalen (tot de weergavelimiet), al gesorteerd
-                # op score.
-                total_matching = len(df_screener)
-                filtered = df_screener.head(_signal_display_limit)
+            # De 'minimum score'-slider is weg -- bleek in de praktijk
+            # nauwelijks gebruikt te worden. Toont nu gewoon alle
+            # matchende signalen (tot de weergavelimiet), al gesorteerd
+            # op score.
+            total_matching = len(df_screener)
+            filtered = df_screener.head(_signal_display_limit)
 
-                # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
-                # dat dwingt op mobiel dubbel scrollen af, verticaal EN
-                # horizontaal). 'Weeks ago'/'Days ago' verschilt per
-                # tijdvenster (weekly.csv heeft weken_geleden, daily.csv
-                # heeft dagen_geleden) -- beide velden afgehandeld.
-                cards_html = []
-                for _, row in filtered.iterrows():
-                    secondary = []
-                    if "dagen_geleden" in row.index and pd.notna(row.get("dagen_geleden")):
-                        secondary.append(("Flipped", f"{int(row['dagen_geleden'])}d ago"))
-                    elif "weken_geleden" in row.index and pd.notna(row.get("weken_geleden")):
-                        secondary.append(("Flipped", f"{int(row['weken_geleden'])}w ago"))
-                    if pd.notna(row.get("sinds_omslag_pct")):
-                        secondary.append(("Since flip", f"{row['sinds_omslag_pct']:+.1f}%"))
-                    if pd.notna(row.get("roic_pct")):
-                        secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
-                    if pd.notna(row.get("relatieve_sterkte")):
-                        secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
-                    cards_html.append(_signal_card_html(
-                        row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
-                        standout=row["score"] >= 8.0,
-                    ))
-                _render_signal_cards(cards_html)
-                st.caption(f"{len(filtered)} of {total_matching} shown, updated {file_last_modified(csv_file)}. "
-                           "⭐ = score 8+, usually the ones worth a closer look.")
-                if not _is_premium_discover and total_matching > _signal_display_limit:
-                    st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                            f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
+            # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
+            # dat dwingt op mobiel dubbel scrollen af, verticaal EN
+            # horizontaal). 'Weeks ago'/'Days ago' verschilt per
+            # tijdvenster (weekly.csv heeft weken_geleden, daily.csv
+            # heeft dagen_geleden) -- beide velden afgehandeld.
+            cards_html = []
+            for _, row in filtered.iterrows():
+                secondary = []
+                if "dagen_geleden" in row.index and pd.notna(row.get("dagen_geleden")):
+                    secondary.append(("Flipped", f"{int(row['dagen_geleden'])}d ago"))
+                elif "weken_geleden" in row.index and pd.notna(row.get("weken_geleden")):
+                    secondary.append(("Flipped", f"{int(row['weken_geleden'])}w ago"))
+                if pd.notna(row.get("sinds_omslag_pct")):
+                    secondary.append(("Since flip", f"{row['sinds_omslag_pct']:+.1f}%"))
+                if pd.notna(row.get("roic_pct")):
+                    secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+                if pd.notna(row.get("relatieve_sterkte")):
+                    secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+                cards_html.append(_signal_card_html(
+                    row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
+                    standout=row["score"] >= 8.0,
+                ))
+            _render_signal_cards(cards_html)
+            st.caption(f"{len(filtered)} of {total_matching} shown, updated {file_last_modified(csv_file)}. "
+                       "⭐ = score 8+, usually the ones worth a closer look.")
+            if not _is_premium_discover and total_matching > _signal_display_limit:
+                st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                        f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
-            st.divider()
-            _email_pref_link("Want this weekly by email?")
+        st.divider()
+        _email_pref_link("Want this weekly by email?")
 
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-        with st.expander("Snowballers", key="snowballers_expander", icon=":material/savings:"):
-            st.caption("Quality companies trading below fair value, with low volatility. For the "
-                       "long-term investor -- no fresh trend flip required.")
-            if os.path.exists("snowball_signals.csv"):
-                df_snowball = pd.read_csv("snowball_signals.csv")
-                if not df_snowball.empty:
-                    df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
-                    total_snowball = len(df_snowball)
-                    df_snowball = df_snowball.head(_signal_display_limit)
+        st.markdown(
+            _flowing_section_header_html("Snowballers", "savings", is_first=False),
+            unsafe_allow_html=True,
+        )
+        st.caption("Quality companies trading below fair value, with low volatility. For the "
+                   "long-term investor -- no fresh trend flip required.")
+        if os.path.exists("snowball_signals.csv"):
+            df_snowball = pd.read_csv("snowball_signals.csv")
+            if not df_snowball.empty:
+                df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
+                total_snowball = len(df_snowball)
+                df_snowball = df_snowball.head(_signal_display_limit)
 
-                    # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
-                    # gebruikelijke +/- logica: een NEGATIEVE afwijking van
-                    # fair value betekent 'goedkoper dan terecht' -- precies
-                    # wat je wil bij dit signaaltype, dus GROEN, niet rood.
-                    # Standout (ster) bij 20%+ onder fair value -- de écht
-                    # opvallende koopjes.
-                    cards_html = []
-                    for _, row in df_snowball.iterrows():
-                        secondary = []
-                        if pd.notna(row.get("roic_pct")):
-                            secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
-                        if pd.notna(row.get("volatiliteit_pct")):
-                            secondary.append(("Volatility", f"{row['volatiliteit_pct']:.1f}%"))
-                        if pd.notna(row.get("prijs_nu")):
-                            secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
-                        cards_html.append(_signal_card_html(
-                            row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
-                            row["afwijking_fair_value_pct"] < 0, secondary,
-                            standout=row["afwijking_fair_value_pct"] <= -20.0,
-                        ))
-                    _render_signal_cards(cards_html)
-                    st.caption(f"{len(df_snowball)} of {total_snowball} shown, updated {file_last_modified('snowball_signals.csv')}. "
-                               f"⭐ = 20%+ below fair value. Next update: {_next_weekly_scan_time()}.")
-                    if not _is_premium_discover and total_snowball > _signal_display_limit:
-                        st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                                f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
-                else:
-                    st.caption("No stocks currently meet the Snowballers criteria.")
+                # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
+                # gebruikelijke +/- logica: een NEGATIEVE afwijking van
+                # fair value betekent 'goedkoper dan terecht' -- precies
+                # wat je wil bij dit signaaltype, dus GROEN, niet rood.
+                # Standout (ster) bij 20%+ onder fair value -- de écht
+                # opvallende koopjes.
+                cards_html = []
+                for _, row in df_snowball.iterrows():
+                    secondary = []
+                    if pd.notna(row.get("roic_pct")):
+                        secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+                    if pd.notna(row.get("volatiliteit_pct")):
+                        secondary.append(("Volatility", f"{row['volatiliteit_pct']:.1f}%"))
+                    if pd.notna(row.get("prijs_nu")):
+                        secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                    cards_html.append(_signal_card_html(
+                        row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
+                        row["afwijking_fair_value_pct"] < 0, secondary,
+                        standout=row["afwijking_fair_value_pct"] <= -20.0,
+                    ))
+                _render_signal_cards(cards_html)
+                st.caption(f"{len(df_snowball)} of {total_snowball} shown, updated {file_last_modified('snowball_signals.csv')}. "
+                           f"⭐ = 20%+ below fair value. Next update: {_next_weekly_scan_time()}.")
+                if not _is_premium_discover and total_snowball > _signal_display_limit:
+                    st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                            f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
             else:
-                st.caption("No data yet -- this updates once a week via the scheduled scan.")
+                st.caption("No stocks currently meet the Snowballers criteria.")
+        else:
+            st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
-            st.divider()
-            _email_pref_link("Want this weekly by email?")
+        st.divider()
+        _email_pref_link("Want this weekly by email?")
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
-        with st.expander("Rocket List", key="rocket_list_expander", icon=":material/rocket_launch:"):
-            st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
-                       "with more risk in exchange for growth potential.")
-            if os.path.exists("rocket_list_signals.csv"):
-                df_rocket = pd.read_csv("rocket_list_signals.csv")
-                if not df_rocket.empty:
-                    df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
-                    total_rocket = len(df_rocket)
-                    df_rocket = df_rocket.head(_signal_display_limit)
+        st.markdown(
+            _flowing_section_header_html("Rocket List", "rocket_launch", is_first=False),
+            unsafe_allow_html=True,
+        )
+        st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
+                   "with more risk in exchange for growth potential.")
+        if os.path.exists("rocket_list_signals.csv"):
+            df_rocket = pd.read_csv("rocket_list_signals.csv")
+            if not df_rocket.empty:
+                df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
+                total_rocket = len(df_rocket)
+                df_rocket = df_rocket.head(_signal_display_limit)
 
-                    # Standout (ster) bij 25%+ groei -- de écht opvallende
-                    # versnellers.
-                    cards_html = []
-                    for _, row in df_rocket.iterrows():
-                        secondary = []
-                        if pd.notna(row.get("relatieve_sterkte")):
-                            secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
-                        if pd.notna(row.get("prijs_nu")):
-                            secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
-                        cards_html.append(_signal_card_html(
-                            row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
-                            standout=row["groei_pct"] >= 25.0,
-                        ))
-                    _render_signal_cards(cards_html)
-                    st.caption(f"{len(df_rocket)} of {total_rocket} shown, updated {file_last_modified('rocket_list_signals.csv')}. "
-                               f"⭐ = 25%+ growth. Next update: {_next_weekly_scan_time()}.")
-                    if not _is_premium_discover and total_rocket > _signal_display_limit:
-                        st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                                f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
-                else:
-                    st.caption("No stocks currently meet the Rocket List criteria.")
+                # Standout (ster) bij 25%+ groei -- de écht opvallende
+                # versnellers.
+                cards_html = []
+                for _, row in df_rocket.iterrows():
+                    secondary = []
+                    if pd.notna(row.get("relatieve_sterkte")):
+                        secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+                    if pd.notna(row.get("prijs_nu")):
+                        secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                    cards_html.append(_signal_card_html(
+                        row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
+                        standout=row["groei_pct"] >= 25.0,
+                    ))
+                _render_signal_cards(cards_html)
+                st.caption(f"{len(df_rocket)} of {total_rocket} shown, updated {file_last_modified('rocket_list_signals.csv')}. "
+                           f"⭐ = 25%+ growth. Next update: {_next_weekly_scan_time()}.")
+                if not _is_premium_discover and total_rocket > _signal_display_limit:
+                    st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                            f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
             else:
-                st.caption("No data yet -- this updates once a week via the scheduled scan.")
+                st.caption("No stocks currently meet the Rocket List criteria.")
+        else:
+            st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
-            st.divider()
-            _email_pref_link("Want this weekly by email?")
+        st.divider()
+        _email_pref_link("Want this weekly by email?")
 
 
 
