@@ -796,9 +796,23 @@ def save_roic_trend_history(states: dict) -> None:
         return
     client = get_supabase_client()
     for ticker, state in states.items():
+        roic_trend = state.get("roic_trend")
+        fair_value_bucket = state.get("fair_value_bucket")
+        # pandas/numpy geeft NaN terug voor tickers met te weinig data om de
+        # trend te berekenen (bv. net-genoteerde bedrijven) -- NaN is GEEN
+        # geldige JSON-waarde, en zou Supabase's client laten crashen met
+        # 'Out of range float values are not JSON compliant: nan'. Omgezet
+        # naar None (wordt keurig NULL in de database). 'waarde != waarde'
+        # is een klassieke, dependency-vrije NaN-check (NaN is het enige
+        # dat nooit gelijk is aan zichzelf) -- geen pandas-import nodig
+        # enkel hiervoor.
+        if isinstance(roic_trend, float) and roic_trend != roic_trend:
+            roic_trend = None
+        if isinstance(fair_value_bucket, float) and fair_value_bucket != fair_value_bucket:
+            fair_value_bucket = None
         client.table("roic_trend_history").upsert({
             "ticker": ticker,
-            "last_roic_trend": state.get("roic_trend"),
-            "last_fair_value_bucket": state.get("fair_value_bucket"),
+            "last_roic_trend": roic_trend,
+            "last_fair_value_bucket": fair_value_bucket,
             "last_checked_at": datetime.now().isoformat(),
         }, on_conflict="ticker").execute()
