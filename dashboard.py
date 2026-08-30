@@ -4198,12 +4198,12 @@ def render_portfolio():
         with st.container(border=True):
             total_value = sum(h.get("position_value") or 0 for h in holdings)
             stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
-            cash_value = database.get_cash_value(user_email)
+            cash_value_eur = database.get_cash_value(user_email)  # altijd opgeslagen in EUR
 
             # 1 rij kolommen i.p.v. 2 gestapelde rijen (currency-selector
             # apart bovenaan, Total value/acties eronder) -- dat gaf een
             # leeg vak aan de kant zonder content in ELKE rij. Nu alles
-            # rechts (currency, toggle, knop) netjes onder elkaar in
+            # rechts (currency, toggle+knop) netjes onder elkaar in
             # dezelfde kolom, naast Total value/Cash links.
             overview_col1, overview_col2 = st.columns([2, 1])
             with overview_col2:
@@ -4220,29 +4220,48 @@ def render_portfolio():
                     shown_currency = display_currency if stored_currency == display_currency else stored_currency
                     shown_symbol = "€" if shown_currency == "EUR" else "$"
                     label_suffix = "" if stored_currency == display_currency else f" ({stored_currency})"
+
+                    # Cash stond vast in EUR getoond, ook als de weergave-
+                    # valuta USD was -- omrekenen naar dezelfde valuta als
+                    # Total portfolio value hierboven, consistent met hoe
+                    # de posities zelf ook omgerekend worden.
+                    if shown_currency == "EUR":
+                        cash_display_value, cash_symbol = cash_value_eur, "€"
+                    else:
+                        eur_to_shown_rate = get_fx_rate("EUR", shown_currency)
+                        if eur_to_shown_rate:
+                            cash_display_value, cash_symbol = cash_value_eur * eur_to_shown_rate, shown_symbol
+                        else:
+                            # FX-conversie mislukt (zeldzaam) -- toon liever
+                            # het correcte EUR-bedrag dan een fout $-bedrag.
+                            cash_display_value, cash_symbol = cash_value_eur, "€"
+
                     st.markdown(
                         f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
                         f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
-                        f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: €{cash_value:,.0f}</div>',
+                        f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>',
                         unsafe_allow_html=True,
                     )
                 else:
                     st.caption("Click 'Update portfolio value' to fetch current prices.")
             with overview_col2:
-                portfolio_view_mode = st.segmented_control(
-                    "View", options=["Daily", "All-time"], default="Daily",
-                    key="portfolio_view_mode", label_visibility="collapsed",
-                )
-                if portfolio_view_mode is None:
-                    portfolio_view_mode = "Daily"
-                if st.button("Update portfolio value", width="stretch"):
-                    with st.spinner("Fetching current prices and exchange rates..."):
-                        success, message = refresh_portfolio_values(holdings, user_email, display_currency)
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.warning(message)
+                toggle_col, button_col = st.columns([1, 1.3])
+                with toggle_col:
+                    portfolio_view_mode = st.segmented_control(
+                        "View", options=["Daily", "All-time"], default="Daily",
+                        key="portfolio_view_mode", label_visibility="collapsed",
+                    )
+                    if portfolio_view_mode is None:
+                        portfolio_view_mode = "Daily"
+                with button_col:
+                    if st.button("Update", width="stretch", icon=":material/refresh:", help="Update portfolio value"):
+                        with st.spinner("Fetching current prices and exchange rates..."):
+                            success, message = refresh_portfolio_values(holdings, user_email, display_currency)
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.warning(message)
 
             def _format_value(holding):
                 value = holding.get("position_value")
