@@ -4382,17 +4382,25 @@ def render_portfolio():
                             )
                             if perf and perf.get("total_return_pct") is not None:
                                 pct = perf["total_return_pct"]
-                                color_emoji = "🟢" if pct >= 0 else "🔴"
-                                st.markdown(f"{color_emoji} **Return: {pct:+.1f}%** (€{perf['total_pnl']:+,.2f})")
+                                return_color = "#1FAE96" if pct >= 0 else "#E5484D"
+                                return_icon = "trending_up" if pct >= 0 else "trending_down"
+                                st.markdown(
+                                    f'<div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.5rem;">'
+                                    f'{_icon_span(return_icon, size_px=18, color=return_color)}'
+                                    f'<span style="font-weight:700; color:{return_color};">Return: {pct:+.1f}%</span>'
+                                    f'<span style="color:#8992A3;">(€{perf["total_pnl"]:+,.2f})</span>'
+                                    f'</div>',
+                                    unsafe_allow_html=True,
+                                )
                             sorted_transactions = sorted(transactions, key=lambda t: t["transaction_date"], reverse=True)
 
                             DEFAULT_TRANSACTIONS_SHOWN = 5
                             show_all_transactions = True
                             if len(sorted_transactions) > DEFAULT_TRANSACTIONS_SHOWN:
-                                st.caption(f"{len(sorted_transactions)} transactions total")
-                                show_all_transactions = st.checkbox(
-                                    f"Show all {len(sorted_transactions)} (most recent {DEFAULT_TRANSACTIONS_SHOWN} shown by default)",
+                                show_all_transactions = st.toggle(
+                                    f"Show all {len(sorted_transactions)} transactions",
                                     key=f"show_all_tx_{selected_holding['id']}",
+                                    help=f"Most recent {DEFAULT_TRANSACTIONS_SHOWN} shown by default",
                                 )
                             else:
                                 st.caption("Transactions (most recent first)")
@@ -4401,19 +4409,35 @@ def render_portfolio():
                                 sorted_transactions if show_all_transactions
                                 else sorted_transactions[:DEFAULT_TRANSACTIONS_SHOWN]
                             )
+                            # Nette rijen i.p.v. een kale bullet-lijst -- zelfde
+                            # soort compacte kaart-stijl als de positierijen
+                            # zelf, i.p.v. losse st.markdown()-regels per
+                            # transactie.
+                            tx_rows_html = []
                             for t in transactions_to_show:
-                                type_emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
-                                type_label = "Buy" if t["transaction_type"] == "buy" else "Sell"
-                                st.markdown(
-                                    f"- {type_emoji} {type_label}: {t['shares']:g} @ €{t['price']:,.2f} "
-                                    f"*({t['transaction_date']})*"
+                                is_buy = t["transaction_type"] == "buy"
+                                type_color = "#1FAE96" if is_buy else "#E5484D"
+                                type_icon = "add_circle" if is_buy else "remove_circle"
+                                type_label = "Buy" if is_buy else "Sell"
+                                tx_rows_html.append(
+                                    f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; '
+                                    f'padding:0.5rem 0.15rem; border-bottom:1px solid rgba(137,146,163,0.12);">'
+                                    f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
+                                    f'{_icon_span(type_icon, size_px=16, color=type_color)}'
+                                    f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem;">{type_label}</span>'
+                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ €{t["price"]:,.2f}</span>'
+                                    f'</div>'
+                                    f'<span style="color:#8992A3; font-size:0.78rem; white-space:nowrap; flex-shrink:0;">{t["transaction_date"]}</span>'
+                                    f'</div>'
                                 )
+                            st.markdown("".join(tx_rows_html), unsafe_allow_html=True)
                         else:
                             st.caption("No transactions logged for this position yet -- log one under 'Manage' below.")
 
                 with detail_col2:
                     with st.container(border=True):
                         st.caption("Price -- last 6 months")
+                        retry_chart_key = f"retry_chart_{selected_holding['ticker']}"
                         with st.spinner("Loading chart..."):
                             mini_hist = get_cached_ticker_history(selected_holding["ticker"], period="6mo")
                         if mini_hist is not None and not mini_hist.empty:
@@ -4453,7 +4477,16 @@ def render_portfolio():
                             else:
                                 st.caption("Not enough price data to show a chart.")
                         else:
-                            st.caption("No price data available right now.")
+                            # yfinance is een bekend onbetrouwbare databron --
+                            # een voorbijgaande netwerkhapering geeft een lege
+                            # DataFrame terug, die vervolgens 5 min gecached
+                            # blijft (get_cached_ticker_history's ttl). Een
+                            # Retry-knop wist die specifieke cache-entry, i.p.v.
+                            # dat je 5 minuten moet wachten voor een nieuwe poging.
+                            st.caption("No price data available right now -- this can happen with a temporary network hiccup.")
+                            if st.button("Retry", key=retry_chart_key, icon=":material/refresh:"):
+                                get_cached_ticker_history.clear()
+                                st.rerun()
 
     # ============================================================
     # 3. MANAGE
