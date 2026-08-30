@@ -3672,18 +3672,21 @@ def render_analyze():
             infos = get_tickers_info(holdings)
 
         # --- Concentratie Risk ---
-        with st.expander("Concentration Risk", expanded=True, key="concentration_risk_expander", icon=":material/target:"):
-            for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
-                st.markdown(f"- {finding}")
+        st.markdown(
+            _flowing_section_header_html("Concentration Risk", "target", is_first=True),
+            unsafe_allow_html=True,
+        )
+        for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
+            st.markdown(f"- {finding}")
 
-            total_value_check = sum(h.get("position_value") or 0 for h in holdings)
-            if total_value_check > 0:
-                largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
-                largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
-                if largest_pct_check > risk_profile["max_position_pct"]:
-                    st.caption("One way to gradually correct an overweight position without a big, "
-                               "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                    st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
+        total_value_check = sum(h.get("position_value") or 0 for h in holdings)
+        if total_value_check > 0:
+            largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
+            largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
+            if largest_pct_check > risk_profile["max_position_pct"]:
+                st.caption("One way to gradually correct an overweight position without a big, "
+                           "one-time move: adjust future contributions with the Smart DCA Assistant.")
+                st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
 
         # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
         # --- Portfolio-samenstelling: Sectors + Asset Type + Region samen,
@@ -3691,67 +3694,73 @@ def render_analyze():
         # breedte sectie. Elke categorie toont nu ook de tickers erachter
         # (bv. welk ETF, welke positie telt als 'Future') i.p.v. alleen een
         # kaal percentage. ---
-        with st.expander("Portfolio Composition", expanded=True, key="portfolio_composition_expander", icon=":material/pie_chart:"):
-            sector_groups, type_groups, region_groups = {}, {}, {}
-            for h in holdings:
-                value = h.get("position_value") or 0
-                info = infos.get(h["ticker"], {})
+        st.markdown(
+            _flowing_section_header_html("Portfolio Composition", "pie_chart", is_first=False),
+            unsafe_allow_html=True,
+        )
+        sector_groups, type_groups, region_groups = {}, {}, {}
+        for h in holdings:
+            value = h.get("position_value") or 0
+            info = infos.get(h["ticker"], {})
 
-                sector = info.get("sector") or "Non-equity / Other"
-                sector_groups.setdefault(sector, []).append((h["naam"], h["ticker"], value))
+            sector = info.get("sector") or "Non-equity / Other"
+            sector_groups.setdefault(sector, []).append((h["naam"], h["ticker"], value))
 
-                raw_quote_type = info.get("quoteType")
-                if raw_quote_type:
-                    asset_type = raw_quote_type.title()
-                else:
-                    ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
-                    asset_type = "Cryptocurrency" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "Unknown"
-                type_groups.setdefault(asset_type, []).append((h["naam"], h["ticker"], value))
+            raw_quote_type = info.get("quoteType")
+            if raw_quote_type:
+                asset_type = raw_quote_type.title()
+            else:
+                ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
+                asset_type = "Cryptocurrency" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "Unknown"
+            type_groups.setdefault(asset_type, []).append((h["naam"], h["ticker"], value))
 
-                region = get_holding_region(h["ticker"], info)
-                region_groups.setdefault(region, []).append((h["naam"], h["ticker"], value))
+            region = get_holding_region(h["ticker"], info)
+            region_groups.setdefault(region, []).append((h["naam"], h["ticker"], value))
 
-            total_value_for_breakdown = sum(h.get("position_value") or 0 for h in holdings)
+        total_value_for_breakdown = sum(h.get("position_value") or 0 for h in holdings)
 
-            def _render_breakdown(title, groups):
-                with st.container(border=True):
-                    st.markdown(f"**{title}**")
-                    chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
-                    if chart_values:
-                        fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
-                        # Unieke key nodig -- deze functie wordt 3x aangeroepen
-                        # (Sectors/Asset Type/Region) en st.plotly_chart() zonder
-                        # key kan dan met StreamlitDuplicateElementId crashen.
-                        chart_key = "breakdown_chart_" + title.lower().replace(" ", "_")
-                        st.plotly_chart(fig, key=chart_key)
+        def _render_breakdown(title, groups):
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
+                if chart_values:
+                    fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
+                    # Unieke key nodig -- deze functie wordt 3x aangeroepen
+                    # (Sectors/Asset Type/Region) en st.plotly_chart() zonder
+                    # key kan dan met StreamlitDuplicateElementId crashen.
+                    chart_key = "breakdown_chart_" + title.lower().replace(" ", "_")
+                    st.plotly_chart(fig, key=chart_key)
 
-            comp_col1, comp_col2 = st.columns(2)
-            with comp_col1:
-                _render_breakdown("Sectors", sector_groups)
-            with comp_col2:
-                _render_breakdown("Asset Type", type_groups)
+        comp_col1, comp_col2 = st.columns(2)
+        with comp_col1:
+            _render_breakdown("Sectors", sector_groups)
+        with comp_col2:
+            _render_breakdown("Asset Type", type_groups)
 
-            # Region krijgt dezelfde kolomstructuur (i.p.v. los, gecentreerd
-            # over de volle breedte) -- staat zo netjes uitgelijnd onder
-            # Sectors, consistent met de blokken hierboven.
-            region_col1, region_col2 = st.columns(2)
-            with region_col1:
-                _render_breakdown("Region", region_groups)
+        # Region krijgt dezelfde kolomstructuur (i.p.v. los, gecentreerd
+        # over de volle breedte) -- staat zo netjes uitgelijnd onder
+        # Sectors, consistent met de blokken hierboven.
+        region_col1, region_col2 = st.columns(2)
+        with region_col1:
+            _render_breakdown("Region", region_groups)
 
-            sector_values_check = {
-                s: sum(v for _, _, v in items) for s, items in sector_groups.items() if s != "Non-equity / Other"
-            }
-            if sector_values_check and total_value_for_breakdown > 0:
-                dominant_sector_pct = max(sector_values_check.values()) / total_value_for_breakdown * 100
-                if dominant_sector_pct > risk_profile["max_sector_pct"]:
-                    st.caption("Overweight in one sector? Steering future contributions toward other "
-                               "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                    st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
+        sector_values_check = {
+            s: sum(v for _, _, v in items) for s, items in sector_groups.items() if s != "Non-equity / Other"
+        }
+        if sector_values_check and total_value_for_breakdown > 0:
+            dominant_sector_pct = max(sector_values_check.values()) / total_value_for_breakdown * 100
+            if dominant_sector_pct > risk_profile["max_sector_pct"]:
+                st.caption("Overweight in one sector? Steering future contributions toward other "
+                           "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
+                st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
 
         # --- Risico ---
-        with st.expander("Risk", key="risk_expander", icon=":material/balance:"):
-            for finding in analyze_risk(holdings, infos):
-                st.markdown(f"- {finding}", unsafe_allow_html=True)
+        st.markdown(
+            _flowing_section_header_html("Risk", "balance", is_first=False),
+            unsafe_allow_html=True,
+        )
+        for finding in analyze_risk(holdings, infos):
+            st.markdown(f"- {finding}", unsafe_allow_html=True)
 
             if is_premium:
                 if len(holdings) >= 2:
@@ -3789,31 +3798,34 @@ def render_analyze():
         with st.spinner("Loading dividend data..."):
             infos = get_tickers_info(holdings)
 
-        with st.expander("Dividend", key="dividend_expander", icon=":material/payments:"):
-            if is_premium:
-                dividend_result = analyze_dividend(holdings, infos)
-                for finding in dividend_result["findings"]:
-                    st.markdown(f"- {finding}", unsafe_allow_html=True)
-                if dividend_result["per_position"]:
-                    if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
-                        df_div = pd.DataFrame(dividend_result["per_position"])
-                        symbol = dividend_result["currency_symbol"]
-                        df_display = pd.DataFrame({
-                            "Name": df_div["naam"],
-                            "Ticker": df_div["ticker"],
-                            "Annual Dividend": df_div["annual_dividend"].apply(
-                                lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
-                            ),
-                            "Yield": df_div["yield_pct"].apply(
-                                lambda v: f"{v:.2f}%" if v is not None else "-"
-                            ),
-                        })
-                        st.dataframe(
-                            df_display, width=480, hide_index=True,
-                            height=min(38 * (len(df_display) + 1), 300),
-                        )
-            else:
-                st.info("Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.", icon=":material/lock:")
+        st.markdown(
+            _flowing_section_header_html("Dividend", "payments", is_first=True),
+            unsafe_allow_html=True,
+        )
+        if is_premium:
+            dividend_result = analyze_dividend(holdings, infos)
+            for finding in dividend_result["findings"]:
+                st.markdown(f"- {finding}", unsafe_allow_html=True)
+            if dividend_result["per_position"]:
+                if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
+                    df_div = pd.DataFrame(dividend_result["per_position"])
+                    symbol = dividend_result["currency_symbol"]
+                    df_display = pd.DataFrame({
+                        "Name": df_div["naam"],
+                        "Ticker": df_div["ticker"],
+                        "Annual Dividend": df_div["annual_dividend"].apply(
+                            lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
+                        ),
+                        "Yield": df_div["yield_pct"].apply(
+                            lambda v: f"{v:.2f}%" if v is not None else "-"
+                        ),
+                    })
+                    st.dataframe(
+                        df_display, width=480, hide_index=True,
+                        height=min(38 * (len(df_display) + 1), 300),
+                    )
+        else:
+            st.info("Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.", icon=":material/lock:")
 
 
     else:
@@ -3837,212 +3849,215 @@ def render_analyze():
         # en van yfinance bekend traag is). Zo verschijnt Performance
         # meteen, terwijl de rest van de pagina (Sectors/Diversification/
         # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
-        with st.expander("Performance", expanded=True, key="performance_expander", icon=":material/monitoring:"):
-            st.caption("Your real return, based on the buy/sell transactions you've logged under "
-                       "My Portfolio -- excludes dividends. Includes fully closed positions. "
-                       "Positions without logged transactions won't show a return here.")
+        st.markdown(
+            _flowing_section_header_html("Performance", "monitoring", is_first=True),
+            unsafe_allow_html=True,
+        )
+        st.caption("Your real return, based on the buy/sell transactions you've logged under "
+                   "My Portfolio -- excludes dividends. Includes fully closed positions. "
+                   "Positions without logged transactions won't show a return here.")
 
-            snapshot = database.get_performance_snapshot(user_email)
-            refresh_col1, refresh_col2 = st.columns([3, 1])
-            with refresh_col1:
-                if snapshot and snapshot.get("computed_at"):
-                    st.caption(f"Last updated: {snapshot['computed_at'][:16].replace('T', ' ')}")
-                else:
-                    st.caption("Calculating your performance for the first time...")
-            with refresh_col2:
-                refresh_clicked = st.button("Refresh", key="perf_refresh_btn")
+        snapshot = database.get_performance_snapshot(user_email)
+        refresh_col1, refresh_col2 = st.columns([3, 1])
+        with refresh_col1:
+            if snapshot and snapshot.get("computed_at"):
+                st.caption(f"Last updated: {snapshot['computed_at'][:16].replace('T', ' ')}")
+            else:
+                st.caption("Calculating your performance for the first time...")
+        with refresh_col2:
+            refresh_clicked = st.button("Refresh", key="perf_refresh_btn")
 
-            if refresh_clicked or not snapshot:
-                # VOLLEDIGE (trage) herberekening -- alleen op expliciet verzoek
-                # (de Refresh-knop) of bij het allereerste bezoek, NIET meer bij
-                # elk bezoek aan de pagina. Dit is de kern van de snelheidsfix:
-                # een volgend bezoek toont de opgeslagen snapshot INSTANT.
-                all_holdings_incl_closed = database.get_user_holdings(user_email)
-                with st.spinner("Loading price history..."):
-                    shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="max")
-                today = datetime.now().date()
-                performance_rows = []
-                total_invested = 0.0
-                total_pnl = 0.0
-                earliest_date = None
-                excluded_no_price = []
-                for h in all_holdings_incl_closed:
-                    transactions = database.get_transactions_for_holding(user_email, h["id"])
-                    if not transactions:
-                        continue
-                    current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
-                    if current_price is None:
-                        single_info = get_cached_ticker_info(h["ticker"])
-                        current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
-                    perf = compute_holding_performance(transactions, current_price)
-                    if perf:
-                        is_closed = perf["shares_held"] <= 0.0001
-                        performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
-                        bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
-                        total_invested += bought_cost
-                        total_pnl += perf["total_pnl"]
-                        for t in transactions:
-                            if earliest_date is None or t["transaction_date"] < earliest_date:
-                                earliest_date = t["transaction_date"]
-                    elif current_price is None:
-                        excluded_no_price.append(h["naam"])
+        if refresh_clicked or not snapshot:
+            # VOLLEDIGE (trage) herberekening -- alleen op expliciet verzoek
+            # (de Refresh-knop) of bij het allereerste bezoek, NIET meer bij
+            # elk bezoek aan de pagina. Dit is de kern van de snelheidsfix:
+            # een volgend bezoek toont de opgeslagen snapshot INSTANT.
+            all_holdings_incl_closed = database.get_user_holdings(user_email)
+            with st.spinner("Loading price history..."):
+                shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="max")
+            today = datetime.now().date()
+            performance_rows = []
+            total_invested = 0.0
+            total_pnl = 0.0
+            earliest_date = None
+            excluded_no_price = []
+            for h in all_holdings_incl_closed:
+                transactions = database.get_transactions_for_holding(user_email, h["id"])
+                if not transactions:
+                    continue
+                current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
+                if current_price is None:
+                    single_info = get_cached_ticker_info(h["ticker"])
+                    current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
+                perf = compute_holding_performance(transactions, current_price)
+                if perf:
+                    is_closed = perf["shares_held"] <= 0.0001
+                    performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
+                    bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
+                    total_invested += bought_cost
+                    total_pnl += perf["total_pnl"]
+                    for t in transactions:
+                        if earliest_date is None or t["transaction_date"] < earliest_date:
+                            earliest_date = t["transaction_date"]
+                elif current_price is None:
+                    excluded_no_price.append(h["naam"])
 
-                if excluded_no_price:
-                    st.caption(
-                        f"{_icon_span('warning', size_px=13, color='#8992A3')} Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
-                        f"excluded from the totals below until that's available again.",
-                        unsafe_allow_html=True,
+            if excluded_no_price:
+                st.caption(
+                    f"{_icon_span('warning', size_px=13, color='#8992A3')} Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
+                    f"excluded from the totals below until that's available again.",
+                    unsafe_allow_html=True,
+                )
+
+            if performance_rows:
+                overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
+                if overall_return_pct is not None and pd.isna(overall_return_pct):
+                    overall_return_pct = None
+
+                checkpoints = []
+                if earliest_date:
+                    try:
+                        since_inception_date = datetime.strptime(earliest_date, "%Y-%m-%d").date()
+                        checkpoints.append(("Since inception", since_inception_date))
+                    except Exception:
+                        pass
+                checkpoints.append(("3 years", (datetime.now() - timedelta(days=365 * 3)).date()))
+                checkpoints.append(("1 year", (datetime.now() - timedelta(days=365)).date()))
+                checkpoints.append(("YTD", date(datetime.now().year, 1, 1)))
+                checkpoints.append(("3 months", (datetime.now() - timedelta(days=90)).date()))
+                checkpoints.append(("1 month", (datetime.now() - timedelta(days=30)).date()))
+
+                checkpoint_results = []
+                for label, window_start in checkpoints:
+                    result = compute_personal_windowed_return(
+                        all_holdings_incl_closed, user_email, window_start, history_by_ticker=shared_history
                     )
+                    if result is not None:
+                        checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
 
-                if performance_rows:
-                    overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
-                    if overall_return_pct is not None and pd.isna(overall_return_pct):
-                        overall_return_pct = None
+                value_series_raw = compute_portfolio_value_over_time(
+                    all_holdings_incl_closed, user_email, shared_history, num_points=60
+                )
+                value_series = [{"date": p["date"].isoformat(), "value": p["value"]} for p in value_series_raw]
 
-                    checkpoints = []
-                    if earliest_date:
+                database.save_performance_snapshot(
+                    user_email, overall_return_pct=overall_return_pct, total_pnl=total_pnl,
+                    earliest_date=earliest_date, checkpoint_results=checkpoint_results,
+                    value_series=value_series, performance_rows=performance_rows,
+                )
+                st.rerun()  # herlaad meteen om de zojuist opgeslagen snapshot te tonen (consistente weergave-route)
+            else:
+                st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
+                           "to start tracking your return.")
+
+        elif snapshot:
+            # INSTANT -- toon de opgeslagen snapshot, GEEN netwerk-aanroepen nodig.
+            overall_return_pct = snapshot.get("overall_return_pct")
+            total_pnl = snapshot.get("total_pnl")
+            earliest_date = snapshot.get("earliest_date")
+            checkpoint_results = snapshot.get("checkpoint_results") or []
+            value_series = [
+                {"date": datetime.strptime(p["date"], "%Y-%m-%d").date(), "value": p["value"]}
+                for p in (snapshot.get("value_series") or [])
+            ]
+            performance_rows = snapshot.get("performance_rows") or []
+
+            if overall_return_pct is not None:
+                since_txt = f" since {earliest_date}" if earliest_date else ""
+                st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
+
+            ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
+            one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
+            ytd_pct = ytd_result["return_pct"] if ytd_result else None
+            one_year_pct = one_year_result["return_pct"] if one_year_result else None
+
+            # Benchmark-vergelijking is nu OPT-IN (een knop) i.p.v. automatisch
+            # bij elk bezoek -- scheelt een extra netwerk-aanroep als je 'm
+            # niet nodig hebt.
+            show_benchmark = st.checkbox("Compare against a benchmark", key="perf_show_benchmark")
+            benchmark_ytd = benchmark_1y = None
+            benchmark_name = None
+            if show_benchmark:
+                benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
+                if st.button(f"Fetch {benchmark_name}", key="perf_fetch_benchmark"):
+                    with st.spinner(f"Fetching {benchmark_name}..."):
                         try:
-                            since_inception_date = datetime.strptime(earliest_date, "%Y-%m-%d").date()
-                            checkpoints.append(("Since inception", since_inception_date))
+                            benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
+                            benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
+                            benchmark_1y = compute_price_return(benchmark_history, days_back=365)
                         except Exception:
-                            pass
-                    checkpoints.append(("3 years", (datetime.now() - timedelta(days=365 * 3)).date()))
-                    checkpoints.append(("1 year", (datetime.now() - timedelta(days=365)).date()))
-                    checkpoints.append(("YTD", date(datetime.now().year, 1, 1)))
-                    checkpoints.append(("3 months", (datetime.now() - timedelta(days=90)).date()))
-                    checkpoints.append(("1 month", (datetime.now() - timedelta(days=30)).date()))
+                            benchmark_ytd = benchmark_1y = None
 
-                    checkpoint_results = []
-                    for label, window_start in checkpoints:
-                        result = compute_personal_windowed_return(
-                            all_holdings_incl_closed, user_email, window_start, history_by_ticker=shared_history
-                        )
-                        if result is not None:
-                            checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
-
-                    value_series_raw = compute_portfolio_value_over_time(
-                        all_holdings_incl_closed, user_email, shared_history, num_points=60
-                    )
-                    value_series = [{"date": p["date"].isoformat(), "value": p["value"]} for p in value_series_raw]
-
-                    database.save_performance_snapshot(
-                        user_email, overall_return_pct=overall_return_pct, total_pnl=total_pnl,
-                        earliest_date=earliest_date, checkpoint_results=checkpoint_results,
-                        value_series=value_series, performance_rows=performance_rows,
-                    )
-                    st.rerun()  # herlaad meteen om de zojuist opgeslagen snapshot te tonen (consistente weergave-route)
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                if ytd_pct is not None:
+                    delta_txt = f"{ytd_pct - benchmark_ytd:+.1f}% vs {benchmark_name}" if benchmark_ytd is not None else None
+                    st.metric("YTD", f"{ytd_pct:+.1f}%", delta_txt)
                 else:
-                    st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
-                               "to start tracking your return.")
+                    st.metric("YTD", "n/a")
+            with pcol2:
+                if one_year_pct is not None:
+                    delta_txt = f"{one_year_pct - benchmark_1y:+.1f}% vs {benchmark_name}" if benchmark_1y is not None else None
+                    st.metric("1-Year", f"{one_year_pct:+.1f}%", delta_txt)
+                else:
+                    st.metric("1-Year", "n/a")
+            st.caption("Your real return over this period -- accounts for shares you already "
+                       "held plus any buys/sells you made during it.")
 
-            elif snapshot:
-                # INSTANT -- toon de opgeslagen snapshot, GEEN netwerk-aanroepen nodig.
-                overall_return_pct = snapshot.get("overall_return_pct")
-                total_pnl = snapshot.get("total_pnl")
-                earliest_date = snapshot.get("earliest_date")
-                checkpoint_results = snapshot.get("checkpoint_results") or []
-                value_series = [
-                    {"date": datetime.strptime(p["date"], "%Y-%m-%d").date(), "value": p["value"]}
-                    for p in (snapshot.get("value_series") or [])
-                ]
-                performance_rows = snapshot.get("performance_rows") or []
-
-                if overall_return_pct is not None:
-                    since_txt = f" since {earliest_date}" if earliest_date else ""
-                    st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
-
-                ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
-                one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
-                ytd_pct = ytd_result["return_pct"] if ytd_result else None
-                one_year_pct = one_year_result["return_pct"] if one_year_result else None
-
-                # Benchmark-vergelijking is nu OPT-IN (een knop) i.p.v. automatisch
-                # bij elk bezoek -- scheelt een extra netwerk-aanroep als je 'm
-                # niet nodig hebt.
-                show_benchmark = st.checkbox("Compare against a benchmark", key="perf_show_benchmark")
-                benchmark_ytd = benchmark_1y = None
-                benchmark_name = None
-                if show_benchmark:
-                    benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
-                    if st.button(f"Fetch {benchmark_name}", key="perf_fetch_benchmark"):
-                        with st.spinner(f"Fetching {benchmark_name}..."):
-                            try:
-                                benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
-                                benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
-                                benchmark_1y = compute_price_return(benchmark_history, days_back=365)
-                            except Exception:
-                                benchmark_ytd = benchmark_1y = None
-
-                pcol1, pcol2 = st.columns(2)
-                with pcol1:
-                    if ytd_pct is not None:
-                        delta_txt = f"{ytd_pct - benchmark_ytd:+.1f}% vs {benchmark_name}" if benchmark_ytd is not None else None
-                        st.metric("YTD", f"{ytd_pct:+.1f}%", delta_txt)
-                    else:
-                        st.metric("YTD", "n/a")
-                with pcol2:
-                    if one_year_pct is not None:
-                        delta_txt = f"{one_year_pct - benchmark_1y:+.1f}% vs {benchmark_name}" if benchmark_1y is not None else None
-                        st.metric("1-Year", f"{one_year_pct:+.1f}%", delta_txt)
-                    else:
-                        st.metric("1-Year", "n/a")
-                st.caption("Your real return over this period -- accounts for shares you already "
-                           "held plus any buys/sells you made during it.")
-
-                if len(value_series) >= 2:
-                    st.markdown("**Your portfolio value over time**")
-                    chart_timeframe = st.radio(
-                        "Timeframe", ["1M", "3M", "1Y", "3Y", "ALL"], index=4,
-                        horizontal=True, key="perf_chart_timeframe",
-                    )
-                    # Filteren op de AL berekende data -- geen nieuwe netwerk-
-                    # aanroepen nodig, dus dit is instant, ook vanuit een
-                    # opgeslagen snapshot.
-                    timeframe_days = {"1M": 30, "3M": 90, "1Y": 365, "3Y": 365 * 3, "ALL": None}
-                    days_back = timeframe_days[chart_timeframe]
-                    if days_back is not None:
-                        cutoff_date = datetime.now().date() - timedelta(days=days_back)
-                        filtered_series = [p for p in value_series if p["date"] >= cutoff_date]
-                        if len(filtered_series) < 2:
-                            # Te weinig punten binnen deze periode (bv. account
-                            # bestaat nog niet zo lang) -- terugvallen op ALL
-                            # i.p.v. een lege/kapotte grafiek te tonen.
-                            filtered_series = value_series
-                    else:
+            if len(value_series) >= 2:
+                st.markdown("**Your portfolio value over time**")
+                chart_timeframe = st.radio(
+                    "Timeframe", ["1M", "3M", "1Y", "3Y", "ALL"], index=4,
+                    horizontal=True, key="perf_chart_timeframe",
+                )
+                # Filteren op de AL berekende data -- geen nieuwe netwerk-
+                # aanroepen nodig, dus dit is instant, ook vanuit een
+                # opgeslagen snapshot.
+                timeframe_days = {"1M": 30, "3M": 90, "1Y": 365, "3Y": 365 * 3, "ALL": None}
+                days_back = timeframe_days[chart_timeframe]
+                if days_back is not None:
+                    cutoff_date = datetime.now().date() - timedelta(days=days_back)
+                    filtered_series = [p for p in value_series if p["date"] >= cutoff_date]
+                    if len(filtered_series) < 2:
+                        # Te weinig punten binnen deze periode (bv. account
+                        # bestaat nog niet zo lang) -- terugvallen op ALL
+                        # i.p.v. een lege/kapotte grafiek te tonen.
                         filtered_series = value_series
+                else:
+                    filtered_series = value_series
 
-                    value_fig = go.Figure()
-                    value_fig.add_trace(go.Scatter(
-                        x=[p["date"].isoformat() for p in filtered_series],
-                        y=[p["value"] for p in filtered_series],
-                        mode="lines",
-                        line=dict(color="#1FAE96", width=2),
-                        fill="tozeroy",
-                        fillcolor="rgba(31,174,150,0.10)",
-                        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
-                    ))
-                    value_fig.update_layout(
-                        yaxis_title="Portfolio value (€)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                        margin=dict(t=30, b=10, l=10, r=10),
-                        height=320,
-                        showlegend=False,
-                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    )
-                    st.plotly_chart(value_fig, width="stretch")
+                value_fig = go.Figure()
+                value_fig.add_trace(go.Scatter(
+                    x=[p["date"].isoformat() for p in filtered_series],
+                    y=[p["value"] for p in filtered_series],
+                    mode="lines",
+                    line=dict(color="#1FAE96", width=2),
+                    fill="tozeroy",
+                    fillcolor="rgba(31,174,150,0.10)",
+                    hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
+                ))
+                value_fig.update_layout(
+                    yaxis_title="Portfolio value (€)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                    margin=dict(t=30, b=10, l=10, r=10),
+                    height=320,
+                    showlegend=False,
+                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                )
+                st.plotly_chart(value_fig, width="stretch")
 
-                if performance_rows and st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
-                    for r in performance_rows:
-                        pct = r["total_return_pct"]
-                        closed_txt = " *(closed)*" if r.get("closed") else ""
-                        if pct is not None:
-                            color_emoji = "🟢" if pct >= 0 else "🔴"
-                            st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
-                        else:
-                            st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
+            if performance_rows and st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
+                for r in performance_rows:
+                    pct = r["total_return_pct"]
+                    closed_txt = " *(closed)*" if r.get("closed") else ""
+                    if pct is not None:
+                        color_emoji = "🟢" if pct >= 0 else "🔴"
+                        st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
+                    else:
+                        st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
 
 
 
