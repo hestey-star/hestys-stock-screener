@@ -601,7 +601,15 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     # mogelijk een tot 1 uur oude cache-hit teruggeven (voelde anders aan
     # alsof de knop niks deed). get_fx_rate() staat los en heeft zijn eigen,
     # kortere 5-min-cache, dus die hoeft hier niet geleegd te worden.
+    #
+    # GEVONDEN BUG: get_cached_ticker_info() (de PRIMAIRE prijsbron
+    # hieronder, regularMarketPrice) heeft OOK een eigen 5-min-cache, die
+    # hier VOORHEEN NIET gewist werd -- bij meerdere klikken binnen
+    # dezelfde 5 minuten gaf de knop dus gegarandeerd dezelfde, oude
+    # koers terug (het leek dan alsof de knop niet werkte). Nu ook deze
+    # cache expliciet gewist.
     _batch_download_history.clear()
+    get_cached_ticker_info.clear()
 
     shared_prices = get_shared_history_for_holdings(
         [{"ticker": t} for t in tickers_to_fetch], period="5d"
