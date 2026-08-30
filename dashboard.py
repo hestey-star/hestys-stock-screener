@@ -1542,6 +1542,25 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
     )
 
 
+def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = False) -> str:
+    """
+    Kop voor een sectie die NIET meer in een st.expander() zit (onderdeel
+    van de bredere herstructurering naar 1 doorscrollende pagina i.p.v.
+    losse uitklapvakken). Zonder de rand die een expander vroeger gaf,
+    moet iets anders het 'hier begint iets nieuws'-signaal geven -- een
+    duidelijke scheidingslijn erboven (weggelaten bij de EERSTE sectie op
+    een pagina, want daar is geen vorig blok om van te scheiden) + een
+    iets groter, steviger lettertype dan een gewone st.markdown("**...**").
+    """
+    divider_html = "" if is_first else '<div style="height:1px; background:rgba(137,146,163,0.15); margin:1.75rem 0 1.1rem 0;"></div>'
+    return (
+        f'{divider_html}'
+        f'<div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.3rem;">'
+        f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
+        f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span></div>'
+    )
+
+
 def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, accent_rgb: str, color: str) -> str:
     """
     Fancy hero-tegel voor een enkele, uitgelichte stat (bv. Top gainer/
@@ -4865,9 +4884,7 @@ def render_discover():
         # dit doen -- een accordion voegde hier geen overzicht toe, het
         # verstopte 'm juist onnodig achter een klik.
         st.markdown(
-            f'<div style="display:flex; align-items:center; gap:0.5rem; margin:1.1rem 0 0.3rem 0;">'
-            f'{_icon_span("sync", size_px=18, color="#EAEDF1")}'
-            f'<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Sector rotation</span></div>',
+            _flowing_section_header_html("Sector rotation", "sync", is_first=True),
             unsafe_allow_html=True,
         )
         st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
@@ -4933,9 +4950,7 @@ def render_discover():
         # hierboven. Apart van de officiële GICS-sectoren gehouden (anders
         # zou een bedrijf dubbel meetellen). ---
         st.markdown(
-            f'<div style="display:flex; align-items:center; gap:0.5rem; margin:1.6rem 0 0.3rem 0;">'
-            f'{_icon_span("lightbulb", size_px=18, color="#EAEDF1")}'
-            f'<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Themes</span></div>',
+            _flowing_section_header_html("Themes", "lightbulb", is_first=False),
             unsafe_allow_html=True,
         )
         st.caption("How popular investing themes are doing right now (1-month trailing).")
