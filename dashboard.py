@@ -4330,7 +4330,19 @@ def render_portfolio():
                 all_time_pnl = None
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
-                    perf = compute_holding_performance(tx, current_price_num) if tx else None
+                    # BELANGRIJK: hier BEWUST pos_value/shares gebruiken i.p.v.
+                    # current_price_num (die uit market_data komt, in de
+                    # NATIVE valuta van de ticker zelf -- bv. altijd USD voor
+                    # SOL-USD). Gelogde transactieprijzen staan in de valuta
+                    # van de holding op het moment van loggen (value_currency),
+                    # dus het mengen met een ongerelateerde native-ticker-
+                    # valuta gaf een zinloos PNL-getal, dat toevallig ook nog
+                    # met het VERKEERDE valutasymbool werd getoond. pos_value/
+                    # shares geeft een prijs in DEZELFDE valuta als de
+                    # transacties, consistent met hoe position-details dit ook
+                    # al deed.
+                    all_time_current_price = pos_value / shares if (pos_value and shares) else current_price_num
+                    perf = compute_holding_performance(tx, all_time_current_price) if tx else None
                     if perf:
                         avg_cost = perf["avg_cost_per_share"]
                         all_time_pct = perf["total_return_pct"]
@@ -4374,6 +4386,7 @@ def render_portfolio():
                 with detail_col1:
                     with st.container(border=True):
                         transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
+                        detail_currency_symbol = "€" if selected_holding.get("value_currency") == "EUR" else "$"
                         if transactions:
                             perf = compute_holding_performance(
                                 transactions,
@@ -4388,7 +4401,7 @@ def render_portfolio():
                                     f'<div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.5rem;">'
                                     f'{_icon_span(return_icon, size_px=18, color=return_color)}'
                                     f'<span style="font-weight:700; color:{return_color};">Return: {pct:+.1f}%</span>'
-                                    f'<span style="color:#8992A3;">(€{perf["total_pnl"]:+,.2f})</span>'
+                                    f'<span style="color:#8992A3;">({detail_currency_symbol}{perf["total_pnl"]:+,.2f})</span>'
                                     f'</div>',
                                     unsafe_allow_html=True,
                                 )
@@ -4425,7 +4438,7 @@ def render_portfolio():
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
                                     f'{_icon_span(type_icon, size_px=16, color=type_color)}'
                                     f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem;">{type_label}</span>'
-                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ €{t["price"]:,.2f}</span>'
+                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ {detail_currency_symbol}{t["price"]:,.2f}</span>'
                                     f'</div>'
                                     f'<span style="color:#8992A3; font-size:0.78rem; white-space:nowrap; flex-shrink:0;">{t["transaction_date"]}</span>'
                                     f'</div>'
