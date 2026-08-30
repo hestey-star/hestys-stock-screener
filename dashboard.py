@@ -5186,23 +5186,24 @@ def render_discover():
         else:
             df_screener = df_screener.sort_values("score", ascending=False)
 
-            # Alleen de STANDOUT-resultaten (score 8+) standaard tonen i.p.v.
-            # simpelweg de top-N -- bij veel wekelijkse matches (soms 50-60+)
-            # werd dit een eindeloze muur kaarten om doorheen te scrollen,
-            # terwijl in de praktijk toch vooral de score-8+-signalen de
-            # moeite waard zijn. Een max-cap (_signal_display_limit) blijft
-            # als vangnet voor het (zeldzame) geval dat er heel veel
-            # standouts in 1 week zijn.
-            standouts = df_screener[df_screener["score"] >= 8.0]
+            # Weergave-drempel op 7.5 (i.p.v. 8.0) -- op verzoek ook de
+            # 'net iets minder dan 8, maar nog steeds sterk'-signalen
+            # tonen. De ⭐-ster (verderop, bij standout=row["score"]>=8.0)
+            # blijft WEL op 8.0 staan -- die markeert specifiek de écht
+            # uitzonderlijke signalen, 7.5-7.9 wordt dus wel getoond maar
+            # zonder ster. Een max-cap (_STANDOUT_DISPLAY_CAP) blijft als
+            # vangnet voor het (zeldzame) geval dat er heel veel
+            # kwalificerende signalen in 1 week zijn.
+            standouts = df_screener[df_screener["score"] >= 7.5]
             total_matching = len(df_screener)
             if not standouts.empty:
                 filtered = standouts.head(_STANDOUT_DISPLAY_CAP)
-                caption_intro = f"{len(filtered)} standout signal(s) (score 8+) of {total_matching} total matches"
+                caption_intro = f"{len(filtered)} standout signal(s) (score 7.5+) of {total_matching} total matches"
             else:
                 # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
                 # de sectie helemaal leeg te laten ogen.
                 filtered = df_screener.head(3)
-                caption_intro = f"No score-8+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
+                caption_intro = f"No score-7.5+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
 
             # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
             # dat dwingt op mobiel dubbel scrollen af, verticaal EN
