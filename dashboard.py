@@ -1629,9 +1629,9 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     else:
         first_letter = (ticker[0] if ticker else "?").upper()
         logo_html = (
-            f'<div style="width:30px; height:30px; border-radius:8px; background:rgba(31,174,150,0.15); '
+            f'<div style="width:30px; height:30px; border-radius:8px; background:rgba(137,146,163,0.15); '
             f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
-            f'<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">{first_letter}</span></div>'
+            f'<span style="color:#8992A3; font-weight:700; font-size:0.8rem;">{first_letter}</span></div>'
         )
 
     if mode == "Daily":
@@ -3477,11 +3477,11 @@ def render_analyze():
 
         st.markdown(
             f"""
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
-                        border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+            <div style="background: rgba(137,146,163,0.05);
+                        border: 1px solid rgba(137,146,163,0.2); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 1rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    {_icon_span("menu_book", size_px=14, color="#1FAE96")} Deep-dives
+                <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    {_icon_span("menu_book", size_px=14, color="#8992A3")} Deep-dives
                 </div>
                 <div style="color:#8992A3; font-size:0.9rem; margin-top:6px; line-height:1.5;">
                     Log your own research per stock -- every time you update it, the previous
@@ -3632,8 +3632,8 @@ def render_analyze():
                                 f'<img src="{logo_url}" width="56" height="56" '
                                 f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
                                 if logo_url else
-                                f'<div style="width:56px; height:56px; border-radius:12px; background:rgba(31,174,150,0.12); '
-                                f'display:flex; align-items:center; justify-content:center;">{_icon_span("candlestick_chart", size_px=24, color="#1FAE96")}</div>'
+                                f'<div style="width:56px; height:56px; border-radius:12px; background:rgba(137,146,163,0.1); '
+                                f'display:flex; align-items:center; justify-content:center;">{_icon_span("candlestick_chart", size_px=24, color="#8992A3")}</div>'
                             )
                             if tile_overall_score is not None:
                                 score_color = _deep_dive_score_color(tile_overall_score)
@@ -4772,7 +4772,7 @@ def render_portfolio():
                 f'background:rgba(137,146,163,0.08); border:1px solid rgba(137,146,163,0.25); '
                 f'border-radius:20px; padding:0.4rem 0.8rem;">'
                 f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem;">{w["naam"]}</span>'
-                f'<span style="color:#1FAE96; font-family:\'IBM Plex Mono\', monospace; font-size:0.75rem;">{w["ticker"]}</span>'
+                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.75rem;">{w["ticker"]}</span>'
                 f'</div>'
                 for w in watchlist_items
             )
@@ -5110,10 +5110,10 @@ def render_discover():
 
         st.markdown(
             f"""
-            <div id="signals" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.14), rgba(31,174,150,0.02));
-                        border: 1px solid rgba(31,174,150,0.35); border-radius: 10px;
+            <div id="signals" style="scroll-margin-top: 80px; background: rgba(137,146,163,0.05);
+                        border: 1px solid rgba(137,146,163,0.2); border-radius: 10px;
                         padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
                     Hesty's Signature Signals
                 </div>
                 <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
@@ -6237,11 +6237,11 @@ def render_privacy():
 
     st.markdown(
         f"""
-        <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                    border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
+        <div style="background: rgba(137,146,163,0.05);
+                    border: 1px solid rgba(137,146,163,0.2); border-radius: 12px;
                     padding: 1.25rem 1.5rem; margin: 0.75rem 0 1.25rem 0;">
-            <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                {_icon_span("lock", size_px=14, color="#1FAE96")} Your data is pseudonymized
+            <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
+                {_icon_span("lock", size_px=14, color="#8992A3")} Your data is pseudonymized
             </div>
             <div style="color:#EAEDF1; font-size:1rem; font-weight:600; margin-top:6px; line-height:1.5;">
                 Your email address is never stored in readable form alongside your portfolio.
