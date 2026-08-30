@@ -4196,29 +4196,25 @@ def render_portfolio():
     # ============================================================
     if holdings:
         with st.container(border=True):
-            # De currency-selector rechtsboven, zonder een overbodig
-            # 'Overview'-label ernaast (voegde niets toe -- de hele pagina
-            # IS het overzicht).
-            header_col1, header_col2 = st.columns([3, 1])
-            with header_col2:
+            total_value = sum(h.get("position_value") or 0 for h in holdings)
+            stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
+            cash_value = database.get_cash_value(user_email)
+
+            # 1 rij kolommen i.p.v. 2 gestapelde rijen (currency-selector
+            # apart bovenaan, Total value/acties eronder) -- dat gaf een
+            # leeg vak aan de kant zonder content in ELKE rij. Nu alles
+            # rechts (currency, toggle, knop) netjes onder elkaar in
+            # dezelfde kolom, naast Total value/Cash links.
+            overview_col1, overview_col2 = st.columns([2, 1])
+            with overview_col2:
                 display_currency = st.selectbox(
                     "Display currency", ["EUR", "USD"], key="display_currency",
                     label_visibility="collapsed", help="Display currency",
                 )
 
-            total_value = sum(h.get("position_value") or 0 for h in holdings)
-            stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
-            currency_symbol = "€" if display_currency == "EUR" else "$"
-            cash_value = database.get_cash_value(user_email)
-
             if total_value > 0 and stored_currency != display_currency:
                 st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
 
-            # Total value/Cash LINKS (de kerncijfers), Update-knop +
-            # Daily/All-time-toggle SAMEN gegroepeerd RECHTS (de acties) --
-            # i.p.v. 3 losse kolommen die elk 1 element gecentreerd lieten
-            # zweven zonder duidelijke onderlinge relatie.
-            overview_col1, overview_col2 = st.columns([2, 1])
             with overview_col1:
                 if total_value > 0:
                     shown_currency = display_currency if stored_currency == display_currency else stored_currency
