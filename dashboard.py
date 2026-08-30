@@ -1506,12 +1506,12 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     # tegels: Markdown zou dit anders als een code-blok interpreteren.
     return (
         f'<div style="height:100%; box-sizing:border-box; {background}'
-        f'border:{border_style}; {box_shadow}border-radius:12px; padding:0.9rem 1rem; '
+        f'border:{border_style}; {box_shadow}border-radius:10px; padding:0.65rem 0.75rem; '
         f'display:flex; flex-direction:column;">'
-        f'<div style="font-size:1.05rem; font-weight:800; color:#EAEDF1;">{ticker}{star_badge}</div>'
-        f'<div style="font-size:1.5rem; font-weight:800; color:{color}; margin-top:4px; white-space:nowrap;">{primary_value}</div>'
-        f'<div style="font-size:0.68rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
-        f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px 10px; margin-top:auto; padding-top:8px; '
+        f'<div style="font-size:0.88rem; font-weight:800; color:#EAEDF1;">{ticker}{star_badge}</div>'
+        f'<div style="font-size:1.2rem; font-weight:800; color:{color}; margin-top:3px; white-space:nowrap;">{primary_value}</div>'
+        f'<div style="font-size:0.6rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
+        f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:4px 8px; margin-top:auto; padding-top:6px; '
         f'border-top:1px solid rgba(137,146,163,0.15);">{secondary_html}</div>'
         f'</div>'
     )
@@ -1521,8 +1521,8 @@ def _render_signal_cards(cards_html: list) -> None:
     """Rendert een responsieve grid van signaal-kaarten (zelfde auto-fill/minmax-aanpak als rotatie-tegels)."""
     combined = "".join(cards_html)
     st.markdown(
-        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); '
-        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
+        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
+        f'gap:0.5rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
         unsafe_allow_html=True,
     )
 
@@ -5177,12 +5177,23 @@ def render_discover():
         else:
             df_screener = df_screener.sort_values("score", ascending=False)
 
-            # De 'minimum score'-slider is weg -- bleek in de praktijk
-            # nauwelijks gebruikt te worden. Toont nu gewoon alle
-            # matchende signalen (tot de weergavelimiet), al gesorteerd
-            # op score.
+            # Alleen de STANDOUT-resultaten (score 8+) standaard tonen i.p.v.
+            # simpelweg de top-N -- bij veel wekelijkse matches (soms 50-60+)
+            # werd dit een eindeloze muur kaarten om doorheen te scrollen,
+            # terwijl in de praktijk toch vooral de score-8+-signalen de
+            # moeite waard zijn. Een max-cap (_signal_display_limit) blijft
+            # als vangnet voor het (zeldzame) geval dat er heel veel
+            # standouts in 1 week zijn.
+            standouts = df_screener[df_screener["score"] >= 8.0]
             total_matching = len(df_screener)
-            filtered = df_screener.head(_signal_display_limit)
+            if not standouts.empty:
+                filtered = standouts.head(_signal_display_limit)
+                caption_intro = f"{len(filtered)} standout signal(s) (score 8+) of {total_matching} total matches"
+            else:
+                # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
+                # de sectie helemaal leeg te laten ogen.
+                filtered = df_screener.head(3)
+                caption_intro = f"No score-8+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
 
             # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
             # dat dwingt op mobiel dubbel scrollen af, verticaal EN
@@ -5207,8 +5218,7 @@ def render_discover():
                     standout=row["score"] >= 8.0,
                 ))
             _render_signal_cards(cards_html)
-            st.caption(f"{len(filtered)} of {total_matching} shown, updated {file_last_modified(csv_file)}. "
-                       "⭐ = score 8+, usually the ones worth a closer look.")
+            st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
             if not _is_premium_discover and total_matching > _signal_display_limit:
                 st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                         f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
@@ -5228,7 +5238,18 @@ def render_discover():
             if not df_snowball.empty:
                 df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
                 total_snowball = len(df_snowball)
-                df_snowball = df_snowball.head(_signal_display_limit)
+
+                # Alleen de STANDOUT-resultaten (20%+ onder fair value)
+                # standaard tonen i.p.v. simpelweg de top-N -- zelfde reden
+                # als bij Momentocrats: voorkomt een eindeloze muur kaarten
+                # bij veel wekelijkse matches.
+                snowball_standouts = df_snowball[df_snowball["afwijking_fair_value_pct"] <= -20.0]
+                if not snowball_standouts.empty:
+                    df_snowball = snowball_standouts.head(_signal_display_limit)
+                    snowball_caption_intro = f"{len(df_snowball)} standout(s) (20%+ below fair value) of {total_snowball} total matches"
+                else:
+                    df_snowball = df_snowball.head(3)
+                    snowball_caption_intro = f"No 20%+ standouts right now -- showing the top {len(df_snowball)} of {total_snowball} matches"
 
                 # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
                 # gebruikelijke +/- logica: een NEGATIEVE afwijking van
@@ -5251,8 +5272,7 @@ def render_discover():
                         standout=row["afwijking_fair_value_pct"] <= -20.0,
                     ))
                 _render_signal_cards(cards_html)
-                st.caption(f"{len(df_snowball)} of {total_snowball} shown, updated {file_last_modified('snowball_signals.csv')}. "
-                           f"⭐ = 20%+ below fair value. Next update: {_next_weekly_scan_time()}.")
+                st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
                 if not _is_premium_discover and total_snowball > _signal_display_limit:
                     st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                             f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
@@ -5276,7 +5296,17 @@ def render_discover():
             if not df_rocket.empty:
                 df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
                 total_rocket = len(df_rocket)
-                df_rocket = df_rocket.head(_signal_display_limit)
+
+                # Alleen de STANDOUT-resultaten (25%+ groei) standaard tonen
+                # i.p.v. simpelweg de top-N -- exact het gemelde probleem
+                # (soms 50-60+ matches, een eindeloze muur op mobiel).
+                rocket_standouts = df_rocket[df_rocket["groei_pct"] >= 25.0]
+                if not rocket_standouts.empty:
+                    df_rocket = rocket_standouts.head(_signal_display_limit)
+                    rocket_caption_intro = f"{len(df_rocket)} standout(s) (25%+ growth) of {total_rocket} total matches"
+                else:
+                    df_rocket = df_rocket.head(3)
+                    rocket_caption_intro = f"No 25%+ standouts right now -- showing the top {len(df_rocket)} of {total_rocket} matches"
 
                 # Standout (ster) bij 25%+ groei -- de écht opvallende
                 # versnellers.
@@ -5292,8 +5322,8 @@ def render_discover():
                         standout=row["groei_pct"] >= 25.0,
                     ))
                 _render_signal_cards(cards_html)
-                st.caption(f"{len(df_rocket)} of {total_rocket} shown, updated {file_last_modified('rocket_list_signals.csv')}. "
-                           f"⭐ = 25%+ growth. Next update: {_next_weekly_scan_time()}.")
+                st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
+                           f"Next update: {_next_weekly_scan_time()}.")
                 if not _is_premium_discover and total_rocket > _signal_display_limit:
                     st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
                             f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
