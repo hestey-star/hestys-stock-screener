@@ -750,3 +750,55 @@ def upsert_ticker_market_data(rows: list) -> None:
     for row in rows:
         row_with_timestamp = {**row, "last_updated": datetime.now().isoformat()}
         client.table("ticker_market_data").upsert(row_with_timestamp, on_conflict="ticker").execute()
+
+
+def get_roic_trend_history(tickers: list) -> dict:
+    """
+    Haalt de 'vorige-week'-stand (ROIC-trend + fair-value-bucket) op voor
+    een lijst tickers, in 1 query -- gebruikt door portfolio_watch.py om
+    week-op-week WIJZIGINGEN te detecteren (bv. 'ROIC is deze week voor
+    het eerst gaan dalen'). Vertaalt de tabel-kolomnamen (last_roic_trend/
+    last_fair_value_bucket) naar de kortere sleutelnamen die de aanroeper
+    verwacht (roic_trend/fair_value_bucket).
+
+    HERSTELD: deze functie ging per ongeluk verloren toen database.py
+    werd overschreven tijdens het toevoegen van de marktdata-sync-
+    architectuur -- het geuploade bestand dat als basis diende, bleek een
+    oudere versie te zijn die deze functie nog niet bevatte. Teruggebouwd
+    op basis van hoe portfolio_watch.py de functie daadwerkelijk aanroept,
+    en het bestaande Supabase-tabelschema (roic_trend_history).
+    """
+    if not tickers:
+        return {}
+    client = get_supabase_client()
+    response = client.table("roic_trend_history").select("*").in_("ticker", list(set(tickers))).execute()
+    return {
+        row["ticker"]: {
+            "roic_trend": row.get("last_roic_trend"),
+            "fair_value_bucket": row.get("last_fair_value_bucket"),
+        }
+        for row in (response.data or [])
+    }
+
+
+def save_roic_trend_history(states: dict) -> None:
+    """
+    Slaat de HUIDIGE stand (ROIC-trend + fair-value-bucket) per ticker op
+    -- wordt de 'vorige week'-referentie voor de volgende run van
+    portfolio_watch.py. Vertaalt de kortere sleutelnamen (roic_trend/
+    fair_value_bucket) terug naar de tabel-kolomnamen (last_roic_trend/
+    last_fair_value_bucket).
+
+    HERSTELD -- zie get_roic_trend_history() hierboven voor de volledige
+    toelichting.
+    """
+    if not states:
+        return
+    client = get_supabase_client()
+    for ticker, state in states.items():
+        client.table("roic_trend_history").upsert({
+            "ticker": ticker,
+            "last_roic_trend": state.get("roic_trend"),
+            "last_fair_value_bucket": state.get("fair_value_bucket"),
+            "last_checked_at": datetime.now().isoformat(),
+        }, on_conflict="ticker").execute()
