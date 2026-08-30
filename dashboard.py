@@ -1380,6 +1380,15 @@ def _rotation_gradient_color(return_pct):
 
 ROTATION_ROCKET_THRESHOLD_PCT = 10  # vanaf dit rendement verschijnt het 🚀-icoontje
 
+# Vaste, kleine cap voor HOEVEEL standout-signalen tegelijk getoond worden
+# (Momentocrats/Snowballers/Rocket List) -- LOS van _signal_display_limit,
+# want die laatste is None (= onbeperkt) voor Premium-gebruikers. Zonder
+# deze aparte cap kon een week met bijzonder veel standouts (bv. tijdens
+# een brede marktrally) alsnog tientallen kaarten tonen voor Premium-
+# gebruikers, exact het probleem dat de standout-filtering net had moeten
+# oplossen.
+_STANDOUT_DISPLAY_CAP = 10
+
 
 def _rotation_tile_html(rank, name, return_pct):
     r, g, b = _rotation_gradient_color(return_pct)
@@ -5187,7 +5196,7 @@ def render_discover():
             standouts = df_screener[df_screener["score"] >= 8.0]
             total_matching = len(df_screener)
             if not standouts.empty:
-                filtered = standouts.head(_signal_display_limit)
+                filtered = standouts.head(_STANDOUT_DISPLAY_CAP)
                 caption_intro = f"{len(filtered)} standout signal(s) (score 8+) of {total_matching} total matches"
             else:
                 # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
@@ -5223,7 +5232,6 @@ def render_discover():
                 st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                         f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
-        st.divider()
         _email_pref_link("Want this weekly by email?")
 
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
@@ -5245,7 +5253,7 @@ def render_discover():
                 # bij veel wekelijkse matches.
                 snowball_standouts = df_snowball[df_snowball["afwijking_fair_value_pct"] <= -20.0]
                 if not snowball_standouts.empty:
-                    df_snowball = snowball_standouts.head(_signal_display_limit)
+                    df_snowball = snowball_standouts.head(_STANDOUT_DISPLAY_CAP)
                     snowball_caption_intro = f"{len(df_snowball)} standout(s) (20%+ below fair value) of {total_snowball} total matches"
                 else:
                     df_snowball = df_snowball.head(3)
@@ -5281,7 +5289,6 @@ def render_discover():
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
 
-        st.divider()
         _email_pref_link("Want this weekly by email?")
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
@@ -5302,7 +5309,7 @@ def render_discover():
                 # (soms 50-60+ matches, een eindeloze muur op mobiel).
                 rocket_standouts = df_rocket[df_rocket["groei_pct"] >= 25.0]
                 if not rocket_standouts.empty:
-                    df_rocket = rocket_standouts.head(_signal_display_limit)
+                    df_rocket = rocket_standouts.head(_STANDOUT_DISPLAY_CAP)
                     rocket_caption_intro = f"{len(df_rocket)} standout(s) (25%+ growth) of {total_rocket} total matches"
                 else:
                     df_rocket = df_rocket.head(3)
