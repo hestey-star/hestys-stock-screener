@@ -5232,8 +5232,6 @@ def render_discover():
                 st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                         f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
-        _email_pref_link("Want this weekly by email?")
-
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
         st.markdown(
             _flowing_section_header_html("Snowballers", "savings", is_first=False),
@@ -5288,8 +5286,6 @@ def render_discover():
                 st.caption("No stocks currently meet the Snowballers criteria.")
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
-
-        _email_pref_link("Want this weekly by email?")
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
         st.markdown(
