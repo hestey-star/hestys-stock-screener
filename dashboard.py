@@ -4860,124 +4860,138 @@ def render_discover():
     current_discover_subview = _discover_subview_map[_discover_selected_label]
 
     if current_discover_subview == "sectors_themes":
-        # --- Sector rotation (nieuw) ---
-        with st.expander("Sector rotation", key="sector_rotation_expander", icon=":material/sync:"):
-            st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
-            region = st.segmented_control(
-                "Region", options=["US", "EU"], selection_mode="single",
-                default="US", key="sector_region", label_visibility="collapsed",
+        # --- Sector rotation -- geen expander meer: content staat gewoon
+        # altijd zichtbaar op de pagina (scrollend), zoals moderne sites
+        # dit doen -- een accordion voegde hier geen overzicht toe, het
+        # verstopte 'm juist onnodig achter een klik.
+        st.markdown(
+            f'<div style="display:flex; align-items:center; gap:0.5rem; margin:1.1rem 0 0.3rem 0;">'
+            f'{_icon_span("sync", size_px=18, color="#EAEDF1")}'
+            f'<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Sector rotation</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
+        region = st.segmented_control(
+            "Region", options=["US", "EU"], selection_mode="single",
+            default="US", key="sector_region", label_visibility="collapsed",
+        )
+        if region is None:
+            region = "US"
+        with st.spinner("Checking sector performance..."):
+            rotation = build_sector_rotation(region=region)
+        if rotation:
+            _render_rotation_tiles(rotation, "sector")
+        else:
+            st.caption("No sector data available right now.")
+
+        st.markdown("**Trend**")
+        st.caption("A line crossing zero is a rotation signal.")
+        with st.spinner("Building trend chart..."):
+            rotation_trend = build_sector_rotation_trend(region=region)
+        if rotation_trend:
+            all_trend_sectors = list(rotation_trend.keys())
+            # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
+            # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
+            default_sectors = sorted(
+                all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
+            )[:5]
+            selected_sectors = st.multiselect(
+                "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
             )
-            if region is None:
-                region = "US"
-            with st.spinner("Checking sector performance..."):
-                rotation = build_sector_rotation(region=region)
-            if rotation:
-                _render_rotation_tiles(rotation, "sector")
-            else:
-                st.caption("No sector data available right now.")
-
-            st.markdown("**Trend**")
-            st.caption("A line crossing zero is a rotation signal.")
-            with st.spinner("Building trend chart..."):
-                rotation_trend = build_sector_rotation_trend(region=region)
-            if rotation_trend:
-                all_trend_sectors = list(rotation_trend.keys())
-                # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
-                # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
-                default_sectors = sorted(
-                    all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
-                )[:5]
-                selected_sectors = st.multiselect(
-                    "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
+            if selected_sectors:
+                trend_fig = go.Figure()
+                trend_palette = [
+                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                ]
+                for i, sector in enumerate(selected_sectors):
+                    series = rotation_trend[sector]
+                    trend_fig.add_trace(go.Scatter(
+                        x=series["dates"], y=series["values"], mode="lines", name=sector,
+                        line=dict(color=trend_palette[i % len(trend_palette)], width=2),
+                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
+                    ))
+                trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                trend_fig.update_layout(
+                    yaxis_title="Trailing 1-month return (%)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=420,
+                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
                 )
-                if selected_sectors:
-                    trend_fig = go.Figure()
-                    trend_palette = [
-                        "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                        "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
-                    ]
-                    for i, sector in enumerate(selected_sectors):
-                        series = rotation_trend[sector]
-                        trend_fig.add_trace(go.Scatter(
-                            x=series["dates"], y=series["values"], mode="lines", name=sector,
-                            line=dict(color=trend_palette[i % len(trend_palette)], width=2),
-                            hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
-                        ))
-                    trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                    trend_fig.update_layout(
-                        yaxis_title="Trailing 1-month return (%)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                        legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        height=420,
-                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    )
-                    st.plotly_chart(trend_fig, width="stretch")
-                else:
-                    st.caption("Select at least 1 sector above to see the trend chart.")
+                st.plotly_chart(trend_fig, width="stretch")
             else:
-                st.caption("No trend data available right now.")
+                st.caption("Select at least 1 sector above to see the trend chart.")
+        else:
+            st.caption("No trend data available right now.")
 
-        # --- Themes (nieuw) -- populaire cross-sector trends, apart van de officiële
-        # GICS-sectoren gehouden (anders zou een bedrijf dubbel meetellen) ---
-        with st.expander("Themes", key="themes_expander", icon=":material/lightbulb:"):
-            st.caption("How popular investing themes are doing right now (1-month trailing).")
-            with st.spinner("Checking theme performance..."):
-                theme_rotation = build_theme_rotation()
-            if theme_rotation:
-                _render_rotation_tiles(theme_rotation, "theme")
-            else:
-                st.caption("No theme data available right now.")
+        # --- Themes -- geen expander meer, zelfde reden als Sector rotation
+        # hierboven. Apart van de officiële GICS-sectoren gehouden (anders
+        # zou een bedrijf dubbel meetellen). ---
+        st.markdown(
+            f'<div style="display:flex; align-items:center; gap:0.5rem; margin:1.6rem 0 0.3rem 0;">'
+            f'{_icon_span("lightbulb", size_px=18, color="#EAEDF1")}'
+            f'<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Themes</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("How popular investing themes are doing right now (1-month trailing).")
+        with st.spinner("Checking theme performance..."):
+            theme_rotation = build_theme_rotation()
+        if theme_rotation:
+            _render_rotation_tiles(theme_rotation, "theme")
+        else:
+            st.caption("No theme data available right now.")
 
-            st.markdown("**Trend**")
-            st.caption("A line crossing zero is a rotation signal.")
-            with st.spinner("Building trend chart..."):
-                theme_trend = build_theme_rotation_trend()
-            if theme_trend:
-                all_trend_themes = list(theme_trend.keys())
-                # Nu er 11 thema's zijn (was 5), standaard de top-5 op basis
-                # van het HUIDIGE (laatste) rendement tonen -- zelfde aanpak
-                # als bij Sectors, voorkomt dat de grafiek meteen met 11
-                # lijnen chaotisch oogt.
-                default_themes = sorted(
-                    all_trend_themes, key=lambda t: theme_trend[t]["values"][-1], reverse=True
-                )[:5]
-                selected_themes = st.multiselect(
-                    "Themes to compare", all_trend_themes, default=default_themes, key="theme_trend_selection",
+        st.markdown("**Trend**")
+        st.caption("A line crossing zero is a rotation signal.")
+        with st.spinner("Building trend chart..."):
+            theme_trend = build_theme_rotation_trend()
+        if theme_trend:
+            all_trend_themes = list(theme_trend.keys())
+            # Nu er 11 thema's zijn (was 5), standaard de top-5 op basis
+            # van het HUIDIGE (laatste) rendement tonen -- zelfde aanpak
+            # als bij Sectors, voorkomt dat de grafiek meteen met 11
+            # lijnen chaotisch oogt.
+            default_themes = sorted(
+                all_trend_themes, key=lambda t: theme_trend[t]["values"][-1], reverse=True
+            )[:5]
+            selected_themes = st.multiselect(
+                "Themes to compare", all_trend_themes, default=default_themes, key="theme_trend_selection",
+            )
+            if selected_themes:
+                theme_fig = go.Figure()
+                theme_palette = [
+                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+                ]
+                for i, theme in enumerate(selected_themes):
+                    series = theme_trend[theme]
+                    theme_fig.add_trace(go.Scatter(
+                        x=series["dates"], y=series["values"], mode="lines", name=theme,
+                        line=dict(color=theme_palette[i % len(theme_palette)], width=2),
+                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + theme + "</extra>",
+                    ))
+                theme_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+                theme_fig.update_layout(
+                    yaxis_title="Trailing 1-month return (%)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=420,
+                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
                 )
-                if selected_themes:
-                    theme_fig = go.Figure()
-                    theme_palette = [
-                        "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                        "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
-                    ]
-                    for i, theme in enumerate(selected_themes):
-                        series = theme_trend[theme]
-                        theme_fig.add_trace(go.Scatter(
-                            x=series["dates"], y=series["values"], mode="lines", name=theme,
-                            line=dict(color=theme_palette[i % len(theme_palette)], width=2),
-                            hovertemplate="%{x}: %{y:+.1f}%<extra>" + theme + "</extra>",
-                        ))
-                    theme_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                    theme_fig.update_layout(
-                        yaxis_title="Trailing 1-month return (%)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                        legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        height=420,
-                        xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                        yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    )
-                    st.plotly_chart(theme_fig, width="stretch")
-                else:
-                    st.caption("Select at least 1 theme above to see the trend chart.")
+                st.plotly_chart(theme_fig, width="stretch")
             else:
-                st.caption("No trend data available right now.")
+                st.caption("Select at least 1 theme above to see the trend chart.")
+        else:
+            st.caption("No trend data available right now.")
 
     elif current_discover_subview == "earnings_surprises":
         with st.expander("Earnings surprises", key="earnings_surprises_expander", icon=":material/payments:"):
