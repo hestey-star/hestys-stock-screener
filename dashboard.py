@@ -2769,13 +2769,30 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     """
     Parseert een DEGIRO 'Transacties'-export (CSV). Groepeert per ISIN (of
     productnaam als er geen ISIN is, zoals bij crypto) en geeft per groep de
-    losse buy/sell-transacties terug, al omgerekend naar EUR-prijs + EUR-fee.
+    losse buy/sell-transacties terug.
 
     Bewuste keuzes:
-    - Prijs en fee worden ALTIJD in EUR berekend (uit 'Waarde EUR' en
-      'Totaal EUR'), niet uit de kolom 'Koers' zelf (die staat vaak in de
-      lokale valuta, bv. USD) -- zo blijft alles consistent met de rest
-      van de site.
+    - Prijs komt nu uit de kolom 'Koers' zelf (de EXACTE, native prijs in
+      de lokale valuta, bv. USD voor een Amerikaans aandeel) i.p.v. de
+      voorheen gebruikte 'Waarde EUR' -- die laatste gaf bij het later
+      terugrekenen naar de native valuta een kleine, onnauwkeurige
+      afwijking (DEGIRO's EUR-waarde gebruikt de wisselkoers VAN TOEN,
+      terwijl een latere terugrekening de wisselkoers VAN NU gebruikt --
+      2 verschillende momenten, dus nooit exact gelijk). 'Koers' zelf
+      heeft dat probleem niet, want daar wordt helemaal niet mee
+      omgerekend. De daadwerkelijke valuta van 'Koers' wordt pas later
+      bepaald (in de import-loop, waar de ticker bekend is, via
+      get_cached_ticker_currency) -- op het moment van parsen is de
+      ticker nog niet gematcht.
+    - Fee blijft voorlopig in EUR (fee_eur) -- DEGIRO's transactiekosten
+      worden altijd in EUR in rekening gebracht, ongeacht de valuta van
+      het aandeel zelf -- wordt in de import-loop omgerekend naar
+      dezelfde native valuta als de prijs, zodat beide velden consistent
+      in 1 valuta staan.
+    - Als 'Koers' een keer ontbreekt (zeldzaam) valt de prijs terug op de
+      oude, EUR-gebaseerde berekening, met is_native=False als signaal
+      voor de import-loop om dan GEEN aparte valuta-conversie meer te
+      doen (de prijs staat dan al in EUR, punt).
     - Sommige crypto-rijen missen 'Aantal' in de export zelf -- die
       leiden we af uit lokale waarde / koers.
     - Rijen die zelfs dan niet te verwerken zijn (bv. een lege regel)
@@ -2830,8 +2847,18 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
             skipped_rows.append((idx, f"{product}: missing or zero value fields"))
             continue
 
-        price_eur = abs(waarde_eur) / abs(aantal)
         fee_eur = abs(totaal_eur - waarde_eur)
+
+        if koers not in (None, 0):
+            # De exacte, native prijs -- geen wisselkoers-afronding, want
+            # geen conversie nodig.
+            price = abs(koers)
+            price_is_native = True
+        else:
+            # Zeldzame terugval: geen 'Koers' beschikbaar -- de oude,
+            # EUR-gebaseerde berekening, met is_native=False als signaal.
+            price = abs(waarde_eur) / abs(aantal)
+            price_is_native = False
 
         try:
             parsed_date = pd.to_datetime(datum, format="%d-%m-%Y").date().isoformat()
@@ -2850,10 +2877,10 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
         grouped[key]["transactions"].append({
             "transaction_type": "buy" if aantal > 0 else "sell",
             "shares": round(abs(aantal), 6),
-            "price": round(price_eur, 4),
-            "fee": round(fee_eur, 2),
+            "price": round(price, 4),
+            "price_is_native": price_is_native,
+            "fee_eur": round(fee_eur, 2),
             "transaction_date": parsed_date,
-            "currency": "EUR",
         })
 
     return {"grouped": grouped, "skipped_rows": skipped_rows}
@@ -4776,7 +4803,10 @@ def render_portfolio():
                                     backfill_currency = get_cached_ticker_currency(ticker)
                                 except Exception:
                                     backfill_price = group["transactions"][0]["price"]
-                                    backfill_currency = group["transactions"][0]["currency"]
+                                    backfill_currency = (
+                                        get_cached_ticker_currency(ticker)
+                                        if group["transactions"][0]["price_is_native"] else "EUR"
+                                    )
                                 database.add_transaction(
                                     user_email, holding_id, "buy",
                                     shares=existing_manual_shares, price=backfill_price, fee=0.0,
@@ -4800,15 +4830,34 @@ def render_portfolio():
                                 for existing in existing_list
                             )
 
+                        # De native valuta van deze ticker 1x bepalen (buiten
+                        # de loop) -- de fee (altijd EUR, DEGIRO-kosten staan
+                        # nooit in de valuta van het aandeel zelf) rekenen we
+                        # om naar dezelfde valuta als de prijs, zodat beide
+                        # velden consistent zijn.
+                        import_native_currency = get_cached_ticker_currency(ticker)
+                        import_fee_fx_rate = None  # lazy: alleen ophalen als er ook echt EUR-fees zijn om te converteren
+
                         skipped_duplicates = 0
                         for t in group["transactions"]:
                             if _is_duplicate(t, already_logged):
                                 skipped_duplicates += 1
                                 continue
+                            if t["price_is_native"] and import_native_currency and import_native_currency != "EUR":
+                                if import_fee_fx_rate is None:
+                                    import_fee_fx_rate = get_fx_rate("EUR", import_native_currency) or 1.0
+                                t_fee = t["fee_eur"] * import_fee_fx_rate
+                                t_currency = import_native_currency
+                            else:
+                                # Prijs is al EUR (geen 'Koers' beschikbaar in
+                                # de export, zeldzame terugval) -- fee blijft
+                                # ook gewoon in EUR, geen conversie nodig.
+                                t_fee = t["fee_eur"]
+                                t_currency = "EUR"
                             database.add_transaction(
                                 user_email, holding_id, t["transaction_type"],
-                                shares=t["shares"], price=t["price"], fee=t["fee"],
-                                transaction_date=t["transaction_date"], currency=t["currency"],
+                                shares=t["shares"], price=t["price"], fee=t_fee,
+                                transaction_date=t["transaction_date"], currency=t_currency,
                             )
                             imported_transactions += 1
 
