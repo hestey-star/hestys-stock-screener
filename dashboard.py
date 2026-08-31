@@ -2853,6 +2853,7 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
             "price": round(price_eur, 4),
             "fee": round(fee_eur, 2),
             "transaction_date": parsed_date,
+            "currency": "EUR",
         })
 
     return {"grouped": grouped, "skipped_rows": skipped_rows}
@@ -3239,6 +3240,40 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
         # checks hierboven, maar voorkomt sowieso ooit weer een '+nan%'.
         return None
     return {"return_pct": return_pct, "gain": gain}
+
+
+def _convert_transactions_to_currency(transactions: list, target_currency: str) -> list:
+    """
+    Rekent elke transactie's prijs+fee om naar 'target_currency', aan de
+    hand van de per-transactie opgeslagen 'currency' (het nieuwe,
+    expliciete veld -- lost de structurele bug op waarbij de app moest
+    GOKKEN in welke valuta een transactieprijs stond: CSV-import slaat
+    altijd EUR op, handmatige invoer kon in principe elke valuta zijn,
+    en het mengen daarvan gaf compleet verkeerde rendementen).
+
+    Ontbreekt het 'currency'-veld nog (oudere transacties, van vóór deze
+    fix)? Dan wordt 'EUR' aangenomen -- consistent met hoe ze feitelijk
+    altijd zijn ingevoerd (CSV-import was al EUR-only, en het formulier
+    toonde tot nu toe overal een hardcoded €-teken).
+    """
+    if not transactions:
+        return transactions
+    fx_cache = {}
+    converted = []
+    for t in transactions:
+        tx_currency = t.get("currency") or "EUR"
+        if tx_currency == target_currency:
+            converted.append(t)
+            continue
+        if tx_currency not in fx_cache:
+            fx_cache[tx_currency] = get_fx_rate(tx_currency, target_currency)
+        fx_rate = fx_cache[tx_currency] or 1.0  # FX-conversie mislukt -- liever ongeconverteerd dan de transactie verliezen
+        converted.append({
+            **t,
+            "price": t["price"] * fx_rate,
+            "fee": t.get("fee", 0.0) * fx_rate,
+        })
+    return converted
 
 
 def compute_holding_performance(transactions: list, current_price: float = None) -> dict:
@@ -4331,20 +4366,18 @@ def render_portfolio():
                 all_time_display_price = current_price_num
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
-                    # Transacties worden gelogd in de NATIVE valuta van de
-                    # ticker (zoals een broker-overzicht dat toont -- EUR
-                    # voor een .AS-aandeel, USD voor een USD-genoteerde
-                    # crypto), dus current_price_num (ongeconverteerd,
-                    # rechtstreeks uit market_data) is de juiste prijs om
-                    # de gemiddelde kostprijs tegen te vergelijken. PAS
-                    # NA de berekening rekenen we het resultaat om naar de
-                    # valuta waarin deze rij nu getoond wordt
-                    # (value_currency) -- als die verschilt van de native
-                    # valuta (bv. na een 'Update portfolio value' in een
-                    # andere weergave-valuta).
-                    perf = compute_holding_performance(tx, current_price_num) if tx else None
+                    native_currency = get_cached_ticker_currency(h["ticker"])
+                    # Elke transactie kan z'n EIGEN valuta hebben (CSV-import
+                    # is altijd EUR, handmatige invoer kan elke valuta zijn,
+                    # zoals de gebruiker die koos in het formulier) -- eerst
+                    # ALLES omrekenen naar de native ticker-valuta (consistent
+                    # met current_price_num, ongeconverteerd rechtstreeks uit
+                    # market_data), zodat compute_holding_performance appels
+                    # met appels vergelijkt, ongeacht hoe elke individuele
+                    # transactie ooit is ingevoerd.
+                    tx_native = _convert_transactions_to_currency(tx, native_currency) if native_currency else tx
+                    perf = compute_holding_performance(tx_native, current_price_num) if tx_native else None
                     if perf:
-                        native_currency = get_cached_ticker_currency(h["ticker"])
                         row_currency = h.get("value_currency")
                         if native_currency and row_currency and native_currency != row_currency:
                             fx_rate = get_fx_rate(native_currency, row_currency)
@@ -4402,20 +4435,24 @@ def render_portfolio():
                         transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
                         detail_currency_symbol = "€" if selected_holding.get("value_currency") == "EUR" else "$"
                         if transactions:
-                            # Zelfde fix als de overzicht-rijen: transacties
-                            # worden gelogd in de NATIVE valuta van de ticker,
-                            # dus de PNL-berekening zelf moet OOK die native
-                            # prijs gebruiken (niet position_value/shares, die
-                            # in de weergave-valuta staat en kan afwijken na
-                            # een FX-conversie). Het resultaat rekenen we PAS
-                            # daarna om voor weergave.
+                            # Zelfde fix als de overzicht-rijen: elke transactie
+                            # kan z'n EIGEN valuta hebben (CSV-import is altijd
+                            # EUR, handmatige invoer kan elke valuta zijn) --
+                            # eerst omrekenen naar de native ticker-valuta
+                            # (consistent met detail_native_price hieronder),
+                            # dan pas de berekening doen, en het RESULTAAT
+                            # omrekenen voor weergave.
                             detail_market_row = market_data.get(selected_holding["ticker"], {})
                             detail_native_price = detail_market_row.get("current_price")
                             if detail_native_price is None and selected_holding.get("shares"):
                                 detail_native_price = (selected_holding.get("position_value") or 0) / selected_holding["shares"]
-                            perf = compute_holding_performance(transactions, current_price=detail_native_price)
+                            detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
+                            transactions_native = (
+                                _convert_transactions_to_currency(transactions, detail_native_currency)
+                                if detail_native_currency else transactions
+                            )
+                            perf = compute_holding_performance(transactions_native, current_price=detail_native_price)
                             if perf:
-                                detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
                                 detail_row_currency = selected_holding.get("value_currency")
                                 if detail_native_currency and detail_row_currency and detail_native_currency != detail_row_currency:
                                     detail_fx_rate = get_fx_rate(detail_native_currency, detail_row_currency)
@@ -4481,13 +4518,23 @@ def render_portfolio():
                                 type_color = "#1FAE96" if is_buy else "#E5484D"
                                 type_icon = "add_circle" if is_buy else "remove_circle"
                                 type_label = "Buy" if is_buy else "Sell"
+                                # Het symbool per transactie is gebaseerd op DIE
+                                # transactie's eigen, opgeslagen currency (niet
+                                # het algemene detail_currency_symbol) -- een
+                                # transactie kan in een andere valuta zijn
+                                # ingevoerd dan de holding's huidige weergave-
+                                # valuta, en de RUWE prijs hier getoond wordt
+                                # zoals ze daadwerkelijk is ingevoerd (geen
+                                # conversie, gewoon het juiste label).
+                                tx_own_currency = t.get("currency") or "EUR"
+                                tx_own_symbol = "€" if tx_own_currency == "EUR" else ("$" if tx_own_currency == "USD" else tx_own_currency + " ")
                                 tx_rows_html.append(
                                     f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; '
                                     f'padding:0.5rem 0.15rem; border-bottom:1px solid rgba(137,146,163,0.12);">'
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
                                     f'{_icon_span(type_icon, size_px=16, color=type_color)}'
                                     f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem;">{type_label}</span>'
-                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ {detail_currency_symbol}{t["price"]:,.2f}</span>'
+                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
                                     f'</div>'
                                     f'<span style="color:#8992A3; font-size:0.78rem; white-space:nowrap; flex-shrink:0;">{t["transaction_date"]}</span>'
                                     f'</div>'
@@ -4726,12 +4773,15 @@ def render_portfolio():
                                 # handmatige shares vastleggen tegen de huidige prijs, vandaag.
                                 try:
                                     backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+                                    backfill_currency = get_cached_ticker_currency(ticker)
                                 except Exception:
                                     backfill_price = group["transactions"][0]["price"]
+                                    backfill_currency = group["transactions"][0]["currency"]
                                 database.add_transaction(
                                     user_email, holding_id, "buy",
                                     shares=existing_manual_shares, price=backfill_price, fee=0.0,
                                     transaction_date=datetime.now().date().isoformat(),
+                                    currency=backfill_currency,
                                 )
                         else:
                             holding_id = database.add_holding(
@@ -4758,7 +4808,7 @@ def render_portfolio():
                             database.add_transaction(
                                 user_email, holding_id, t["transaction_type"],
                                 shares=t["shares"], price=t["price"], fee=t["fee"],
-                                transaction_date=t["transaction_date"],
+                                transaction_date=t["transaction_date"], currency=t["currency"],
                             )
                             imported_transactions += 1
 
@@ -4856,6 +4906,27 @@ def render_portfolio():
             with trow2_col2:
                 tx_date = st.date_input("Date", key="tx_date_input")
 
+            # Valuta expliciet vragen i.p.v. altijd EUR aan te nemen --
+            # was voorheen de bron van een echte, verwarrende bug: een
+            # Amerikaans aandeel gekocht in USD werd stilzwijgend als EUR
+            # behandeld, wat het rendement volledig verkeerd berekende.
+            # Slimme default: de native valuta van de gekozen ticker (zoals
+            # je die op je broker-overzicht zou zien), maar altijd
+            # aanpasbaar -- voor het geval je toch de EUR-equivalente
+            # prijs invoert (bv. van een DEGIRO-overzicht).
+            tx_ticker_for_currency = tx_holding["ticker"] if tx_holding else new_position_symbol
+            tx_default_currency = (
+                get_cached_ticker_currency(tx_ticker_for_currency) if tx_ticker_for_currency else "EUR"
+            )
+            tx_currency_options = ["EUR", "USD", "GBP", "CAD", "CHF", "SEK", "DKK", "NOK", "HKD", "JPY", "AUD"]
+            tx_currency_default_index = (
+                tx_currency_options.index(tx_default_currency) if tx_default_currency in tx_currency_options else 0
+            )
+            tx_currency = st.selectbox(
+                "Price currency", tx_currency_options, index=tx_currency_default_index, key="tx_currency_input",
+                help="The currency the price above is in -- usually the ticker's native trading currency.",
+            )
+
             can_save = (tx_holding is not None) or (new_position_symbol is not None)
 
             if can_save and st.button("Save transaction", type="primary"):
@@ -4873,7 +4944,7 @@ def render_portfolio():
                             database.add_transaction(
                                 user_email, new_id, "buy",
                                 shares=tx_shares, price=tx_price, fee=tx_fee,
-                                transaction_date=tx_date.isoformat(),
+                                transaction_date=tx_date.isoformat(), currency=tx_currency,
                             )
                             sync_holding_shares_from_transactions(new_id, user_email)
                             st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
@@ -4889,22 +4960,25 @@ def render_portfolio():
                             # historische aankoopprijs nog weet).
                             try:
                                 backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
+                                backfill_currency = get_cached_ticker_currency(tx_holding["ticker"])
                             except Exception:
                                 backfill_price = tx_price  # fallback als de live prijs niet op te halen is
+                                backfill_currency = tx_currency
                             database.add_transaction(
                                 user_email, tx_holding["id"], "buy",
                                 shares=existing_manual_shares, price=backfill_price, fee=0.0,
-                                transaction_date=datetime.now().date().isoformat(),
+                                transaction_date=datetime.now().date().isoformat(), currency=backfill_currency,
                             )
                             existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
+                            backfill_symbol = "€" if backfill_currency == "EUR" else ("$" if backfill_currency == "USD" else backfill_currency + " ")
                             st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
-                                    f"bought at today's price (€{backfill_price:.2f}) -- edit this later if "
+                                    f"bought at today's price ({backfill_symbol}{backfill_price:.2f}) -- edit this later if "
                                     f"you remember the actual original purchase price.")
 
                         database.add_transaction(
                             user_email, tx_holding["id"], "buy" if is_buy else "sell",
                             shares=tx_shares, price=tx_price, fee=tx_fee,
-                            transaction_date=tx_date.isoformat(),
+                            transaction_date=tx_date.isoformat(), currency=tx_currency,
                         )
                         shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
 

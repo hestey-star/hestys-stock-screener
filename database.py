@@ -110,10 +110,17 @@ def update_holding_shares(holding_id: int, user_email: str, shares: float) -> No
 def add_transaction(
     user_email: str, holding_id: int, transaction_type: str,
     shares: float, price: float, fee: float, transaction_date: str,
+    currency: str = "EUR",
 ) -> None:
     """
     Logt 1 buy/sell-transactie voor een positie. Filtert ALTIJD op
     user_email (zie de module-docstring voor waarom dit hier gebeurt).
+
+    'currency' -- expliciet opgeslagen i.p.v. te gokken (was voorheen
+    altijd impliciet EUR aangenomen, wat fout ging zodra iemand een
+    transactie in een andere native valuta logde, bv. USD voor een
+    Amerikaans aandeel) -- default 'EUR' voor bestaande aanroepers die
+    dit nog niet expliciet meegeven.
     """
     client = get_supabase_client()
     client.table("portfolio_transactions").insert({
@@ -124,6 +131,7 @@ def add_transaction(
         "price": price,
         "fee": fee,
         "transaction_date": transaction_date,
+        "currency": currency,
     }).execute()
 
 
