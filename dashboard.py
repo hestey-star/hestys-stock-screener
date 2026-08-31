@@ -4328,25 +4328,39 @@ def render_portfolio():
                 avg_cost = None
                 all_time_pct = None
                 all_time_pnl = None
+                all_time_display_price = current_price_num
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
-                    # BELANGRIJK: hier BEWUST pos_value/shares gebruiken i.p.v.
-                    # current_price_num (die uit market_data komt, in de
-                    # NATIVE valuta van de ticker zelf -- bv. altijd USD voor
-                    # SOL-USD). Gelogde transactieprijzen staan in de valuta
-                    # van de holding op het moment van loggen (value_currency),
-                    # dus het mengen met een ongerelateerde native-ticker-
-                    # valuta gaf een zinloos PNL-getal, dat toevallig ook nog
-                    # met het VERKEERDE valutasymbool werd getoond. pos_value/
-                    # shares geeft een prijs in DEZELFDE valuta als de
-                    # transacties, consistent met hoe position-details dit ook
-                    # al deed.
-                    all_time_current_price = pos_value / shares if (pos_value and shares) else current_price_num
-                    perf = compute_holding_performance(tx, all_time_current_price) if tx else None
+                    # Transacties worden gelogd in de NATIVE valuta van de
+                    # ticker (zoals een broker-overzicht dat toont -- EUR
+                    # voor een .AS-aandeel, USD voor een USD-genoteerde
+                    # crypto), dus current_price_num (ongeconverteerd,
+                    # rechtstreeks uit market_data) is de juiste prijs om
+                    # de gemiddelde kostprijs tegen te vergelijken. PAS
+                    # NA de berekening rekenen we het resultaat om naar de
+                    # valuta waarin deze rij nu getoond wordt
+                    # (value_currency) -- als die verschilt van de native
+                    # valuta (bv. na een 'Update portfolio value' in een
+                    # andere weergave-valuta).
+                    perf = compute_holding_performance(tx, current_price_num) if tx else None
                     if perf:
-                        avg_cost = perf["avg_cost_per_share"]
-                        all_time_pct = perf["total_return_pct"]
-                        all_time_pnl = perf["total_pnl"]
+                        native_currency = get_cached_ticker_currency(h["ticker"])
+                        row_currency = h.get("value_currency")
+                        if native_currency and row_currency and native_currency != row_currency:
+                            fx_rate = get_fx_rate(native_currency, row_currency)
+                        else:
+                            fx_rate = 1.0
+                        if not fx_rate:
+                            fx_rate = 1.0  # FX-conversie mislukt -- toon liever de ongeconverteerde waarde dan niks
+                        avg_cost = perf["avg_cost_per_share"] * fx_rate
+                        all_time_pnl = perf["total_pnl"] * fx_rate
+                        all_time_pct = perf["total_return_pct"]  # verhouding, valuta-onafhankelijk
+                        # De 'huidige prijs' in de avg_cost -> current_price-
+                        # pijl moet in DEZELFDE (nu omgerekende) valuta staan
+                        # als avg_cost zelf, anders vergelijk je appels met
+                        # peren in de weergave.
+                        if current_price_num is not None:
+                            all_time_display_price = current_price_num * fx_rate
 
                 position_rows_data.append({
                     "pct": _pct_of_portfolio(h),
@@ -4356,7 +4370,7 @@ def render_portfolio():
                         currency_symbol="€" if h.get("value_currency") == "EUR" else "$",
                         logo_url=get_company_logo_url(h["ticker"], h.get("naam")),
                         day_change_pct=day_change_pct, day_change_value=day_change_value,
-                        current_price=current_price_num, avg_cost=avg_cost,
+                        current_price=all_time_display_price, avg_cost=avg_cost,
                         all_time_pct=all_time_pct, all_time_pnl=all_time_pnl,
                     ),
                 })
@@ -4388,23 +4402,58 @@ def render_portfolio():
                         transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
                         detail_currency_symbol = "€" if selected_holding.get("value_currency") == "EUR" else "$"
                         if transactions:
-                            perf = compute_holding_performance(
-                                transactions,
-                                current_price=(selected_holding.get("position_value") or 0) / selected_holding["shares"]
-                                if selected_holding.get("shares") else None,
-                            )
+                            # Zelfde fix als de overzicht-rijen: transacties
+                            # worden gelogd in de NATIVE valuta van de ticker,
+                            # dus de PNL-berekening zelf moet OOK die native
+                            # prijs gebruiken (niet position_value/shares, die
+                            # in de weergave-valuta staat en kan afwijken na
+                            # een FX-conversie). Het resultaat rekenen we PAS
+                            # daarna om voor weergave.
+                            detail_market_row = market_data.get(selected_holding["ticker"], {})
+                            detail_native_price = detail_market_row.get("current_price")
+                            if detail_native_price is None and selected_holding.get("shares"):
+                                detail_native_price = (selected_holding.get("position_value") or 0) / selected_holding["shares"]
+                            perf = compute_holding_performance(transactions, current_price=detail_native_price)
+                            if perf:
+                                detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
+                                detail_row_currency = selected_holding.get("value_currency")
+                                if detail_native_currency and detail_row_currency and detail_native_currency != detail_row_currency:
+                                    detail_fx_rate = get_fx_rate(detail_native_currency, detail_row_currency)
+                                else:
+                                    detail_fx_rate = 1.0
+                                if not detail_fx_rate:
+                                    detail_fx_rate = 1.0
+                                perf["total_pnl"] = perf["total_pnl"] * detail_fx_rate
+                                perf["avg_cost_per_share"] = perf["avg_cost_per_share"] * detail_fx_rate
+                                # total_return_pct is een verhouding, valuta-onafhankelijk -- geen conversie nodig
                             if perf and perf.get("total_return_pct") is not None:
                                 pct = perf["total_return_pct"]
                                 return_color = "#1FAE96" if pct >= 0 else "#E5484D"
                                 return_icon = "trending_up" if pct >= 0 else "trending_down"
                                 st.markdown(
-                                    f'<div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.5rem;">'
+                                    f'<div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.2rem;" '
+                                    f'title="Total return includes both your current holdings (vs. avg. cost) and any past sells -- '
+                                    f'a loss on an earlier sale still counts, even if the current price is above your average cost.">'
                                     f'{_icon_span(return_icon, size_px=18, color=return_color)}'
-                                    f'<span style="font-weight:700; color:{return_color};">Return: {pct:+.1f}%</span>'
+                                    f'<span style="font-weight:700; color:{return_color};">Total return: {pct:+.1f}%</span>'
                                     f'<span style="color:#8992A3;">({detail_currency_symbol}{perf["total_pnl"]:+,.2f})</span>'
                                     f'</div>',
                                     unsafe_allow_html=True,
                                 )
+                                # Expliciet tonen WANNEER er daadwerkelijk gerealiseerde
+                                # winst/verlies meetelt -- dit is precies wat een
+                                # 'avg. cost lager dan huidige prijs, toch negatief
+                                # totaalrendement'-situatie verklaart, i.p.v. dat de
+                                # gebruiker alleen op de tooltip moet vertrouwen.
+                                if perf.get("realized_pnl") and abs(perf["realized_pnl"]) >= 0.01:
+                                    realized_color = "#1FAE96" if perf["realized_pnl"] >= 0 else "#E5484D"
+                                    st.markdown(
+                                        f'<div style="font-size:0.78rem; color:#8992A3; margin-bottom:0.5rem;">'
+                                        f'Includes <span style="color:{realized_color}; font-weight:600;">'
+                                        f'{detail_currency_symbol}{perf["realized_pnl"]:+,.2f}</span> realized from earlier sells'
+                                        f'</div>',
+                                        unsafe_allow_html=True,
+                                    )
                             sorted_transactions = sorted(transactions, key=lambda t: t["transaction_date"], reverse=True)
 
                             DEFAULT_TRANSACTIONS_SHOWN = 5
