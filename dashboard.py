@@ -4513,16 +4513,19 @@ def render_portfolio():
                 all_time_display_price = current_price_display
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
-                    # De valuta AFLEIDEN uit de daadwerkelijke transacties
-                    # (nu betrouwbaar, dankzij de CSV-fix) i.p.v. te GOKKEN
-                    # op basis van het ticker-achtervoegsel -- die gok bleek
-                    # fout voor aandelen die ondanks hun beurs-notering in
-                    # een andere valuta handelen (bv. USA.TO, .TO-genoteerd
-                    # maar USD-verhandeld). Alleen hier gedaan (niet ook voor
-                    # Daily), want de transacties worden hier sowieso al
-                    # opgehaald voor de berekening zelf -- geen extra
-                    # database-aanroep nodig t.o.v. de vorige situatie.
-                    native_currency = _infer_currency_from_transactions(tx, fallback=get_cached_ticker_currency(h["ticker"]))
+                    # BELANGRIJK, gecorrigeerd inzicht: het conversie-DOELWIT
+                    # moet de valuta van de LIVE MARKTPRIJS zijn (current_
+                    # price_num, uit market_data) -- get_cached_ticker_currency
+                    # geeft die correct (bevestigd: matcht wat Daily-modus al
+                    # goed toont). De transactie's EIGEN valuta (nu correct
+                    # dankzij de CSV-fix, kan legitiem AFWIJKEN van de markt-
+                    # notering -- bv. USA.TO: marktprijs in CAD (Toronto-
+                    # notering), maar DEGIRO voerde de koop uit in USD) wordt
+                    # binnen _convert_transactions_to_currency zelf gebruikt
+                    # om ELKE transactie correct naar dit doelwit om te
+                    # rekenen -- ongeacht in welke valuta ze oorspronkelijk
+                    # stonden.
+                    native_currency = get_cached_ticker_currency(h["ticker"])
                     # Elke transactie kan z'n EIGEN valuta hebben (CSV-import
                     # is altijd EUR, handmatige invoer kan elke valuta zijn,
                     # zoals de gebruiker die koos in het formulier) -- eerst
@@ -4603,9 +4606,7 @@ def render_portfolio():
                             detail_native_price = detail_market_row.get("current_price")
                             if detail_native_price is None and selected_holding.get("shares"):
                                 detail_native_price = (selected_holding.get("position_value") or 0) / selected_holding["shares"]
-                            detail_native_currency = _infer_currency_from_transactions(
-                                transactions, fallback=get_cached_ticker_currency(selected_holding["ticker"])
-                            )
+                            detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
                             transactions_native = (
                                 _convert_transactions_to_currency(transactions, detail_native_currency)
                                 if detail_native_currency else transactions
