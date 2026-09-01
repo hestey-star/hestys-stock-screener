@@ -4359,6 +4359,27 @@ def render_portfolio():
                     # database, i.p.v. helemaal geen koers te tonen.
                     current_price_num = pos_value / shares
 
+                # GEVONDEN BUG (Daily-modus): de 'Price'-kolom in Daily-modus
+                # gebruikte current_price_num (native ticker-valuta, bv.
+                # altijd EUR voor ADYEN.AS) RECHTSTREEKS, met het symbool
+                # gebaseerd op value_currency (bv. USD als de gebruiker USD
+                # als weergave koos) -- ZONDER ooit om te rekenen. Resultaat:
+                # het getoonde GETAL bleef de EUR-prijs, alleen het SYMBOOL
+                # werd (fout) $ -- exact wat er gemeld werd voor ADYEN. Dit
+                # was eerder al gefixt voor All-time (all_time_display_price)
+                # maar niet voor Daily -- nu ook hier consistent gemaakt.
+                # current_price_num zelf blijft ONGEWIJZIGD (native), want de
+                # All-time-berekening verderop heeft de ONgeconverteerde
+                # waarde nodig als basis voor compute_holding_performance.
+                current_price_display = current_price_num
+                if current_price_num is not None:
+                    display_native_currency = get_cached_ticker_currency(h["ticker"])
+                    display_row_currency = h.get("value_currency")
+                    if display_native_currency and display_row_currency and display_native_currency != display_row_currency:
+                        display_fx_rate = get_fx_rate(display_native_currency, display_row_currency)
+                        if display_fx_rate:
+                            current_price_display = current_price_num * display_fx_rate
+
                 # Dagrendement komt nu uit market_data (de achtergrond-
                 # gesynchroniseerde tabel, elke 15 min ververst) i.p.v. een
                 # LIVE yfinance-aanroep tijdens het laden van de pagina --
@@ -4390,7 +4411,7 @@ def render_portfolio():
                 avg_cost = None
                 all_time_pct = None
                 all_time_pnl = None
-                all_time_display_price = current_price_num
+                all_time_display_price = current_price_display
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
                     native_currency = get_cached_ticker_currency(h["ticker"])
