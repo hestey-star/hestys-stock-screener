@@ -5051,9 +5051,17 @@ def render_portfolio():
                         for t in tx_history:
                             hcol1, hcol2 = st.columns([5, 1])
                             with hcol1:
-                                emoji = "🟢" if t["transaction_type"] == "buy" else "🔴"
-                                st.caption(f"{emoji} {t['transaction_date']}: {t['shares']:.2f} shares @ "
-                                           f"€{t['price']:.2f} (fee: €{t['fee']:.2f})")
+                                is_buy = t["transaction_type"] == "buy"
+                                type_icon = "add_circle" if is_buy else "remove_circle"
+                                type_color = "#1FAE96" if is_buy else "#E5484D"
+                                tx_hist_symbol = "€" if t.get("currency") == "EUR" else ("$" if t.get("currency") == "USD" else (t.get("currency") or "EUR") + " ")
+                                st.markdown(
+                                    f'<span style="display:inline-flex; align-items:center; gap:0.3rem; font-size:0.85rem; color:#8992A3;">'
+                                    f'{_icon_span(type_icon, size_px=14, color=type_color)}'
+                                    f'{t["transaction_date"]}: {t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
+                                    f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
+                                    unsafe_allow_html=True,
+                                )
                             with hcol2:
                                 if st.button("✕", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
                                     database.delete_transaction(t["id"], user_email)
@@ -5067,6 +5075,41 @@ def render_portfolio():
                                     else:
                                         sync_holding_shares_from_transactions(tx_holding["id"], user_email)
                                         st.success("Transaction deleted.")
+                                    st.rerun()
+
+                        # Alles-in-1x wissen -- handig om oude, minder-precieze
+                        # transacties (bv. van vóór een CSV-parser-verbetering)
+                        # op te schonen vóór een schone herimport, i.p.v. ze
+                        # 1-voor-1 te moeten verwijderen. 2-staps-bevestiging
+                        # (destructieve actie): 1e klik toont de waarschuwing,
+                        # 2e klik voert 'm daadwerkelijk uit.
+                        st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+                        delete_all_confirm_key = f"confirm_delete_all_tx_{tx_holding['id']}"
+                        if not st.session_state.get(delete_all_confirm_key, False):
+                            if st.button(
+                                "Delete all transactions for this position", icon=":material/delete_sweep:",
+                                key=f"delete_all_tx_btn_{tx_holding['id']}",
+                            ):
+                                st.session_state[delete_all_confirm_key] = True
+                                st.rerun()
+                        else:
+                            st.warning(
+                                f"This will permanently delete all {len(tx_history)} transactions for "
+                                f"{tx_holding['naam']} -- useful if you want to re-import this position "
+                                f"cleanly (e.g. after a CSV-import precision fix). This cannot be undone."
+                            )
+                            confirm_col1, confirm_col2 = st.columns(2)
+                            with confirm_col1:
+                                if st.button("Yes, delete all", key=f"confirm_delete_all_tx_btn_{tx_holding['id']}", type="primary"):
+                                    database.delete_all_transactions_for_holding(tx_holding["id"], user_email)
+                                    database.delete_holding(tx_holding["id"], user_email)
+                                    st.session_state[delete_all_confirm_key] = False
+                                    st.success(f"All transactions for {tx_holding['naam']} deleted -- "
+                                               f"you can now re-import it cleanly.")
+                                    st.rerun()
+                            with confirm_col2:
+                                if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{tx_holding['id']}"):
+                                    st.session_state[delete_all_confirm_key] = False
                                     st.rerun()
 
     # ============================================================

@@ -172,6 +172,18 @@ def delete_transaction(transaction_id: int, user_email: str) -> None:
         .eq("id", transaction_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def delete_all_transactions_for_holding(holding_id: int, user_email: str) -> None:
+    """
+    Verwijdert IN 1X alle transacties voor 1 positie -- handig om oude,
+    minder-precieze transacties (bv. van vóór een CSV-parser-verbetering)
+    op te schonen vóór een schone herimport, i.p.v. ze 1-voor-1 te moeten
+    verwijderen.
+    """
+    client = get_supabase_client()
+    client.table("portfolio_transactions").delete() \
+        .eq("holding_id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR", day_change_pct: float = None) -> None:
     """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat, en de dagverandering (%) -- 'gratis' meegenomen bij dezelfde refresh."""
     client = get_supabase_client()
