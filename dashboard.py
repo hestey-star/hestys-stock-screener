@@ -4844,25 +4844,30 @@ def render_portfolio():
                         already_logged = database.get_transactions_for_holding(user_email, holding_id)
 
                         def _is_duplicate(new_tx, existing_list):
-                            # BELANGRIJK: GEEN prijs-vergelijking meer -- die kan
-                            # verschillen tussen parser-versies (de oude, EUR-
-                            # gebaseerde berekening vs. de nieuwe, directe
-                            # 'Koers'-waarde geven soms een klein
-                            # afrondingsverschil, zelfs voor EUR-native tickers).
-                            # Bij een herimport na de parser-fix werden zo
-                            # eerder-al-geimporteerde, inmiddels VOLLEDIG
-                            # VERKOCHTE posities (bv. EXXY.DE, ALFEN.AS) niet
-                            # meer als duplicaat herkend -- de buy/sell-paren
-                            # werden dan (soms asymmetrisch) opnieuw toegevoegd,
-                            # wat een allang-gesloten positie weer als actief liet
-                            # verschijnen. Type+datum+aantal is robuust genoeg om
-                            # eenzelfde transactie te herkennen, zonder dit risico.
-                            return any(
-                                existing["transaction_type"] == new_tx["transaction_type"]
-                                and existing["transaction_date"] == new_tx["transaction_date"]
-                                and abs(existing["shares"] - new_tx["shares"]) < 0.0001
-                                for existing in existing_list
-                            )
+                            # Prijs-tolerantie: 1% relatief (met een kleine
+                            # absolute ondergrens voor goedkope posities) i.p.v.
+                            # helemaal geen prijs-check (te los -- zag bij
+                            # meerdere, losse aankopen op dezelfde dag/aantal
+                            # een 2e, ECHT andere aankoopprijs onterecht als
+                            # duplicaat overslaan, bv. GRAB/ORBS/ADURO) EN i.p.v.
+                            # een exacte match (te strak -- zag bij een
+                            # parser-versie-verschil een allang-verkochte positie
+                            # (EXXY.DE/ALFEN.AS) niet meer herkennen en dus
+                            # dubbel importeren). 1% dekt het typische parser-
+                            # afrondingsverschil ruim, terwijl een 2e, bewust
+                            # andere aankoop met een ANDERE koers vrijwel altijd
+                            # verder dan 1% uit elkaar ligt.
+                            for existing in existing_list:
+                                if existing["transaction_type"] != new_tx["transaction_type"]:
+                                    continue
+                                if existing["transaction_date"] != new_tx["transaction_date"]:
+                                    continue
+                                if abs(existing["shares"] - new_tx["shares"]) >= 0.0001:
+                                    continue
+                                price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
+                                if abs(existing["price"] - new_tx["price"]) <= price_tolerance:
+                                    return True
+                            return False
 
                         # De native valuta van deze ticker 1x bepalen (buiten
                         # de loop) -- de fee (altijd EUR, DEGIRO-kosten staan
