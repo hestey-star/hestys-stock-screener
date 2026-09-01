@@ -4710,10 +4710,32 @@ def render_portfolio():
             st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
                        "(CSV) to import your full buy/sell history in one go, instead of "
                        "logging each one by hand.")
-            # Defensief: hasattr + try/except, zodat een eventueel niet
-            # (nog) correct doorgekomen database.py-update deze SECTIE
-            # laat degraderen (gewoon geen 'laatst geimporteerd'-regel
-            # tonen) i.p.v. de HELE pagina te laten crashen.
+
+            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
+            # bulk-delete-knop, voor als je NA een structurele CSV-parser-
+            # verbetering niet elke positie apart wilt opschonen (bv. bij
+            # 20+ posities). Extra-stevige bevestiging (letterlijk 'DELETE'
+            # typen) gezien de VEEL grotere impact dan de per-positie-versie.
+            with st.container(border=True):
+                st.markdown("**Start fresh (advanced)**")
+                st.caption(
+                    "Deletes ALL your positions and their full transaction history in one go "
+                    "-- useful if you want to cleanly re-import everything after a data-precision "
+                    "fix, instead of clearing each position one by one. Your watchlist is not affected."
+                )
+                reset_all_confirm_text = st.text_input(
+                    "Type DELETE to confirm", key="reset_all_holdings_confirm_text",
+                    placeholder="DELETE",
+                )
+                if st.button(
+                    "Delete all my positions and transactions", icon=":material/delete_forever:",
+                    disabled=(reset_all_confirm_text.strip().upper() != "DELETE"),
+                    key="reset_all_holdings_btn",
+                ):
+                    database.delete_all_holdings_and_transactions(user_email)
+                    st.success("All positions and transactions deleted -- you can now re-import cleanly below.")
+                    st.rerun()
+
             if hasattr(database, "get_last_csv_import"):
                 try:
                     last_csv_import = database.get_last_csv_import(user_email)

@@ -197,6 +197,23 @@ def delete_all_transactions_for_holding(holding_id: int, user_email: str) -> Non
         .eq("holding_id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def delete_all_holdings_and_transactions(user_email: str) -> None:
+    """
+    Verwijdert IN 1X ALLE eigen posities EN al hun transacties voor deze
+    gebruiker -- de 'grote reset'-versie van
+    delete_all_transactions_for_holding, voor als je NA een structurele
+    CSV-parser-verbetering niet 1-voor-1 door elke positie heen wilt
+    (bv. bij 20+ posities) om ze allemaal op te schonen vóór een schone
+    herimport. Watchlist-items blijven ongemoeid -- die hebben geen
+    transacties/CSV-import-gerelateerde problemen.
+    """
+    client = get_supabase_client()
+    hashed_email = hash_email(user_email)
+    client.table("portfolio_transactions").delete().eq("user_email", hashed_email).execute()
+    client.table("portfolio_holdings").delete() \
+        .eq("user_email", hashed_email).eq("is_watchlist", False).execute()
+
+
 def update_holding_value(holding_id: int, user_email: str, position_value: float, value_currency: str = "EUR", day_change_pct: float = None) -> None:
     """Werkt de LAATST BEREKENDE waarde van 1 positie bij (shares x actuele koers x wisselkoers), inclusief in welke valuta die staat, en de dagverandering (%) -- 'gratis' meegenomen bij dezelfde refresh."""
     client = get_supabase_client()
