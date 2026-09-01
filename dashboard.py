@@ -2787,18 +2787,16 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     losse buy/sell-transacties terug.
 
     Bewuste keuzes:
-    - Prijs komt nu uit de kolom 'Koers' zelf (de EXACTE, native prijs in
-      de lokale valuta, bv. USD voor een Amerikaans aandeel) i.p.v. de
-      voorheen gebruikte 'Waarde EUR' -- die laatste gaf bij het later
-      terugrekenen naar de native valuta een kleine, onnauwkeurige
-      afwijking (DEGIRO's EUR-waarde gebruikt de wisselkoers VAN TOEN,
-      terwijl een latere terugrekening de wisselkoers VAN NU gebruikt --
-      2 verschillende momenten, dus nooit exact gelijk). 'Koers' zelf
-      heeft dat probleem niet, want daar wordt helemaal niet mee
-      omgerekend. De daadwerkelijke valuta van 'Koers' wordt pas later
-      bepaald (in de import-loop, waar de ticker bekend is, via
-      get_cached_ticker_currency) -- op het moment van parsen is de
-      ticker nog niet gematcht.
+    - Prijs komt uit de kolom 'Koers' zelf (de EXACTE, native prijs).
+      GEVONDEN, BELANGRIJKE VERBETERING: de valuta van 'Koers' wordt nu
+      RECHTSTREEKS uit de CSV zelf gelezen -- DEGIRO's export heeft een
+      ONGENAAMDE kolom DIRECT NA 'Koers' met daarin de expliciete valuta
+      (bv. 'USD'), die pandas automatisch 'Unnamed: N' noemt. Voorheen
+      werd de valuta GEGOKT op basis van het ticker-achtervoegsel (bv.
+      '.TO' -> altijd CAD) -- dit bleek FOUT voor USD-genoteerde aandelen
+      op een Canadese beurs (zoals USA.TO, die ondanks de .TO-notering
+      gewoon in USD handelt). De CSV's eigen, expliciete valuta-kolom is
+      een VEEL betrouwbaardere bron dan zo'n achtervoegsel-gok.
     - Fee blijft voorlopig in EUR (fee_eur) -- DEGIRO's transactiekosten
       worden altijd in EUR in rekening gebracht, ongeacht de valuta van
       het aandeel zelf -- wordt in de import-loop omgerekend naar
@@ -2831,6 +2829,17 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
 
     df = pd.read_csv(io.BytesIO(file_bytes))
 
+    # De kolom DIRECT NA 'Koers' bevat de expliciete valuta (bv. 'USD')
+    # -- ongenaamd in de CSV zelf, dus pandas noemt 'm 'Unnamed: N'. We
+    # zoeken 'm op POSITIE (relatief aan 'Koers') i.p.v. op de exacte
+    # 'Unnamed: N'-naam, want die N kan verschuiven als het aantal
+    # kolommen vóór 'Koers' ooit verandert.
+    koers_currency_col = None
+    if "Koers" in df.columns:
+        koers_idx = df.columns.get_loc("Koers")
+        if koers_idx + 1 < len(df.columns):
+            koers_currency_col = df.columns[koers_idx + 1]
+
     grouped: dict = {}
     skipped_rows: list = []
 
@@ -2848,6 +2857,11 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
         lokale_waarde = parse_dutch_number(row.get("Lokale waarde"))
         waarde_eur = parse_dutch_number(row.get("Waarde EUR"))
         totaal_eur = parse_dutch_number(row.get("Totaal EUR"))
+        koers_currency = (
+            str(row.get(koers_currency_col)).strip().upper()
+            if koers_currency_col and not pd.isna(row.get(koers_currency_col))
+            else None
+        )
         wisselkoers = parse_dutch_number(row.get("Wisselkoers"))
 
         if pd.isna(aantal):
@@ -2902,6 +2916,7 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
             "fee_eur": round(fee_eur, 2),
             "transaction_date": parsed_date,
             "historical_fx_rate": wisselkoers,  # EUR -> native, van DIE transactiedag zelf
+            "koers_currency": koers_currency,  # de EXPLICIETE valuta uit de CSV zelf, i.p.v. een ticker-achtervoegsel-gok
         })
 
     return {"grouped": grouped, "skipped_rows": skipped_rows}
@@ -3288,6 +3303,28 @@ def compute_personal_windowed_return(holdings: list, user_email: str, window_sta
         # checks hierboven, maar voorkomt sowieso ooit weer een '+nan%'.
         return None
     return {"return_pct": return_pct, "gain": gain}
+
+
+def _infer_currency_from_transactions(transactions: list, fallback: str = None) -> str:
+    """
+    Leidt de 'native' valuta van een positie af uit de daadwerkelijk
+    OPGESLAGEN transacties (de meest voorkomende currency erin) i.p.v.
+    te GOKKEN op basis van het ticker-achtervoegsel (get_cached_
+    ticker_currency) -- die gok bleek FOUT voor aandelen die ondanks
+    hun beurs-notering in een andere valuta handelen (bv. USA.TO,
+    genoteerd op Toronto (.TO, meestal CAD) maar daadwerkelijk in USD
+    verhandeld). De transacties zelf hebben nu een betrouwbare,
+    EXPLICIETE currency (rechtstreeks uit de CSV's eigen valuta-kolom,
+    of de valuta die de gebruiker zelf koos bij handmatige invoer) --
+    veel betrouwbaarder dan een achtervoegsel-gok.
+
+    Valt terug op 'fallback' (meestal get_cached_ticker_currency) als er
+    geen transacties zijn om uit af te leiden.
+    """
+    if not transactions:
+        return fallback
+    currencies = [t.get("currency") or "EUR" for t in transactions]
+    return max(set(currencies), key=currencies.count)
 
 
 def _convert_transactions_to_currency(transactions: list, target_currency: str) -> list:
@@ -4424,6 +4461,15 @@ def render_portfolio():
                 # current_price_num zelf blijft ONGEWIJZIGD (native), want de
                 # All-time-berekening verderop heeft de ONgeconverteerde
                 # waarde nodig als basis voor compute_holding_performance.
+                #
+                # Hier BEWUST nog get_cached_ticker_currency (de goedkope,
+                # ticker-achtervoegsel-gok) i.p.v. de transactie-afgeleide
+                # valuta -- die laatste vereist een extra database-aanroep
+                # PER HOLDING, wat de Daily-pagina (de standaard, meest
+                # gebruikte weergave) merkbaar zou vertragen bij een grote
+                # portfolio. All-time-modus (verderop) haalt de transacties
+                # sowieso al op voor de berekening zelf, dus daar gebruiken
+                # we WEL de precieze, transactie-afgeleide valuta.
                 current_price_display = current_price_num
                 if current_price_num is not None:
                     display_native_currency = get_cached_ticker_currency(h["ticker"])
@@ -4467,7 +4513,16 @@ def render_portfolio():
                 all_time_display_price = current_price_display
                 if portfolio_view_mode == "All-time":
                     tx = database.get_transactions_for_holding(user_email, h["id"])
-                    native_currency = get_cached_ticker_currency(h["ticker"])
+                    # De valuta AFLEIDEN uit de daadwerkelijke transacties
+                    # (nu betrouwbaar, dankzij de CSV-fix) i.p.v. te GOKKEN
+                    # op basis van het ticker-achtervoegsel -- die gok bleek
+                    # fout voor aandelen die ondanks hun beurs-notering in
+                    # een andere valuta handelen (bv. USA.TO, .TO-genoteerd
+                    # maar USD-verhandeld). Alleen hier gedaan (niet ook voor
+                    # Daily), want de transacties worden hier sowieso al
+                    # opgehaald voor de berekening zelf -- geen extra
+                    # database-aanroep nodig t.o.v. de vorige situatie.
+                    native_currency = _infer_currency_from_transactions(tx, fallback=get_cached_ticker_currency(h["ticker"]))
                     # Elke transactie kan z'n EIGEN valuta hebben (CSV-import
                     # is altijd EUR, handmatige invoer kan elke valuta zijn,
                     # zoals de gebruiker die koos in het formulier) -- eerst
@@ -4548,7 +4603,9 @@ def render_portfolio():
                             detail_native_price = detail_market_row.get("current_price")
                             if detail_native_price is None and selected_holding.get("shares"):
                                 detail_native_price = (selected_holding.get("position_value") or 0) / selected_holding["shares"]
-                            detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
+                            detail_native_currency = _infer_currency_from_transactions(
+                                transactions, fallback=get_cached_ticker_currency(selected_holding["ticker"])
+                            )
                             transactions_native = (
                                 _convert_transactions_to_currency(transactions, detail_native_currency)
                                 if detail_native_currency else transactions
@@ -4945,11 +5002,11 @@ def render_portfolio():
                                     return True
                             return False
 
-                        # De native valuta van deze ticker 1x bepalen (buiten
-                        # de loop) -- de fee (altijd EUR, DEGIRO-kosten staan
-                        # nooit in de valuta van het aandeel zelf) rekenen we
-                        # om naar dezelfde valuta als de prijs.
-                        import_native_currency = get_cached_ticker_currency(ticker)
+                        # Terugval-valuta (als de CSV geen expliciete
+                        # koers_currency heeft voor een specifieke rij, bv.
+                        # een oudere export-versie) -- 1x bepaald buiten de
+                        # loop, puur als fallback.
+                        import_fallback_currency = get_cached_ticker_currency(ticker)
                         import_fee_fx_rate_fallback = None  # lazy: alleen als de CSV geen 'Wisselkoers'-kolom had
 
                         skipped_duplicates = 0
@@ -4957,7 +5014,14 @@ def render_portfolio():
                             if _is_duplicate(t, already_logged):
                                 skipped_duplicates += 1
                                 continue
-                            if t["price_is_native"] and import_native_currency and import_native_currency != "EUR":
+                            # De EXPLICIETE valuta uit de CSV zelf ('Koers'-
+                            # kolom se eigen valuta-indicator) heeft ALTIJD
+                            # voorrang boven een ticker-achtervoegsel-gok --
+                            # die gok bleek fout voor USD-genoteerde aandelen
+                            # op een Canadese beurs (bv. USA.TO, dat ondanks
+                            # de .TO-notering gewoon in USD handelt).
+                            row_native_currency = t.get("koers_currency") or import_fallback_currency
+                            if t["price_is_native"] and row_native_currency and row_native_currency != "EUR":
                                 # BELANGRIJK: de EXACTE, HISTORISCHE wisselkoers
                                 # van DIE transactiedag gebruiken (uit de CSV's
                                 # eigen 'Wisselkoers'-kolom), niet een live
@@ -4973,10 +5037,10 @@ def render_portfolio():
                                     fee_fx_rate = t["historical_fx_rate"]
                                 else:
                                     if import_fee_fx_rate_fallback is None:
-                                        import_fee_fx_rate_fallback = get_fx_rate("EUR", import_native_currency) or 1.0
+                                        import_fee_fx_rate_fallback = get_fx_rate("EUR", row_native_currency) or 1.0
                                     fee_fx_rate = import_fee_fx_rate_fallback
                                 t_fee = t["fee_eur"] * fee_fx_rate
-                                t_currency = import_native_currency
+                                t_currency = row_native_currency
                             else:
                                 # Prijs is al EUR (geen 'Koers' beschikbaar in
                                 # de export, zeldzame terugval) -- fee blijft
