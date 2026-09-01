@@ -85,10 +85,20 @@ def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False, isin: str = None) -> int:
-    """Voegt een nieuwe positie toe (eigen positie, of alleen watchlist als is_watchlist=True). Geeft de nieuwe id terug."""
+def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False, isin: str = None, value_currency: str = None) -> int:
+    """
+    Voegt een nieuwe positie toe (eigen positie, of alleen watchlist als
+    is_watchlist=True). Geeft de nieuwe id terug.
+
+    'value_currency' -- optioneel, direct meegeven bij aanmaken i.p.v.
+    het aan de standaard-DB-waarde (of None) over te laten. Zonder dit
+    zou een gloednieuwe positie (nog geen 'Update portfolio value'-klik
+    gehad) de VERKEERDE valutasymbool kunnen tonen naast een WEL al
+    beschikbare, native prijs (bv. uit de gedeelde market_data-tabel) --
+    een mismatch tussen het getoonde getal en het getoonde symbool.
+    """
     client = get_supabase_client()
-    response = client.table("portfolio_holdings").insert({
+    insert_data = {
         "user_email": hash_email(user_email),
         "naam": naam,
         "ticker": ticker,
@@ -96,7 +106,10 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, i
         "position_value": None,  # wordt pas gevuld na de eerste 'Update waarde'-klik
         "is_watchlist": is_watchlist,
         "isin": isin,
-    }).execute()
+    }
+    if value_currency:
+        insert_data["value_currency"] = value_currency
+    response = client.table("portfolio_holdings").insert(insert_data).execute()
     return response.data[0]["id"]
 
 

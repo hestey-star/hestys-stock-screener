@@ -4816,17 +4816,30 @@ def render_portfolio():
                         else:
                             holding_id = database.add_holding(
                                 user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
+                                value_currency=get_cached_ticker_currency(ticker),
                             )
                             imported_positions += 1
 
                         already_logged = database.get_transactions_for_holding(user_email, holding_id)
 
                         def _is_duplicate(new_tx, existing_list):
+                            # BELANGRIJK: GEEN prijs-vergelijking meer -- die kan
+                            # verschillen tussen parser-versies (de oude, EUR-
+                            # gebaseerde berekening vs. de nieuwe, directe
+                            # 'Koers'-waarde geven soms een klein
+                            # afrondingsverschil, zelfs voor EUR-native tickers).
+                            # Bij een herimport na de parser-fix werden zo
+                            # eerder-al-geimporteerde, inmiddels VOLLEDIG
+                            # VERKOCHTE posities (bv. EXXY.DE, ALFEN.AS) niet
+                            # meer als duplicaat herkend -- de buy/sell-paren
+                            # werden dan (soms asymmetrisch) opnieuw toegevoegd,
+                            # wat een allang-gesloten positie weer als actief liet
+                            # verschijnen. Type+datum+aantal is robuust genoeg om
+                            # eenzelfde transactie te herkennen, zonder dit risico.
                             return any(
                                 existing["transaction_type"] == new_tx["transaction_type"]
                                 and existing["transaction_date"] == new_tx["transaction_date"]
                                 and abs(existing["shares"] - new_tx["shares"]) < 0.0001
-                                and abs(existing["price"] - new_tx["price"]) < 0.0001
                                 for existing in existing_list
                             )
 
@@ -4989,7 +5002,10 @@ def render_portfolio():
                                 "Upgrade to Premium for unlimited tracking."
                             )
                         else:
-                            new_id = database.add_holding(user_email, new_position_name, new_position_symbol, shares=None)
+                            new_id = database.add_holding(
+                                user_email, new_position_name, new_position_symbol, shares=None,
+                                value_currency=get_cached_ticker_currency(new_position_symbol),
+                            )
                             database.add_transaction(
                                 user_email, new_id, "buy",
                                 shares=tx_shares, price=tx_price, fee=tx_fee,
