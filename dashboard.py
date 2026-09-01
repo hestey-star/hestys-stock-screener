@@ -1658,7 +1658,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                         currency_symbol: str = "$", logo_url: str = None,
                         day_change_pct: float = None, day_change_value: float = None,
                         current_price: float = None, avg_cost: float = None,
-                        all_time_pct: float = None, all_time_pnl: float = None) -> str:
+                        all_time_pct: float = None, all_time_pnl: float = None,
+                        shares: float = None) -> str:
     """
     Positie-rij voor My Portfolio -- rendert BEIDE een compacte, gestapelde
     mobiele versie EN een brede, meerkoloms desktop-tabelversie (CSS
@@ -1754,6 +1755,14 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
     )
 
+    # Aantal stuks, als klein onderschrift onder de Value-cel -- 'shares:g'
+    # verwijdert overbodige nullen (10 i.p.v. 10.000000, 0.085 voor
+    # fractionele crypto-posities).
+    shares_html = (
+        f'<div style="color:#8992A3; font-size:0.72rem; margin-top:1px;">{shares:g} shares</div>'
+        if shares is not None else ""
+    )
+
     mobile_html = (
         f'<div class="portfolio-row-mobile" style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
         f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
@@ -1761,7 +1770,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<div style="flex:1; min-width:0;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
         f'<span style="font-weight:800; color:#EAEDF1; font-size:1rem; letter-spacing:0.01em;">{ticker}</span>'
+        f'<div style="text-align:right;">'
         f'<span style="font-weight:700; color:#EAEDF1; font-size:0.98rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
+        f'{shares_html}'
+        f'</div>'
         f'</div>'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
         f'{subtitle_html}'
@@ -1787,7 +1799,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
         f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
         f'<div style="font-size:0.85rem;">{change_html}</div>'
+        f'<div>'
         f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+        f'{shares_html}'
+        f'</div>'
         f'<div>'
         f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
         f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
@@ -4250,6 +4265,27 @@ def render_portfolio():
     # de Daily-modus.
     market_data = database.get_market_data_for_tickers([h["ticker"] for h in holdings])
 
+    # Totaal dagrendement (bedrag + %) over de HELE portfolio -- vooraf
+    # berekend zodat dit meteen bovenaan getoond kan worden, naast Total
+    # portfolio value. Zelfde logica als de per-positie-berekening
+    # verderop, maar gesommeerd: voor elke holding de dag-verandering in
+    # waarde optellen, dan het percentage afleiden uit totaal-nu vs.
+    # totaal-gisteren (i.p.v. losse percentages simpelweg optellen, wat
+    # scheef zou trekken bij ongelijke positiegroottes).
+    total_day_change_value = 0.0
+    total_day_change_known = False
+    for h in holdings:
+        h_pos_value = h.get("position_value")
+        h_day_change_pct = market_data.get(h["ticker"], {}).get("day_change_pct")
+        if h_pos_value and h_day_change_pct is not None and (1 + h_day_change_pct / 100) != 0:
+            h_prev_value = h_pos_value / (1 + h_day_change_pct / 100)
+            total_day_change_value += h_pos_value - h_prev_value
+            total_day_change_known = True
+    total_prev_value = sum(h.get("position_value") or 0 for h in holdings) - total_day_change_value
+    total_day_change_pct = (
+        (total_day_change_value / total_prev_value * 100) if total_prev_value else None
+    ) if total_day_change_known else None
+
     if not holdings:
         st.info("You haven't added any positions yet -- add your first one under 'Manage' below.")
 
@@ -4298,9 +4334,20 @@ def render_portfolio():
                             # het correcte EUR-bedrag dan een fout $-bedrag.
                             cash_display_value, cash_symbol = cash_value_eur, "€"
 
+                    total_day_change_html = ""
+                    if total_day_change_pct is not None:
+                        change_color = "#1FAE96" if total_day_change_pct >= 0 else "#E5484D"
+                        change_arrow = "&#9650;" if total_day_change_pct >= 0 else "&#9660;"
+                        change_sign = "+" if total_day_change_pct >= 0 else "-"
+                        total_day_change_html = (
+                            f'<div style="font-size:0.9rem; font-weight:700; color:{change_color}; margin-top:2px;">'
+                            f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f} ({total_day_change_pct:+.1f}%) {change_arrow}'
+                            f'</div>'
+                        )
                     st.markdown(
                         f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
                         f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
+                        f'{total_day_change_html}'
                         f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>',
                         unsafe_allow_html=True,
                     )
@@ -4453,6 +4500,7 @@ def render_portfolio():
                         day_change_pct=day_change_pct, day_change_value=day_change_value,
                         current_price=all_time_display_price, avg_cost=avg_cost,
                         all_time_pct=all_time_pct, all_time_pnl=all_time_pnl,
+                        shares=shares,
                     ),
                 })
             position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
