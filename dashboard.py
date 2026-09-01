@@ -2802,8 +2802,12 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     - Fee blijft voorlopig in EUR (fee_eur) -- DEGIRO's transactiekosten
       worden altijd in EUR in rekening gebracht, ongeacht de valuta van
       het aandeel zelf -- wordt in de import-loop omgerekend naar
-      dezelfde native valuta als de prijs, zodat beide velden consistent
-      in 1 valuta staan.
+      dezelfde native valuta als de prijs. Hiervoor gebruiken we de
+      EXACTE, HISTORISCHE wisselkoers uit de CSV zelf ('Wisselkoers'-
+      kolom, de koers van DIE transactiedag) i.p.v. een live opgehaalde
+      koers van vandaag -- anders geeft de fee (een klein bedrag) een
+      kleine maar zichtbare afwijking in de gemiddelde kostprijs, puur
+      omdat de wisselkoers sinds de aankoop is bewogen.
     - Als 'Koers' een keer ontbreekt (zeldzaam) valt de prijs terug op de
       oude, EUR-gebaseerde berekening, met is_native=False als signaal
       voor de import-loop om dan GEEN aparte valuta-conversie meer te
@@ -2844,6 +2848,7 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
         lokale_waarde = parse_dutch_number(row.get("Lokale waarde"))
         waarde_eur = parse_dutch_number(row.get("Waarde EUR"))
         totaal_eur = parse_dutch_number(row.get("Totaal EUR"))
+        wisselkoers = parse_dutch_number(row.get("Wisselkoers"))
 
         if pd.isna(aantal):
             if lokale_waarde is not None and koers not in (None, 0):
@@ -2896,6 +2901,7 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
             "price_is_native": price_is_native,
             "fee_eur": round(fee_eur, 2),
             "transaction_date": parsed_date,
+            "historical_fx_rate": wisselkoers,  # EUR -> native, van DIE transactiedag zelf
         })
 
     return {"grouped": grouped, "skipped_rows": skipped_rows}
@@ -4920,10 +4926,9 @@ def render_portfolio():
                         # De native valuta van deze ticker 1x bepalen (buiten
                         # de loop) -- de fee (altijd EUR, DEGIRO-kosten staan
                         # nooit in de valuta van het aandeel zelf) rekenen we
-                        # om naar dezelfde valuta als de prijs, zodat beide
-                        # velden consistent zijn.
+                        # om naar dezelfde valuta als de prijs.
                         import_native_currency = get_cached_ticker_currency(ticker)
-                        import_fee_fx_rate = None  # lazy: alleen ophalen als er ook echt EUR-fees zijn om te converteren
+                        import_fee_fx_rate_fallback = None  # lazy: alleen als de CSV geen 'Wisselkoers'-kolom had
 
                         skipped_duplicates = 0
                         for t in group["transactions"]:
@@ -4931,9 +4936,24 @@ def render_portfolio():
                                 skipped_duplicates += 1
                                 continue
                             if t["price_is_native"] and import_native_currency and import_native_currency != "EUR":
-                                if import_fee_fx_rate is None:
-                                    import_fee_fx_rate = get_fx_rate("EUR", import_native_currency) or 1.0
-                                t_fee = t["fee_eur"] * import_fee_fx_rate
+                                # BELANGRIJK: de EXACTE, HISTORISCHE wisselkoers
+                                # van DIE transactiedag gebruiken (uit de CSV's
+                                # eigen 'Wisselkoers'-kolom), niet een live
+                                # opgehaalde koers van vandaag -- anders geeft
+                                # de fee (een klein bedrag) een kleine maar
+                                # zichtbare afwijking in de gemiddelde
+                                # kostprijs, puur omdat de wisselkoers sinds de
+                                # aankoop is bewogen. Per transactie apart (niet
+                                # 1x gedeeld voor de hele groep), want
+                                # verschillende aankopen op verschillende dagen
+                                # hebben elk hun eigen, andere historische koers.
+                                if t.get("historical_fx_rate"):
+                                    fee_fx_rate = t["historical_fx_rate"]
+                                else:
+                                    if import_fee_fx_rate_fallback is None:
+                                        import_fee_fx_rate_fallback = get_fx_rate("EUR", import_native_currency) or 1.0
+                                    fee_fx_rate = import_fee_fx_rate_fallback
+                                t_fee = t["fee_eur"] * fee_fx_rate
                                 t_currency = import_native_currency
                             else:
                                 # Prijs is al EUR (geen 'Koers' beschikbaar in
