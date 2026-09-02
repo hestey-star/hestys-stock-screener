@@ -333,8 +333,10 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
    Streamlit kent geen server-side viewport-detectie, dus dit is de
    standaard, betrouwbare aanpak. --- */
 .portfolio-row-desktop { display: none; }
+.portfolio-row-desktop-alltime { display: none; }
 .portfolio-row-mobile { display: block; }
 .portfolio-row-header { display: none; }
+.portfolio-row-header-alltime { display: none; }
 
 @media (min-width: 768px) {
     .portfolio-row-mobile { display: none; }
@@ -344,13 +346,22 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
         align-items: center;
         gap: 0.75rem;
     }
-    .portfolio-row-desktop {
+    /* All-time heeft 1 kolom extra t.o.v. Daily -- Cost price en Current
+       price staan hier apart i.p.v. samengeperst in 1 'X -> Y'-pijl,
+       die eerder verwarrend bleek (kon aangezien worden voor 1 getal). */
+    .portfolio-row-desktop-alltime, .portfolio-row-header-alltime {
+        display: grid;
+        grid-template-columns: 40px 1.9fr 0.9fr 0.9fr 1.1fr 0.9fr 1.1fr;
+        align-items: center;
+        gap: 0.6rem;
+    }
+    .portfolio-row-desktop, .portfolio-row-desktop-alltime {
         background: rgba(137,146,163,0.05);
         border-radius: 10px;
         padding: 0.7rem 1rem;
         margin-bottom: 0.4rem;
     }
-    .portfolio-row-header {
+    .portfolio-row-header, .portfolio-row-header-alltime {
         padding: 0 1rem 0.4rem 1rem;
         color: #8992A3;
         font-size: 0.7rem;
@@ -1787,30 +1798,58 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'</div>'
     )
 
-    # Desktop: brede grid-tabel-weergave -- Logo | Ticker+Naam | Koers |
-    # Verandering | Waarde | Allocatie%+balk, elk in een eigen kolom,
-    # gebruikt de beschikbare breedte i.p.v. lege ruimte ertussen.
-    desktop_html = (
-        f'<div class="portfolio-row-desktop">'
-        f'{logo_html}'
-        f'<div style="min-width:0;">'
-        f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
-        f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
-        f'</div>'
-        f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
-        f'<div style="font-size:0.85rem;">{change_html}</div>'
-        f'<div>'
-        f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
-        f'{shares_html}'
-        f'</div>'
-        f'<div>'
-        f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
-        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
-        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
-        f'</div>'
-        f'</div>'
-        f'</div>'
-    )
+    # Desktop: brede grid-tabel-weergave. Daily: Logo | Ticker+Naam | Koers |
+    # Verandering | Waarde | Allocatie%+balk (6 kolommen). All-time: 1
+    # kolom extra -- Cost price en Current price staan APART i.p.v.
+    # samengeperst in 1 'X -> Y'-pijl, die eerder verwarrend bleek (kon
+    # aangezien worden voor 1 enkel getal i.p.v. 2 losse prijzen).
+    if mode == "Daily":
+        desktop_html = (
+            f'<div class="portfolio-row-desktop">'
+            f'{logo_html}'
+            f'<div style="min-width:0;">'
+            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
+            f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
+            f'</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
+            f'<div style="font-size:0.85rem;">{change_html}</div>'
+            f'<div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'{shares_html}'
+            f'</div>'
+            f'<div>'
+            f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
+            f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
+            f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+            f'</div>'
+            f'</div>'
+            f'</div>'
+        )
+    else:  # "All-time"
+        cost_price_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
+        current_price_str = f'{currency_symbol}{current_price:,.2f}' if current_price is not None else "-"
+        desktop_html = (
+            f'<div class="portfolio-row-desktop-alltime">'
+            f'{logo_html}'
+            f'<div style="min-width:0;">'
+            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
+            f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
+            f'</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{cost_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{current_price_str}</div>'
+            f'<div style="font-size:0.85rem;">{change_html}</div>'
+            f'<div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'{shares_html}'
+            f'</div>'
+            f'<div>'
+            f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
+            f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
+            f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+            f'</div>'
+            f'</div>'
+            f'</div>'
+        )
 
     return mobile_html + desktop_html
 
@@ -4568,12 +4607,22 @@ def render_portfolio():
                     ),
                 })
             position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
-            st.markdown(
-                '<div class="portfolio-row-header">'
-                '<div></div><div>Position</div><div>Price</div><div>Change</div><div>Value</div><div>Allocation</div>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+            if portfolio_view_mode == "Daily":
+                st.markdown(
+                    '<div class="portfolio-row-header">'
+                    '<div></div><div>Position</div><div>Price</div><div>Change</div><div>Value</div><div>Allocation</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+            else:  # "All-time"
+                st.markdown(
+                    '<div class="portfolio-row-header-alltime">'
+                    '<div></div><div>Position</div>'
+                    '<div title="Average price you paid per share, including transaction fees">Cost price &#9432;</div>'
+                    '<div>Current price</div><div>Change</div><div>Value</div><div>Allocation</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
             st.markdown(
                 "".join(r["html"] for r in position_rows_data),
                 unsafe_allow_html=True,
