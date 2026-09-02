@@ -1,4 +1,4 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-SBAC,2026-08-31,0,73,189.66,189.66,0.0,True,^GSPC,-4.61,False,11.4,stijgend,-1.2,False,2026-08-03,28,226.4,-16.2,6.04
-CDNS,2026-08-27,1,29,347.55,338.78,-2.52,False,^GSPC,-18.72,True,24.3,stijgend,2.7,True,2026-07-27,35,403.12,-16.0,5.82
-SNPS,2026-08-27,1,63,464.89,439.59,-5.44,True,^GSPC,-13.49,True,1.7,dalend,6.4,True,2026-08-26,5,544.97,-19.3,5.09
+ADM,2026-09-01,0,24,84.55,84.55,0.0,True,^GSPC,1.79,True,3.4,dalend,28.0,True,2026-08-04,28,78.7,7.4,6.23
+SPGI,2026-08-28,2,20,442.89,440.21,-0.61,True,^GSPC,6.52,False,10.8,stijgend,-2.9,False,2026-07-28,35,519.3,-15.2,5.06
+SBAC,2026-08-28,2,73,190.95,188.81,-1.12,True,^GSPC,-11.96,False,11.4,stijgend,-1.2,False,2026-08-03,29,226.4,-16.6,4.1
