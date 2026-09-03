@@ -4684,7 +4684,23 @@ def render_portfolio():
             )
             if selected_position_label != "-- Select a position --":
                 selected_holding = position_options[selected_position_label]
-                st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
+                title_col, target_col, target_save_col = st.columns([3, 1.3, 1])
+                with title_col:
+                    st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
+                with target_col:
+                    detail_new_target = st.number_input(
+                        "Target %", min_value=0.0, max_value=100.0, step=0.5,
+                        value=float(selected_holding.get("target_weight") or 0.0),
+                        key=f"detail_target_weight_{selected_holding['id']}",
+                        label_visibility="collapsed", help="Target allocation % for this position",
+                    )
+                with target_save_col:
+                    if st.button("Save", key=f"detail_save_target_{selected_holding['id']}"):
+                        database.set_target_weight(
+                            selected_holding["id"], user_email,
+                            detail_new_target if detail_new_target > 0 else None,
+                        )
+                        st.rerun()
                 detail_col1, detail_col2 = st.columns(2, gap="medium")
 
                 with detail_col1:
@@ -4865,57 +4881,13 @@ def render_portfolio():
         unsafe_allow_html=True,
     )
     manage_section = st.segmented_control(
-        "Manage section", options=["Target weights", "Import from broker", "Log transaction", "Watchlist"],
-        default="Target weights", key="manage_section_select", label_visibility="collapsed",
+        "Manage section", options=["Import from broker", "Log transaction", "Watchlist"],
+        default="Import from broker", key="manage_section_select", label_visibility="collapsed",
     )
     if manage_section is None:
-        manage_section = "Target weights"
+        manage_section = "Import from broker"
 
-    if manage_section == "Target weights":
-        st.caption("Set a target allocation % for the positions you actively want to balance -- "
-                   "positions without a target are simply ignored by rebalancing suggestions below.")
-        if not holdings:
-            st.caption("Add a position first (via 'Log transaction' or 'Import from broker') to set targets.")
-        else:
-            total_value_for_targets = sum(h.get("position_value") or 0 for h in holdings)
-            total_target_pct = sum(h.get("target_weight") or 0 for h in holdings)
-            target_total_color = "#1FAE96" if abs(total_target_pct - 100) < 0.5 else "#8992A3"
-            st.markdown(
-                f'<div style="font-size:0.85rem; color:{target_total_color}; margin-bottom:0.75rem;">'
-                f'Total allocated: {total_target_pct:.1f}%'
-                f'{" (doesn&#39;t need to add up to 100% -- only set targets for positions you actively manage)" if abs(total_target_pct - 100) > 0.5 else ""}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            new_target_values = {}
-            for h in sorted(holdings, key=lambda x: x.get("position_value") or 0, reverse=True):
-                current_pct = (h.get("position_value") or 0) / total_value_for_targets * 100 if total_value_for_targets else 0
-                tw_col1, tw_col2, tw_col3 = st.columns([3, 1.2, 1])
-                with tw_col1:
-                    st.markdown(f"**{h['ticker']}** -- {h['naam']}")
-                with tw_col2:
-                    st.caption(f"Currently: {current_pct:.1f}%")
-                with tw_col3:
-                    new_target_values[h["id"]] = st.number_input(
-                        "Target %", min_value=0.0, max_value=100.0, step=0.5,
-                        value=float(h.get("target_weight") or 0.0), key=f"target_weight_input_{h['id']}",
-                        label_visibility="collapsed",
-                    )
-            if st.button("Save targets", type="primary", key="save_target_weights_btn"):
-                changed_count = 0
-                for h in holdings:
-                    new_val = new_target_values.get(h["id"])
-                    old_val = h.get("target_weight") or 0.0
-                    if new_val is not None and abs(new_val - old_val) > 0.001:
-                        database.set_target_weight(h["id"], user_email, new_val if new_val > 0 else None)
-                        changed_count += 1
-                if changed_count:
-                    st.success(f"Saved {changed_count} target(s).")
-                    st.rerun()
-                else:
-                    st.info("No changes to save.")
-
-    elif manage_section == "Import from broker":
+    if manage_section == "Import from broker":
         # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
         st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
                    "(CSV) to import your full buy/sell history in one go, instead of "
@@ -5033,8 +5005,11 @@ def render_portfolio():
                 degiro_grouped.items(),
                 key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
             )
+            existing_tickers_set = {h["ticker"] for h in holdings}
             for key, group in sorted_items:
-                dcol1, dcol2 = st.columns([3, 2])
+                current_ticker = st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                is_new_position = current_ticker and current_ticker not in existing_tickers_set
+                dcol1, dcol2, dcol3 = st.columns([3, 2, 1]) if is_new_position else (*st.columns([3, 2]), None)
                 with dcol1:
                     prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
                     st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
@@ -5071,6 +5046,21 @@ def render_portfolio():
                             label_visibility="collapsed", placeholder="leave empty to skip",
                         )
                         st.session_state["degiro_ticker_matches"][key] = new_ticker
+                # Target weight ALLEEN vragen voor een NIEUWE positie (nog
+                # niet in je bestaande holdings) -- eenmalig, bij aanmaak,
+                # i.p.v. een aparte lijst met ALLE posities achteraf (die
+                # voelde als een dubbele, overbodige waslijst naast de
+                # portfolio-tabel zelf). Optioneel, leeg = geen target.
+                if dcol3 is not None:
+                    with dcol3:
+                        st.session_state.setdefault("degiro_target_weights", {})
+                        st.session_state["degiro_target_weights"][key] = st.number_input(
+                            "Target %", min_value=0.0, max_value=100.0, step=0.5, value=0.0,
+                            key=f"degiro_target_{key}", label_visibility="collapsed",
+                            help="Optional -- target allocation % for this new position",
+                        )
+
+
 
             ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
             st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
@@ -5126,6 +5116,12 @@ def render_portfolio():
                             value_currency=get_cached_ticker_currency(ticker),
                         )
                         imported_positions += 1
+                        # De optioneel ingevulde target weight (bij deze
+                        # nieuwe positie zelf ingevuld, zie hierboven)
+                        # direct opslaan -- eenmalig, bij aanmaak.
+                        import_target_weight = st.session_state.get("degiro_target_weights", {}).get(key)
+                        if import_target_weight and import_target_weight > 0:
+                            database.set_target_weight(holding_id, user_email, import_target_weight)
 
                     already_logged = database.get_transactions_for_holding(user_email, holding_id)
 
@@ -5322,6 +5318,16 @@ def render_portfolio():
             help="The currency the price above is in -- usually the ticker's native trading currency.",
         )
 
+        # Target weight ALLEEN vragen bij een NIEUWE positie -- eenmalig,
+        # bij aanmaak, i.p.v. een aparte lijst met ALLE posities achteraf.
+        tx_target_weight = 0.0
+        if tx_position_mode == "New position":
+            tx_target_weight = st.number_input(
+                "Target allocation % (optional)", min_value=0.0, max_value=100.0, step=0.5,
+                value=0.0, key="tx_target_weight_input",
+                help="Optional -- the % of your portfolio you want this position to make up.",
+            )
+
         can_save = (tx_holding is not None) or (new_position_symbol is not None)
 
         if can_save and st.button("Save transaction", type="primary"):
@@ -5339,6 +5345,8 @@ def render_portfolio():
                             user_email, new_position_name, new_position_symbol, shares=None,
                             value_currency=get_cached_ticker_currency(new_position_symbol),
                         )
+                        if tx_target_weight > 0:
+                            database.set_target_weight(new_id, user_email, tx_target_weight)
                         database.add_transaction(
                             user_email, new_id, "buy",
                             shares=tx_shares, price=tx_price, fee=tx_fee,
