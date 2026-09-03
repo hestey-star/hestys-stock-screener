@@ -557,16 +557,28 @@ def get_cached_ticker_currency(ticker: str) -> str:
     lange cache-tijd voorkomt dat elke portfolio-refresh opnieuw de trage
     .info-aanroep per positie moet doen.
 
-    Bepaalt de valuta EERST via het ticker-achtervoegsel (bv. '.AS' ->
-    EUR, '.L' -> GBP) -- een VEEL betrouwbaardere bron dan yfinance's
-    .info['currency']-veld, dat (net als eerder gevonden bij 'website')
-    regelmatig lijkt te ontbreken. Concreet gevolg zonder deze fix: een
-    EUR-aandeel als ADYEN.AS werd via de terugval-standaard 'USD'
-    behandeld, waardoor er een ONTERECHTE USD->EUR-omrekening op een
-    al-EUR-prijs plaatsvond (zichtbaar als een te lage getoonde prijs).
-    Alleen als het achtervoegsel niet herkend wordt (bv. Amerikaanse
-    tickers zonder achtervoegsel), valt dit terug op .info als laatste optie.
+    GEVONDEN, BELANGRIJKE CORRECTIE: yfinance's .info['currency'] wordt nu
+    als PRIMAIRE bron gebruikt WANNEER die daadwerkelijk een waarde geeft
+    (niet een .get(..., default)-aanname) -- het ticker-achtervoegsel (bv.
+    '.AS' -> EUR) is de BETROUWBARE TERUGVAL voor als .info ontbreekt.
+    Eerder stond dit omgekeerd (achtervoegsel eerst), wat een ANDERE bug
+    gaf: SMH.L (VanEck Semiconductor UCITS ETF) staat genoteerd op Londen
+    (.L) maar handelt daadwerkelijk in USD -- het achtervoegsel alleen
+    zegt niets over de specifieke valuta van een individuele notering,
+    zoals ook al eerder bleek bij USA.TO (Toronto-notering, maar USD-
+    verhandeld). yfinance's .info geeft voor DIT soort uitzonderingen wel
+    de juiste, specifieke waarde. De oorspronkelijke reden om het
+    achtervoegsel eerst te proberen (ADYEN.AS, waar .info['currency']
+    ONTBRAK en de .get(...,'USD')-default dus een VERKEERDE aanname was)
+    blijft correct afgehandeld: als .info geen waarde heeft, valt dit nu
+    alsnog terug op het achtervoegsel, niet op een blinde 'USD'-aanname.
     """
+    try:
+        info_currency = yf.Ticker(ticker).info.get("currency")
+    except Exception:
+        info_currency = None
+    if info_currency:
+        return info_currency
     if "." in ticker:
         suffix = ticker.rsplit(".", 1)[-1].upper()
         if suffix in TICKER_EXCHANGE_CURRENCY:
@@ -577,10 +589,7 @@ def get_cached_ticker_currency(ticker: str) -> str:
             return crypto_suffix
         if crypto_suffix in ("USD", "USDT", "USDC"):
             return "USD"
-    try:
-        return yf.Ticker(ticker).info.get("currency", "USD")
-    except Exception:
-        return "USD"
+    return "USD"
 
 
 def refresh_portfolio_values(holdings: list, user_email: str, display_currency: str = "EUR") -> tuple:
@@ -4689,12 +4698,13 @@ def render_portfolio():
                     st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
                 with target_col:
                     detail_new_target = st.number_input(
-                        "Target %", min_value=0.0, max_value=100.0, step=0.5,
+                        "Target weight %", min_value=0.0, max_value=100.0, step=0.5,
                         value=float(selected_holding.get("target_weight") or 0.0),
                         key=f"detail_target_weight_{selected_holding['id']}",
-                        label_visibility="collapsed", help="Target allocation % for this position",
+                        help="The % of your portfolio you want this position to make up",
                     )
                 with target_save_col:
+                    st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
                     if st.button("Save", key=f"detail_save_target_{selected_holding['id']}"):
                         database.set_target_weight(
                             selected_holding["id"], user_email,
