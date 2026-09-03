@@ -1728,7 +1728,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             )
             sign = "+" if day_change_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
+                f'<span style="color:{color}; font-weight:700; font-family:\'IBM Plex Mono\', monospace;">{sign}{value_part}'
                 f'({day_change_pct:+.1f}%) {arrow}</span>'
             )
         if current_price is not None:
@@ -1748,7 +1748,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             )
             sign = "+" if all_time_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
+                f'<span style="color:{color}; font-weight:700; font-family:\'IBM Plex Mono\', monospace;">{sign}{value_part}'
                 f'({all_time_pct:+.1f}%) {arrow}</span>'
             )
             avg_cost_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
