@@ -351,7 +351,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
        die eerder verwarrend bleek (kon aangezien worden voor 1 getal). */
     .portfolio-row-desktop-alltime, .portfolio-row-header-alltime {
         display: grid;
-        grid-template-columns: 40px 1.9fr 0.9fr 0.9fr 1.1fr 0.9fr 1.1fr;
+        grid-template-columns: 40px 1.7fr 1fr 1fr 1.1fr 0.9fr 1.1fr;
         align-items: center;
         gap: 0.6rem;
     }
@@ -1822,10 +1822,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{price_display or "-"}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
@@ -1846,11 +1846,11 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{cost_price_str}</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:0.9rem; font-weight:700;">{current_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{cost_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{current_price_str}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
