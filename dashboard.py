@@ -1742,7 +1742,9 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                 f'<span style="color:{color}; font-weight:700;">{sign}{value_part}'
                 f'({all_time_pct:+.1f}%) {arrow}</span>'
             )
-            price_display = f'{currency_symbol}{avg_cost:,.2f} &rarr; {currency_symbol}{current_price:,.2f}'
+            avg_cost_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
+            current_price_str_mobile = f'{currency_symbol}{current_price:,.2f}' if current_price is not None else "-"
+            price_display = f'{avg_cost_str} &rarr; {current_price_str_mobile}'
             detail_html = (
                 f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
                 f'&middot; {price_display}</span>'
@@ -3403,9 +3405,19 @@ def _convert_transactions_to_currency(transactions: list, target_currency: str) 
 def compute_holding_performance(transactions: list, current_price: float = None) -> dict:
     """
     Berekent rendement uit een lijst buy/sell-transacties, met de
-    gemiddelde-kostprijs-methode (inclusief betaalde fees). Geeft None
-    terug als er geen bruikbare transacties zijn -- geen dividenden
-    meegenomen (bewust, voor nu).
+    FIFO-methode (First-In-First-Out, inclusief betaalde fees) -- matcht
+    hiermee DEGIRO's eigen 'GAK' en de meeste brokers/belastingdiensten.
+    Geeft None terug als er geen bruikbare transacties zijn -- geen
+    dividenden meegenomen (bewust, voor nu).
+
+    GEVONDEN, BELANGRIJK VERSCHIL (met de vorige, eenvoudigere methode):
+    bij een positie met TUSSENTIJDSE, GEDEELTELIJKE verkopen gaf een
+    simpel gewogen gemiddelde van ALLE ooit gedane aankopen een compleet
+    andere (en voor de gebruiker onherkenbare) kostprijs dan wat DEGIRO
+    toont. FIFO beschouwt de OUDSTE aankopen als eerst verkocht -- de
+    kostprijs van wat je NU nog in bezit hebt, is dus gebaseerd op de
+    specifieke, meest recente aankoop-blokken die nog 'over' zijn, niet
+    een gemiddelde van de hele (inclusief allang verkochte) geschiedenis.
 
     current_price is alleen nodig als er nog shares in bezit zijn (voor
     de ongerealiseerde winst/verlies) -- bij een VOLLEDIG GESLOTEN positie
@@ -3418,27 +3430,63 @@ def compute_holding_performance(transactions: list, current_price: float = None)
     total_bought_shares = sum(tx["shares"] for tx in transactions if tx["transaction_type"] == "buy")
     total_bought_cost = sum(tx["shares"] * tx["price"] + tx["fee"] for tx in transactions if tx["transaction_type"] == "buy")
     total_sold_shares = sum(tx["shares"] for tx in transactions if tx["transaction_type"] == "sell")
-    total_sold_proceeds = sum(tx["shares"] * tx["price"] - tx["fee"] for tx in transactions if tx["transaction_type"] == "sell")
 
     if total_bought_shares <= 0:
         return None  # geen aankopen gelogd, kan geen kostprijs bepalen
 
-    avg_cost_per_share = total_bought_cost / total_bought_shares
-    shares_held = total_bought_shares - total_sold_shares
+    # FIFO-simulatie: chronologisch (oud -> nieuw) door de transacties
+    # lopen, met een wachtrij van 'lots' (aankoop-blokken). Een verkoop
+    # verbruikt eerst de OUDSTE, nog-openstaande lots. BELANGRIJK: bij
+    # transacties op DEZELFDE dag moet een buy ALTIJD vóór een sell komen
+    # (anders kan een verkoop 'te vroeg' verwerkt worden, voordat de
+    # aankoop van diezelfde dag al in de wachtrij zit -- dit gaf eerder
+    # een fout, te hoog shares_held-aantal, omdat een deel van zo'n
+    # verkoop niet gematcht kon worden en simpelweg genegeerd werd).
+    sorted_tx = sorted(
+        transactions,
+        key=lambda t: (t["transaction_date"], 0 if t["transaction_type"] == "buy" else 1),
+    )
+    from collections import deque
+    lots = deque()  # elk element: [aantal_over, kostprijs_per_stuk_incl_fee]
+    realized_pnl = 0.0
+
+    for tx in sorted_tx:
+        if tx["transaction_type"] == "buy":
+            cost_per_share = tx["price"] + (tx["fee"] / tx["shares"] if tx["shares"] else 0)
+            lots.append([tx["shares"], cost_per_share])
+        else:  # sell
+            proceeds_per_share = tx["price"] - (tx["fee"] / tx["shares"] if tx["shares"] else 0)
+            remaining_to_sell = tx["shares"]
+            while remaining_to_sell > 0.0001 and lots:
+                lot_shares, lot_cost = lots[0]
+                matched = min(lot_shares, remaining_to_sell)
+                realized_pnl += matched * (proceeds_per_share - lot_cost)
+                remaining_to_sell -= matched
+                if matched >= lot_shares - 0.0001:
+                    lots.popleft()
+                else:
+                    lots[0][0] -= matched
+            # Als remaining_to_sell > 0 blijft (meer verkocht dan ooit
+            # gekocht -- een data-fout, bv. een ontbrekende aankoop) wordt
+            # dat stuk simpelweg genegeerd i.p.v. te crashen.
+
+    # De OVERGEBLEVEN lots vormen de huidige positie -- hun kostprijs is
+    # de FIFO-gebaseerde 'gemiddelde kostprijs' die nu getoond wordt.
+    shares_held = sum(lot_shares for lot_shares, _ in lots)
+    cost_basis_held = sum(lot_shares * lot_cost for lot_shares, lot_cost in lots)
+    avg_cost_per_share = cost_basis_held / shares_held if shares_held > 0.0001 else None
 
     if shares_held > 0.0001 and current_price is None:
         return None  # er zijn nog shares in bezit, dan is de huidige prijs wel echt nodig
 
-    cost_basis_held = shares_held * avg_cost_per_share
     price_for_calc = current_price if current_price is not None else 0.0
     unrealized_pnl = (price_for_calc * shares_held) - cost_basis_held
-    realized_pnl = total_sold_proceeds - (total_sold_shares * avg_cost_per_share)
     total_pnl = unrealized_pnl + realized_pnl
     total_return_pct = (total_pnl / total_bought_cost) * 100 if total_bought_cost > 0 else None
 
     return {
         "shares_held": round(shares_held, 4),
-        "avg_cost_per_share": round(avg_cost_per_share, 4),
+        "avg_cost_per_share": round(avg_cost_per_share, 4) if avg_cost_per_share is not None else None,
         "cost_basis_held": round(cost_basis_held, 2),
         "current_value_held": round(price_for_calc * shares_held, 2),
         "unrealized_pnl": round(unrealized_pnl, 2),
@@ -4583,7 +4631,7 @@ def render_portfolio():
                             fx_rate = 1.0
                         if not fx_rate:
                             fx_rate = 1.0  # FX-conversie mislukt -- toon liever de ongeconverteerde waarde dan niks
-                        avg_cost = perf["avg_cost_per_share"] * fx_rate
+                        avg_cost = perf["avg_cost_per_share"] * fx_rate if perf["avg_cost_per_share"] is not None else None
                         all_time_pnl = perf["total_pnl"] * fx_rate
                         all_time_pct = perf["total_return_pct"]  # verhouding, valuta-onafhankelijk
                         # De 'huidige prijs' in de avg_cost -> current_price-
@@ -4670,7 +4718,8 @@ def render_portfolio():
                                 if not detail_fx_rate:
                                     detail_fx_rate = 1.0
                                 perf["total_pnl"] = perf["total_pnl"] * detail_fx_rate
-                                perf["avg_cost_per_share"] = perf["avg_cost_per_share"] * detail_fx_rate
+                                if perf["avg_cost_per_share"] is not None:
+                                    perf["avg_cost_per_share"] = perf["avg_cost_per_share"] * detail_fx_rate
                                 # total_return_pct is een verhouding, valuta-onafhankelijk -- geen conversie nodig
                             if perf and perf.get("total_return_pct") is not None:
                                 pct = perf["total_return_pct"]
@@ -4809,559 +4858,611 @@ def render_portfolio():
     # ============================================================
     # 3. MANAGE
     # ============================================================
-    with st.container(border=True):
-        st.markdown("**Manage**")
+    st.markdown(
+        '<div style="margin: 1.5rem 0 0.75rem 0; padding-top: 1rem; border-top: 1px solid rgba(137,146,163,0.15);">'
+        '<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Manage</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    manage_section = st.segmented_control(
+        "Manage section", options=["Target weights", "Import from broker", "Log transaction", "Watchlist"],
+        default="Target weights", key="manage_section_select", label_visibility="collapsed",
+    )
+    if manage_section is None:
+        manage_section = "Target weights"
 
+    if manage_section == "Target weights":
+        st.caption("Set a target allocation % for the positions you actively want to balance -- "
+                   "positions without a target are simply ignored by rebalancing suggestions below.")
+        if not holdings:
+            st.caption("Add a position first (via 'Log transaction' or 'Import from broker') to set targets.")
+        else:
+            total_value_for_targets = sum(h.get("position_value") or 0 for h in holdings)
+            total_target_pct = sum(h.get("target_weight") or 0 for h in holdings)
+            target_total_color = "#1FAE96" if abs(total_target_pct - 100) < 0.5 else "#8992A3"
+            st.markdown(
+                f'<div style="font-size:0.85rem; color:{target_total_color}; margin-bottom:0.75rem;">'
+                f'Total allocated: {total_target_pct:.1f}%'
+                f'{" (doesn&#39;t need to add up to 100% -- only set targets for positions you actively manage)" if abs(total_target_pct - 100) > 0.5 else ""}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            new_target_values = {}
+            for h in sorted(holdings, key=lambda x: x.get("position_value") or 0, reverse=True):
+                current_pct = (h.get("position_value") or 0) / total_value_for_targets * 100 if total_value_for_targets else 0
+                tw_col1, tw_col2, tw_col3 = st.columns([3, 1.2, 1])
+                with tw_col1:
+                    st.markdown(f"**{h['ticker']}** -- {h['naam']}")
+                with tw_col2:
+                    st.caption(f"Currently: {current_pct:.1f}%")
+                with tw_col3:
+                    new_target_values[h["id"]] = st.number_input(
+                        "Target %", min_value=0.0, max_value=100.0, step=0.5,
+                        value=float(h.get("target_weight") or 0.0), key=f"target_weight_input_{h['id']}",
+                        label_visibility="collapsed",
+                    )
+            if st.button("Save targets", type="primary", key="save_target_weights_btn"):
+                changed_count = 0
+                for h in holdings:
+                    new_val = new_target_values.get(h["id"])
+                    old_val = h.get("target_weight") or 0.0
+                    if new_val is not None and abs(new_val - old_val) > 0.001:
+                        database.set_target_weight(h["id"], user_email, new_val if new_val > 0 else None)
+                        changed_count += 1
+                if changed_count:
+                    st.success(f"Saved {changed_count} target(s).")
+                    st.rerun()
+                else:
+                    st.info("No changes to save.")
+
+    elif manage_section == "Import from broker":
         # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-        with st.expander("Import from a broker", expanded=False, key="import_from_a_broker_expander"):
-            st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
-                       "(CSV) to import your full buy/sell history in one go, instead of "
-                       "logging each one by hand.")
+        st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
+                   "(CSV) to import your full buy/sell history in one go, instead of "
+                   "logging each one by hand.")
 
-            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
-            # bulk-delete-knop, voor als je NA een structurele CSV-parser-
-            # verbetering niet elke positie apart wilt opschonen (bv. bij
-            # 20+ posities). Extra-stevige bevestiging (letterlijk 'DELETE'
-            # typen) gezien de VEEL grotere impact dan de per-positie-versie.
-            with st.container(border=True):
-                st.markdown("**Start fresh (advanced)**")
-                st.caption(
-                    "Deletes ALL your positions and their full transaction history in one go "
-                    "-- useful if you want to cleanly re-import everything after a data-precision "
-                    "fix, instead of clearing each position one by one. Your watchlist is not affected."
+        # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
+        # bulk-delete-knop, voor als je NA een structurele CSV-parser-
+        # verbetering niet elke positie apart wilt opschonen (bv. bij
+        # 20+ posities). Extra-stevige bevestiging (letterlijk 'DELETE'
+        # typen) gezien de VEEL grotere impact dan de per-positie-versie.
+        with st.container(border=True):
+            st.markdown("**Start fresh (advanced)**")
+            st.caption(
+                "Deletes ALL your positions and their full transaction history in one go "
+                "-- useful if you want to cleanly re-import everything after a data-precision "
+                "fix, instead of clearing each position one by one. Your watchlist is not affected."
+            )
+            reset_all_confirm_text = st.text_input(
+                "Type DELETE to confirm", key="reset_all_holdings_confirm_text",
+                placeholder="DELETE",
+            )
+            if st.button(
+                "Delete all my positions and transactions", icon=":material/delete_forever:",
+                disabled=(reset_all_confirm_text.strip().upper() != "DELETE"),
+                key="reset_all_holdings_btn",
+            ):
+                database.delete_all_holdings_and_transactions(user_email)
+                st.success("All positions and transactions deleted -- you can now re-import cleanly below.")
+                st.rerun()
+
+        if hasattr(database, "get_last_csv_import"):
+            try:
+                last_csv_import = database.get_last_csv_import(user_email)
+            except Exception:
+                last_csv_import = None
+            if last_csv_import:
+                import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
+                filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
+                st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
+        st.caption("Using a different broker?")
+        st.page_link(support_page, label="Go to Support")
+        degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
+
+        already_imported = st.session_state.get("degiro_imported_filenames", set())
+
+        if degiro_file is not None and degiro_file.name in already_imported:
+            st.success(f"'{degiro_file.name}' was already imported.", icon=":material/check_circle:")
+            if st.button("Process this file again anyway"):
+                already_imported.discard(degiro_file.name)
+                st.session_state["degiro_imported_filenames"] = already_imported
+                st.session_state.pop("degiro_parsed_filename", None)
+                st.rerun()
+        elif degiro_file is not None:
+            if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
+                # Nieuw bestand -- opnieuw parsen en de matches resetten
+                with st.spinner("Reading your file..."):
+                    parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
+                st.session_state["degiro_parsed_filename"] = degiro_file.name
+                st.session_state["degiro_grouped"] = parse_result["grouped"]
+                st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
+                ticker_matches = {}
+                ticker_candidates = {}
+                # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
+                # import) -- geen nieuwe zoekopdracht nodig, geen keuzelijst opnieuw.
+                existing_isin_to_ticker = {
+                    h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
+                }
+                with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
+                    for key, group in parse_result["grouped"].items():
+                        remembered_ticker = existing_isin_to_ticker.get(group.get("isin"))
+                        if remembered_ticker:
+                            ticker_matches[key] = remembered_ticker
+                            ticker_candidates[key] = [{
+                                "symbol": remembered_ticker, "name": group["product"], "exchange": "remembered",
+                            }]
+                        else:
+                            candidates = get_ticker_candidates(group["product"], group.get("isin"))
+                            ticker_candidates[key] = candidates
+                            ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
+                st.session_state["degiro_ticker_matches"] = ticker_matches
+                st.session_state["degiro_ticker_candidates"] = ticker_candidates
+
+            degiro_grouped = st.session_state["degiro_grouped"]
+            degiro_skipped = st.session_state["degiro_skipped"]
+
+            total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
+            st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
+            if degiro_skipped:
+                reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
+                more = "..." if len(degiro_skipped) > 5 else ""
+                st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
+                           f"{reasons_preview}{more}")
+
+            unmatched_keys = [
+                key for key, group in degiro_grouped.items()
+                if not st.session_state["degiro_ticker_matches"].get(key, "").strip()
+            ]
+            if unmatched_keys:
+                unmatched_lines = "\n".join(
+                    f"- **{degiro_grouped[key]['product']}**"
+                    + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
+                    for key in unmatched_keys
                 )
-                reset_all_confirm_text = st.text_input(
-                    "Type DELETE to confirm", key="reset_all_holdings_confirm_text",
-                    placeholder="DELETE",
+                st.warning(
+                    f"**{len(unmatched_keys)} security/securities need your attention** "
+                    f"-- no ticker could be auto-matched. Fill these in manually below, "
+                    f"or they'll be skipped:\n\n{unmatched_lines}",
+                    icon=":material/warning:",
                 )
-                if st.button(
-                    "Delete all my positions and transactions", icon=":material/delete_forever:",
-                    disabled=(reset_all_confirm_text.strip().upper() != "DELETE"),
-                    key="reset_all_holdings_btn",
-                ):
-                    database.delete_all_holdings_and_transactions(user_email)
-                    st.success("All positions and transactions deleted -- you can now re-import cleanly below.")
-                    st.rerun()
 
-            if hasattr(database, "get_last_csv_import"):
-                try:
-                    last_csv_import = database.get_last_csv_import(user_email)
-                except Exception:
-                    last_csv_import = None
-                if last_csv_import:
-                    import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
-                    filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
-                    st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
-            st.caption("Using a different broker?")
-            st.page_link(support_page, label="Go to Support")
-            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
+            st.markdown("**Review the ticker for each security** (auto-suggested -- please "
+                         "double-check and correct if wrong before importing). "
+                         "Unmatched ones are shown first:")
+            sorted_items = sorted(
+                degiro_grouped.items(),
+                key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
+            )
+            for key, group in sorted_items:
+                dcol1, dcol2 = st.columns([3, 2])
+                with dcol1:
+                    prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
+                    st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
+                with dcol2:
+                    candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
+                    if len(candidates) >= 2:
+                        # Meerdere beursnoteringen gevonden (bv. hetzelfde ETF op meerdere
+                        # beurzen) -- laat kiezen met naam + beurs erbij, i.p.v. blind te gokken.
+                        options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
+                        options.append("Other (type manually)")
+                        current_symbol = st.session_state["degiro_ticker_matches"].get(key, "")
+                        default_index = next(
+                            (i for i, c in enumerate(candidates) if c["symbol"] == current_symbol),
+                            len(options) - 1,
+                        )
+                        chosen_label = st.selectbox(
+                            "Ticker", options, index=default_index,
+                            key=f"degiro_choice_{key}", label_visibility="collapsed",
+                        )
+                        if chosen_label == "Other (type manually)":
+                            manual_default = current_symbol if current_symbol not in [c["symbol"] for c in candidates] else ""
+                            manual_ticker = st.text_input(
+                                "Manual ticker", value=manual_default, key=f"degiro_manual_{key}",
+                                label_visibility="collapsed", placeholder="type ticker",
+                            )
+                            st.session_state["degiro_ticker_matches"][key] = manual_ticker
+                        else:
+                            chosen_symbol = candidates[options.index(chosen_label)]["symbol"]
+                            st.session_state["degiro_ticker_matches"][key] = chosen_symbol
+                    else:
+                        current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
+                        new_ticker = st.text_input(
+                            "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
+                            label_visibility="collapsed", placeholder="leave empty to skip",
+                        )
+                        st.session_state["degiro_ticker_matches"][key] = new_ticker
 
-            already_imported = st.session_state.get("degiro_imported_filenames", set())
+            ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
+            st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
+                       f"the rest will be skipped.")
 
-            if degiro_file is not None and degiro_file.name in already_imported:
-                st.success(f"'{degiro_file.name}' was already imported.", icon=":material/check_circle:")
-                if st.button("Process this file again anyway"):
-                    already_imported.discard(degiro_file.name)
-                    st.session_state["degiro_imported_filenames"] = already_imported
-                    st.session_state.pop("degiro_parsed_filename", None)
-                    st.rerun()
-            elif degiro_file is not None:
-                if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
-                    # Nieuw bestand -- opnieuw parsen en de matches resetten
-                    with st.spinner("Reading your file..."):
-                        parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
-                    st.session_state["degiro_parsed_filename"] = degiro_file.name
-                    st.session_state["degiro_grouped"] = parse_result["grouped"]
-                    st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
-                    ticker_matches = {}
-                    ticker_candidates = {}
-                    # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
-                    # import) -- geen nieuwe zoekopdracht nodig, geen keuzelijst opnieuw.
-                    existing_isin_to_ticker = {
-                        h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
-                    }
-                    with st.spinner(f"Looking up tickers for {len(parse_result['grouped'])} securities..."):
-                        for key, group in parse_result["grouped"].items():
-                            remembered_ticker = existing_isin_to_ticker.get(group.get("isin"))
-                            if remembered_ticker:
-                                ticker_matches[key] = remembered_ticker
-                                ticker_candidates[key] = [{
-                                    "symbol": remembered_ticker, "name": group["product"], "exchange": "remembered",
-                                }]
-                            else:
-                                candidates = get_ticker_candidates(group["product"], group.get("isin"))
-                                ticker_candidates[key] = candidates
-                                ticker_matches[key] = candidates[0]["symbol"] if candidates else ""
-                    st.session_state["degiro_ticker_matches"] = ticker_matches
-                    st.session_state["degiro_ticker_candidates"] = ticker_candidates
-
-                degiro_grouped = st.session_state["degiro_grouped"]
-                degiro_skipped = st.session_state["degiro_skipped"]
-
-                total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
-                st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
-                if degiro_skipped:
-                    reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
-                    more = "..." if len(degiro_skipped) > 5 else ""
-                    st.caption(f"{len(degiro_skipped)} row(s) couldn't be read and were skipped: "
-                               f"{reasons_preview}{more}")
-
-                unmatched_keys = [
-                    key for key, group in degiro_grouped.items()
-                    if not st.session_state["degiro_ticker_matches"].get(key, "").strip()
+            if st.button("Import all matched transactions", type="primary"):
+                imported_positions = 0
+                imported_transactions = 0
+                imported_duplicates_skipped = 0
+                all_holdings_for_import = database.get_user_holdings(user_email)
+                to_import = [
+                    (key, group) for key, group in degiro_grouped.items()
+                    if st.session_state["degiro_ticker_matches"].get(key, "").strip()
                 ]
-                if unmatched_keys:
-                    unmatched_lines = "\n".join(
-                        f"- **{degiro_grouped[key]['product']}**"
-                        + (f" (ISIN: {degiro_grouped[key]['isin']})" if degiro_grouped[key]["isin"] else "")
-                        for key in unmatched_keys
-                    )
-                    st.warning(
-                        f"**{len(unmatched_keys)} security/securities need your attention** "
-                        f"-- no ticker could be auto-matched. Fill these in manually below, "
-                        f"or they'll be skipped:\n\n{unmatched_lines}",
-                        icon=":material/warning:",
-                    )
 
-                st.markdown("**Review the ticker for each security** (auto-suggested -- please "
-                             "double-check and correct if wrong before importing). "
-                             "Unmatched ones are shown first:")
-                sorted_items = sorted(
-                    degiro_grouped.items(),
-                    key=lambda kv: st.session_state["degiro_ticker_matches"].get(kv[0], "").strip() != "",
-                )
-                for key, group in sorted_items:
-                    dcol1, dcol2 = st.columns([3, 2])
-                    with dcol1:
-                        prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
-                        st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
-                    with dcol2:
-                        candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
-                        if len(candidates) >= 2:
-                            # Meerdere beursnoteringen gevonden (bv. hetzelfde ETF op meerdere
-                            # beurzen) -- laat kiezen met naam + beurs erbij, i.p.v. blind te gokken.
-                            options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
-                            options.append("Other (type manually)")
-                            current_symbol = st.session_state["degiro_ticker_matches"].get(key, "")
-                            default_index = next(
-                                (i for i, c in enumerate(candidates) if c["symbol"] == current_symbol),
-                                len(options) - 1,
-                            )
-                            chosen_label = st.selectbox(
-                                "Ticker", options, index=default_index,
-                                key=f"degiro_choice_{key}", label_visibility="collapsed",
-                            )
-                            if chosen_label == "Other (type manually)":
-                                manual_default = current_symbol if current_symbol not in [c["symbol"] for c in candidates] else ""
-                                manual_ticker = st.text_input(
-                                    "Manual ticker", value=manual_default, key=f"degiro_manual_{key}",
-                                    label_visibility="collapsed", placeholder="type ticker",
+                progress_bar = st.progress(0.0)
+                status_text = st.empty()
+
+                for i, (key, group) in enumerate(to_import):
+                    ticker = st.session_state["degiro_ticker_matches"][key].strip()
+                    status_text.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(to_import)})")
+
+                    # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
+                    # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
+                    # had, per ongeluk een dubbele, nieuwe positie aanmaken i.p.v. de
+                    # bestaande (met z'n geschiedenis) te hergebruiken.
+                    existing = next((h for h in all_holdings_for_import if h["ticker"] == ticker), None)
+                    if existing:
+                        holding_id = existing["id"]
+                        existing_manual_shares = existing.get("shares") or 0.0
+                        existing_tx = database.get_transactions_for_holding(user_email, holding_id)
+                        if not existing_tx and existing_manual_shares > 0:
+                            # Zelfde inhaal-logica als bij 'Log a transaction': bestaande
+                            # handmatige shares vastleggen tegen de huidige prijs, vandaag.
+                            try:
+                                backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
+                                backfill_currency = get_cached_ticker_currency(ticker)
+                            except Exception:
+                                backfill_price = group["transactions"][0]["price"]
+                                backfill_currency = (
+                                    get_cached_ticker_currency(ticker)
+                                    if group["transactions"][0]["price_is_native"] else "EUR"
                                 )
-                                st.session_state["degiro_ticker_matches"][key] = manual_ticker
-                            else:
-                                chosen_symbol = candidates[options.index(chosen_label)]["symbol"]
-                                st.session_state["degiro_ticker_matches"][key] = chosen_symbol
-                        else:
-                            current_guess = st.session_state["degiro_ticker_matches"].get(key, "")
-                            new_ticker = st.text_input(
-                                "Ticker", value=current_guess, key=f"degiro_ticker_{key}",
-                                label_visibility="collapsed", placeholder="leave empty to skip",
-                            )
-                            st.session_state["degiro_ticker_matches"][key] = new_ticker
-
-                ready_count = sum(1 for t in st.session_state["degiro_ticker_matches"].values() if t.strip())
-                st.caption(f"{ready_count} of {len(degiro_grouped)} securities have a ticker -- "
-                           f"the rest will be skipped.")
-
-                if st.button("Import all matched transactions", type="primary"):
-                    imported_positions = 0
-                    imported_transactions = 0
-                    imported_duplicates_skipped = 0
-                    all_holdings_for_import = database.get_user_holdings(user_email)
-                    to_import = [
-                        (key, group) for key, group in degiro_grouped.items()
-                        if st.session_state["degiro_ticker_matches"].get(key, "").strip()
-                    ]
-
-                    progress_bar = st.progress(0.0)
-                    status_text = st.empty()
-
-                    for i, (key, group) in enumerate(to_import):
-                        ticker = st.session_state["degiro_ticker_matches"][key].strip()
-                        status_text.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(to_import)})")
-
-                        # Ook GESLOTEN posities meenemen (niet alleen de actieve lijst) --
-                        # anders zou opnieuw kopen van iets dat je ooit volledig verkocht
-                        # had, per ongeluk een dubbele, nieuwe positie aanmaken i.p.v. de
-                        # bestaande (met z'n geschiedenis) te hergebruiken.
-                        existing = next((h for h in all_holdings_for_import if h["ticker"] == ticker), None)
-                        if existing:
-                            holding_id = existing["id"]
-                            existing_manual_shares = existing.get("shares") or 0.0
-                            existing_tx = database.get_transactions_for_holding(user_email, holding_id)
-                            if not existing_tx and existing_manual_shares > 0:
-                                # Zelfde inhaal-logica als bij 'Log a transaction': bestaande
-                                # handmatige shares vastleggen tegen de huidige prijs, vandaag.
-                                try:
-                                    backfill_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
-                                    backfill_currency = get_cached_ticker_currency(ticker)
-                                except Exception:
-                                    backfill_price = group["transactions"][0]["price"]
-                                    backfill_currency = (
-                                        get_cached_ticker_currency(ticker)
-                                        if group["transactions"][0]["price_is_native"] else "EUR"
-                                    )
-                                database.add_transaction(
-                                    user_email, holding_id, "buy",
-                                    shares=existing_manual_shares, price=backfill_price, fee=0.0,
-                                    transaction_date=datetime.now().date().isoformat(),
-                                    currency=backfill_currency,
-                                )
-                        else:
-                            holding_id = database.add_holding(
-                                user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
-                                value_currency=get_cached_ticker_currency(ticker),
-                            )
-                            imported_positions += 1
-
-                        already_logged = database.get_transactions_for_holding(user_email, holding_id)
-
-                        def _is_duplicate(new_tx, existing_list):
-                            # Prijs-tolerantie: 1% relatief (met een kleine
-                            # absolute ondergrens voor goedkope posities) i.p.v.
-                            # helemaal geen prijs-check (te los -- zag bij
-                            # meerdere, losse aankopen op dezelfde dag/aantal
-                            # een 2e, ECHT andere aankoopprijs onterecht als
-                            # duplicaat overslaan, bv. GRAB/ORBS/ADURO) EN i.p.v.
-                            # een exacte match (te strak -- zag bij een
-                            # parser-versie-verschil een allang-verkochte positie
-                            # (EXXY.DE/ALFEN.AS) niet meer herkennen en dus
-                            # dubbel importeren). 1% dekt het typische parser-
-                            # afrondingsverschil ruim, terwijl een 2e, bewust
-                            # andere aankoop met een ANDERE koers vrijwel altijd
-                            # verder dan 1% uit elkaar ligt.
-                            for existing in existing_list:
-                                if existing["transaction_type"] != new_tx["transaction_type"]:
-                                    continue
-                                if existing["transaction_date"] != new_tx["transaction_date"]:
-                                    continue
-                                if abs(existing["shares"] - new_tx["shares"]) >= 0.0001:
-                                    continue
-                                price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
-                                if abs(existing["price"] - new_tx["price"]) <= price_tolerance:
-                                    return True
-                            return False
-
-                        # Terugval-valuta (als de CSV geen expliciete
-                        # koers_currency heeft voor een specifieke rij, bv.
-                        # een oudere export-versie) -- 1x bepaald buiten de
-                        # loop, puur als fallback.
-                        import_fallback_currency = get_cached_ticker_currency(ticker)
-                        import_fee_fx_rate_fallback = None  # lazy: alleen als de CSV geen 'Wisselkoers'-kolom had
-
-                        skipped_duplicates = 0
-                        for t in group["transactions"]:
-                            if _is_duplicate(t, already_logged):
-                                skipped_duplicates += 1
-                                continue
-                            # De EXPLICIETE valuta uit de CSV zelf ('Koers'-
-                            # kolom se eigen valuta-indicator) heeft ALTIJD
-                            # voorrang boven een ticker-achtervoegsel-gok --
-                            # die gok bleek fout voor USD-genoteerde aandelen
-                            # op een Canadese beurs (bv. USA.TO, dat ondanks
-                            # de .TO-notering gewoon in USD handelt).
-                            row_native_currency = t.get("koers_currency") or import_fallback_currency
-                            if t["price_is_native"] and row_native_currency and row_native_currency != "EUR":
-                                # BELANGRIJK: de EXACTE, HISTORISCHE wisselkoers
-                                # van DIE transactiedag gebruiken (uit de CSV's
-                                # eigen 'Wisselkoers'-kolom), niet een live
-                                # opgehaalde koers van vandaag -- anders geeft
-                                # de fee (een klein bedrag) een kleine maar
-                                # zichtbare afwijking in de gemiddelde
-                                # kostprijs, puur omdat de wisselkoers sinds de
-                                # aankoop is bewogen. Per transactie apart (niet
-                                # 1x gedeeld voor de hele groep), want
-                                # verschillende aankopen op verschillende dagen
-                                # hebben elk hun eigen, andere historische koers.
-                                if t.get("historical_fx_rate"):
-                                    fee_fx_rate = t["historical_fx_rate"]
-                                else:
-                                    if import_fee_fx_rate_fallback is None:
-                                        import_fee_fx_rate_fallback = get_fx_rate("EUR", row_native_currency) or 1.0
-                                    fee_fx_rate = import_fee_fx_rate_fallback
-                                t_fee = t["fee_eur"] * fee_fx_rate
-                                t_currency = row_native_currency
-                            else:
-                                # Prijs is al EUR (geen 'Koers' beschikbaar in
-                                # de export, zeldzame terugval) -- fee blijft
-                                # ook gewoon in EUR, geen conversie nodig.
-                                t_fee = t["fee_eur"]
-                                t_currency = "EUR"
                             database.add_transaction(
-                                user_email, holding_id, t["transaction_type"],
-                                shares=t["shares"], price=t["price"], fee=t_fee,
-                                transaction_date=t["transaction_date"], currency=t_currency,
+                                user_email, holding_id, "buy",
+                                shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                                transaction_date=datetime.now().date().isoformat(),
+                                currency=backfill_currency,
                             )
-                            imported_transactions += 1
+                    else:
+                        holding_id = database.add_holding(
+                            user_email, group["product"], ticker, shares=None, isin=group.get("isin"),
+                            value_currency=get_cached_ticker_currency(ticker),
+                        )
+                        imported_positions += 1
 
-                        if skipped_duplicates:
-                            imported_duplicates_skipped += skipped_duplicates
+                    already_logged = database.get_transactions_for_holding(user_email, holding_id)
 
-                        sync_holding_shares_from_transactions(holding_id, user_email)
-                        progress_bar.progress((i + 1) / len(to_import))
+                    def _is_duplicate(new_tx, existing_list):
+                        # Prijs-tolerantie: 1% relatief (met een kleine
+                        # absolute ondergrens voor goedkope posities) i.p.v.
+                        # helemaal geen prijs-check (te los -- zag bij
+                        # meerdere, losse aankopen op dezelfde dag/aantal
+                        # een 2e, ECHT andere aankoopprijs onterecht als
+                        # duplicaat overslaan, bv. GRAB/ORBS/ADURO) EN i.p.v.
+                        # een exacte match (te strak -- zag bij een
+                        # parser-versie-verschil een allang-verkochte positie
+                        # (EXXY.DE/ALFEN.AS) niet meer herkennen en dus
+                        # dubbel importeren). 1% dekt het typische parser-
+                        # afrondingsverschil ruim, terwijl een 2e, bewust
+                        # andere aankoop met een ANDERE koers vrijwel altijd
+                        # verder dan 1% uit elkaar ligt.
+                        for existing in existing_list:
+                            if existing["transaction_type"] != new_tx["transaction_type"]:
+                                continue
+                            if existing["transaction_date"] != new_tx["transaction_date"]:
+                                continue
+                            if abs(existing["shares"] - new_tx["shares"]) >= 0.0001:
+                                continue
+                            price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
+                            if abs(existing["price"] - new_tx["price"]) <= price_tolerance:
+                                return True
+                        return False
 
-                    status_text.empty()
-                    progress_bar.empty()
+                    # Terugval-valuta (als de CSV geen expliciete
+                    # koers_currency heeft voor een specifieke rij, bv.
+                    # een oudere export-versie) -- 1x bepaald buiten de
+                    # loop, puur als fallback.
+                    import_fallback_currency = get_cached_ticker_currency(ticker)
+                    import_fee_fx_rate_fallback = None  # lazy: alleen als de CSV geen 'Wisselkoers'-kolom had
 
-                    dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
-                    st.success(f"Imported {imported_transactions} transactions across "
-                               f"{imported_positions} new position(s)!{dup_txt}")
-                    already_imported.add(degiro_file.name)
-                    st.session_state["degiro_imported_filenames"] = already_imported
-                    if hasattr(database, "set_last_csv_import"):
-                        try:
-                            database.set_last_csv_import(user_email, datetime.now().isoformat(), degiro_file.name)
-                        except Exception:
-                            pass  # het loggen van dit tijdstip mag de daadwerkelijke import nooit blokkeren
-                    for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
-                                       "degiro_ticker_matches", "degiro_ticker_candidates"]:
-                        st.session_state.pop(state_key, None)
-                    st.rerun()
+                    skipped_duplicates = 0
+                    for t in group["transactions"]:
+                        if _is_duplicate(t, already_logged):
+                            skipped_duplicates += 1
+                            continue
+                        # De EXPLICIETE valuta uit de CSV zelf ('Koers'-
+                        # kolom se eigen valuta-indicator) heeft ALTIJD
+                        # voorrang boven een ticker-achtervoegsel-gok --
+                        # die gok bleek fout voor USD-genoteerde aandelen
+                        # op een Canadese beurs (bv. USA.TO, dat ondanks
+                        # de .TO-notering gewoon in USD handelt).
+                        row_native_currency = t.get("koers_currency") or import_fallback_currency
+                        if t["price_is_native"] and row_native_currency and row_native_currency != "EUR":
+                            # BELANGRIJK: de EXACTE, HISTORISCHE wisselkoers
+                            # van DIE transactiedag gebruiken (uit de CSV's
+                            # eigen 'Wisselkoers'-kolom), niet een live
+                            # opgehaalde koers van vandaag -- anders geeft
+                            # de fee (een klein bedrag) een kleine maar
+                            # zichtbare afwijking in de gemiddelde
+                            # kostprijs, puur omdat de wisselkoers sinds de
+                            # aankoop is bewogen. Per transactie apart (niet
+                            # 1x gedeeld voor de hele groep), want
+                            # verschillende aankopen op verschillende dagen
+                            # hebben elk hun eigen, andere historische koers.
+                            if t.get("historical_fx_rate"):
+                                fee_fx_rate = t["historical_fx_rate"]
+                            else:
+                                if import_fee_fx_rate_fallback is None:
+                                    import_fee_fx_rate_fallback = get_fx_rate("EUR", row_native_currency) or 1.0
+                                fee_fx_rate = import_fee_fx_rate_fallback
+                            t_fee = t["fee_eur"] * fee_fx_rate
+                            t_currency = row_native_currency
+                        else:
+                            # Prijs is al EUR (geen 'Koers' beschikbaar in
+                            # de export, zeldzame terugval) -- fee blijft
+                            # ook gewoon in EUR, geen conversie nodig.
+                            t_fee = t["fee_eur"]
+                            t_currency = "EUR"
+                        database.add_transaction(
+                            user_email, holding_id, t["transaction_type"],
+                            shares=t["shares"], price=t["price"], fee=t_fee,
+                            transaction_date=t["transaction_date"], currency=t_currency,
+                        )
+                        imported_transactions += 1
 
+                    if skipped_duplicates:
+                        imported_duplicates_skipped += skipped_duplicates
+
+                    sync_holding_shares_from_transactions(holding_id, user_email)
+                    progress_bar.progress((i + 1) / len(to_import))
+
+                status_text.empty()
+                progress_bar.empty()
+
+                dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
+                st.success(f"Imported {imported_transactions} transactions across "
+                           f"{imported_positions} new position(s)!{dup_txt}")
+                already_imported.add(degiro_file.name)
+                st.session_state["degiro_imported_filenames"] = already_imported
+                if hasattr(database, "set_last_csv_import"):
+                    try:
+                        database.set_last_csv_import(user_email, datetime.now().isoformat(), degiro_file.name)
+                    except Exception:
+                        pass  # het loggen van dit tijdstip mag de daadwerkelijke import nooit blokkeren
+                for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
+                                   "degiro_ticker_matches", "degiro_ticker_candidates"]:
+                    st.session_state.pop(state_key, None)
+                st.rerun()
+
+    elif manage_section == "Log transaction":
         # --- Log a transaction (werkt ook zonder bestaande posities -- een
         # nieuwe positie kan direct via een eerste 'Log a buy' worden
         # aangemaakt) ---
-        with st.expander("Log a transaction", expanded=False, key="log_a_transaction_expander"):
-            st.caption("Log your actual buys and sells to see your real return under Analyze. "
-                       "Optional -- positions without transactions logged just won't show a return.")
+        st.caption("Log your actual buys and sells to see your real return under Analyze. "
+                   "Optional -- positions without transactions logged just won't show a return.")
 
-            position_mode_options = (
-                ["Existing position", "New position"] if holdings else ["New position"]
+        position_mode_options = (
+            ["Existing position", "New position"] if holdings else ["New position"]
+        )
+        tx_position_mode = st.segmented_control(
+            "Position", options=position_mode_options, selection_mode="single",
+            default=position_mode_options[0], key="tx_position_mode", label_visibility="collapsed",
+        )
+        if tx_position_mode is None:
+            tx_position_mode = position_mode_options[0]
+
+        tx_holding = None
+        new_position_symbol = None
+        new_position_name = None
+
+        if tx_position_mode == "Existing position":
+            tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+            tx_label = st.selectbox(
+                "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
             )
-            tx_position_mode = st.segmented_control(
-                "Position", options=position_mode_options, selection_mode="single",
-                default=position_mode_options[0], key="tx_position_mode", label_visibility="collapsed",
+            tx_holding = tx_holding_options[tx_label]
+            tx_type = st.segmented_control(
+                "Type", options=["Buy", "Sell"], selection_mode="single",
+                default="Buy", key="tx_type_radio",
             )
-            if tx_position_mode is None:
-                tx_position_mode = position_mode_options[0]
-
-            tx_holding = None
-            new_position_symbol = None
-            new_position_name = None
-
-            if tx_position_mode == "Existing position":
-                tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
-                tx_label = st.selectbox(
-                    "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
-                )
-                tx_holding = tx_holding_options[tx_label]
-                tx_type = st.segmented_control(
-                    "Type", options=["Buy", "Sell"], selection_mode="single",
-                    default="Buy", key="tx_type_radio",
-                )
-                if tx_type is None:
-                    tx_type = "Buy"
-                is_buy = tx_type == "Buy"
-            else:
-                # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
-                is_buy = True
-                tx_search_query = st.text_input(
-                    "Search for the company/asset you bought", key="tx_search_query",
-                )
-                if tx_search_query:
-                    try:
-                        tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
-                    except Exception as exc:
-                        tx_search_results = []
-                        st.caption(f"Search failed: {exc}")
-                    if tx_search_results:
-                        tx_options = {}
-                        for r in tx_search_results:
-                            name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                            label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                            tx_options[label] = r
-                        tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
-                        tx_chosen = tx_options[tx_chosen_label]
-                        new_position_symbol = tx_chosen.get("symbol")
-                        new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
-                    else:
-                        st.caption("No results found for this search -- try a different name.")
-
-            trow1_col1, trow1_col2 = st.columns(2)
-            with trow1_col1:
-                tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
-            with trow1_col2:
-                tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
-            trow2_col1, trow2_col2 = st.columns(2)
-            with trow2_col1:
-                tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
-            with trow2_col2:
-                tx_date = st.date_input("Date", key="tx_date_input")
-
-            # Valuta expliciet vragen i.p.v. altijd EUR aan te nemen --
-            # was voorheen de bron van een echte, verwarrende bug: een
-            # Amerikaans aandeel gekocht in USD werd stilzwijgend als EUR
-            # behandeld, wat het rendement volledig verkeerd berekende.
-            # Slimme default: de native valuta van de gekozen ticker (zoals
-            # je die op je broker-overzicht zou zien), maar altijd
-            # aanpasbaar -- voor het geval je toch de EUR-equivalente
-            # prijs invoert (bv. van een DEGIRO-overzicht).
-            tx_ticker_for_currency = tx_holding["ticker"] if tx_holding else new_position_symbol
-            tx_default_currency = (
-                get_cached_ticker_currency(tx_ticker_for_currency) if tx_ticker_for_currency else "EUR"
+            if tx_type is None:
+                tx_type = "Buy"
+            is_buy = tx_type == "Buy"
+        else:
+            # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
+            is_buy = True
+            tx_search_query = st.text_input(
+                "Search for the company/asset you bought", key="tx_search_query",
             )
-            tx_currency_options = ["EUR", "USD", "GBP", "CAD", "CHF", "SEK", "DKK", "NOK", "HKD", "JPY", "AUD"]
-            tx_currency_default_index = (
-                tx_currency_options.index(tx_default_currency) if tx_default_currency in tx_currency_options else 0
-            )
-            tx_currency = st.selectbox(
-                "Price currency", tx_currency_options, index=tx_currency_default_index, key="tx_currency_input",
-                help="The currency the price above is in -- usually the ticker's native trading currency.",
-            )
-
-            can_save = (tx_holding is not None) or (new_position_symbol is not None)
-
-            if can_save and st.button("Save transaction", type="primary"):
-                if tx_shares <= 0 or tx_price <= 0:
-                    st.error("Shares and price must both be greater than 0.")
+            if tx_search_query:
+                try:
+                    tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
+                except Exception as exc:
+                    tx_search_results = []
+                    st.caption(f"Search failed: {exc}")
+                if tx_search_results:
+                    tx_options = {}
+                    for r in tx_search_results:
+                        name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                        label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                        tx_options[label] = r
+                    tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
+                    tx_chosen = tx_options[tx_chosen_label]
+                    new_position_symbol = tx_chosen.get("symbol")
+                    new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
                 else:
-                    if tx_position_mode == "New position":
-                        if len(holdings) >= 10 and not is_premium:
-                            st.error(
-                                "You've reached the free plan limit of 10 tracked positions. "
-                                "Upgrade to Premium for unlimited tracking."
-                            )
-                        else:
-                            new_id = database.add_holding(
-                                user_email, new_position_name, new_position_symbol, shares=None,
-                                value_currency=get_cached_ticker_currency(new_position_symbol),
-                            )
-                            database.add_transaction(
-                                user_email, new_id, "buy",
-                                shares=tx_shares, price=tx_price, fee=tx_fee,
-                                transaction_date=tx_date.isoformat(), currency=tx_currency,
-                            )
-                            sync_holding_shares_from_transactions(new_id, user_email)
-                            st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
-                            st.rerun()
-                    else:
-                        existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
-                        existing_manual_shares = tx_holding.get("shares") or 0.0
-                        if not existing_tx and existing_manual_shares > 0:
-                            # Eerste transactie voor deze positie, en er stond al een handmatig
-                            # aantal shares -- die vangen we automatisch op als een 'gekocht
-                            # tegen de huidige prijs, vandaag'-transactie (simpele standaard,
-                            # geen keuzemenu nodig; later aanpasbaar als je de echte
-                            # historische aankoopprijs nog weet).
-                            try:
-                                backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
-                                backfill_currency = get_cached_ticker_currency(tx_holding["ticker"])
-                            except Exception:
-                                backfill_price = tx_price  # fallback als de live prijs niet op te halen is
-                                backfill_currency = tx_currency
-                            database.add_transaction(
-                                user_email, tx_holding["id"], "buy",
-                                shares=existing_manual_shares, price=backfill_price, fee=0.0,
-                                transaction_date=datetime.now().date().isoformat(), currency=backfill_currency,
-                            )
-                            existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
-                            backfill_symbol = "€" if backfill_currency == "EUR" else ("$" if backfill_currency == "USD" else backfill_currency + " ")
-                            st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
-                                    f"bought at today's price ({backfill_symbol}{backfill_price:.2f}) -- edit this later if "
-                                    f"you remember the actual original purchase price.")
+                    st.caption("No results found for this search -- try a different name.")
 
+        trow1_col1, trow1_col2 = st.columns(2)
+        with trow1_col1:
+            tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
+        with trow1_col2:
+            tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
+        trow2_col1, trow2_col2 = st.columns(2)
+        with trow2_col1:
+            tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
+        with trow2_col2:
+            tx_date = st.date_input("Date", key="tx_date_input")
+
+        # Valuta expliciet vragen i.p.v. altijd EUR aan te nemen --
+        # was voorheen de bron van een echte, verwarrende bug: een
+        # Amerikaans aandeel gekocht in USD werd stilzwijgend als EUR
+        # behandeld, wat het rendement volledig verkeerd berekende.
+        # Slimme default: de native valuta van de gekozen ticker (zoals
+        # je die op je broker-overzicht zou zien), maar altijd
+        # aanpasbaar -- voor het geval je toch de EUR-equivalente
+        # prijs invoert (bv. van een DEGIRO-overzicht).
+        tx_ticker_for_currency = tx_holding["ticker"] if tx_holding else new_position_symbol
+        tx_default_currency = (
+            get_cached_ticker_currency(tx_ticker_for_currency) if tx_ticker_for_currency else "EUR"
+        )
+        tx_currency_options = ["EUR", "USD", "GBP", "CAD", "CHF", "SEK", "DKK", "NOK", "HKD", "JPY", "AUD"]
+        tx_currency_default_index = (
+            tx_currency_options.index(tx_default_currency) if tx_default_currency in tx_currency_options else 0
+        )
+        tx_currency = st.selectbox(
+            "Price currency", tx_currency_options, index=tx_currency_default_index, key="tx_currency_input",
+            help="The currency the price above is in -- usually the ticker's native trading currency.",
+        )
+
+        can_save = (tx_holding is not None) or (new_position_symbol is not None)
+
+        if can_save and st.button("Save transaction", type="primary"):
+            if tx_shares <= 0 or tx_price <= 0:
+                st.error("Shares and price must both be greater than 0.")
+            else:
+                if tx_position_mode == "New position":
+                    if len(holdings) >= 10 and not is_premium:
+                        st.error(
+                            "You've reached the free plan limit of 10 tracked positions. "
+                            "Upgrade to Premium for unlimited tracking."
+                        )
+                    else:
+                        new_id = database.add_holding(
+                            user_email, new_position_name, new_position_symbol, shares=None,
+                            value_currency=get_cached_ticker_currency(new_position_symbol),
+                        )
                         database.add_transaction(
-                            user_email, tx_holding["id"], "buy" if is_buy else "sell",
+                            user_email, new_id, "buy",
                             shares=tx_shares, price=tx_price, fee=tx_fee,
                             transaction_date=tx_date.isoformat(), currency=tx_currency,
                         )
-                        shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+                        sync_holding_shares_from_transactions(new_id, user_email)
+                        st.success(f"{new_position_name} ({new_position_symbol}) added, with your buy logged!")
+                        st.rerun()
+                else:
+                    existing_tx = database.get_transactions_for_holding(user_email, tx_holding["id"])
+                    existing_manual_shares = tx_holding.get("shares") or 0.0
+                    if not existing_tx and existing_manual_shares > 0:
+                        # Eerste transactie voor deze positie, en er stond al een handmatig
+                        # aantal shares -- die vangen we automatisch op als een 'gekocht
+                        # tegen de huidige prijs, vandaag'-transactie (simpele standaard,
+                        # geen keuzemenu nodig; later aanpasbaar als je de echte
+                        # historische aankoopprijs nog weet).
+                        try:
+                            backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
+                            backfill_currency = get_cached_ticker_currency(tx_holding["ticker"])
+                        except Exception:
+                            backfill_price = tx_price  # fallback als de live prijs niet op te halen is
+                            backfill_currency = tx_currency
+                        database.add_transaction(
+                            user_email, tx_holding["id"], "buy",
+                            shares=existing_manual_shares, price=backfill_price, fee=0.0,
+                            transaction_date=datetime.now().date().isoformat(), currency=backfill_currency,
+                        )
+                        existing_tx.append({"transaction_type": "buy", "shares": existing_manual_shares})
+                        backfill_symbol = "€" if backfill_currency == "EUR" else ("$" if backfill_currency == "USD" else backfill_currency + " ")
+                        st.info(f"Your existing {existing_manual_shares:.2f} shares were logged as "
+                                f"bought at today's price ({backfill_symbol}{backfill_price:.2f}) -- edit this later if "
+                                f"you remember the actual original purchase price.")
 
-                        # Bij een verkoop naar ~0 shares: de positie NIET verwijderen (dat zou
-                        # via de cascade ook de transactiegeschiedenis wissen, en dus je
-                        # gerealiseerde winst/verlies uit Performance laten verdwijnen) --
-                        # 'ie blijft gewoon bestaan met 0 shares, verborgen uit My Portfolio
-                        # via filter_active_holdings(), maar telt nog mee bij Performance.
-                        if not is_buy and shares_after <= 0.001:
-                            st.success(f"Sell logged -- {tx_holding['naam']} is now fully closed. "
-                                       f"Its history still counts toward your Performance stats.")
-                            st.rerun()
+                    database.add_transaction(
+                        user_email, tx_holding["id"], "buy" if is_buy else "sell",
+                        shares=tx_shares, price=tx_price, fee=tx_fee,
+                        transaction_date=tx_date.isoformat(), currency=tx_currency,
+                    )
+                    shares_after = sync_holding_shares_from_transactions(tx_holding["id"], user_email)
 
-                        st.success("Transaction saved!")
+                    # Bij een verkoop naar ~0 shares: de positie NIET verwijderen (dat zou
+                    # via de cascade ook de transactiegeschiedenis wissen, en dus je
+                    # gerealiseerde winst/verlies uit Performance laten verdwijnen) --
+                    # 'ie blijft gewoon bestaan met 0 shares, verborgen uit My Portfolio
+                    # via filter_active_holdings(), maar telt nog mee bij Performance.
+                    if not is_buy and shares_after <= 0.001:
+                        st.success(f"Sell logged -- {tx_holding['naam']} is now fully closed. "
+                                   f"Its history still counts toward your Performance stats.")
                         st.rerun()
 
-            if tx_holding is not None:
-                tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
-                if tx_history:
-                    if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
-                        for t in tx_history:
-                            hcol1, hcol2 = st.columns([5, 1])
-                            with hcol1:
-                                is_buy = t["transaction_type"] == "buy"
-                                type_icon = "add_circle" if is_buy else "remove_circle"
-                                type_color = "#1FAE96" if is_buy else "#E5484D"
-                                tx_hist_symbol = "€" if t.get("currency") == "EUR" else ("$" if t.get("currency") == "USD" else (t.get("currency") or "EUR") + " ")
-                                st.markdown(
-                                    f'<span style="display:inline-flex; align-items:center; gap:0.3rem; font-size:0.85rem; color:#8992A3;">'
-                                    f'{_icon_span(type_icon, size_px=14, color=type_color)}'
-                                    f'{t["transaction_date"]}: {t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
-                                    f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
-                                    unsafe_allow_html=True,
-                                )
-                            with hcol2:
-                                if st.button("✕", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
-                                    database.delete_transaction(t["id"], user_email)
-                                    remaining = [x for x in tx_history if x["id"] != t["id"]]
-                                    if not remaining:
-                                        # Geen transacties meer over voor deze positie -- voorkomt een
-                                        # 'verweesde' positie zonder shares en zonder geschiedenis.
-                                        database.delete_holding(tx_holding["id"], user_email)
-                                        st.success("Transaction deleted -- this position had no other "
-                                                   "transactions left, so it was removed too.")
-                                    else:
-                                        sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-                                        st.success("Transaction deleted.")
-                                    st.rerun()
+                    st.success("Transaction saved!")
+                    st.rerun()
 
-                        # Alles-in-1x wissen -- handig om oude, minder-precieze
-                        # transacties (bv. van vóór een CSV-parser-verbetering)
-                        # op te schonen vóór een schone herimport, i.p.v. ze
-                        # 1-voor-1 te moeten verwijderen. 2-staps-bevestiging
-                        # (destructieve actie): 1e klik toont de waarschuwing,
-                        # 2e klik voert 'm daadwerkelijk uit.
-                        st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-                        delete_all_confirm_key = f"confirm_delete_all_tx_{tx_holding['id']}"
-                        if not st.session_state.get(delete_all_confirm_key, False):
-                            if st.button(
-                                "Delete all transactions for this position", icon=":material/delete_sweep:",
-                                key=f"delete_all_tx_btn_{tx_holding['id']}",
-                            ):
-                                st.session_state[delete_all_confirm_key] = True
-                                st.rerun()
-                        else:
-                            st.warning(
-                                f"This will permanently delete all {len(tx_history)} transactions for "
-                                f"{tx_holding['naam']} -- useful if you want to re-import this position "
-                                f"cleanly (e.g. after a CSV-import precision fix). This cannot be undone."
+        if tx_holding is not None:
+            tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
+            if tx_history:
+                if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
+                    for t in tx_history:
+                        hcol1, hcol2 = st.columns([5, 1])
+                        with hcol1:
+                            is_buy = t["transaction_type"] == "buy"
+                            type_icon = "add_circle" if is_buy else "remove_circle"
+                            type_color = "#1FAE96" if is_buy else "#E5484D"
+                            tx_hist_symbol = "€" if t.get("currency") == "EUR" else ("$" if t.get("currency") == "USD" else (t.get("currency") or "EUR") + " ")
+                            st.markdown(
+                                f'<span style="display:inline-flex; align-items:center; gap:0.3rem; font-size:0.85rem; color:#8992A3;">'
+                                f'{_icon_span(type_icon, size_px=14, color=type_color)}'
+                                f'{t["transaction_date"]}: {t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
+                                f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
+                                unsafe_allow_html=True,
                             )
-                            confirm_col1, confirm_col2 = st.columns(2)
-                            with confirm_col1:
-                                if st.button("Yes, delete all", key=f"confirm_delete_all_tx_btn_{tx_holding['id']}", type="primary"):
-                                    database.delete_all_transactions_for_holding(tx_holding["id"], user_email)
+                        with hcol2:
+                            if st.button("✕", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                database.delete_transaction(t["id"], user_email)
+                                remaining = [x for x in tx_history if x["id"] != t["id"]]
+                                if not remaining:
+                                    # Geen transacties meer over voor deze positie -- voorkomt een
+                                    # 'verweesde' positie zonder shares en zonder geschiedenis.
                                     database.delete_holding(tx_holding["id"], user_email)
-                                    st.session_state[delete_all_confirm_key] = False
-                                    st.success(f"All transactions for {tx_holding['naam']} deleted -- "
-                                               f"you can now re-import it cleanly.")
-                                    st.rerun()
-                            with confirm_col2:
-                                if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{tx_holding['id']}"):
-                                    st.session_state[delete_all_confirm_key] = False
-                                    st.rerun()
+                                    st.success("Transaction deleted -- this position had no other "
+                                               "transactions left, so it was removed too.")
+                                else:
+                                    sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+                                    st.success("Transaction deleted.")
+                                st.rerun()
 
-    # ============================================================
-    # WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today
-    # ============================================================
-    with st.expander("Watchlist", expanded=False, key="watchlist_expander"):
+                    # Alles-in-1x wissen -- handig om oude, minder-precieze
+                    # transacties (bv. van vóór een CSV-parser-verbetering)
+                    # op te schonen vóór een schone herimport, i.p.v. ze
+                    # 1-voor-1 te moeten verwijderen. 2-staps-bevestiging
+                    # (destructieve actie): 1e klik toont de waarschuwing,
+                    # 2e klik voert 'm daadwerkelijk uit.
+                    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+                    delete_all_confirm_key = f"confirm_delete_all_tx_{tx_holding['id']}"
+                    if not st.session_state.get(delete_all_confirm_key, False):
+                        if st.button(
+                            "Delete all transactions for this position", icon=":material/delete_sweep:",
+                            key=f"delete_all_tx_btn_{tx_holding['id']}",
+                        ):
+                            st.session_state[delete_all_confirm_key] = True
+                            st.rerun()
+                    else:
+                        st.warning(
+                            f"This will permanently delete all {len(tx_history)} transactions for "
+                            f"{tx_holding['naam']} -- useful if you want to re-import this position "
+                            f"cleanly (e.g. after a CSV-import precision fix). This cannot be undone."
+                        )
+                        confirm_col1, confirm_col2 = st.columns(2)
+                        with confirm_col1:
+                            if st.button("Yes, delete all", key=f"confirm_delete_all_tx_btn_{tx_holding['id']}", type="primary"):
+                                database.delete_all_transactions_for_holding(tx_holding["id"], user_email)
+                                database.delete_holding(tx_holding["id"], user_email)
+                                st.session_state[delete_all_confirm_key] = False
+                                st.success(f"All transactions for {tx_holding['naam']} deleted -- "
+                                           f"you can now re-import it cleanly.")
+                                st.rerun()
+                        with confirm_col2:
+                            if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{tx_holding['id']}"):
+                                st.session_state[delete_all_confirm_key] = False
+                                st.rerun()
+
+    elif manage_section == "Watchlist":
+        # --- WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today ---
         st.caption("Track tickers you don't own yet -- they'll show up with personalized "
                    "signals and news on the Today page.")
 

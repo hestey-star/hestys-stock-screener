@@ -224,6 +224,19 @@ def update_holding_value(holding_id: int, user_email: str, position_value: float
         .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def set_target_weight(holding_id: int, user_email: str, target_weight: float = None) -> None:
+    """
+    Stelt het target-gewicht (percentage van de portfolio) voor 1
+    positie in -- los, eigen instelbaar per positie (geen koppeling aan
+    een vooraf-gedefinieerde tier-structuur). target_weight=None wist
+    het target weer (positie doet dan niet mee aan rebalancing-
+    suggesties, zonder de positie zelf te verwijderen).
+    """
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"target_weight": target_weight}) \
+        .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def delete_holding(holding_id: int, user_email: str) -> None:
     """
     Verwijdert een positie. Filtert OOK op user_email als extra
