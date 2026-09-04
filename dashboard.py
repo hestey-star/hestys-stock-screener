@@ -399,6 +399,24 @@ div[data-testid="stFileUploader"] section button {
     border: none !important;
     font-weight: 700 !important;
 }
+/* Watchlist-rij: kolommen laten krimpen naar hun DAADWERKELIJKE inhoud
+   i.p.v. de vaste, proportionele ratio-breedte -- st.columns() reserveert
+   normaal altijd de volle, toegewezen breedte per kolom, ongeacht hoe
+   kort de inhoud is, wat bij een korte naam als 'HIMS' een groot, leeg
+   gat tussen de naam en de bel/prullenbak-iconen gaf. Gescoped via het
+   '.watchlist-row-anchor'-element dat we vlak VOOR elke st.columns()-
+   aanroep in de watchlist plaatsen (CSS adjacent-sibling-selector) --
+   raakt dus ALLEEN deze specifieke rijen, geen andere st.columns()
+   elders op de site. */
+.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+}
+.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -5609,7 +5627,8 @@ def render_portfolio():
                 watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
                 for w in watchlist_items:
-                    w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1])
+                    st.markdown('<div class="watchlist-row-anchor"></div>', unsafe_allow_html=True)
+                    w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1])
                     with w_row_col1:
                         # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                         # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
