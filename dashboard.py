@@ -1728,13 +1728,13 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             )
             sign = "+" if day_change_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'IBM Plex Mono\', monospace;">{sign}{value_part}'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}'
                 f'({day_change_pct:+.1f}%) {arrow}</span>'
             )
         if current_price is not None:
             price_display = f'{currency_symbol}{current_price:,.2f}'
             detail_html = (
-                f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
+                f'<span style="color:#8992A3; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.72rem; flex-shrink:0;">'
                 f'&middot; {price_display}</span>'
             )
         else:
@@ -1748,14 +1748,14 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             )
             sign = "+" if all_time_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'IBM Plex Mono\', monospace;">{sign}{value_part}'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}'
                 f'({all_time_pct:+.1f}%) {arrow}</span>'
             )
             avg_cost_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
             current_price_str_mobile = f'{currency_symbol}{current_price:,.2f}' if current_price is not None else "-"
             price_display = f'{avg_cost_str} &rarr; {current_price_str_mobile}'
             detail_html = (
-                f'<span style="color:{color}; font-family:\'IBM Plex Mono\', monospace; font-size:0.72rem; flex-shrink:0;">'
+                f'<span style="color:{color}; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.72rem; flex-shrink:0;">'
                 f'&middot; {price_display}</span>'
             )
         else:
@@ -1793,7 +1793,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
         f'<span style="font-weight:800; color:#EAEDF1; font-size:1rem; letter-spacing:0.01em;">{ticker}</span>'
         f'<div style="text-align:right;">'
-        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.98rem; font-family:\'IBM Plex Mono\', monospace; white-space:nowrap;">{value_text}</span>'
+        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.98rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; white-space:nowrap;">{value_text}</span>'
         f'{shares_html}'
         f'</div>'
         f'</div>'
@@ -1822,10 +1822,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{price_display or "-"}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{price_display or "-"}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
@@ -1846,11 +1846,11 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{cost_price_str}</div>'
-            f'<div style="color:#EAEDF1; font-family:\'IBM Plex Mono\', monospace; font-size:1.05rem; font-weight:700;">{current_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{cost_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{current_price_str}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'IBM Plex Mono\', monospace;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.15rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
@@ -4485,7 +4485,7 @@ def render_portfolio():
                         )
                     st.markdown(
                         f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
-                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'IBM Plex Mono\', monospace;">{shown_symbol}{total_value:,.0f}</div>'
+                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{shown_symbol}{total_value:,.0f}</div>'
                         f'{total_day_change_html}'
                         f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>',
                         unsafe_allow_html=True,
@@ -4818,7 +4818,7 @@ def render_portfolio():
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
                                     f'{_icon_span(type_icon, size_px=16, color=type_color)}'
                                     f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem;">{type_label}</span>'
-                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'IBM Plex Mono\', monospace;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
+                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
                                     f'</div>'
                                     f'<span style="color:#8992A3; font-size:0.78rem; white-space:nowrap; flex-shrink:0;">{t["transaction_date"]}</span>'
                                     f'</div>'
