@@ -399,6 +399,23 @@ div[data-testid="stFileUploader"] section button {
     border: none !important;
     font-weight: 700 !important;
 }
+/* Watchlist bel/prullenbak-knoppen compacter. De prullenbak-knop via
+   Streamlit's eigen .st-key-{key}-klasse (gebaseerd op een key die
+   wijzelf definieren). De bel-knop is een st.popover() -- die
+   ondersteunt GEEN key-parameter (bevestigd in Streamlit's eigen
+   documentatie), dus daarvoor de generieke stPopover-testid gebruikt.
+   Dit is hier veilig: st.popover() wordt NERGENS anders op de site
+   gebruikt (dus geen risico op onbedoelde neveneffecten elders). */
+[class*="st-key-watchlist_delete_"] button {
+    padding: 0.15rem 0.4rem !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
+div[data-testid="stPopover"] button {
+    padding: 0.15rem 0.4rem !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -5610,9 +5627,9 @@ def render_portfolio():
 
                 for w in watchlist_items:
                     try:
-                        w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1], gap="small", width=300)
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1], gap="small", width=450)
                     except Exception:
-                        w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1])
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1])
                     with w_row_col1:
                         # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                         # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
