@@ -41,6 +41,30 @@ VOLUME_AVG_DAYS = 20
 MIN_PRIOR_TREND_DAYS = 15          # zigzag-ruis-filter (i.p.v. 8 WEKEN)
 EARNINGS_RELEVANCE_DAYS = 45       # hoe recent winstcijfers moeten zijn (i.p.v. 8 WEKEN)
 
+# GEVONDEN, BELANGRIJKE BUG: als yfinance op het moment van deze scan
+# (05:07 UTC, dus voordat yfinance's eigen data-pijplijn de vorige
+# Amerikaanse handelsdag altijd al heeft verwerkt) de meest recente
+# slotkoers nog niet heeft bijgewerkt, wijst fetch_daily()'s
+# versheidscheck ALLE tickers tegelijk af (leeg resultaat, 'te oud').
+# Dat op zich is correct (geen onbetrouwbare data gebruiken) -- maar
+# 'main()' behandelde dit vervolgens hetzelfde als 'echt geen signalen
+# vandaag': geen foutmelding, geen nieuwe CSV weggeschreven, workflow
+# blijft gewoon groen. Het gevolg: de oude, laatst-geslaagde CSV bleef
+# eindeloos staan, en site + mail bleven dezelfde, steeds-verder-
+# verouderende tickers tonen, dagenlang, zonder dat er ooit een
+# zichtbare fout was.
+#
+# Deze module-niveau teller houdt specifiek bij hoe vaak fetch_daily()
+# een ticker afwees vanwege VERSHEID (niet om een andere reden, zoals
+# een delisted ticker of een tijdelijke netwerkfout) -- zodat main() het
+# onderscheid kan maken en de run expliciet kan laten falen als STALE
+# DATA de oorzaak was. Dat maakt de workflow zichtbaar rood (in plaats
+# van een vals-geruststellend groen), en zorgt ervoor dat de 05:37 UTC-
+# vangnetrun het automatisch opnieuw probeert (de dedup-check in
+# daily.yml kijkt naar de laatste COMMIT-datum van de CSV, die dan
+# terecht nog niet van vandaag is).
+_stale_data_skip_count = 0
+
 
 def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
     """
@@ -110,6 +134,8 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
             print(f"    (Overgeslagen: laatste data voor {ticker} is {days_stale} dag(en) oud "
                   f"(laatste koers: {last_date.date()}) -- waarschijnlijk yfinance-vertraging, "
                   f"niet betrouwbaar genoeg voor vandaag.)")
+            global _stale_data_skip_count
+            _stale_data_skip_count += 1
             return pd.DataFrame()
 
     return df
@@ -433,6 +459,14 @@ def main(send_own_email: bool = True) -> None:
     print("Fetching benchmark returns (for relative strength)...")
     benchmark_returns = fetch_benchmark_returns_daily()
 
+    # De teller resetten NA de benchmark-fetch (die ook fetch_daily()
+    # aanroept, voor elke unieke benchmark-index) -- zodat de
+    # stale_ratio-berekening verderop uitsluitend de daadwerkelijk
+    # gescreende tickers (len(tickers)) weerspiegelt, niet de paar
+    # losse benchmark-aanroepen ervoor.
+    global _stale_data_skip_count
+    _stale_data_skip_count = 0
+
     print(f"\nScreening {len(tickers)} tickers for recent bullish Supertrend flips "
           f"(daily, ATR length {ATR_LENGTH}, multiplier {ATR_MULTIPLIER})...\n")
 
@@ -466,6 +500,32 @@ def main(send_own_email: bool = True) -> None:
         df_movers = pd.DataFrame(movers).sort_values("change_pct", ascending=False)
         df_movers.to_csv("top_movers.csv", index=False)
         print(f"\nSaved {len(df_movers)} tickers' daily change to 'top_movers.csv'.")
+
+    # GEVONDEN BUG: als yfinance's data op het scan-moment nog niet vers
+    # genoeg is, wees fetch_daily() voorheen ALLE tickers stilzwijgend af
+    # -- 'main()' zag dan gewoon 'geen hits', rapporteerde dat als een
+    # normale, geslaagde dag zonder signalen, en de oude CSV (van de
+    # laatst-echt-geslaagde run) bleef eindeloos staan, zonder dat er
+    # ooit een zichtbare fout was. Nu expliciet detecteren: als een groot
+    # deel (hier: meer dan de helft) van alle tickers werd afgewezen
+    # vanwege VERSHEID specifiek (niet een andere reden), is dit
+    # duidelijk een yfinance-vertraging op scan-moment, geen 'stille
+    # markt'-dag -- laat de run dan zichtbaar FALEN (rode workflow-run,
+    # i.p.v. een vals-geruststellend groen) en GEEN CSV/mail aanraken, zodat:
+    # 1. Je het meteen ziet in GitHub Actions.
+    # 2. De 05:37 UTC-vangnetrun het automatisch opnieuw probeert -- de
+    #    dedup-check in daily.yml kijkt naar de laatste COMMIT-datum van
+    #    de CSV, die dan terecht nog niet van vandaag is (er is niets
+    #    gecommit), dus de tweede poging wordt niet overgeslagen.
+    stale_ratio = _stale_data_skip_count / len(tickers) if tickers else 0
+    if stale_ratio > 0.5:
+        print(f"\nFOUT: {_stale_data_skip_count} van de {len(tickers)} tickers "
+              f"({stale_ratio:.0%}) werden afgewezen vanwege te-oude data -- "
+              f"dit is waarschijnlijk een yfinance-vertraging op dit scan-moment, "
+              f"geen 'stille markt'-dag. Geen CSV/mail aangeraakt; de 05:37 UTC-"
+              f"vangnetrun probeert het automatisch opnieuw.")
+        import sys
+        sys.exit(1)
 
     if not hits:
         print("\nNo signals today.")

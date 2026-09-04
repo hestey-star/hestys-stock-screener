@@ -4885,17 +4885,24 @@ def render_portfolio():
     # 3. MANAGE
     # ============================================================
     st.markdown(
-        '<div style="margin: 1.5rem 0 0.75rem 0; padding-top: 1rem; border-top: 1px solid rgba(137,146,163,0.15);">'
-        '<span style="font-weight:700; font-size:1.05rem; color:#EAEDF1;">Manage</span>'
-        '</div>',
+        _flowing_section_header_html("Manage", "tune"),
         unsafe_allow_html=True,
     )
-    manage_section = st.segmented_control(
-        "Manage section", options=["Import from broker", "Log transaction", "Watchlist"],
-        default="Import from broker", key="manage_section_select", label_visibility="collapsed",
+    manage_section_options = [
+        ":material/upload_file: Import from broker",
+        ":material/receipt_long: Log transaction",
+        ":material/visibility: Watchlist",
+    ]
+    manage_section_selected = st.segmented_control(
+        "Manage section", options=manage_section_options,
+        default=manage_section_options[0], key="manage_section_select", label_visibility="collapsed",
     )
-    if manage_section is None:
-        manage_section = "Import from broker"
+    if manage_section_selected is None:
+        manage_section_selected = manage_section_options[0]
+    # De iconen-prefix (":material/...: ") eraf strippen zodat de rest van
+    # de code hieronder gewoon de bekende, korte namen kan blijven
+    # vergelijken -- alleen de WEERGAVE kreeg een icoon, niet de logica.
+    manage_section = manage_section_selected.split(": ", 1)[-1]
 
     if manage_section == "Import from broker":
         # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
@@ -5019,10 +5026,13 @@ def render_portfolio():
             for key, group in sorted_items:
                 current_ticker = st.session_state["degiro_ticker_matches"].get(key, "").strip()
                 is_new_position = current_ticker and current_ticker not in existing_tickers_set
-                dcol1, dcol2, dcol3 = st.columns([3, 2, 1]) if is_new_position else (*st.columns([3, 2]), None)
-                with dcol1:
-                    prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
-                    st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
+                # Naam krijgt de VOLLE breedte i.p.v. een eigen, smalle kolom
+                # -- op mobiel werd de rest (ticker-keuze, target%) anders
+                # samengeperst in nog krappere kolommen ernaast. Ticker +
+                # target staan nu in een eigen, ruimere rij eronder.
+                prefix = f"{_icon_span('warning', size_px=13, color='#E5484D')} " if key in unmatched_keys else ""
+                st.caption(f"{prefix}{group['product']} ({len(group['transactions'])} transactions)", unsafe_allow_html=True)
+                dcol2, dcol3 = st.columns([2, 1]) if is_new_position else (st.columns([1])[0], None)
                 with dcol2:
                     candidates = st.session_state["degiro_ticker_candidates"].get(key, [])
                     if len(candidates) >= 2:
@@ -5069,6 +5079,7 @@ def render_portfolio():
                             key=f"degiro_target_{key}", label_visibility="collapsed",
                             help="Optional -- target allocation % for this new position",
                         )
+                st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
 
 
 
