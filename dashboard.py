@@ -4941,8 +4941,17 @@ def render_portfolio():
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
             # de hoofdtaak zelf.
             st.markdown("**Upload your transactions**")
-            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
-                                           label_visibility="collapsed")
+            # width=320 i.p.v. de standaard 'stretch' -- zonder dit vult de
+            # uploader altijd de VOLLE breedte van de kaart, wat de brede,
+            # grijze balk gaf die je zag. Val terug op de oude aanroep als
+            # deze (relatief nieuwe) parameter niet bestaat in de
+            # geïnstalleerde Streamlit-versie.
+            try:
+                degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
+                                               label_visibility="collapsed", width=320)
+            except TypeError:
+                degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
+                                               label_visibility="collapsed")
             st.caption("Export your broker's 'Transactions' CSV and upload it here to import "
                        "your full buy/sell history in one go, instead of logging each one by hand.")
 
@@ -4956,21 +4965,22 @@ def render_portfolio():
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
                     st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
 
-            # DEGIRO-badge + 'andere broker?'-link nu SAMEN, lager -- dit is
-            # ondersteunende context, geen hoofdtaak, dus verdient minder
-            # nadruk dan de upload zelf erboven.
+            # 'Supported brokers'-lijst i.p.v. een losse badge -- schaalt
+            # netjes mee zodra er een 2e/3e broker bijkomt. Favicon via
+            # Google's favicon-service (zelfde, al-geplande aanpak als
+            # bedrijfslogo's bij deep-dives) i.p.v. een zelf-gehost, echt
+            # DEGIRO-merklogo -- vermijdt trademark-issues.
             st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            st.markdown("**Supported brokers**")
             st.markdown(
-                '<div style="display:inline-flex; align-items:center; gap:0.4rem; '
-                'background:rgba(31,174,150,0.1); border:1px solid rgba(31,174,150,0.35); '
-                'border-radius:20px; padding:0.3rem 0.8rem; margin-bottom:0.5rem;">'
-                f'{_icon_span("verified", size_px=15, color="#1FAE96")}'
-                '<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">DEGIRO supported</span>'
+                '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                '<img src="https://www.google.com/s2/favicons?domain=degiro.com&sz=32" '
+                'style="width:18px; height:18px; border-radius:4px;">'
+                '<span style="color:#EAEDF1; font-size:0.9rem;">DEGIRO</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
-            st.caption("Using a different broker? Request it here.")
-            st.page_link(support_page, label="Go to Support", icon=":material/support_agent:")
+            st.page_link(support_page, label="Request a new broker", icon=":material/add_circle:")
 
             already_imported = st.session_state.get("degiro_imported_filenames", set())
 
