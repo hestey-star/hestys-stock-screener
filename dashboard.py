@@ -379,6 +379,26 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     border: 1px solid rgba(137,146,163,0.18) !important;
     border-radius: 12px !important;
 }
+/* Compactere file-uploaders op de HELE site -- het 'Limit 200MB per
+   file * CSV'-regeltje voegt weinig waarde toe en maakt de widget
+   onnodig zwaar/breed; de Browse-knop krijgt Hesty's eigen jade-kleur
+   zodat die duidelijk als DE actie oogt, i.p.v. Streamlit's standaard,
+   neutrale knop-stijl. */
+div[data-testid="stFileUploaderDropzoneInstructions"] small,
+div[data-testid="stFileDropzoneInstructions"] small {
+    display: none !important;
+}
+div[data-testid="stFileUploaderDropzone"],
+div[data-testid="stFileUploadDropzone"] {
+    padding: 0.6rem 1rem !important;
+    min-height: unset !important;
+}
+div[data-testid="stFileUploader"] section button {
+    background: #1FAE96 !important;
+    color: #0B1210 !important;
+    border: none !important;
+    font-weight: 700 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -4917,23 +4937,14 @@ def render_portfolio():
     if manage_section == "Import from broker":
         with st.container(border=True):
             # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-            # DEGIRO-badge (tekst + icoon, GEEN echt merklogo -- vermijdt
-            # trademark-issues) i.p.v. een platte zin, om meteen duidelijk
-            # te maken dat dit een ECHT-ondersteunde, herkende broker is,
-            # niet zomaar een losse CSV-upload.
-            st.markdown(
-                '<div style="display:inline-flex; align-items:center; gap:0.4rem; '
-                'background:rgba(31,174,150,0.1); border:1px solid rgba(31,174,150,0.35); '
-                'border-radius:20px; padding:0.3rem 0.8rem; margin-bottom:0.6rem;">'
-                f'{_icon_span("verified", size_px=15, color="#1FAE96")}'
-                '<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">DEGIRO supported</span>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
+            # Upload is nu de EERSTE, meest prominente actie -- geen
+            # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
+            # de hoofdtaak zelf.
             st.markdown("**Upload your transactions**")
+            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
+                                           label_visibility="collapsed")
             st.caption("Export your broker's 'Transactions' CSV and upload it here to import "
                        "your full buy/sell history in one go, instead of logging each one by hand.")
-            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
 
             if hasattr(database, "get_last_csv_import"):
                 try:
@@ -4945,9 +4956,21 @@ def render_portfolio():
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
                     st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
 
-            st.markdown("<div style='height: 0.3rem'></div>", unsafe_allow_html=True)
-            st.page_link(support_page, label="Using a different broker? Go to Support",
-                         icon=":material/support_agent:")
+            # DEGIRO-badge + 'andere broker?'-link nu SAMEN, lager -- dit is
+            # ondersteunende context, geen hoofdtaak, dus verdient minder
+            # nadruk dan de upload zelf erboven.
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            st.markdown(
+                '<div style="display:inline-flex; align-items:center; gap:0.4rem; '
+                'background:rgba(31,174,150,0.1); border:1px solid rgba(31,174,150,0.35); '
+                'border-radius:20px; padding:0.3rem 0.8rem; margin-bottom:0.5rem;">'
+                f'{_icon_span("verified", size_px=15, color="#1FAE96")}'
+                '<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">DEGIRO supported</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption("Using a different broker? Request it here.")
+            st.page_link(support_page, label="Go to Support", icon=":material/support_agent:")
 
             already_imported = st.session_state.get("degiro_imported_filenames", set())
 
@@ -5249,41 +5272,6 @@ def render_portfolio():
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
-            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
-            # bulk-delete-knop, voor als je NA een structurele CSV-parser-
-            # verbetering niet elke positie apart wilt opschonen. BEWUST
-            # klein en helemaal onderaan gehouden (i.p.v. een eigen, volle
-            # kaart bovenaan) -- dit is een zelden-gebruikte, geavanceerde
-            # actie, niet de hoofdtaak van deze sectie. Zelfde, simpele
-            # 2-staps-bevestiging (klik -> waarschuwing -> bevestig) als de
-            # per-positie-versie, i.p.v. tekst moeten typen.
-            st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-            if not st.session_state.get("confirm_reset_all_holdings", False):
-                if st.button(
-                    "Start over: delete all my positions", type="tertiary",
-                    icon=":material/delete_forever:", key="reset_all_holdings_btn",
-                ):
-                    st.session_state["confirm_reset_all_holdings"] = True
-                    st.rerun()
-            else:
-                st.warning(
-                    "This will permanently delete ALL your positions and their full "
-                    "transaction history -- useful if you want to cleanly re-import "
-                    "everything after a data-precision fix. Your watchlist is not affected. "
-                    "This cannot be undone."
-                )
-                reset_confirm_col1, reset_confirm_col2 = st.columns(2)
-                with reset_confirm_col1:
-                    if st.button("Yes, delete everything", key="confirm_reset_all_holdings_btn", type="primary"):
-                        database.delete_all_holdings_and_transactions(user_email)
-                        st.session_state["confirm_reset_all_holdings"] = False
-                        st.success("All positions and transactions deleted -- you can now re-import cleanly above.")
-                        st.rerun()
-                with reset_confirm_col2:
-                    if st.button("Cancel", key="cancel_reset_all_holdings_btn"):
-                        st.session_state["confirm_reset_all_holdings"] = False
-                        st.rerun()
-
     elif manage_section == "Log transaction":
         with st.container(border=True):
             # --- Log a transaction (werkt ook zonder bestaande posities -- een
@@ -5526,6 +5514,42 @@ def render_portfolio():
                                 if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{tx_holding['id']}"):
                                     st.session_state[delete_all_confirm_key] = False
                                     st.rerun()
+
+            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
+            # bulk-delete-knop hierboven, voor als je NA een structurele
+            # CSV-parser-verbetering niet elke positie apart wilt
+            # opschonen. Hoort hier (bij transactiebeheer) thuis, niet bij
+            # 'Import from broker' -- het is een losse, zelden-gebruikte
+            # actie, geen onderdeel van het importeren zelf. BEWUST klein
+            # gehouden (i.p.v. een eigen, volle kaart) -- zelfde, simpele
+            # 2-staps-bevestiging (klik -> waarschuwing -> bevestig) als de
+            # per-positie-versie hierboven, i.p.v. tekst moeten typen.
+            st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+            if not st.session_state.get("confirm_reset_all_holdings", False):
+                if st.button(
+                    "Start over: delete all my positions", type="tertiary",
+                    icon=":material/delete_forever:", key="reset_all_holdings_btn",
+                ):
+                    st.session_state["confirm_reset_all_holdings"] = True
+                    st.rerun()
+            else:
+                st.warning(
+                    "This will permanently delete ALL your positions and their full "
+                    "transaction history -- useful if you want to cleanly re-import "
+                    "everything after a data-precision fix. Your watchlist is not affected. "
+                    "This cannot be undone."
+                )
+                reset_confirm_col1, reset_confirm_col2 = st.columns(2)
+                with reset_confirm_col1:
+                    if st.button("Yes, delete everything", key="confirm_reset_all_holdings_btn", type="primary"):
+                        database.delete_all_holdings_and_transactions(user_email)
+                        st.session_state["confirm_reset_all_holdings"] = False
+                        st.success("All positions and transactions deleted -- you can now re-import cleanly under Import from broker.")
+                        st.rerun()
+                with reset_confirm_col2:
+                    if st.button("Cancel", key="cancel_reset_all_holdings_btn"):
+                        st.session_state["confirm_reset_all_holdings"] = False
+                        st.rerun()
 
     elif manage_section == "Watchlist":
         with st.container(border=True):
