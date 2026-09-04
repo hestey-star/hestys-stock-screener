@@ -4917,34 +4917,23 @@ def render_portfolio():
     if manage_section == "Import from broker":
         with st.container(border=True):
             # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-            st.caption("Currently supports DEGIRO. Upload your broker's 'Transactions' export "
-                       "(CSV) to import your full buy/sell history in one go, instead of "
-                       "logging each one by hand.")
-
-            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
-            # bulk-delete-knop, voor als je NA een structurele CSV-parser-
-            # verbetering niet elke positie apart wilt opschonen (bv. bij
-            # 20+ posities). Extra-stevige bevestiging (letterlijk 'DELETE'
-            # typen) gezien de VEEL grotere impact dan de per-positie-versie.
-            with st.container(border=True):
-                st.markdown("**Start fresh (advanced)**")
-                st.caption(
-                    "Deletes ALL your positions and their full transaction history in one go "
-                    "-- useful if you want to cleanly re-import everything after a data-precision "
-                    "fix, instead of clearing each position one by one. Your watchlist is not affected."
-                )
-                reset_all_confirm_text = st.text_input(
-                    "Type DELETE to confirm", key="reset_all_holdings_confirm_text",
-                    placeholder="DELETE",
-                )
-                if st.button(
-                    "Delete all my positions and transactions", icon=":material/delete_forever:",
-                    disabled=(reset_all_confirm_text.strip().upper() != "DELETE"),
-                    key="reset_all_holdings_btn",
-                ):
-                    database.delete_all_holdings_and_transactions(user_email)
-                    st.success("All positions and transactions deleted -- you can now re-import cleanly below.")
-                    st.rerun()
+            # DEGIRO-badge (tekst + icoon, GEEN echt merklogo -- vermijdt
+            # trademark-issues) i.p.v. een platte zin, om meteen duidelijk
+            # te maken dat dit een ECHT-ondersteunde, herkende broker is,
+            # niet zomaar een losse CSV-upload.
+            st.markdown(
+                '<div style="display:inline-flex; align-items:center; gap:0.4rem; '
+                'background:rgba(31,174,150,0.1); border:1px solid rgba(31,174,150,0.35); '
+                'border-radius:20px; padding:0.3rem 0.8rem; margin-bottom:0.6rem;">'
+                f'{_icon_span("verified", size_px=15, color="#1FAE96")}'
+                '<span style="color:#1FAE96; font-weight:700; font-size:0.8rem;">DEGIRO supported</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("**Upload your transactions**")
+            st.caption("Export your broker's 'Transactions' CSV and upload it here to import "
+                       "your full buy/sell history in one go, instead of logging each one by hand.")
+            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
 
             if hasattr(database, "get_last_csv_import"):
                 try:
@@ -4955,9 +4944,10 @@ def render_portfolio():
                     import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
                     st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
-            st.caption("Using a different broker?")
-            st.page_link(support_page, label="Go to Support")
-            degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload")
+
+            st.markdown("<div style='height: 0.3rem'></div>", unsafe_allow_html=True)
+            st.page_link(support_page, label="Using a different broker? Go to Support",
+                         icon=":material/support_agent:")
 
             already_imported = st.session_state.get("degiro_imported_filenames", set())
 
@@ -5258,6 +5248,41 @@ def render_portfolio():
                                        "degiro_ticker_matches", "degiro_ticker_candidates"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
+
+            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
+            # bulk-delete-knop, voor als je NA een structurele CSV-parser-
+            # verbetering niet elke positie apart wilt opschonen. BEWUST
+            # klein en helemaal onderaan gehouden (i.p.v. een eigen, volle
+            # kaart bovenaan) -- dit is een zelden-gebruikte, geavanceerde
+            # actie, niet de hoofdtaak van deze sectie. Zelfde, simpele
+            # 2-staps-bevestiging (klik -> waarschuwing -> bevestig) als de
+            # per-positie-versie, i.p.v. tekst moeten typen.
+            st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+            if not st.session_state.get("confirm_reset_all_holdings", False):
+                if st.button(
+                    "Start over: delete all my positions", type="tertiary",
+                    icon=":material/delete_forever:", key="reset_all_holdings_btn",
+                ):
+                    st.session_state["confirm_reset_all_holdings"] = True
+                    st.rerun()
+            else:
+                st.warning(
+                    "This will permanently delete ALL your positions and their full "
+                    "transaction history -- useful if you want to cleanly re-import "
+                    "everything after a data-precision fix. Your watchlist is not affected. "
+                    "This cannot be undone."
+                )
+                reset_confirm_col1, reset_confirm_col2 = st.columns(2)
+                with reset_confirm_col1:
+                    if st.button("Yes, delete everything", key="confirm_reset_all_holdings_btn", type="primary"):
+                        database.delete_all_holdings_and_transactions(user_email)
+                        st.session_state["confirm_reset_all_holdings"] = False
+                        st.success("All positions and transactions deleted -- you can now re-import cleanly above.")
+                        st.rerun()
+                with reset_confirm_col2:
+                    if st.button("Cancel", key="cancel_reset_all_holdings_btn"):
+                        st.session_state["confirm_reset_all_holdings"] = False
+                        st.rerun()
 
     elif manage_section == "Log transaction":
         with st.container(border=True):
