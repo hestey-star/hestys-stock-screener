@@ -399,41 +399,6 @@ div[data-testid="stFileUploader"] section button {
     border: none !important;
     font-weight: 700 !important;
 }
-/* Watchlist-rij: kolommen laten krimpen naar hun DAADWERKELIJKE inhoud
-   i.p.v. de vaste, proportionele ratio-breedte -- st.columns() reserveert
-   normaal altijd de volle, toegewezen breedte per kolom, ongeacht hoe
-   kort de inhoud is, wat bij een korte naam als 'HIMS' een groot, leeg
-   gat tussen de naam en de bel/prullenbak-iconen gaf.
-
-   BELANGRIJKE CORRECTIE: een simpele '.watchlist-row-anchor + div[...]'
-   werkte NIET, omdat Streamlit elk st.markdown()-element EN elke
-   st.columns()-aanroep in zijn EIGEN, aparte 'element-container'-<div>
-   wrapt -- het anker en de kolommen-rij zijn dus geen directe DOM-
-   siblings van elkaar (elk zit genest in zijn eigen wrapper-laag), dus
-   de eenvoudige aangrenzende-sibling-selector matchte nooit iets.
-   :has() kijkt WEL door die wrapper-laag heen: 'de element-container
-   die het anker bevat, gevolgd door de eerstvolgende element-container,
-   en DAARBINNEN de stHorizontalBlock'. Gescoped zodat dit ALLEEN deze
-   specifieke watchlist-rijen raakt, geen andere st.columns() elders. */
-div[data-testid="element-container"]:has(.watchlist-row-anchor)
-    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] {
-    flex-wrap: nowrap !important;
-    gap: 0.25rem !important;
-}
-div[data-testid="element-container"]:has(.watchlist-row-anchor)
-    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-div[data-testid="element-container"]:has(.watchlist-row-anchor)
-    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
-    flex: 0 0 auto !important;
-    width: auto !important;
-    min-width: 0 !important;
-}
-div[data-testid="element-container"]:has(.watchlist-row-anchor)
-    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] button {
-    padding: 0.2rem 0.5rem !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -5644,11 +5609,10 @@ def render_portfolio():
                 watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
                 for w in watchlist_items:
-                    st.markdown('<div class="watchlist-row-anchor"></div>', unsafe_allow_html=True)
                     try:
-                        w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1], gap=None)
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1], gap="small", width=300)
                     except Exception:
-                        w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1])
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1])
                     with w_row_col1:
                         # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                         # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
@@ -5668,10 +5632,12 @@ def render_portfolio():
                                 'onerror="this.style.display=\'none\'">'
                             )
                         st.markdown(
-                            f'<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                            f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
+                            f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
                             f'{favicon_html}'
-                            f'<span style="color:#EAEDF1; font-weight:600; font-size:0.88rem;">{w["naam"]}</span>'
-                            f'<span style="color:#8992A3; font-size:0.75rem;">{w["ticker"]}</span>'
+                            f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; '
+                            f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"]}</span>'
+                            f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
                             '</div>',
                             unsafe_allow_html=True,
                         )
