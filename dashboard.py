@@ -403,22 +403,33 @@ div[data-testid="stFileUploader"] section button {
    i.p.v. de vaste, proportionele ratio-breedte -- st.columns() reserveert
    normaal altijd de volle, toegewezen breedte per kolom, ongeacht hoe
    kort de inhoud is, wat bij een korte naam als 'HIMS' een groot, leeg
-   gat tussen de naam en de bel/prullenbak-iconen gaf. Gescoped via het
-   '.watchlist-row-anchor'-element dat we vlak VOOR elke st.columns()-
-   aanroep in de watchlist plaatsen (CSS adjacent-sibling-selector) --
-   raakt dus ALLEEN deze specifieke rijen, geen andere st.columns()
-   elders op de site. */
-.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] {
+   gat tussen de naam en de bel/prullenbak-iconen gaf.
+
+   BELANGRIJKE CORRECTIE: een simpele '.watchlist-row-anchor + div[...]'
+   werkte NIET, omdat Streamlit elk st.markdown()-element EN elke
+   st.columns()-aanroep in zijn EIGEN, aparte 'element-container'-<div>
+   wrapt -- het anker en de kolommen-rij zijn dus geen directe DOM-
+   siblings van elkaar (elk zit genest in zijn eigen wrapper-laag), dus
+   de eenvoudige aangrenzende-sibling-selector matchte nooit iets.
+   :has() kijkt WEL door die wrapper-laag heen: 'de element-container
+   die het anker bevat, gevolgd door de eerstvolgende element-container,
+   en DAARBINNEN de stHorizontalBlock'. Gescoped zodat dit ALLEEN deze
+   specifieke watchlist-rijen raakt, geen andere st.columns() elders. */
+div[data-testid="element-container"]:has(.watchlist-row-anchor)
+    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] {
     flex-wrap: nowrap !important;
     gap: 0.25rem !important;
 }
-.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+div[data-testid="element-container"]:has(.watchlist-row-anchor)
+    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+div[data-testid="element-container"]:has(.watchlist-row-anchor)
+    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
     flex: 0 0 auto !important;
     width: auto !important;
     min-width: 0 !important;
 }
-.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] button {
+div[data-testid="element-container"]:has(.watchlist-row-anchor)
+    + div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] button {
     padding: 0.2rem 0.5rem !important;
     min-width: 0 !important;
     min-height: 0 !important;
