@@ -1,4 +1,4 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
 AAPL,2026-09-03,0,24,328.21,328.21,0.0,True,^GSPC,8.17,False,73.1,stijgend,6.7,True,2026-07-30,35,324.53,1.1,6.98
 META,2026-09-03,0,26,610.68,610.68,0.0,True,^GSPC,-0.33,True,23.5,dalend,-14.4,False,2026-07-29,36,754.77,-19.1,6.15
-ADM,2026-09-01,2,24,84.55,84.38,-0.2,True,^GSPC,1.1,True,3.4,dalend,28.0,True,2026-08-04,30,78.7,7.2,4.69
+ADM,2026-09-01,2,24,84.55,84.38,-0.2,True,^GSPC,1.1,True,,onbekend,28.0,True,2026-08-04,30,78.7,7.2,5.33
