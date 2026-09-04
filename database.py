@@ -237,6 +237,54 @@ def set_target_weight(holding_id: int, user_email: str, target_weight: float = N
         .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def set_watchlist_alert(holding_id: int, user_email: str, target_price: float, current_price: float) -> None:
+    """
+    Stelt een prijs-alert in voor een WATCHLIST-item (geen eigen
+    positie): je krijgt een melding op Today zodra de koers deze
+    streefprijs bereikt.
+
+    'direction' wordt AUTOMATISCH bepaald t.o.v. de huidige koers op
+    het moment van instellen -- niet een aparte keuze die de gebruiker
+    zelf moet maken. Een streefprijs ONDER de huidige koers ('ik ben
+    geinteresseerd als 'ie terugzakt naar X') triggert zodra de koers
+    op of onder die prijs komt; een streefprijs ERBOVEN triggert zodra
+    de koers erboven stijgt. alert_dismissed wordt bij het (opnieuw)
+    instellen altijd naar False gezet -- een eerder afgehandelde alert
+    telt niet meer mee zodra je 'm opnieuw instelt.
+    """
+    direction = "below" if target_price <= current_price else "above"
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({
+        "alert_target_price": target_price,
+        "alert_direction": direction,
+        "alert_dismissed": False,
+    }).eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
+def clear_watchlist_alert(holding_id: int, user_email: str) -> None:
+    """Verwijdert een ingestelde prijs-alert weer (zonder het watchlist-item zelf te verwijderen)."""
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({
+        "alert_target_price": None,
+        "alert_direction": None,
+        "alert_dismissed": False,
+    }).eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
+def dismiss_watchlist_alert(holding_id: int, user_email: str) -> None:
+    """
+    Markeert een GETRIGGERDE alert als gezien/afgehandeld -- voorkomt
+    dat dezelfde melding op Today elke dag opnieuw verschijnt. De
+    streefprijs zelf blijft staan (zichtbaar in Manage), alleen de
+    Today-melding wordt onderdrukt totdat de alert opnieuw wordt
+    ingesteld (zie set_watchlist_alert, die alert_dismissed weer False
+    zet).
+    """
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"alert_dismissed": True}) \
+        .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def delete_holding(holding_id: int, user_email: str) -> None:
     """
     Verwijdert een positie. Filtert OOK op user_email als extra

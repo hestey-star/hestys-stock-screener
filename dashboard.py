@@ -1126,6 +1126,33 @@ def analyze_dividend(holdings: list, infos: dict, display_currency: str = "EUR")
     return {"findings": findings, "per_position": per_position, "currency_symbol": currency_symbol}
 
 
+def check_triggered_watchlist_alerts(watchlist_items: list, market_data: dict) -> list:
+    """
+    Controleert alle watchlist-items met een ingestelde alert tegen de
+    huidige koers (uit de al-opgehaalde market_data, geen extra
+    aanroepen nodig), en geeft de items terug waarvan de alert is
+    GETRIGGERD (koers heeft de streefprijs in de ingestelde richting
+    bereikt) en nog niet is afgehandeld (alert_dismissed=False).
+
+    'below': triggert zodra de koers OP of ONDER de streefprijs komt.
+    'above': triggert zodra de koers OP of BOVEN de streefprijs komt.
+    """
+    triggered = []
+    for w in watchlist_items:
+        target_price = w.get("alert_target_price")
+        if target_price is None or w.get("alert_dismissed"):
+            continue
+        current_price = market_data.get(w["ticker"], {}).get("current_price")
+        if current_price is None:
+            continue
+        direction = w.get("alert_direction")
+        if direction == "below" and current_price <= target_price:
+            triggered.append({**w, "current_price": current_price})
+        elif direction == "above" and current_price >= target_price:
+            triggered.append({**w, "current_price": current_price})
+    return triggered
+
+
 def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
     """
     Dag-op-dag statistieken: totale verandering, en beste/slechtste
@@ -5570,25 +5597,88 @@ def render_portfolio():
             watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
 
             if watchlist_items:
-                # Pills i.p.v. een tabel -- simpel genoeg (alleen naam+ticker) om
-                # geen kaart-grid nodig te hebben, maar wel consistent met de
-                # rest van de (inmiddels tegel-gebaseerde) pagina.
-                pills_html = "".join(
-                    f'<div style="display:inline-flex; align-items:center; gap:0.4rem; '
-                    f'background:rgba(137,146,163,0.08); border:1px solid rgba(137,146,163,0.25); '
-                    f'border-radius:20px; padding:0.4rem 0.8rem;">'
-                    f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem;">{w["naam"]}</span>'
-                    f'<span style="color:#8992A3; font-family:\'IBM Plex Mono\', monospace; font-size:0.75rem;">{w["ticker"]}</span>'
-                    f'</div>'
-                    for w in watchlist_items
-                )
-                st.markdown(
-                    f'<div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">{pills_html}</div>',
-                    unsafe_allow_html=True,
-                )
+                # Compacte lijst i.p.v. pills -- elke rij toont favicon+naam+
+                # ticker, plus een bel-icoon (prijs-alert instellen/aanpassen
+                # via popover) en een prullenbak-icoon (direct verwijderen,
+                # geen bevestiging nodig -- een watchlist-item heeft geen
+                # transactiegeschiedenis om per ongeluk kwijt te raken).
+                # BEWUST geen extra marktdata (koers/verandering) in de rij
+                # zelf -- alleen zichtbaar in de alert-popover, waar het
+                # nodig is als context voor de streefprijs.
+                watchlist_tickers = [w["ticker"] for w in watchlist_items]
+                watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
+
+                for w in watchlist_items:
+                    w_row_col1, w_row_col2, w_row_col3 = st.columns([5, 1, 1])
+                    with w_row_col1:
+                        # Favicon via yfinance's eigen 'website'-veld i.p.v. een
+                        # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
+                        # een future als 'GC=F' compleet onzinnig zou zijn) --
+                        # ontbreekt 'website' (bv. bij futures/grondstoffen),
+                        # dan gewoon geen favicon tonen.
+                        try:
+                            website = get_cached_ticker_info(w["ticker"]).get("website")
+                        except Exception:
+                            website = None
+                        favicon_html = ""
+                        if website:
+                            favicon_domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                            favicon_html = (
+                                f'<img src="https://www.google.com/s2/favicons?domain={favicon_domain}&sz=32" '
+                                'style="width:18px; height:18px; border-radius:4px;" '
+                                'onerror="this.style.display=\'none\'">'
+                            )
+                        st.markdown(
+                            f'<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                            f'{favicon_html}'
+                            f'<span style="color:#EAEDF1; font-weight:600; font-size:0.88rem;">{w["naam"]}</span>'
+                            f'<span style="color:#8992A3; font-size:0.75rem;">{w["ticker"]}</span>'
+                            '</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with w_row_col2:
+                        has_alert = w.get("alert_target_price") is not None
+                        with st.popover(
+                            ":material/notifications_active:" if has_alert else ":material/notifications:",
+                            use_container_width=False,
+                        ):
+                            current_price = watchlist_market_data.get(w["ticker"], {}).get("current_price")
+                            if current_price is None:
+                                try:
+                                    current_price = get_cached_ticker_info(w["ticker"]).get("regularMarketPrice")
+                                except Exception:
+                                    current_price = None
+                            st.markdown(f"**Price alert for {w['naam']}**")
+                            if current_price is not None:
+                                st.caption(f"Current: {current_price:.2f}")
+                            if has_alert:
+                                direction_word = "drops to" if w.get("alert_direction") == "below" else "rises to"
+                                st.caption(f"Alert set: notify me when the price {direction_word} "
+                                          f"{w['alert_target_price']:.2f}")
+                            new_target_price = st.number_input(
+                                "Target price", min_value=0.0, step=0.5,
+                                value=float(w.get("alert_target_price") or 0.0),
+                                key=f"watchlist_alert_target_{w['id']}",
+                            )
+                            alert_btn_col1, alert_btn_col2 = st.columns(2)
+                            with alert_btn_col1:
+                                if st.button("Set alert", key=f"watchlist_set_alert_{w['id']}", type="primary",
+                                            disabled=(new_target_price <= 0 or current_price is None)):
+                                    database.set_watchlist_alert(w["id"], user_email, new_target_price, current_price)
+                                    st.rerun()
+                            with alert_btn_col2:
+                                if has_alert and st.button("Clear", key=f"watchlist_clear_alert_{w['id']}"):
+                                    database.clear_watchlist_alert(w["id"], user_email)
+                                    st.rerun()
+                    with w_row_col3:
+                        if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
+                                    help="Remove from watchlist"):
+                            database.delete_holding(w["id"], user_email)
+                            st.rerun()
             else:
                 st.caption("Your watchlist is empty.")
 
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
             st.markdown("**Add to watchlist**")
             watchlist_search = st.text_input(
                 "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
@@ -5618,20 +5708,6 @@ def render_portfolio():
                 database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
                 st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
                 st.rerun()
-
-            if watchlist_items:
-                st.markdown("**Remove from watchlist**")
-                w_remove_options = {f"{w['naam']} ({w['ticker']})": w["id"] for w in watchlist_items}
-                wcol1, wcol2 = st.columns([4, 1])
-                with wcol1:
-                    w_to_remove = st.selectbox(
-                        "Item to remove", list(w_remove_options.keys()),
-                        key="watchlist_remove_select", label_visibility="collapsed",
-                    )
-                with wcol2:
-                    if st.button("Remove", key="watchlist_remove_btn"):
-                        database.delete_holding(w_remove_options[w_to_remove], user_email)
-                        st.rerun()
 
     st.caption("Manage email preferences and cash amount under Settings. "
                "You'll also automatically receive a weekly email with this update, "
@@ -6226,6 +6302,27 @@ def render_today():
             market_data = database.get_market_data_for_tickers(
                 [item["ticker"] for item in tracked_items]
             )
+
+            # --- Getriggerde watchlist-prijsalerts -- bovenaan, prominent,
+            # want dit is precies het soort tijdgevoelig nieuws waar Today
+            # voor bedoeld is. Hergebruikt de al-opgehaalde market_data
+            # hierboven (geen extra aanroepen). ---
+            if watchlist_items:
+                triggered_alerts = check_triggered_watchlist_alerts(watchlist_items, market_data)
+                for alert in triggered_alerts:
+                    direction_word = "dropped to" if alert["alert_direction"] == "below" else "rose to"
+                    alert_col1, alert_col2 = st.columns([5, 1])
+                    with alert_col1:
+                        st.success(
+                            f"**{alert['naam']}** ({alert['ticker']}) {direction_word} your alert "
+                            f"price of {alert['alert_target_price']:.2f} -- now at {alert['current_price']:.2f}.",
+                            icon=":material/notifications_active:",
+                        )
+                    with alert_col2:
+                        st.markdown("<div style='height: 0.6rem'></div>", unsafe_allow_html=True)
+                        if st.button("Dismiss", key=f"dismiss_alert_{alert['id']}"):
+                            database.dismiss_watchlist_alert(alert["id"], user_email)
+                            st.rerun()
 
             # --- Your portfolio today (nu in een eigen kader, net als Yesterday's
             # biggest movers -- consistente stijl over de hele Today-pagina) ---
