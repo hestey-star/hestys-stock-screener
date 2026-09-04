@@ -410,12 +410,18 @@ div[data-testid="stFileUploader"] section button {
    elders op de site. */
 .watchlist-row-anchor + div[data-testid="stHorizontalBlock"] {
     flex-wrap: nowrap !important;
+    gap: 0.25rem !important;
 }
 .watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
 .watchlist-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
     flex: 0 0 auto !important;
     width: auto !important;
     min-width: 0 !important;
+}
+.watchlist-row-anchor + div[data-testid="stHorizontalBlock"] button {
+    padding: 0.2rem 0.5rem !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -5628,7 +5634,10 @@ def render_portfolio():
 
                 for w in watchlist_items:
                     st.markdown('<div class="watchlist-row-anchor"></div>', unsafe_allow_html=True)
-                    w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1])
+                    try:
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1], gap=None)
+                    except Exception:
+                        w_row_col1, w_row_col2, w_row_col3 = st.columns([1, 1, 1])
                     with w_row_col1:
                         # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                         # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
