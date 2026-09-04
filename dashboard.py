@@ -5609,7 +5609,7 @@ def render_portfolio():
                 watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
                 for w in watchlist_items:
-                    w_row_col1, w_row_col2, w_row_col3 = st.columns([5, 1, 1])
+                    w_row_col1, w_row_col2, w_row_col3 = st.columns([3, 1, 1])
                     with w_row_col1:
                         # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                         # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
