@@ -34,6 +34,7 @@ import plotly.graph_objects as go
 import requests
 import stripe
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 
 from emailer import send_email
@@ -379,21 +380,10 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     border: 1px solid rgba(137,146,163,0.18) !important;
     border-radius: 12px !important;
 }
-/* Compactere file-uploaders op de HELE site. Vorige versie gokte naar
-   interne, tussenliggende testid-namen (stFileUploaderDropzoneInstructions
-   e.d.) die NIET bleken te kloppen -- de '200MB per file'-tekst en het
-   grijze omkaderde vak bleven gewoon staan. Nu alles opgebouwd vanuit
-   ALLEEN de buitenste 'stFileUploader'-testid, waarvan we ZEKER weten
-   dat die klopt (de jade-knop-kleuring hieronder werkte immers al) --
-   geen giswerk meer naar interne wrapper-namen. */
-div[data-testid="stFileUploader"] section {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-}
-div[data-testid="stFileUploader"] small {
-    display: none !important;
-}
+/* Alleen de knop zelf jade-gekleurd -- het omkaderde vak eromheen
+   bleek achteraf nooit het probleem te zijn (bewust NIET meer
+   aangepast na eerdere feedback), dus dat blijft nu gewoon
+   Streamlit's eigen, standaard stijl. */
 div[data-testid="stFileUploader"] section button {
     background: #1FAE96 !important;
     color: #0B1210 !important;
@@ -402,6 +392,9 @@ div[data-testid="stFileUploader"] section button {
     padding: 0.5rem 1.1rem !important;
     border-radius: 8px !important;
 }
+</style>
+<style>
+
 /* Watchlist bel/prullenbak-knoppen compacter. De prullenbak-knop via
    Streamlit's eigen .st-key-{key}-klasse (gebaseerd op een key die
    wijzelf definieren). De bel-knop is een st.popover() -- die
@@ -421,6 +414,34 @@ div[data-testid="stPopover"] button {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# Het '200MB per file * CSV'-tekstje bij de file-uploader verbergen.
+# BELANGRIJKE ONTDEKKING: browsers voeren <script>-tags die via
+# innerHTML-achtige DOM-invoeging worden toegevoegd NOOIT uit (een
+# algemene, browserbrede beveiliging -- niet iets Streamlit-specifieks)
+# -- daarom deed een <script>-tag BINNEN de st.markdown()-aanroep
+# hierboven helemaal niets, ondanks een verder correcte, tekst-
+# gebaseerde aanpak (geen giswerk naar tag-/testid-namen). st.components.
+# v1.html() rendert wel in een echte <iframe>, waarin scripts WEL
+# gewoon worden uitgevoerd -- vandaar hier apart, met window.parent.document
+# om vanuit die iframe alsnog de ECHTE, omliggende Streamlit-pagina te
+# bereiken en aan te passen. height=0 houdt de iframe zelf onzichtbaar.
+components.html(
+    """
+    <script>
+    function hideFileSizeHint() {
+        window.parent.document.querySelectorAll('[data-testid="stFileUploader"] *').forEach(function(el) {
+            if (el.children.length === 0 && el.textContent.indexOf('per file') !== -1) {
+                el.style.display = 'none';
+            }
+        });
+    }
+    hideFileSizeHint();
+    new MutationObserver(hideFileSizeHint).observe(window.parent.document.body, {childList: true, subtree: true});
+    </script>
+    """,
+    height=0,
+)
 
 
 def get_file_last_commit_date(path: str) -> str:
