@@ -5847,20 +5847,17 @@ def render_portfolio():
                                 f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
                                 f'margin:-0.7rem 0 !important; display:flex !important; '
                                 f'align-items:center !important; width:100% !important; }}'
-                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
-                                f'align-items:center !important; }}'
-                                # Elke kolom kan een ander soort widget bevatten (platte
-                                # markdown-tekst, een container-gewrapte popover, een kale
-                                # knop) -- elk daarvan volgt zijn EIGEN, interne Streamlit-
-                                # standaard voor uitlijning (soms bovenaan, soms onderaan),
-                                # ongeacht de align-items van de ouder hierboven. Deze bredere
-                                # regel forceert center op meerdere nest-niveaus tegelijk
-                                # (de kolommen zelf EN hun directe kinderen), ongeacht welk
-                                # widget-type er precies in zit.
-                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] > div {{ '
-                                f'align-self:center !important; }}'
-                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] > div > div {{ '
-                                f'align-self:center !important; }}</style>',
+                                # De vorige, GENESTE selectors (op stHorizontalBlock en zijn
+                                # kinderen) hadden NUL zichtbaar effect, meerdere pogingen
+                                # achter elkaar -- terwijl de achtergrond hierboven (rechtstreeks
+                                # op .st-key-{row_key} zelf, GEEN nesting) altijd wel werkte.
+                                # Dit wijst erop dat er een onbekende tussenlaag zit die de
+                                # geneste selectors nooit bereikten. Deze keer de breedst
+                                # mogelijke, universele selector (*): raakt ELKE nakomelning
+                                # ongeacht diepte/tussenlagen. align-self heeft alleen effect
+                                # op elementen wiens OUDER zelf flex is, dus onschadelijk voor
+                                # de rest (bv. tekst-opmaak binnen de naam blijft ongemoeid).
+                                f'.st-key-{row_key} * {{ align-self:center !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
