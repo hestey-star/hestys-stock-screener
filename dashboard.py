@@ -408,15 +408,35 @@ div[data-testid="stFileUploader"] section button:hover {
 </style>
 <style>
 
+/* De verticale afstand tussen watchlist-rijen verkleinen. Elke rij
+   kreeg al een eigen, kleine margin, maar Streamlit's EIGEN, standaard
+   afstand tussen opeenvolgende elementen (de 'gap' van de omliggende
+   verticale kolom-container) bleef daarnaast gewoon bestaan en
+   domineerde de visuele ruimte -- vandaar dat de donkere tussenruimte
+   veel groter oogde dan de lichte rijen zelf. Gescoped via :has() naar
+   ALLEEN de kolom die watchlist-rijen bevat (geen andere kolommen
+   elders op de site). */
+div[data-testid="stVerticalBlock"]:has(div[class*="st-key-watchlist_row_"]) {
+    gap: 0.15rem !important;
+}
+</style>
+<style>
 /* Watchlist prullenbak-knop compacter, via Streamlit's eigen
    .st-key-{key}-klasse (gebaseerd op een key die wijzelf definieren).
    De bel-knop (st.popover) wordt inline, direct bij de rij zelf
    gestyled -- ook via st.container(key=...), zie de watchlist-render-
-   code verderop. */
+   code verderop.
+   flex+center toegevoegd: zonder expliciete uitlijning bleef de
+   icoon-inhoud (icoon + bij de bel-knop ook de eigen chevron van
+   st.popover) linksgedrukt/buiten het vak hangen bij zo'n krappe
+   padding. */
 [class*="st-key-watchlist_delete_"] button {
-    padding: 0.15rem 0.4rem !important;
+    padding: 0.2rem 0.5rem !important;
     min-width: 0 !important;
     min-height: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -5899,8 +5919,10 @@ def render_portfolio():
                                 if bell_wrap_key:
                                     st.markdown(
                                         f'<style>.st-key-{bell_wrap_key} button {{ '
-                                        f'padding: 0.15rem 0.4rem !important; '
-                                        f'min-width: 0 !important; min-height: 0 !important; }}</style>',
+                                        f'padding: 0.2rem 0.5rem !important; '
+                                        f'min-width: 0 !important; min-height: 0 !important; '
+                                        f'display: flex !important; align-items: center !important; '
+                                        f'justify-content: center !important; gap: 0.15rem !important; }}</style>',
                                         unsafe_allow_html=True,
                                     )
                                 with bell_wrap_ctx:
