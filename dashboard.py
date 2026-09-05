@@ -1870,14 +1870,16 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
         else:
             color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
+            bg = "rgba(31,174,150,0.15)" if day_change_pct >= 0 else "rgba(229,72,77,0.15)"
             arrow = "&#9650;" if day_change_pct >= 0 else "&#9660;"
             value_part = (
                 f'{currency_symbol}{abs(day_change_value):,.0f} ' if day_change_value is not None else ""
             )
             sign = "+" if day_change_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}'
-                f'({day_change_pct:+.1f}%) {arrow}</span>'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}</span>'
+                f'<span style="background:{bg}; color:{color}; font-weight:700; font-size:0.85em; '
+                f'padding:0.05em 0.4em; border-radius:8px;">{day_change_pct:+.1f}% {arrow}</span>'
             )
         if current_price is not None:
             price_display = f'{currency_symbol}{current_price:,.2f}'
@@ -1890,14 +1892,16 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     else:  # "All-time"
         if avg_cost is not None and current_price is not None and all_time_pct is not None:
             color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
+            bg = "rgba(31,174,150,0.15)" if all_time_pct >= 0 else "rgba(229,72,77,0.15)"
             arrow = "&#9650;" if all_time_pct >= 0 else "&#9660;"
             value_part = (
                 f'{currency_symbol}{abs(all_time_pnl):,.0f} ' if all_time_pnl is not None else ""
             )
             sign = "+" if all_time_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}'
-                f'({all_time_pct:+.1f}%) {arrow}</span>'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}</span>'
+                f'<span style="background:{bg}; color:{color}; font-weight:700; font-size:0.85em; '
+                f'padding:0.05em 0.4em; border-radius:8px;">{all_time_pct:+.1f}% {arrow}</span>'
             )
             avg_cost_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
             current_price_str_mobile = f'{currency_symbol}{current_price:,.2f}' if current_price is not None else "-"
@@ -4628,11 +4632,16 @@ def render_portfolio():
                     total_day_change_html = ""
                     if total_day_change_pct is not None:
                         change_color = "#1FAE96" if total_day_change_pct >= 0 else "#E5484D"
+                        change_bg = "rgba(31,174,150,0.15)" if total_day_change_pct >= 0 else "rgba(229,72,77,0.15)"
                         change_arrow = "&#9650;" if total_day_change_pct >= 0 else "&#9660;"
                         change_sign = "+" if total_day_change_pct >= 0 else "-"
                         total_day_change_html = (
-                            f'<div style="font-size:0.9rem; font-weight:700; color:{change_color}; margin-top:2px;">'
-                            f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f} ({total_day_change_pct:+.1f}%) {change_arrow}'
+                            f'<div style="margin-top:2px;">'
+                            f'<span style="font-size:0.9rem; font-weight:700; color:{change_color};">'
+                            f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f}</span> '
+                            f'<span style="background:{change_bg}; color:{change_color}; font-weight:700; '
+                            f'font-size:0.8rem; padding:0.1rem 0.45rem; border-radius:10px;">'
+                            f'{total_day_change_pct:+.1f}% {change_arrow}</span>'
                             f'</div>'
                         )
                     label_suffix_html = f'<span style="font-size:0.85rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
