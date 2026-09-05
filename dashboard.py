@@ -5841,7 +5841,7 @@ def render_portfolio():
                             row_ctx = st.container()
                             row_key = None
                         if row_key:
-                            row_bg = "rgba(137,146,163,0.06)" if row_idx % 2 == 0 else "transparent"
+                            row_bg = "rgba(137,146,163,0.06)" if row_idx % 2 == 0 else "rgba(137,146,163,0.02)"
                             st.markdown(
                                 f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
                                 f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
