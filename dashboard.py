@@ -1970,10 +1970,10 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{price_display or "-"}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:0.9rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
@@ -1994,11 +1994,11 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
             f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
             f'</div>'
-            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{cost_price_str}</div>'
-            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:1.05rem; font-weight:700;">{current_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{cost_price_str}</div>'
+            f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{current_price_str}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
             f'<div>'
-            f'<div style="color:#EAEDF1; font-weight:700; font-size:1.05rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
+            f'<div style="color:#EAEDF1; font-weight:700; font-size:0.9rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{value_text}</div>'
             f'{shares_html}'
             f'</div>'
             f'<div>'
@@ -4635,11 +4635,13 @@ def render_portfolio():
                             f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f} ({total_day_change_pct:+.1f}%) {change_arrow}'
                             f'</div>'
                         )
+                    label_suffix_html = f'<span style="font-size:0.85rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
                     st.markdown(
-                        f'<div style="font-size:0.68rem; color:#8992A3; text-transform:uppercase; letter-spacing:1px;">Total portfolio value{label_suffix}</div>'
-                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; margin-top:2px; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{shown_symbol}{total_value:,.0f}</div>'
-                        f'{total_day_change_html}'
-                        f'<div style="font-size:0.85rem; color:#8992A3; margin-top:4px;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>',
+                        f'<div style="display:flex; align-items:baseline; gap:0.6rem; flex-wrap:wrap;">'
+                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{shown_symbol}{total_value:,.0f}{label_suffix_html}</div>'
+                        f'<div style="font-size:0.85rem; color:#8992A3;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
+                        f'</div>'
+                        f'{total_day_change_html}',
                         unsafe_allow_html=True,
                     )
                 else:
