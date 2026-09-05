@@ -5846,18 +5846,7 @@ def render_portfolio():
                                 f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
                                 f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
                                 f'margin:-0.7rem 0 !important; display:flex !important; '
-                                f'align-items:center !important; width:100% !important; }}'
-                                # De vorige, GENESTE selectors (op stHorizontalBlock en zijn
-                                # kinderen) hadden NUL zichtbaar effect, meerdere pogingen
-                                # achter elkaar -- terwijl de achtergrond hierboven (rechtstreeks
-                                # op .st-key-{row_key} zelf, GEEN nesting) altijd wel werkte.
-                                # Dit wijst erop dat er een onbekende tussenlaag zit die de
-                                # geneste selectors nooit bereikten. Deze keer de breedst
-                                # mogelijke, universele selector (*): raakt ELKE nakomelning
-                                # ongeacht diepte/tussenlagen. align-self heeft alleen effect
-                                # op elementen wiens OUDER zelf flex is, dus onschadelijk voor
-                                # de rest (bv. tekst-opmaak binnen de naam blijft ongemoeid).
-                                f'.st-key-{row_key} * {{ align-self:center !important; }}</style>',
+                                f'align-items:center !important; width:100% !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
@@ -5885,7 +5874,7 @@ def render_portfolio():
                                     )
                                 st.markdown(
                                     f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
-                                    f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
+                                    f'margin-top:-0.3rem; overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
                                     f'{favicon_html}'
                                     f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; '
                                     f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"]}</span>'
