@@ -407,20 +407,6 @@ div[data-testid="stFileUploader"] section button:hover {
 }
 </style>
 <style>
-
-/* De verticale afstand tussen watchlist-rijen verkleinen. Elke rij
-   kreeg al een eigen, kleine margin, maar Streamlit's EIGEN, standaard
-   afstand tussen opeenvolgende elementen (de 'gap' van de omliggende
-   verticale kolom-container) bleef daarnaast gewoon bestaan en
-   domineerde de visuele ruimte -- vandaar dat de donkere tussenruimte
-   veel groter oogde dan de lichte rijen zelf. Gescoped via :has() naar
-   ALLEEN de kolom die watchlist-rijen bevat (geen andere kolommen
-   elders op de site). */
-div[data-testid="stVerticalBlock"]:has(> div[class*="st-key-watchlist_row_"]) {
-    gap: 0.15rem !important;
-}
-</style>
-<style>
 /* Watchlist prullenbak-knop compacter, via Streamlit's eigen
    .st-key-{key}-klasse (gebaseerd op een key die wijzelf definieren).
    De bel-knop (st.popover) wordt inline, direct bij de rij zelf
@@ -5859,7 +5845,8 @@ def render_portfolio():
                             st.markdown(
                                 f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
                                 f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
-                                f'margin:0.05rem 0 !important; }}</style>',
+                                f'margin:-0.4rem 0 !important; display:flex !important; '
+                                f'align-items:center !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
