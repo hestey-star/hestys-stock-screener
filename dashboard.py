@@ -5850,9 +5850,9 @@ def render_portfolio():
                             )
                         with row_ctx:
                             try:
-                                w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1], gap="small")
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([10, 1, 1], gap="small")
                             except Exception:
-                                w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1])
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([10, 1, 1])
                             with w_row_col1:
                                 # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                                 # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
