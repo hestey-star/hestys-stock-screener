@@ -416,7 +416,7 @@ div[data-testid="stFileUploader"] section button:hover {
    veel groter oogde dan de lichte rijen zelf. Gescoped via :has() naar
    ALLEEN de kolom die watchlist-rijen bevat (geen andere kolommen
    elders op de site). */
-div[data-testid="stVerticalBlock"]:has(div[class*="st-key-watchlist_row_"]) {
+div[data-testid="stVerticalBlock"]:has(> div[class*="st-key-watchlist_row_"]) {
     gap: 0.15rem !important;
 }
 </style>
@@ -5864,9 +5864,9 @@ def render_portfolio():
                             )
                         with row_ctx:
                             try:
-                                w_row_col1, w_row_col2, w_row_col3 = st.columns([10, 1, 1], gap="small")
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([9, 1.5, 1], gap="small")
                             except Exception:
-                                w_row_col1, w_row_col2, w_row_col3 = st.columns([10, 1, 1])
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([9, 1.5, 1])
                             with w_row_col1:
                                 # Favicon via yfinance's eigen 'website'-veld i.p.v. een
                                 # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
@@ -5919,10 +5919,11 @@ def render_portfolio():
                                 if bell_wrap_key:
                                     st.markdown(
                                         f'<style>.st-key-{bell_wrap_key} button {{ '
-                                        f'padding: 0.2rem 0.5rem !important; '
+                                        f'padding: 0.2rem 0.55rem !important; '
                                         f'min-width: 0 !important; min-height: 0 !important; '
                                         f'display: flex !important; align-items: center !important; '
-                                        f'justify-content: center !important; gap: 0.15rem !important; }}</style>',
+                                        f'justify-content: center !important; gap: 0.2rem !important; '
+                                        f'white-space: nowrap !important; }}</style>',
                                         unsafe_allow_html=True,
                                     )
                                 with bell_wrap_ctx:
