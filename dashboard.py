@@ -5848,7 +5848,19 @@ def render_portfolio():
                                 f'margin:-0.7rem 0 !important; display:flex !important; '
                                 f'align-items:center !important; width:100% !important; }}'
                                 f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
-                                f'align-items:center !important; }}</style>',
+                                f'align-items:center !important; }}'
+                                # Elke kolom kan een ander soort widget bevatten (platte
+                                # markdown-tekst, een container-gewrapte popover, een kale
+                                # knop) -- elk daarvan volgt zijn EIGEN, interne Streamlit-
+                                # standaard voor uitlijning (soms bovenaan, soms onderaan),
+                                # ongeacht de align-items van de ouder hierboven. Deze bredere
+                                # regel forceert center op meerdere nest-niveaus tegelijk
+                                # (de kolommen zelf EN hun directe kinderen), ongeacht welk
+                                # widget-type er precies in zit.
+                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] > div {{ '
+                                f'align-self:center !important; }}'
+                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] > div > div {{ '
+                                f'align-self:center !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
