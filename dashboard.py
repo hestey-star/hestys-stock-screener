@@ -408,19 +408,12 @@ div[data-testid="stFileUploader"] section button:hover {
 </style>
 <style>
 
-/* Watchlist bel/prullenbak-knoppen compacter. De prullenbak-knop via
-   Streamlit's eigen .st-key-{key}-klasse (gebaseerd op een key die
-   wijzelf definieren). De bel-knop is een st.popover() -- die
-   ondersteunt GEEN key-parameter (bevestigd in Streamlit's eigen
-   documentatie), dus daarvoor de generieke stPopover-testid gebruikt.
-   Dit is hier veilig: st.popover() wordt NERGENS anders op de site
-   gebruikt (dus geen risico op onbedoelde neveneffecten elders). */
+/* Watchlist prullenbak-knop compacter, via Streamlit's eigen
+   .st-key-{key}-klasse (gebaseerd op een key die wijzelf definieren).
+   De bel-knop (st.popover) wordt inline, direct bij de rij zelf
+   gestyled -- ook via st.container(key=...), zie de watchlist-render-
+   code verderop. */
 [class*="st-key-watchlist_delete_"] button {
-    padding: 0.15rem 0.4rem !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-}
-div[data-testid="stPopover"] button {
     padding: 0.15rem 0.4rem !important;
     min-width: 0 !important;
     min-height: 0 !important;
@@ -5845,7 +5838,8 @@ def render_portfolio():
                             row_bg = "rgba(137,146,163,0.06)" if row_idx % 2 == 0 else "transparent"
                             st.markdown(
                                 f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
-                                f'border-radius:6px !important; }}</style>',
+                                f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
+                                f'margin:0.05rem 0 !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
@@ -5883,38 +5877,66 @@ def render_portfolio():
                                 )
                             with w_row_col2:
                                 has_alert = w.get("alert_target_price") is not None
-                                with st.popover(
-                                    ":material/notifications_active:" if has_alert else ":material/notifications:",
-                                    use_container_width=False,
-                                ):
-                                    current_price = watchlist_market_data.get(w["ticker"], {}).get("current_price")
-                                    if current_price is None:
-                                        try:
-                                            current_price = get_cached_ticker_info(w["ticker"]).get("regularMarketPrice")
-                                        except Exception:
-                                            current_price = None
-                                    st.markdown(f"**Price alert for {w['naam']}**")
-                                    if current_price is not None:
-                                        st.caption(f"Current: {current_price:.2f}")
-                                    if has_alert:
-                                        direction_word = "drops to" if w.get("alert_direction") == "below" else "rises to"
-                                        st.caption(f"Alert set: notify me when the price {direction_word} "
-                                                  f"{w['alert_target_price']:.2f}")
-                                    new_target_price = st.number_input(
-                                        "Target price", min_value=0.0, step=0.5,
-                                        value=float(w.get("alert_target_price") or 0.0),
-                                        key=f"watchlist_alert_target_{w['id']}",
+                                # BELANGRIJKE FIX: de :material:-icoon-syntax hoort in de
+                                # aparte 'icon'-parameter van st.popover(), NIET in het
+                                # 'label' zelf -- het label ondersteunt volgens Streamlit's
+                                # eigen documentatie alleen Bold/Italics/Links/Images, geen
+                                # material-icon-syntax. Dat verklaarde waarom er nooit een
+                                # bel-icoon verscheen (het label-materiaal werd genegeerd/
+                                # kaal weergegeven, alleen de eigen chevron van de popover
+                                # bleef zichtbaar).
+                                # Ook gewrapt in st.container(key=...) -- een betrouwbare,
+                                # bevestigd-werkende manier om deze specifieke knop te
+                                # stylen, i.p.v. de eerdere, nooit-bevestigde 'stPopover'-
+                                # testid-gok (die de grootte-mismatch met de prullenbak-
+                                # knop verklaarde: de CSS raakte 'm gewoon nooit).
+                                bell_wrap_key = f"watchlist_bell_wrap_{w['id']}"
+                                try:
+                                    bell_wrap_ctx = st.container(key=bell_wrap_key)
+                                except Exception:
+                                    bell_wrap_ctx = st.container()
+                                    bell_wrap_key = None
+                                if bell_wrap_key:
+                                    st.markdown(
+                                        f'<style>.st-key-{bell_wrap_key} button {{ '
+                                        f'padding: 0.15rem 0.4rem !important; '
+                                        f'min-width: 0 !important; min-height: 0 !important; }}</style>',
+                                        unsafe_allow_html=True,
                                     )
-                                    alert_btn_col1, alert_btn_col2 = st.columns(2)
-                                    with alert_btn_col1:
-                                        if st.button("Set alert", key=f"watchlist_set_alert_{w['id']}", type="primary",
-                                                    disabled=(new_target_price <= 0 or current_price is None)):
-                                            database.set_watchlist_alert(w["id"], user_email, new_target_price, current_price)
-                                            st.rerun()
-                                    with alert_btn_col2:
-                                        if has_alert and st.button("Clear", key=f"watchlist_clear_alert_{w['id']}"):
-                                            database.clear_watchlist_alert(w["id"], user_email)
-                                            st.rerun()
+                                with bell_wrap_ctx:
+                                    with st.popover(
+                                        "",
+                                        icon=":material/notifications_active:" if has_alert else ":material/notifications:",
+                                        use_container_width=False,
+                                    ):
+                                        current_price = watchlist_market_data.get(w["ticker"], {}).get("current_price")
+                                        if current_price is None:
+                                            try:
+                                                current_price = get_cached_ticker_info(w["ticker"]).get("regularMarketPrice")
+                                            except Exception:
+                                                current_price = None
+                                        st.markdown(f"**Price alert for {w['naam']}**")
+                                        if current_price is not None:
+                                            st.caption(f"Current: {current_price:.2f}")
+                                        if has_alert:
+                                            direction_word = "drops to" if w.get("alert_direction") == "below" else "rises to"
+                                            st.caption(f"Alert set: notify me when the price {direction_word} "
+                                                      f"{w['alert_target_price']:.2f}")
+                                        new_target_price = st.number_input(
+                                            "Target price", min_value=0.0, step=0.5,
+                                            value=float(w.get("alert_target_price") or 0.0),
+                                            key=f"watchlist_alert_target_{w['id']}",
+                                        )
+                                        alert_btn_col1, alert_btn_col2 = st.columns(2)
+                                        with alert_btn_col1:
+                                            if st.button("Set alert", key=f"watchlist_set_alert_{w['id']}", type="primary",
+                                                        disabled=(new_target_price <= 0 or current_price is None)):
+                                                database.set_watchlist_alert(w["id"], user_email, new_target_price, current_price)
+                                                st.rerun()
+                                        with alert_btn_col2:
+                                            if has_alert and st.button("Clear", key=f"watchlist_clear_alert_{w['id']}"):
+                                                database.clear_watchlist_alert(w["id"], user_email)
+                                                st.rerun()
                             with w_row_col3:
                                 if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
                                             help="Remove from watchlist"):
