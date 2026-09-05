@@ -1170,6 +1170,65 @@ def check_triggered_watchlist_alerts(watchlist_items: list, market_data: dict) -
     return triggered
 
 
+def build_rebalancing_suggestions(holdings: list, total_value: float, materiality_threshold_pct: float = 1.0) -> dict:
+    """
+    Berekent concrete koop/verkoop-suggesties voor elke positie met een
+    ingesteld target_weight, om weer op de eigen, gewenste verdeling uit
+    te komen.
+
+    Alleen posities MET een ingesteld target_weight doen mee -- posities
+    zonder target worden simpelweg overgeslagen (geen 'impliciet 0%'-
+    aanname), dus de ingestelde targets hoeven niet op te tellen tot
+    100%. WEL wordt gewaarschuwd als de som van de ingestelde targets
+    boven de 100% uitkomt, want dat is wiskundig inconsistent (je kunt
+    nooit alle targets tegelijk halen als ze samen meer dan de hele
+    portfolio claimen).
+
+    'materiality_threshold_pct' filtert triviale afwijkingen eruit (bv.
+    0,3 procentpunt van je target af zitten is geen bruikbare suggestie
+    om voor te handelen) -- standaard 1 procentpunt.
+
+    Retourneert:
+    {
+        "suggestions": [{naam, ticker, current_pct, target_pct,
+                          diff_pct, diff_value, action}, ...],
+                         gesorteerd op grootste absolute afwijking eerst.
+        "targets_sum_pct": som van alle ingestelde targets,
+        "any_targets_set": of er uberhaupt targets zijn ingesteld,
+    }
+    """
+    positions_with_target = [h for h in holdings if h.get("target_weight") is not None]
+    targets_sum_pct = sum(h["target_weight"] for h in positions_with_target)
+
+    suggestions = []
+    if total_value:
+        for h in positions_with_target:
+            current_value = h.get("position_value") or 0
+            current_pct = (current_value / total_value) * 100
+            target_pct = h["target_weight"]
+            diff_pct = target_pct - current_pct
+            if abs(diff_pct) < materiality_threshold_pct:
+                continue
+            target_value = total_value * (target_pct / 100)
+            diff_value = target_value - current_value
+            suggestions.append({
+                "naam": h["naam"],
+                "ticker": h["ticker"],
+                "current_pct": current_pct,
+                "target_pct": target_pct,
+                "diff_pct": diff_pct,
+                "diff_value": diff_value,
+                "action": "buy" if diff_value > 0 else "sell",
+            })
+    suggestions.sort(key=lambda s: abs(s["diff_pct"]), reverse=True)
+
+    return {
+        "suggestions": suggestions,
+        "targets_sum_pct": targets_sum_pct,
+        "any_targets_set": len(positions_with_target) > 0,
+    }
+
+
 def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
     """
     Dag-op-dag statistieken: totale verandering, en beste/slechtste
@@ -4954,6 +5013,49 @@ def render_portfolio():
                             if st.button("Retry", key=retry_chart_key, icon=":material/refresh:"):
                                 get_cached_ticker_history.clear()
                                 st.rerun()
+
+    # ============================================================
+    # 2. REBALANCING -- concrete koop/verkoop-suggesties o.b.v. target weights
+    # ============================================================
+    if holdings:
+        rebalance_total_value = sum(h.get("position_value") or 0 for h in holdings)
+        rebalance_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
+        rebalance_symbol = "€" if rebalance_currency == "EUR" else "$"
+        rebalance_result = build_rebalancing_suggestions(holdings, rebalance_total_value)
+
+        if rebalance_result["any_targets_set"]:
+            st.markdown(
+                _flowing_section_header_html("Rebalancing", "swap_horiz"),
+                unsafe_allow_html=True,
+            )
+            with st.container(border=True):
+                if rebalance_result["targets_sum_pct"] > 100:
+                    st.warning(
+                        f"Your target weights add up to {rebalance_result['targets_sum_pct']:.0f}% -- "
+                        f"more than 100%, so not every target can be fully reached at once. "
+                        f"Consider lowering a few targets under 'Manage'."
+                    )
+                if rebalance_result["suggestions"]:
+                    for sugg in rebalance_result["suggestions"]:
+                        action_word = "Buy" if sugg["action"] == "buy" else "Sell"
+                        action_color = "#1FAE96" if sugg["action"] == "buy" else "#E5484D"
+                        st.markdown(
+                            f'<div style="display:flex; justify-content:space-between; align-items:center; '
+                            f'padding:0.5rem 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
+                            f'<div><span style="color:#EAEDF1; font-weight:600;">{sugg["naam"]}</span> '
+                            f'<span style="color:#8992A3; font-size:0.8rem;">({sugg["ticker"]})</span><br>'
+                            f'<span style="color:#8992A3; font-size:0.78rem;">{sugg["current_pct"]:.1f}% now '
+                            f'&#8594; {sugg["target_pct"]:.1f}% target</span></div>'
+                            f'<span style="color:{action_color}; font-weight:700;">{action_word} ~{rebalance_symbol}'
+                            f'{abs(sugg["diff_value"]):,.0f}</span>'
+                            '</div>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("All positions with a target weight are already close enough to their target -- nothing to rebalance right now.")
+        # Geen 'else' hier -- als er nergens een target is ingesteld, blijft
+        # deze sectie gewoon volledig ongetoond (geen lege sectie/verwijzing-
+        # ruis voor gebruikers die de target-weight-feature niet gebruiken).
 
     # ============================================================
     # 3. MANAGE
