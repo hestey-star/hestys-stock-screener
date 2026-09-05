@@ -5060,7 +5060,10 @@ def render_portfolio():
                         action_color = "#1FAE96" if sugg["action"] == "buy" else "#E5484D"
                         shares_txt = ""
                         if sugg["diff_shares"] is not None:
-                            shares_txt = f' &middot; {abs(sugg["diff_shares"]):.2f} shares'
+                            shares_txt = (
+                                f' <span style="color:#8992A3; font-weight:400;">&middot; '
+                                f'{abs(sugg["diff_shares"]):.2f} shares</span>'
+                            )
 
                         # Lichte, subtiele balk: huidige% als vulling, een
                         # verticale streep op de target%-positie -- geeft in
