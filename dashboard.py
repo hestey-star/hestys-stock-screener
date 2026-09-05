@@ -5821,81 +5821,116 @@ def render_portfolio():
                     # BEWUST geen extra marktdata (koers/verandering) in de rij
                     # zelf -- alleen zichtbaar in de alert-popover, waar het
                     # nodig is als context voor de streefprijs.
+                    #
+                    # 2-koloms-indeling + zebra-striping (afwisselend lichtgrijze
+                    # rijen) toegevoegd na feedback op een lange, 1-koloms-lijst
+                    # (16+ items) -- halveert de scroll-lengte en maakt elke rij
+                    # makkelijker te volgen.
                     watchlist_tickers = [w["ticker"] for w in watchlist_items]
                     watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
-                    for w in watchlist_items:
+                    def _render_watchlist_row(w, row_idx):
+                        # Zebra-striping via st.container(key=...) -- geeft een
+                        # betrouwbare .st-key-{key}-klasse (bevestigd, al eerder
+                        # gebruikt voor de prullenbak-knop), met een veilige
+                        # fallback voor een oudere Streamlit-versie die 'key' op
+                        # st.container() nog niet ondersteunt.
+                        row_key = f"watchlist_row_{w['id']}"
                         try:
-                            w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1], gap="small", width=450)
+                            row_ctx = st.container(key=row_key)
                         except Exception:
-                            w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1])
-                        with w_row_col1:
-                            # Favicon via yfinance's eigen 'website'-veld i.p.v. een
-                            # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
-                            # een future als 'GC=F' compleet onzinnig zou zijn) --
-                            # ontbreekt 'website' (bv. bij futures/grondstoffen),
-                            # dan gewoon geen favicon tonen.
-                            try:
-                                website = get_cached_ticker_info(w["ticker"]).get("website")
-                            except Exception:
-                                website = None
-                            favicon_html = ""
-                            if website:
-                                favicon_domain = website.replace("https://", "").replace("http://", "").split("/")[0]
-                                favicon_html = (
-                                    f'<img src="https://www.google.com/s2/favicons?domain={favicon_domain}&sz=32" '
-                                    'style="width:18px; height:18px; border-radius:4px;" '
-                                    'onerror="this.style.display=\'none\'">'
-                                )
+                            row_ctx = st.container()
+                            row_key = None
+                        if row_key:
+                            row_bg = "rgba(137,146,163,0.06)" if row_idx % 2 == 0 else "transparent"
                             st.markdown(
-                                f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
-                                f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
-                                f'{favicon_html}'
-                                f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; '
-                                f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"]}</span>'
-                                f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
-                                '</div>',
+                                f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
+                                f'border-radius:6px !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
-                        with w_row_col2:
-                            has_alert = w.get("alert_target_price") is not None
-                            with st.popover(
-                                ":material/notifications_active:" if has_alert else ":material/notifications:",
-                                use_container_width=False,
-                            ):
-                                current_price = watchlist_market_data.get(w["ticker"], {}).get("current_price")
-                                if current_price is None:
-                                    try:
-                                        current_price = get_cached_ticker_info(w["ticker"]).get("regularMarketPrice")
-                                    except Exception:
-                                        current_price = None
-                                st.markdown(f"**Price alert for {w['naam']}**")
-                                if current_price is not None:
-                                    st.caption(f"Current: {current_price:.2f}")
-                                if has_alert:
-                                    direction_word = "drops to" if w.get("alert_direction") == "below" else "rises to"
-                                    st.caption(f"Alert set: notify me when the price {direction_word} "
-                                              f"{w['alert_target_price']:.2f}")
-                                new_target_price = st.number_input(
-                                    "Target price", min_value=0.0, step=0.5,
-                                    value=float(w.get("alert_target_price") or 0.0),
-                                    key=f"watchlist_alert_target_{w['id']}",
+                        with row_ctx:
+                            try:
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1], gap="small")
+                            except Exception:
+                                w_row_col1, w_row_col2, w_row_col3 = st.columns([6, 1, 1])
+                            with w_row_col1:
+                                # Favicon via yfinance's eigen 'website'-veld i.p.v. een
+                                # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
+                                # een future als 'GC=F' compleet onzinnig zou zijn) --
+                                # ontbreekt 'website' (bv. bij futures/grondstoffen),
+                                # dan gewoon geen favicon tonen.
+                                try:
+                                    website = get_cached_ticker_info(w["ticker"]).get("website")
+                                except Exception:
+                                    website = None
+                                favicon_html = ""
+                                if website:
+                                    favicon_domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                                    favicon_html = (
+                                        f'<img src="https://www.google.com/s2/favicons?domain={favicon_domain}&sz=32" '
+                                        'style="width:18px; height:18px; border-radius:4px;" '
+                                        'onerror="this.style.display=\'none\'">'
+                                    )
+                                st.markdown(
+                                    f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
+                                    f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
+                                    f'{favicon_html}'
+                                    f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; '
+                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"]}</span>'
+                                    f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
+                                    '</div>',
+                                    unsafe_allow_html=True,
                                 )
-                                alert_btn_col1, alert_btn_col2 = st.columns(2)
-                                with alert_btn_col1:
-                                    if st.button("Set alert", key=f"watchlist_set_alert_{w['id']}", type="primary",
-                                                disabled=(new_target_price <= 0 or current_price is None)):
-                                        database.set_watchlist_alert(w["id"], user_email, new_target_price, current_price)
-                                        st.rerun()
-                                with alert_btn_col2:
-                                    if has_alert and st.button("Clear", key=f"watchlist_clear_alert_{w['id']}"):
-                                        database.clear_watchlist_alert(w["id"], user_email)
-                                        st.rerun()
-                        with w_row_col3:
-                            if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
-                                        help="Remove from watchlist"):
-                                database.delete_holding(w["id"], user_email)
-                                st.rerun()
+                            with w_row_col2:
+                                has_alert = w.get("alert_target_price") is not None
+                                with st.popover(
+                                    ":material/notifications_active:" if has_alert else ":material/notifications:",
+                                    use_container_width=False,
+                                ):
+                                    current_price = watchlist_market_data.get(w["ticker"], {}).get("current_price")
+                                    if current_price is None:
+                                        try:
+                                            current_price = get_cached_ticker_info(w["ticker"]).get("regularMarketPrice")
+                                        except Exception:
+                                            current_price = None
+                                    st.markdown(f"**Price alert for {w['naam']}**")
+                                    if current_price is not None:
+                                        st.caption(f"Current: {current_price:.2f}")
+                                    if has_alert:
+                                        direction_word = "drops to" if w.get("alert_direction") == "below" else "rises to"
+                                        st.caption(f"Alert set: notify me when the price {direction_word} "
+                                                  f"{w['alert_target_price']:.2f}")
+                                    new_target_price = st.number_input(
+                                        "Target price", min_value=0.0, step=0.5,
+                                        value=float(w.get("alert_target_price") or 0.0),
+                                        key=f"watchlist_alert_target_{w['id']}",
+                                    )
+                                    alert_btn_col1, alert_btn_col2 = st.columns(2)
+                                    with alert_btn_col1:
+                                        if st.button("Set alert", key=f"watchlist_set_alert_{w['id']}", type="primary",
+                                                    disabled=(new_target_price <= 0 or current_price is None)):
+                                            database.set_watchlist_alert(w["id"], user_email, new_target_price, current_price)
+                                            st.rerun()
+                                    with alert_btn_col2:
+                                        if has_alert and st.button("Clear", key=f"watchlist_clear_alert_{w['id']}"):
+                                            database.clear_watchlist_alert(w["id"], user_email)
+                                            st.rerun()
+                            with w_row_col3:
+                                if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
+                                            help="Remove from watchlist"):
+                                    database.delete_holding(w["id"], user_email)
+                                    st.rerun()
+
+                    half = (len(watchlist_items) + 1) // 2
+                    left_items = watchlist_items[:half]
+                    right_items = watchlist_items[half:]
+                    watchlist_outer_left, watchlist_outer_right = st.columns(2)
+                    for row_idx in range(half):
+                        with watchlist_outer_left:
+                            _render_watchlist_row(left_items[row_idx], row_idx)
+                        if row_idx < len(right_items):
+                            with watchlist_outer_right:
+                                _render_watchlist_row(right_items[row_idx], row_idx)
                 else:
                     st.caption("Your watchlist is empty.")
 
