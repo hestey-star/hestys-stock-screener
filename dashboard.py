@@ -1191,8 +1191,11 @@ def build_rebalancing_suggestions(holdings: list, total_value: float, materialit
     Retourneert:
     {
         "suggestions": [{naam, ticker, current_pct, target_pct,
-                          diff_pct, diff_value, action}, ...],
+                          diff_pct, diff_value, diff_shares, action}, ...],
                          gesorteerd op grootste absolute afwijking eerst.
+                         diff_shares is None als het aantal stuks van de
+                         positie onbekend of nul is (kan dan niet worden
+                         afgeleid).
         "targets_sum_pct": som van alle ingestelde targets,
         "any_targets_set": of er uberhaupt targets zijn ingesteld,
     }
@@ -1211,6 +1214,17 @@ def build_rebalancing_suggestions(holdings: list, total_value: float, materialit
                 continue
             target_value = total_value * (target_pct / 100)
             diff_value = target_value - current_value
+
+            # Aantal aandelen afleiden uit de huidige prijs per stuk
+            # (position_value / shares) -- geeft alleen een schatting als
+            # zowel shares als position_value bekend en positief zijn.
+            shares = h.get("shares") or 0
+            if shares > 0 and current_value > 0:
+                price_per_share = current_value / shares
+                diff_shares = diff_value / price_per_share
+            else:
+                diff_shares = None
+
             suggestions.append({
                 "naam": h["naam"],
                 "ticker": h["ticker"],
@@ -1218,6 +1232,7 @@ def build_rebalancing_suggestions(holdings: list, total_value: float, materialit
                 "target_pct": target_pct,
                 "diff_pct": diff_pct,
                 "diff_value": diff_value,
+                "diff_shares": diff_shares,
                 "action": "buy" if diff_value > 0 else "sell",
             })
     suggestions.sort(key=lambda s: abs(s["diff_pct"]), reverse=True)
@@ -4565,6 +4580,10 @@ def render_portfolio():
     # 1. OVERVIEW -- totaal, valuta, pie chart, en de tabel, samen in 1 vak
     # ============================================================
     if holdings:
+        st.markdown(
+            _flowing_section_header_html("Portfolio", "account_balance_wallet", is_first=True),
+            unsafe_allow_html=True,
+        )
         with st.container(border=True):
             total_value = sum(h.get("position_value") or 0 for h in holdings)
             stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
@@ -5039,15 +5058,37 @@ def render_portfolio():
                     for sugg in rebalance_result["suggestions"]:
                         action_word = "Buy" if sugg["action"] == "buy" else "Sell"
                         action_color = "#1FAE96" if sugg["action"] == "buy" else "#E5484D"
+                        shares_txt = ""
+                        if sugg["diff_shares"] is not None:
+                            shares_txt = f' &middot; {abs(sugg["diff_shares"]):.2f} shares'
+
+                        # Lichte, subtiele balk: huidige% als vulling, een
+                        # verticale streep op de target%-positie -- geeft in
+                        # 1 oogopslag de afstand tot het doel, naast de
+                        # tekstuele percentages.
+                        bar_current_pct = min(sugg["current_pct"], 100)
+                        bar_target_pct = min(sugg["target_pct"], 100)
+                        bar_html = (
+                            '<div style="position:relative; height:4px; background:rgba(137,146,163,0.10); '
+                            'border-radius:2px; margin-top:0.35rem;">'
+                            f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
+                            f'background:{action_color}; border-radius:2px;"></div>'
+                            f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-2px; height:8px; '
+                            'width:2px; background:#EAEDF1; border-radius:1px;"></div>'
+                            '</div>'
+                        )
+
                         st.markdown(
-                            f'<div style="display:flex; justify-content:space-between; align-items:center; '
-                            f'padding:0.5rem 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
+                            f'<div style="padding:0.5rem 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
+                            f'<div style="display:flex; justify-content:space-between; align-items:center;">'
                             f'<div><span style="color:#EAEDF1; font-weight:600;">{sugg["naam"]}</span> '
                             f'<span style="color:#8992A3; font-size:0.8rem;">({sugg["ticker"]})</span><br>'
                             f'<span style="color:#8992A3; font-size:0.78rem;">{sugg["current_pct"]:.1f}% now '
                             f'&#8594; {sugg["target_pct"]:.1f}% target</span></div>'
-                            f'<span style="color:{action_color}; font-weight:700;">{action_word} ~{rebalance_symbol}'
-                            f'{abs(sugg["diff_value"]):,.0f}</span>'
+                            f'<span style="color:{action_color}; font-weight:700;">{action_word} {rebalance_symbol}'
+                            f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
+                            '</div>'
+                            f'{bar_html}'
                             '</div>',
                             unsafe_allow_html=True,
                         )
