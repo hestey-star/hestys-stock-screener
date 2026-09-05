@@ -380,17 +380,30 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     border: 1px solid rgba(137,146,163,0.18) !important;
     border-radius: 12px !important;
 }
-/* Alleen de knop zelf jade-gekleurd -- het omkaderde vak eromheen
-   bleek achteraf nooit het probleem te zijn (bewust NIET meer
-   aangepast na eerdere feedback), dus dat blijft nu gewoon
-   Streamlit's eigen, standaard stijl. */
+/* Het vak laten krimpen naar de knop -- was veel groter dan nodig voor
+   zo'n kleine knop, wat een 'verdwaald-in-lege-ruimte'-gevoel gaf.
+   En de knop zelf duidelijk anders vormgegeven (niet alleen een
+   kleuraanpassing): volle breedte, meer body, subtiele schaduw + een
+   licht hover-effect voor wat diepte/interactiviteit. */
+div[data-testid="stFileUploader"] section {
+    padding: 0.6rem !important;
+    min-height: 0 !important;
+}
 div[data-testid="stFileUploader"] section button {
     background: #1FAE96 !important;
     color: #0B1210 !important;
     border: none !important;
     font-weight: 700 !important;
-    padding: 0.5rem 1.1rem !important;
+    font-size: 0.95rem !important;
+    padding: 0.65rem 1.3rem !important;
     border-radius: 8px !important;
+    width: 100% !important;
+    box-shadow: 0 2px 8px rgba(31,174,150,0.25) !important;
+    transition: background 0.15s ease, box-shadow 0.15s ease !important;
+}
+div[data-testid="stFileUploader"] section button:hover {
+    background: #24C7AB !important;
+    box-shadow: 0 4px 12px rgba(31,174,150,0.35) !important;
 }
 </style>
 <style>
