@@ -5846,7 +5846,9 @@ def render_portfolio():
                                 f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
                                 f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
                                 f'margin:-0.7rem 0 !important; display:flex !important; '
-                                f'align-items:center !important; width:100% !important; }}</style>',
+                                f'align-items:center !important; width:100% !important; }}'
+                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
+                                f'align-items:center !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
