@@ -5801,7 +5801,7 @@ def render_portfolio():
 
     elif manage_section == "Watchlist":
         try:
-            watchlist_narrow_col = st.columns([1], width=500)[0]
+            watchlist_narrow_col = st.columns([1], width=900)[0]
         except Exception:
             watchlist_narrow_col = st.columns([1])[0]
         with watchlist_narrow_col:
