@@ -379,25 +379,28 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     border: 1px solid rgba(137,146,163,0.18) !important;
     border-radius: 12px !important;
 }
-/* Compactere file-uploaders op de HELE site -- het 'Limit 200MB per
-   file * CSV'-regeltje voegt weinig waarde toe en maakt de widget
-   onnodig zwaar/breed; de Browse-knop krijgt Hesty's eigen jade-kleur
-   zodat die duidelijk als DE actie oogt, i.p.v. Streamlit's standaard,
-   neutrale knop-stijl. */
-div[data-testid="stFileUploaderDropzoneInstructions"] small,
-div[data-testid="stFileDropzoneInstructions"] small {
-    display: none !important;
+/* Compactere file-uploaders op de HELE site. Vorige versie gokte naar
+   interne, tussenliggende testid-namen (stFileUploaderDropzoneInstructions
+   e.d.) die NIET bleken te kloppen -- de '200MB per file'-tekst en het
+   grijze omkaderde vak bleven gewoon staan. Nu alles opgebouwd vanuit
+   ALLEEN de buitenste 'stFileUploader'-testid, waarvan we ZEKER weten
+   dat die klopt (de jade-knop-kleuring hieronder werkte immers al) --
+   geen giswerk meer naar interne wrapper-namen. */
+div[data-testid="stFileUploader"] section {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
 }
-div[data-testid="stFileUploaderDropzone"],
-div[data-testid="stFileUploadDropzone"] {
-    padding: 0.6rem 1rem !important;
-    min-height: unset !important;
+div[data-testid="stFileUploader"] small {
+    display: none !important;
 }
 div[data-testid="stFileUploader"] section button {
     background: #1FAE96 !important;
     color: #0B1210 !important;
     border: none !important;
     font-weight: 700 !important;
+    padding: 0.5rem 1.1rem !important;
+    border-radius: 8px !important;
 }
 /* Watchlist bel/prullenbak-knoppen compacter. De prullenbak-knop via
    Streamlit's eigen .st-key-{key}-klasse (gebaseerd op een key die

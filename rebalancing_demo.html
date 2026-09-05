@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hesty's — Rebalancing (demo)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined&display=swap');
+
+* { box-sizing: border-box; }
+body {
+  background: #0B0E14;
+  color: #EAEDF1;
+  font-family: 'Inter', sans-serif;
+  padding: 2rem;
+  margin: 0;
+  max-width: 640px;
+}
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-size: 19px;
+  vertical-align: middle;
+  color: #1FAE96;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.3rem;
+}
+.section-header span.title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #EAEDF1;
+}
+.card {
+  background: rgba(137,146,163,0.05);
+  border: 1px solid rgba(137,146,163,0.18);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+}
+.row {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(137,146,163,0.12);
+}
+.row:last-child { border-bottom: none; }
+.row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.name { color: #EAEDF1; font-weight: 600; }
+.ticker { color: #8992A3; font-size: 0.8rem; }
+.sub { color: #8992A3; font-size: 0.78rem; }
+.amount { font-weight: 700; }
+.shares { color: #8992A3; font-weight: 400; }
+.bar-track {
+  position: relative;
+  height: 4px;
+  background: rgba(137,146,163,0.10);
+  border-radius: 2px;
+  margin-top: 0.35rem;
+}
+.bar-fill { position: absolute; height: 100%; border-radius: 2px; }
+.bar-target { position: absolute; top: -2px; height: 8px; width: 2px; background: #EAEDF1; border-radius: 1px; }
+.watermark {
+  margin-top: 1.5rem;
+  color: #4A5568;
+  font-size: 0.72rem;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div class="section-header">
+  <span class="material-symbols-outlined">swap_horiz</span>
+  <span class="title">Rebalancing</span>
+</div>
+
+<div class="card">
+
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <span class="name">Palantir Technologies</span> <span class="ticker">(PLTR)</span><br>
+        <span class="sub">9.2% now &#8594; 18.0% target</span>
+      </div>
+      <span class="amount" style="color:#1FAE96;">Buy &euro;4,392</span> <span class="shares">&middot; 25.66 shares</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:9.2%; background:#1FAE96;"></div>
+      <div class="bar-target" style="left:18.0%;"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <span class="name">Hims &amp; Hers Health</span> <span class="ticker">(HIMS)</span><br>
+        <span class="sub">21.4% now &#8594; 12.0% target</span>
+      </div>
+      <span class="amount" style="color:#E5484D;">Sell &euro;4,700</span> <span class="shares">&middot; 139.11 shares</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:21.4%; background:#E5484D;"></div>
+      <div class="bar-target" style="left:12.0%;"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <span class="name">Tesla, Inc.</span> <span class="ticker">(TSLA)</span><br>
+        <span class="sub">11.8% now &#8594; 20.0% target</span>
+      </div>
+      <span class="amount" style="color:#1FAE96;">Buy &euro;4,100</span> <span class="shares">&middot; 12.49 shares</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:11.8%; background:#1FAE96;"></div>
+      <div class="bar-target" style="left:20.0%;"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <span class="name">Amazon.com, Inc.</span> <span class="ticker">(AMZN)</span><br>
+        <span class="sub">17.6% now &#8594; 10.0% target</span>
+      </div>
+      <span class="amount" style="color:#E5484D;">Sell &euro;3,800</span> <span class="shares">&middot; 17.27 shares</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:17.6%; background:#E5484D;"></div>
+      <div class="bar-target" style="left:10.0%;"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="row-top">
+      <div>
+        <span class="name">Alphabet Inc.</span> <span class="ticker">(GOOGL)</span><br>
+        <span class="sub">24.1% now &#8594; 30.0% target</span>
+      </div>
+      <span class="amount" style="color:#1FAE96;">Buy &euro;2,950</span> <span class="shares">&middot; 15.10 shares</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:24.1%; background:#1FAE96;"></div>
+      <div class="bar-target" style="left:30.0%;"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="watermark">Sample data for illustration purposes only — not a real portfolio</div>
+
+</body>
+</html>
