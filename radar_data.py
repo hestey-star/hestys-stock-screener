@@ -213,6 +213,13 @@ def build_opportunities_today(holdings: list, watchlist_items: list, include_wee
         "in_portfolio_count": len(in_portfolio),
         "in_watchlist_count": len(in_watchlist),
         "new_opportunities_count": len(new_opportunities),
+        # Een paar ECHTE tickersymbolen uit de nieuwe-ideeen-set, voor het
+        # 'Top hits: ...'-snippet op Today -- bewust GEEN bedrijfsnaam of
+        # 'stijl' (Value/Growth) erbij verzonnen: de screener-CSV's hebben
+        # geen betrouwbare naam-kolom (Discover toont deze signalen ook
+        # gewoon op tickersymbool), dus alleen het symbool zelf, nooit
+        # nepdata.
+        "new_opportunity_tickers": sorted(new_opportunities)[:3],
     }
 
 
@@ -582,6 +589,15 @@ def compute_daily_radar_bundle(user_email: str, holdings: list, watchlist_items:
                     f"{alert['pct']:+.1f}% this month{extreme_marker}",
         })
 
+    # Top 2 ECHTE sector/thema-uitschieters (uit threshold_alerts hierboven,
+    # al gesorteerd op |pct| aflopend) als kort snippet voor Today's
+    # 'Macro Catalyst'-bulletin -- bewust GEEN losstaande macro-tickers als
+    # ruwe olie/dollarindex (die worden nergens anders in de app gevolgd,
+    # dus dat zou verzonnen data zijn).
+    macro_top_movers = [
+        f"{a['name']} {a['pct']:+.1f}%" for a in threshold_alerts[:2]
+    ]
+
     if holdings:
         weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
         weekly_scan_within_days = (
@@ -636,6 +652,7 @@ def compute_daily_radar_bundle(user_email: str, holdings: list, watchlist_items:
         "day_items": day_items,
         "screener_items": screener_items,
         "macro_items": macro_items,
+        "macro_top_movers": macro_top_movers,
         "dated_agenda_items": dated_agenda_items,
         "opportunities": opportunities,
         "computed_at": datetime.now(tz=None).isoformat(),

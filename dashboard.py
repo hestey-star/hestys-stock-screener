@@ -2282,12 +2282,12 @@ def _week_agenda_html(buckets: dict) -> str:
                 '<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>No events</span></div>'
             )
 
-        label_color = "#1FAE96" if is_today else "#8992A3"
+        label_color = "#1FAE96" if is_today else "#E2E8F0"
         day_class = "hesty-week-day hesty-week-day-last" if i == 4 else "hesty-week-day"
         day_cols.append(
             f'<div class="{day_class}">'
-            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; '
-            f'letter-spacing:0.08em; font-family:\'Inter\', sans-serif !important;">{label}</div>'
+            f'<div style="font-size:1.05rem; font-weight:800; color:{label_color}; text-transform:uppercase; '
+            f'letter-spacing:0.03em; font-family:\'Inter\', sans-serif !important;">{label}</div>'
             f'{items_html}'
             f'</div>'
         )
@@ -7224,40 +7224,15 @@ def render_today():
             day_items = radar_bundle["day_items"]
             macro_items = radar_bundle["macro_items"]
             opportunities = radar_bundle["opportunities"]
+            macro_top_movers = radar_bundle.get("macro_top_movers", [])
+            new_opportunity_tickers = opportunities.get("new_opportunity_tickers", [])
 
-            # --- Today's Insights Summary -- vervangt de klikbare Stories-
-            # cirkels door direct scanbare, platte tekst: dezelfde 3
-            # categorieen data (dag-gebeurtenissen, screener-hits, macro-
-            # catalysts) als voorheen, nu meteen zichtbaar i.p.v. achter een
-            # klik verstopt. ---
-            summary_rows = [
-                ("\u2713", "DAILY SUMMARY", f"{len(day_items)} item(s) on your radar today."),
-                ("\U0001F50D", "SCREENER HITS", f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners."),
-                ("\u26A1", "MACRO CATALYST", f"{len(macro_items)} key global market movement(s) detected today."),
-            ]
-            st.markdown(
-                "".join(
-                    f'<div style="display:flex; align-items:flex-start; gap:0.5rem; margin-top:8px; '
-                    f'font-size:0.83rem; color:#CBD5E1; line-height:1.5; font-family:\'Inter\', sans-serif !important;">'
-                    f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
-                    f'align-items:center;">{icon}</span>'
-                    f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
-                    f'</div>'
-                    for icon, label, text in summary_rows
-                )
-                + '<div style="margin-top:12px;">'
-                  '<a href="/discover" target="_self" class="inline-link" style="font-size:0.82rem;">'
-                  'Explore all signals on Discover &rarr;</a></div>',
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("<div style=\'height: 0.9rem\'></div>", unsafe_allow_html=True)
-
-            # --- Horizontale Week-Agenda (Ma t/m Vr) -- rauwe, gedateerde
-            # events komen al kant-en-klare uit de radar-bundel (batch of
-            # live, zelfde vorm); hier alleen omzetten naar de (datum,
-            # icoon-HTML, tekst)-tuples die _bucket_events_by_weekday()
-            # verwacht. ---
+            # --- Horizontale Week-Agenda (Ma t/m Vr) -- nu BOVENAAN de
+            # sectie, direct onder de titel (prominenter dan de bulletins
+            # eronder). Rauwe, gedateerde events komen al kant-en-klaar uit
+            # de radar-bundel (batch of live, zelfde vorm); hier alleen
+            # omzetten naar de (datum, icoon-HTML, tekst)-tuples die
+            # _bucket_events_by_weekday() verwacht. ---
             dated_agenda_items = [
                 (
                     datetime.strptime(d["date"], "%Y-%m-%d").date(),
@@ -7266,8 +7241,62 @@ def render_today():
                 )
                 for d in radar_bundle["dated_agenda_items"]
             ]
-
             st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
+
+            st.markdown("<div style='height: 1.1rem'></div>", unsafe_allow_html=True)
+
+            # --- Today's Insights Summary -- nu ONDER de agenda. Vervangt
+            # de klikbare Stories-cirkels door direct scanbare, platte
+            # tekst: dezelfde 3 categorieen data (dag-gebeurtenissen,
+            # screener-hits, macro-catalysts) als voorheen, nu meteen
+            # zichtbaar i.p.v. achter een klik verstopt. Screener Hits en
+            # Macro Catalyst krijgen een ingesprongen snippet-regel eronder
+            # met de daadwerkelijke tickers/uitschieters (ECHTE data, geen
+            # mock -- zie radar_data.py's toelichting bij
+            # new_opportunity_tickers/macro_top_movers). ---
+            screener_snippet = (
+                f"Top hits: {', '.join(new_opportunity_tickers)}" if new_opportunity_tickers else None
+            )
+            macro_snippet = (
+                f"Biggest movers: {', '.join(macro_top_movers)}" if macro_top_movers else None
+            )
+            summary_rows = [
+                ("\u2713", "DAILY SUMMARY", f"{len(day_items)} item(s) on your radar today.", None),
+                (
+                    "\U0001F50D", "SCREENER HITS",
+                    f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners.",
+                    screener_snippet,
+                ),
+                (
+                    "\u26A1", "MACRO CATALYST",
+                    f"{len(macro_items)} key global market movement(s) detected today.",
+                    macro_snippet,
+                ),
+            ]
+            st.markdown(
+                "".join(
+                    f'<div style="margin-top:8px;">'
+                    f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
+                    f'font-size:0.83rem; color:#CBD5E1; line-height:1.5; font-family:\'Inter\', sans-serif !important;">'
+                    f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
+                    f'align-items:center;">{icon}</span>'
+                    f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+                    f'</div>'
+                    + (
+                        f'<div style="margin-left:2rem; margin-top:3px; font-size:0.72rem; color:#94A3B8; '
+                        f'font-family:\'Inter\', sans-serif !important;">&rarr; {snippet}</div>'
+                        if snippet else ""
+                    )
+                    + '</div>'
+                    for icon, label, text, snippet in summary_rows
+                )
+                + '<div style="margin-top:12px;">'
+                  '<a href="/discover" target="_self" class="inline-link" style="font-size:0.82rem;">'
+                  'Explore all signals on Discover &rarr;</a></div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
 
             # --- Portfolio Health & DCA Insights -- zelfde borderloze,
             # 3-koloms behandeling als 'Your Portfolio Today' hierboven:
