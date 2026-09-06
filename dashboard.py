@@ -384,7 +384,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     }
     .portfolio-row-desktop, .portfolio-row-desktop-alltime {
         border-bottom: 1px solid rgba(148,163,184,0.08);
-        padding: 0.65rem 0.25rem;
+        padding: 1.15rem 0.25rem;
     }
     .portfolio-row-header, .portfolio-row-header-alltime {
         padding: 0 0.25rem 0.4rem 0.25rem;
@@ -2463,7 +2463,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     )
 
     mobile_html = (
-        f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); padding:0.75rem 0.2rem;">'
+        f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); padding:1.1rem 0.2rem;">'
         f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
         f'{logo_html}'
         f'<div style="flex:1; min-width:0;">'
@@ -5203,7 +5203,11 @@ def render_portfolio():
                         else:
                             st.warning(message)
 
-        with st.container(border=True):
+        # --- Positietabel: geen omlijnd kader meer om de hele tabel-sectie
+        # (die zware buitenrand is nu weg); de rijen ademen puur van links
+        # naar rechts, elk gescheiden door de flinterdunne border-bottom
+        # (zie .portfolio-row-desktop/-mobile hierboven). ---
+        with st.container(border=False):
 
             def _format_value(holding):
                 value = holding.get("position_value")
