@@ -2323,6 +2323,36 @@ def _week_agenda_html(buckets: dict) -> str:
     )
 
 
+def _portfolio_responsive_css() -> str:
+    """
+    Responsieve stylesheet voor 'Your Portfolio Today'. Desktop: kolom 1
+    ('Your Portfolio Today' zelf) krijgt een eigen, zachte achtergrond-
+    tegel (geen scheidslijn ernaast -- de ademruimte komt uit de
+    flex-gap) zodat 'ie duidelijk de belangrijkste metric van de pagina
+    is; kolom 2/3 (Best/Worst) blijven cleane tekstkolommen, gescheiden
+    door een dunne verticale lijn. Mobiel (<640px): alle 3 gestapeld als
+    losse kaartjes.
+    """
+    return (
+        '<style>'
+        '.hesty-portfolio-row { display:flex; align-items:flex-start; gap:1.75rem; } '
+        '.hesty-portfolio-col { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); '
+        'padding-right:1.75rem; } '
+        '.hesty-portfolio-col-last { border-right:none !important; padding-right:0 !important; } '
+        '.hesty-portfolio-hero-col { flex:1; min-width:0; background:rgba(15,23,42,0.4); '
+        'border-radius:14px; padding:1.15rem 1.35rem; box-sizing:border-box; } '
+        '@media (max-width:640px) { '
+        '.hesty-portfolio-row { flex-direction:column; gap:0.75rem; } '
+        '.hesty-portfolio-col { width:100%; box-sizing:border-box; border-right:none !important; '
+        'padding-right:0 !important; background:rgba(137,146,163,0.04); '
+        'border:1px solid rgba(148,163,184,0.15); border-radius:12px; padding:0.85rem 1rem; } '
+        '.hesty-portfolio-hero-col { width:100%; padding:1rem 1.15rem; } '
+        '.hesty-portfolio-col-empty { display:none !important; } '
+        '} '
+        '</style>'
+    )
+
+
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
                         currency_symbol: str = "$", logo_url: str = None,
                         day_change_pct: float = None, day_change_value: float = None,
