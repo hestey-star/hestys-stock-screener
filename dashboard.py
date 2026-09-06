@@ -2078,7 +2078,7 @@ def _insight_dismiss_button_html(insight_id: str) -> str:
     return (
         f"<span onclick=\"window.localStorage.setItem('hesty_dismissed_insight_{insight_id}', "
         f"Date.now().toString()); this.closest('[data-insight-col]').style.display='none';\" "
-        f'style="position:absolute; top:-4px; right:2px; cursor:pointer; color:#8992A3; '
+        f'style="position:absolute; top:0; right:2px; cursor:pointer; color:#8992A3; '
         f'font-size:0.95rem; line-height:1; opacity:0.5; transition:opacity 0.15s;" '
         f'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" '
         f'title="Dismiss for 5 days">&times;</span>'
@@ -2151,10 +2151,10 @@ def _session_cached(cache_key: str, ttl_seconds: int, compute_fn):
 
 def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     """
-    Herbalanceer-trigger als 1 rij in een verticale lijst (Insights heeft
-    nu een EIGEN identiteit t.o.v. het 3-koloms portfolio-blok erboven --
-    geen kolommen/verticale scheidslijnen meer hier, alleen een dunne
-    HORIZONTALE lijn onder elke rij). Geen kaart-achtergrond.
+    Herbalanceer-trigger als kolom-content (Insights staat weer naast
+    elkaar in kolommen, net als 'Your Portfolio Today' -- maar BEWUST
+    ZONDER verticale scheidslijnen en zonder kaart-achtergrond/-rand,
+    zodat het meteen visueel verschilt van het portfolio-blok erboven).
 
     Het hoofdcijfer is NEUTRAAL gekleurd (het site-brede lichte
     tekst-wit, #EAEDF1) i.p.v. rood/groen -- dit is een doel-afwijking,
@@ -2173,53 +2173,50 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
         target_label = "above target"
         context = f'{suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target.'
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; '
-        f'padding:14px 28px 14px 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; padding-right:26px;">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
         f'{_icon_span("balance", size_px=13, color="#8992A3")}'
         f'<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
         f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Rebalance trigger</span>'
         f'</div>'
-        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
+        f'<div style="font-size:1.65rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
-        f'{sign}{abs(suggestion["diff_pct"]):.1f}%</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:2px; font-family:\'Inter\', sans-serif !important;">{target_label}</div>'
-        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:8px; '
-        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word; '
-        f'max-width:640px;">{suggestion["naam"].upper()}</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important; '
-        f'max-width:640px;">{context}</div>'
+        f'{sign}{abs(suggestion["diff_pct"]):.1f}% <span style="font-size:0.62rem; font-weight:700; '
+        f'color:#8992A3; text-transform:none; letter-spacing:0;">{target_label}</span></div>'
+        f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word;">'
+        f'{suggestion["naam"].upper()}</div>'
+        f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px; font-family:\'Inter\', sans-serif !important;">'
+        f'{context}</div>'
         f'</div>'
     )
 
 
 def _watchlist_snack_card_html(alert: dict) -> str:
     """
-    'Watchlist-Snack' als 1 rij in dezelfde verticale lijst -- zelfde
-    structuur als _rebalance_trigger_card_html hierboven. Amber blijft
-    hier de accentkleur (dit is een 'watch dit'-signaal, geen
-    rendementscijfer, dus geen verwarring met winst/verlies).
+    'Watchlist-Snack' als kolom-content -- zelfde structuur als
+    _rebalance_trigger_card_html hierboven. Amber blijft hier de
+    accentkleur (dit is een 'watch dit'-signaal, geen rendementscijfer,
+    dus geen verwarring met winst/verlies).
     """
     color = "#E8A93C"
     insight_id = f"watchlist-{alert['ticker']}"
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; '
-        f'padding:14px 28px 14px 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; padding-right:26px;">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
         f'{_icon_span("sell", size_px=13, color=color)}'
         f'<span style="font-size:0.62rem; color:{color}; text-transform:uppercase; letter-spacing:0.1em; '
         f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Watchlist alert</span>'
         f'</div>'
-        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
+        f'<div style="font-size:1.65rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
         f'{alert["distance_pct"]:.1f}% to go</div>'
-        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
-        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word; '
-        f'max-width:640px;">{alert["naam"].upper()}</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important; '
-        f'max-width:640px;">'
+        f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word;">'
+        f'{alert["naam"].upper()}</div>'
+        f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px; font-family:\'Inter\', sans-serif !important;">'
         f'Now at {alert["current_price"]:.2f}, target {alert["alert_target_price"]:.2f}</div>'
         f'</div>'
     )
@@ -7298,11 +7295,11 @@ def render_today():
 
             st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
 
-            # --- Portfolio Health & DCA Insights -- zelfde borderloze,
-            # 3-koloms behandeling als 'Your Portfolio Today' hierboven:
-            # geen kaart/rand meer per insight, 1 vloeiende sectiekop
-            # (icoon + titel, geen dikke omlijning), en 3 gelijke kolommen
-            # met dezelfde dunne verticale scheidslijnen. Herbalanceer-
+            # --- Portfolio Health & DCA Insights -- horizontale kolommen,
+            # net als 'Your Portfolio Today' hierboven, maar BEWUST ZONDER
+            # verticale scheidslijnen en zonder kaart-achtergrond/-rand --
+            # dat visuele verschil is precies wat deze sectie een eigen
+            # identiteit geeft t.o.v. het blok erboven. Herbalanceer-
             # triggers hergebruiken de bestaande build_rebalancing_
             # suggestions()-logica (ongewijzigd, al aanwezig voor
             # Analyze); Watchlist-Snack is nieuw. Elke kolom is los
@@ -7329,14 +7326,27 @@ def render_today():
                         unsafe_allow_html=True,
                     )
 
-                    # Bewuste breuk met de 3-koloms-layout van het portfolio-
-                    # blok hierboven -- Insights is nu een simpele, verticale
-                    # lijst (elke insight = 1 rij met een dunne HORIZONTALE
-                    # lijn eronder, geen kaart-achtergrond, geen verticale
-                    # scheidslijnen) i.p.v. dezelfde 3-koloms-look, zodat het
-                    # niet langer aanvoelt als 1 doorlopend vak met het blok
-                    # erboven.
-                    st.markdown("".join(health_cards_html), unsafe_allow_html=True)
+                    insight_cols_html = "".join(
+                        f'<div class="hesty-insights-col">{card}</div>' for card in health_cards_html
+                    )
+                    st.markdown(
+                        '<style>'
+                        '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
+                        '.hesty-insights-col { flex:1; min-width:0; } '
+                        '@media (max-width:640px) { '
+                        '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
+                        '.hesty-insights-col { width:100%; } '
+                        '} '
+                        '</style>'
+                        f'<div class="hesty-insights-row">{insight_cols_html}</div>'
+                        # 'Adjust target allocations' -- zelfde .inline-link-stijl
+                        # (teal accent + hover) als de andere navigatielinks op de
+                        # site, netjes onder de kolommen.
+                        '<div style="margin-top:1.1rem;">'
+                        '<a href="/portfolio" target="_self" class="inline-link" style="font-size:0.82rem;">'
+                        'Adjust target allocations in My Portfolio &rarr;</a></div>',
+                        unsafe_allow_html=True,
+                    )
                     _render_insight_dismiss_autohide_script()
 
             # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
