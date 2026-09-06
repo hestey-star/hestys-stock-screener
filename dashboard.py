@@ -62,13 +62,15 @@ st.markdown("""
    was te groot om te riskeren voor een puur cosmetische wijziging. */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-/* stToolbar NIET meer verbergen -- vermoedelijke oorzaak van een bug
-   waarbij het zijbalk-uitklap-pijltje (zichtbaar zodra de zijbalk is
-   ingeklapt) na het inklappen nergens meer te vinden was: dat pijltje
-   lijkt in dezelfde header-regio te leven als deze toolbar, en
-   'visibility:hidden; height:0%' op de HELE toolbar-container trok het
-   pijltje daar kennelijk in mee. Zelfde soort risico als bij de header
-   hierboven al werd vermeden -- nu ook hier consequent toegepast. */
+/* stToolbar zelf NIET meer volledig verbergen -- was de oorzaak van een
+   bug waarbij het zijbalk-uitklap-pijltje (zichtbaar zodra de zijbalk
+   is ingeklapt) na het inklappen nergens meer te vinden was: dat
+   pijltje leeft kennelijk in dezelfde header-regio als deze toolbar.
+   In plaats daarvan specifiek ALLEEN de Streamlit Cloud-actie-iconen
+   verbergen (Share/ster/potlood/GitHub, rechtsboven) via de smallere
+   stToolbarActions-testid -- die zit blijkbaar niet in dezelfde regio
+   als het pijltje, dus dit is veiliger dan de hele toolbar te raken. */
+div[data-testid="stToolbarActions"] {visibility: hidden; height: 0%;}
 div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
 div[data-testid="stStatusWidget"] {visibility: hidden; height: 0%;}
 
