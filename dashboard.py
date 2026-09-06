@@ -1981,27 +1981,39 @@ def _get_portfolio_sector_names(holdings: list) -> set:
 
 def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_portfolio_match: bool, discover_url: str) -> str:
     """
-    1 blok in de Global Sector Heatmap. Grootte (flex-basis) schaalt met
-    'weight' (marktimpact). Kaart-achtergrond is bewust NEUTRAAL en
-    donker (TODAY_CARD_BG) -- de emerald/rose-kleur zit alleen in de
-    dunne rand (20% opacity) en het percentage-cijfer zelf, geen
-    gekleurde gradient-achtergrond. Het hele blok is 1 klikbare link
-    naar Discover's Sectors & Themes-subview.
+    1 blok in de Global Sector Heatmap. Grootte (flex-basis EN min-height)
+    schaalt met 'weight' (marktimpact) -- Technology/Financials worden zo
+    fysiek groter dan Utilities/Materials, een echte treemap-illusie i.p.v.
+    een grid van gelijke blokken. Geen rand en geen neutrale achtergrond
+    meer -- alleen een zeer zachte, performance-gebaseerde kleurtint
+    (nooit hoger dan ~0.09 alpha) en het gekleurde percentage-cijfer zelf
+    dragen de betekenis, net zo mat/gedempt als het rood/groen in de
+    portfolio-sectie hierboven. Het hele blok is 1 klikbare link naar
+    Discover's Sectors & Themes-subview.
     """
     if return_pct > 0:
         color = TODAY_POSITIVE_TEXT
-        border_rgb = TODAY_POSITIVE_BORDER_RGB
+        tint_rgb = TODAY_POSITIVE_BORDER_RGB
     elif return_pct < 0:
         color = TODAY_NEGATIVE_TEXT
-        border_rgb = TODAY_NEGATIVE_BORDER_RGB
+        tint_rgb = TODAY_NEGATIVE_BORDER_RGB
     else:
         color = "#EAEDF1"
-        border_rgb = "137,146,163"
+        tint_rgb = "137,146,163"
 
-    # Grotere sectoren (hoger 'weight') krijgen zowel meer flex-grow als
-    # een hogere min-width -- benadert een treemap-achtige, ongelijke
-    # blokverdeling binnen de grenzen van een simpele flex-wrap-layout.
+    # Zachte achtergrondtint schaalt licht mee met de GROOTTE van de
+    # beweging (nauwelijks zichtbaar bij een kleine beweging, nog steeds
+    # mat/gedempt bij een grote) -- puur ter ondersteuning, de tekstkleur
+    # draagt het meeste gewicht.
+    intensity = min(abs(return_pct) / 15.0, 1.0)
+    bg_alpha = 0.03 + intensity * 0.06
+
+    # Grotere sectoren (hoger 'weight') krijgen meer flex-grow, een hogere
+    # min-width EN een hogere min-height -- benadert een treemap-achtige,
+    # ongelijke blokverdeling (breder EN hoger) binnen de grenzen van een
+    # simpele flex-wrap-layout.
     min_width = 120 + min(weight, 32) * 4
+    min_height = 68 + min(weight, 32) * 0.7
 
     compass_badge = (
         f'<span style="position:absolute; top:8px; right:10px; font-size:0.85rem;" '
@@ -2012,9 +2024,8 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
     return (
         f'<a href="{discover_url}" target="_self" style="text-decoration:none; '
         f'flex: {weight} 1 {min_width}px; position:relative; display:block; '
-        f'background: {TODAY_CARD_BG}; '
-        f'border: 1px solid rgba({border_rgb},0.2); border-radius: 10px; '
-        f'padding: 0.7rem 0.8rem; min-height: 76px; box-sizing:border-box;">'
+        f'background: rgba({tint_rgb},{bg_alpha:.3f}); border-radius: 10px; '
+        f'padding: 0.7rem 0.8rem; min-height: {min_height:.0f}px; box-sizing:border-box;">'
         f'{compass_badge}'
         f'<div style="font-size:0.78rem; font-weight:700; color:#EAEDF1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{sector}</div>'
         f'<div style="font-size:1.05rem; font-weight:800; color:{color}; margin-top:4px;">{return_pct:+.1f}%</div>'
@@ -2260,9 +2271,9 @@ def _week_agenda_html(buckets: dict) -> str:
 # overzicht in plaats van alles als platte tekst op de pagina te
 # proppen. ---
 _STORY_DEFINITIONS = [
-    {"id": "day_numbers", "label": "Your day", "icon": "bar_chart"},
-    {"id": "screener_hits", "label": "Screener hits", "icon": "search"},
-    {"id": "macro_trend", "label": "Macro trend", "icon": "public"},
+    {"id": "day_numbers", "label": "Daily Summary", "icon": "bar_chart"},
+    {"id": "screener_hits", "label": "Screener Hits", "icon": "search"},
+    {"id": "macro_trend", "label": "Macro Catalyst", "icon": "public"},
 ]
 
 
@@ -2287,14 +2298,14 @@ def _show_story_dialog(story_id: str, story_data: dict) -> None:
     vanuit de dialog zelf).
     """
     if story_id == "day_numbers":
-        st.markdown(f"#### {_icon_span('bar_chart', size_px=20, color='#1FAE96')} Your day in numbers", unsafe_allow_html=True)
+        st.markdown(f"#### {_icon_span('bar_chart', size_px=20, color='#1FAE96')} Daily Summary", unsafe_allow_html=True)
         rows = story_data.get("day_rows", [])
         if rows:
             _render_radar_rows(rows)
         else:
             st.caption("Nothing new to flag right now. A quiet day on your radar.")
     elif story_id == "screener_hits":
-        st.markdown(f"#### {_icon_span('search', size_px=20, color='#1FAE96')} New screener hits", unsafe_allow_html=True)
+        st.markdown(f"#### {_icon_span('search', size_px=20, color='#1FAE96')} Screener Hits", unsafe_allow_html=True)
         rows = story_data.get("screener_rows", [])
         if rows:
             _render_radar_rows(rows)
@@ -2302,7 +2313,7 @@ def _show_story_dialog(story_id: str, story_data: dict) -> None:
             st.caption("No new screener activity to report right now.")
         st.page_link(discover_page, label="Browse all signals on Discover")
     elif story_id == "macro_trend":
-        st.markdown(f"#### {_icon_span('public', size_px=20, color='#1FAE96')} Macro trend", unsafe_allow_html=True)
+        st.markdown(f"#### {_icon_span('public', size_px=20, color='#1FAE96')} Macro Catalyst", unsafe_allow_html=True)
         rows = story_data.get("macro_rows", [])
         if rows:
             _render_radar_rows(rows)
@@ -7233,231 +7244,237 @@ def render_today():
             # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
             # sterk/zwak' meer dan de dagkoers van 1 los aandeel). Hergebruikt
             # build_sector_rotation() (al bestond voor Discover's Sector
-            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar. ---
-            with st.container(border=True):
-                st.markdown("**Global Sector Heatmap**")
-                st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
-                           "color = performance. 🧭 marks a sector you're already invested in.")
-                heatmap_region = st.segmented_control(
-                    "Region", options=["US", "EU"], selection_mode="single",
-                    default="US", key="today_heatmap_region", label_visibility="collapsed",
+            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar.
+            # Geen omlijnd kader meer -- zelfde borderloze 'flowing section'-
+            # stijl (icoon + titel) als de secties hierboven. ---
+            st.markdown(
+                _flowing_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
+                unsafe_allow_html=True,
+            )
+            st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
+                       "color = performance. 🧭 marks a sector you're already invested in.")
+            heatmap_region = st.segmented_control(
+                "Region", options=["US", "EU"], selection_mode="single",
+                default="US", key="today_heatmap_region", label_visibility="collapsed",
+            )
+            if heatmap_region is None:
+                heatmap_region = "US"
+            with st.spinner("Checking sector performance..."):
+                heatmap_rotation = build_sector_rotation(region=heatmap_region)
+            if heatmap_rotation:
+                heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
+                portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
+                _render_sector_heatmap(
+                    heatmap_rotation, heatmap_weights, portfolio_sectors,
+                    "/discover?subview=sectors_themes",
                 )
-                if heatmap_region is None:
-                    heatmap_region = "US"
-                with st.spinner("Checking sector performance..."):
-                    heatmap_rotation = build_sector_rotation(region=heatmap_region)
-                if heatmap_rotation:
-                    heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
-                    portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
-                    _render_sector_heatmap(
-                        heatmap_rotation, heatmap_weights, portfolio_sectors,
-                        "/discover?subview=sectors_themes",
-                    )
-                    st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
-                    st.page_link(discover_page, label="Explore sectors & themes on Discover")
-                else:
-                    st.caption("No sector data available right now.")
+                st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
+                st.page_link(discover_page, label="Explore sectors & themes on Discover")
+            else:
+                st.caption("No sector data available right now.")
 
             # --- Daily Radar: 'Stories' + Week-Agenda (vervangt de platte
             # 'Today's radar'-tekstlijst). Zelfde onderliggende data-
             # verzameling als voorheen -- nu opgedeeld in 3 scanbare
             # 'Stories' (modale slide-overs, Instagram-stijl) + een
             # horizontale week-agenda voor lange-termijn-catalysts. ---
-            with st.container(border=True):
-                st.markdown("**Daily Radar**")
+            st.markdown(
+                _flowing_section_header_html("Daily Radar", "radar", is_first=False),
+                unsafe_allow_html=True,
+            )
 
-                # 3 aparte lijsten i.p.v. 1 platte 'radar_rows' -- elke Story
-                # toont z'n eigen deel van dezelfde onderliggende data.
-                day_rows = []
-                screener_rows = []
-                macro_rows = []
+            # 3 aparte lijsten i.p.v. 1 platte 'radar_rows' -- elke Story
+            # toont z'n eigen deel van dezelfde onderliggende data.
+            day_rows = []
+            screener_rows = []
+            macro_rows = []
 
-                macro_events = get_todays_macro_events(max_items=3)
-                with st.spinner("Checking today's radar..."):
-                    earnings_today = get_todays_portfolio_earnings(tracked_items, market_data, max_items=3)
-                todays_events = macro_events + [
-                    {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
-                ]
-                for event in todays_events[:3]:
-                    time_part = f" ({event['time']})" if "time" in event else ""
-                    day_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
+            macro_events = get_todays_macro_events(max_items=3)
+            with st.spinner("Checking today's radar..."):
+                earnings_today = get_todays_portfolio_earnings(tracked_items, market_data, max_items=3)
+            todays_events = macro_events + [
+                {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
+            ]
+            for event in todays_events[:3]:
+                time_part = f" ({event['time']})" if "time" in event else ""
+                day_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
 
-                # Aankomende earnings deze week -- niet alleen vandaag, ook een
-                # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
-                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, market_data, days_ahead=5, max_items=3)
-                for e in upcoming_earnings:
-                    day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
-                    day_rows.append(_radar_row_html(
-                        _icon_span("calendar_month", size_px=15, color="#8992A3"),
-                        f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).",
-                    ))
-
-                # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
-                # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
-                if holdings:
-                    risk_profile = database.get_risk_profile(user_email)
-                    concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
-                    if concentration_alert:
-                        day_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
-
-                # Aankomende ex-dividend-data voor je HUIDIGE posities.
-                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3)
-                for d in upcoming_ex_div:
-                    day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
-                    day_rows.append(_radar_row_html(
-                        _icon_span("payments", size_px=15, color="#8992A3"),
-                        f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']}).",
-                    ))
-
-                # 52-weken-record -- een leuk, opvallend signaal als een van je
-                # posities vandaag een nieuwe hoogte/laagte raakt.
-                records_52wk = get_52_week_records(holdings, market_data, max_items=3) if holdings else []
-                for r in records_52wk:
-                    icon_name = "trending_up" if r["type"] == "high" else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if r["type"] == "high" else TODAY_NEGATIVE_TEXT
-                    label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    day_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
-
-                # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
-                # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
-                deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
-                for t in deep_dive_triggers:
-                    day_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
-
-                weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
-                last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
-                weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
-                if weekly_is_new:
-                    database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
-
-                opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
-                weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
-                screener_rows.append(_radar_row_html(
-                    _icon_span("search", size_px=15, color="#8992A3"),
-                    f"<b>{opportunities['total_signals']}</b> signal(s) found "
-                    f"({opportunities['daily_signals']} daily{weekly_part}). "
-                    f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
-                    f"<b>{opportunities['in_watchlist_count']}</b> are on your watchlist, "
-                    f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
+            # Aankomende earnings deze week -- niet alleen vandaag, ook een
+            # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
+            upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, market_data, days_ahead=5, max_items=3)
+            for e in upcoming_earnings:
+                day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
+                day_rows.append(_radar_row_html(
+                    _icon_span("calendar_month", size_px=15, color="#8992A3"),
+                    f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).",
                 ))
 
-                tracked_tickers = {item["ticker"] for item in tracked_items}
+            # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
+            # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
+            if holdings:
+                risk_profile = database.get_risk_profile(user_email)
+                concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
+                if concentration_alert:
+                    day_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
 
-                # Persoonlijke earnings-surprises: rechtstreeks via yfinance
-                # (get_recent_earnings_surprises_for_tracked_items) i.p.v.
-                # de supertrend-signalen-CSV -- werkt zo voor ELKE gevolgde
-                # ticker, ongeacht of 'ie toevallig ook een signaal is
-                # (de oude aanpak miste een verrassing als de ticker net
-                # niet aan de signaal-criteria voldeed).
-                personal_surprises = get_recent_earnings_surprises_for_tracked_items(
-                    tracked_items, market_data, max_days_old=7, max_items=3,
+            # Aankomende ex-dividend-data voor je HUIDIGE posities.
+            upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3)
+            for d in upcoming_ex_div:
+                day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
+                day_rows.append(_radar_row_html(
+                    _icon_span("payments", size_px=15, color="#8992A3"),
+                    f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']}).",
+                ))
+
+            # 52-weken-record -- een leuk, opvallend signaal als een van je
+            # posities vandaag een nieuwe hoogte/laagte raakt.
+            records_52wk = get_52_week_records(holdings, market_data, max_items=3) if holdings else []
+            for r in records_52wk:
+                icon_name = "trending_up" if r["type"] == "high" else "trending_down"
+                icon_color = TODAY_POSITIVE_TEXT if r["type"] == "high" else TODAY_NEGATIVE_TEXT
+                label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
+                day_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
+
+            # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
+            # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
+            deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
+            for t in deep_dive_triggers:
+                day_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
+
+            weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
+            last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
+            weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
+            if weekly_is_new:
+                database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
+
+            opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
+            weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
+            screener_rows.append(_radar_row_html(
+                _icon_span("search", size_px=15, color="#8992A3"),
+                f"<b>{opportunities['total_signals']}</b> signal(s) found "
+                f"({opportunities['daily_signals']} daily{weekly_part}). "
+                f"<b>{opportunities['in_portfolio_count']}</b> relate to your portfolio, "
+                f"<b>{opportunities['in_watchlist_count']}</b> are on your watchlist, "
+                f"<b>{opportunities['new_opportunities_count']}</b> are new ideas."
+            ))
+
+            tracked_tickers = {item["ticker"] for item in tracked_items}
+
+            # Persoonlijke earnings-surprises: rechtstreeks via yfinance
+            # (get_recent_earnings_surprises_for_tracked_items) i.p.v.
+            # de supertrend-signalen-CSV -- werkt zo voor ELKE gevolgde
+            # ticker, ongeacht of 'ie toevallig ook een signaal is
+            # (de oude aanpak miste een verrassing als de ticker net
+            # niet aan de signaal-criteria voldeed).
+            personal_surprises = get_recent_earnings_surprises_for_tracked_items(
+                tracked_items, market_data, max_days_old=7, max_items=3,
+            )
+            for s in personal_surprises:
+                icon_name = "trending_up" if s["beat"] else "trending_down"
+                icon_color = TODAY_POSITIVE_TEXT if s["beat"] else TODAY_NEGATIVE_TEXT
+                screener_rows.append(_radar_row_html(
+                    _icon_span(icon_name, size_px=15, color=icon_color),
+                    f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
+                ))
+
+            # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
+            # strenger venster (1 dag i.p.v. 7), want minder persoonlijk relevant,
+            # maar toch de moeite waard om even te vermelden. Blijft via de
+            # supertrend-signalen-CSV (niet elke marktticker is live te
+            # bevragen zonder de pagina traag te maken).
+            def _is_recent_earnings(earnings_date_str, max_days=1):
+                try:
+                    earnings_date = pd.to_datetime(earnings_date_str).date()
+                    days_since = (datetime.now().date() - earnings_date).days
+                    return 0 <= days_since <= max_days
+                except Exception:
+                    return False
+
+            all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
+            market_wide_surprises = [
+                s for s in all_recent_surprises
+                if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
+            ]
+            for s in market_wide_surprises[:2]:
+                icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
+                icon_color = TODAY_POSITIVE_TEXT if s["earnings_beat"] else TODAY_NEGATIVE_TEXT
+                macro_rows.append(_radar_row_html(
+                    _icon_span(icon_name, size_px=15, color=icon_color),
+                    f"Also worth noting (not in your portfolio): "
+                    f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
+                ))
+
+            # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
+            # kan een koop-/verkoopmoment zijn.
+            with st.spinner("Checking for sector/theme extremes..."):
+                threshold_alerts = get_sector_theme_threshold_alerts()
+            for alert in threshold_alerts[:3]:
+                move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
+                extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
+                region_suffix = f" ({alert['region']})" if alert.get("region") else ""
+                kind_label = "sector" if alert["kind"] == "sector" else "theme"
+                macro_rows.append(_radar_row_html(
+                    move_emoji,
+                    f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
+                    f"{alert['pct']:+.1f}% this month{extreme_marker}"
+                ))
+
+            if holdings:
+                weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
+                weekly_scan_within_days = (
+                    weekly_scan_recent_date is not None
+                    and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
                 )
-                for s in personal_surprises:
-                    icon_name = "trending_up" if s["beat"] else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if s["beat"] else TODAY_NEGATIVE_TEXT
-                    screener_rows.append(_radar_row_html(
-                        _icon_span(icon_name, size_px=15, color=icon_color),
-                        f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
-                    ))
+                if weekly_scan_within_days:
+                    from portfolio_watch import check_holding
+                    # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
+                    # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
+                    # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
+                    # berekend op basis van de exacte flip-datum ('sinds').
+                    FLIP_VISIBLE_DAYS_ON_TODAY = 2
+                    today_date = datetime.now().date()
+                    with st.spinner("Checking for trend flips..."):
+                        flipped = []
+                        for h in holdings:
+                            result = check_holding(h["naam"], h["ticker"])
+                            if result and result.get("sinds"):
+                                days_since_flip = (today_date - result["sinds"]).days
+                                if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
+                                    flipped.append(result)
+                    for f in flipped[:3]:
+                        emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
+                        screener_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
 
-                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
-                # strenger venster (1 dag i.p.v. 7), want minder persoonlijk relevant,
-                # maar toch de moeite waard om even te vermelden. Blijft via de
-                # supertrend-signalen-CSV (niet elke marktticker is live te
-                # bevragen zonder de pagina traag te maken).
-                def _is_recent_earnings(earnings_date_str, max_days=1):
-                    try:
-                        earnings_date = pd.to_datetime(earnings_date_str).date()
-                        days_since = (datetime.now().date() - earnings_date).days
-                        return 0 <= days_since <= max_days
-                    except Exception:
-                        return False
+            # --- Stories-rij (Instagram-stijl cirkels) -- elke cirkel
+            # opent een modale slide-over met z'n eigen deel van de
+            # hierboven verzamelde data. ---
+            story_data = {"day_rows": day_rows, "screener_rows": screener_rows, "macro_rows": macro_rows}
+            _render_stories_row(story_data)
 
-                all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
-                market_wide_surprises = [
-                    s for s in all_recent_surprises
-                    if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
-                ]
-                for s in market_wide_surprises[:2]:
-                    icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if s["earnings_beat"] else TODAY_NEGATIVE_TEXT
-                    macro_rows.append(_radar_row_html(
-                        _icon_span(icon_name, size_px=15, color=icon_color),
-                        f"Also worth noting (not in your portfolio): "
-                        f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
-                    ))
+            st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
 
-                # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
-                # kan een koop-/verkoopmoment zijn.
-                with st.spinner("Checking for sector/theme extremes..."):
-                    threshold_alerts = get_sector_theme_threshold_alerts()
-                for alert in threshold_alerts[:3]:
-                    move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
-                    extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
-                    region_suffix = f" ({alert['region']})" if alert.get("region") else ""
-                    kind_label = "sector" if alert["kind"] == "sector" else "theme"
-                    macro_rows.append(_radar_row_html(
-                        move_emoji,
-                        f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
-                        f"{alert['pct']:+.1f}% this month{extreme_marker}"
-                    ))
+            # --- Horizontale Week-Agenda (Ma t/m Vr) -- dezelfde soort
+            # catalysts als hierboven, nu gebundeld PER DAG i.p.v. als
+            # losse platte regels. ---
+            dated_agenda_items = []
+            for me in get_macro_events_for_week(max_items=10):
+                me_date = datetime.strptime(me["date"], "%Y-%m-%d").date()
+                time_part = f" ({me['time']})" if "time" in me else ""
+                dated_agenda_items.append((me_date, _icon_span("event", size_px=13, color="#8992A3"), f"{me['name']}{time_part}"))
+            for e in earnings_today:
+                dated_agenda_items.append((datetime.now().date(), _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
+            for e in upcoming_earnings:
+                e_date = datetime.now().date() + timedelta(days=e["days_until"])
+                dated_agenda_items.append((e_date, _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
+            for d in upcoming_ex_div:
+                d_date = datetime.now().date() + timedelta(days=d["days_until"])
+                dated_agenda_items.append((d_date, _icon_span("payments", size_px=13, color="#8992A3"), f"<b>{d['naam']}</b> ex-dividend"))
 
-                if holdings:
-                    weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
-                    weekly_scan_within_days = (
-                        weekly_scan_recent_date is not None
-                        and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
-                    )
-                    if weekly_scan_within_days:
-                        from portfolio_watch import check_holding
-                        # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
-                        # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
-                        # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
-                        # berekend op basis van de exacte flip-datum ('sinds').
-                        FLIP_VISIBLE_DAYS_ON_TODAY = 2
-                        today_date = datetime.now().date()
-                        with st.spinner("Checking for trend flips..."):
-                            flipped = []
-                            for h in holdings:
-                                result = check_holding(h["naam"], h["ticker"])
-                                if result and result.get("sinds"):
-                                    days_since_flip = (today_date - result["sinds"]).days
-                                    if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
-                                        flipped.append(result)
-                        for f in flipped[:3]:
-                            emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                            screener_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
+            st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
 
-                # --- Stories-rij (Instagram-stijl cirkels) -- elke cirkel
-                # opent een modale slide-over met z'n eigen deel van de
-                # hierboven verzamelde data. ---
-                story_data = {"day_rows": day_rows, "screener_rows": screener_rows, "macro_rows": macro_rows}
-                _render_stories_row(story_data)
-
-                st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
-
-                # --- Horizontale Week-Agenda (Ma t/m Vr) -- dezelfde soort
-                # catalysts als hierboven, nu gebundeld PER DAG i.p.v. als
-                # losse platte regels. ---
-                dated_agenda_items = []
-                for me in get_macro_events_for_week(max_items=10):
-                    me_date = datetime.strptime(me["date"], "%Y-%m-%d").date()
-                    time_part = f" ({me['time']})" if "time" in me else ""
-                    dated_agenda_items.append((me_date, _icon_span("event", size_px=13, color="#8992A3"), f"{me['name']}{time_part}"))
-                for e in earnings_today:
-                    dated_agenda_items.append((datetime.now().date(), _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
-                for e in upcoming_earnings:
-                    e_date = datetime.now().date() + timedelta(days=e["days_until"])
-                    dated_agenda_items.append((e_date, _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
-                for d in upcoming_ex_div:
-                    d_date = datetime.now().date() + timedelta(days=d["days_until"])
-                    dated_agenda_items.append((d_date, _icon_span("payments", size_px=13, color="#8992A3"), f"<b>{d['naam']}</b> ex-dividend"))
-
-                st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
-
-                st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-                st.caption("See the full signal lists under:")
-                st.page_link(discover_page, label="Discover")
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            st.caption("See the full signal lists under:")
+            st.page_link(discover_page, label="Discover")
 
             # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
             # met Market news voelde dit als een lange wand van tekst ---
