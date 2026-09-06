@@ -6088,7 +6088,7 @@ def render_discover():
             optin_region_narrow_col = st.columns([2, 3])[0]
             with optin_region_narrow_col:
                 optin_region_raw = st.selectbox(
-                    "Region", ["Choose time", "EU", "US_East", "US_West"],
+                    "Region", ["Choose timezone", "EU", "US_East", "US_West"],
                     format_func=lambda x: x.replace("_", " "),
                     key="discover_optin_region", label_visibility="collapsed",
                 )
@@ -6097,7 +6097,7 @@ def render_discover():
         if optin_submitted:
             if not optin_email or "@" not in optin_email:
                 st.error("Please enter a valid email address.")
-            elif optin_region_raw == "Choose time":
+            elif optin_region_raw == "Choose timezone":
                 st.error("Please choose your timezone.")
             else:
                 confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region_raw)
