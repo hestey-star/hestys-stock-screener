@@ -383,13 +383,11 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
         gap: 0.6rem;
     }
     .portfolio-row-desktop, .portfolio-row-desktop-alltime {
-        background: rgba(137,146,163,0.05);
-        border-radius: 10px;
-        padding: 0.7rem 1rem;
-        margin-bottom: 0.4rem;
+        border-bottom: 1px solid rgba(148,163,184,0.08);
+        padding: 0.65rem 0.25rem;
     }
     .portfolio-row-header, .portfolio-row-header-alltime {
-        padding: 0 1rem 0.4rem 1rem;
+        padding: 0 0.25rem 0.4rem 0.25rem;
         color: #8992A3;
         font-size: 0.7rem;
         text-transform: uppercase;
@@ -2399,17 +2397,15 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         if day_change_pct is None:
             change_html = '<span style="color:#8992A3; font-weight:700;">-</span>'
         else:
-            color = "#1FAE96" if day_change_pct >= 0 else "#E5484D"
-            bg = "rgba(31,174,150,0.15)" if day_change_pct >= 0 else "rgba(229,72,77,0.15)"
+            color = TODAY_POSITIVE_TEXT if day_change_pct >= 0 else TODAY_NEGATIVE_TEXT
             arrow = "&#9650;" if day_change_pct >= 0 else "&#9660;"
             value_part = (
                 f'{currency_symbol}{abs(day_change_value):,.0f} ' if day_change_value is not None else ""
             )
             sign = "+" if day_change_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}</span>'
-                f'<span style="background:{bg}; color:{color}; font-weight:700; font-size:0.85em; '
-                f'padding:0.05em 0.4em; border-radius:8px;">{day_change_pct:+.1f}% {arrow}</span>'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">'
+                f'{sign}{value_part}{day_change_pct:+.1f}% {arrow}</span>'
             )
         if current_price is not None:
             price_display = f'{currency_symbol}{current_price:,.2f}'
@@ -2421,17 +2417,15 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             detail_html = ""
     else:  # "All-time"
         if avg_cost is not None and current_price is not None and all_time_pct is not None:
-            color = "#1FAE96" if all_time_pct >= 0 else "#E5484D"
-            bg = "rgba(31,174,150,0.15)" if all_time_pct >= 0 else "rgba(229,72,77,0.15)"
+            color = TODAY_POSITIVE_TEXT if all_time_pct >= 0 else TODAY_NEGATIVE_TEXT
             arrow = "&#9650;" if all_time_pct >= 0 else "&#9660;"
             value_part = (
                 f'{currency_symbol}{abs(all_time_pnl):,.0f} ' if all_time_pnl is not None else ""
             )
             sign = "+" if all_time_pct >= 0 else "-"
             change_html = (
-                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{sign}{value_part}</span>'
-                f'<span style="background:{bg}; color:{color}; font-weight:700; font-size:0.85em; '
-                f'padding:0.05em 0.4em; border-radius:8px;">{all_time_pct:+.1f}% {arrow}</span>'
+                f'<span style="color:{color}; font-weight:700; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">'
+                f'{sign}{value_part}{all_time_pct:+.1f}% {arrow}</span>'
             )
             avg_cost_str = f'{currency_symbol}{avg_cost:,.2f}' if avg_cost is not None else "-"
             current_price_str_mobile = f'{currency_symbol}{current_price:,.2f}' if current_price is not None else "-"
@@ -2454,7 +2448,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     # (naam+koers samen) werd afgekapt.
     subtitle_html = (
         f'<div style="display:flex; align-items:baseline; gap:0.3rem; min-width:0; flex:1;">'
-        f'<span style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{name}</span>'
+        f'<span style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
+        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{name.upper()}</span>'
         f'{detail_html}'
         f'</div>'
     )
@@ -2468,7 +2463,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     )
 
     mobile_html = (
-        f'<div class="portfolio-row-mobile" style="background:rgba(137,146,163,0.05); border-radius:10px; padding:0.75rem 0.9rem; margin-bottom:0.5rem;">'
+        f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); padding:0.75rem 0.2rem;">'
         f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
         f'{logo_html}'
         f'<div style="flex:1; min-width:0;">'
@@ -2483,8 +2478,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'{subtitle_html}'
         f'<span style="font-size:0.8rem; white-space:nowrap; flex-shrink:0;">{change_html}</span>'
         f'</div>'
-        f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px; margin-top:8px;">'
-        f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+        f'<div style="height:3px; background:rgba(137,146,163,0.1); border-radius:2px; margin-top:8px;">'
+        f'<div style="height:100%; width:{bar_pct:.0f}%; background:rgba(31,174,150,0.55); border-radius:2px;"></div>'
         f'</div>'
         f'</div>'
         f'</div>'
@@ -2502,7 +2497,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'{logo_html}'
             f'<div style="min-width:0;">'
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
-            f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
+            f'<div style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
+            f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
             f'</div>'
             f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{price_display or "-"}</div>'
             f'<div style="font-size:0.85rem;">{change_html}</div>'
@@ -2512,8 +2508,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'</div>'
             f'<div>'
             f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
-            f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
-            f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+            f'<div style="height:3px; background:rgba(137,146,163,0.1); border-radius:2px;">'
+            f'<div style="height:100%; width:{bar_pct:.0f}%; background:rgba(31,174,150,0.55); border-radius:2px;"></div>'
             f'</div>'
             f'</div>'
             f'</div>'
@@ -2526,7 +2522,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'{logo_html}'
             f'<div style="min-width:0;">'
             f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
-            f'<div style="color:#8992A3; font-size:0.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name}</div>'
+            f'<div style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
+            f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
             f'</div>'
             f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{cost_price_str}</div>'
             f'<div style="color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; font-size:0.9rem; font-weight:700;">{current_price_str}</div>'
@@ -2537,8 +2534,8 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'</div>'
             f'<div>'
             f'<div style="color:#8992A3; font-size:0.78rem; margin-bottom:3px;">{pct_of_portfolio:.1f}%</div>'
-            f'<div style="height:3px; background:rgba(137,146,163,0.12); border-radius:2px;">'
-            f'<div style="height:100%; width:{bar_pct:.0f}%; background:#1FAE96; border-radius:2px;"></div>'
+            f'<div style="height:3px; background:rgba(137,146,163,0.1); border-radius:2px;">'
+            f'<div style="height:100%; width:{bar_pct:.0f}%; background:rgba(31,174,150,0.55); border-radius:2px;"></div>'
             f'</div>'
             f'</div>'
             f'</div>'
@@ -5384,10 +5381,23 @@ def render_portfolio():
 
             # --- Positie-detail: transacties + rendement + mini-koersgrafiek ---
             position_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
-            selected_position_label = st.selectbox(
-                "View position details", ["-- Select a position --"] + list(position_options.keys()),
-                key="portfolio_position_detail_select",
+            # Minimalistische dropdown-stijl (dunne slate-rand, geen
+            # glimmend/gevuld standaard-Streamlit-uiterlijk) -- zelfde
+            # gedempte designtaal als de rest van de tabel hierboven.
+            _pf_select_key = "portfolio_position_detail_select_wrap"
+            st.markdown(
+                f'<style>'
+                f'.st-key-{_pf_select_key} div[data-baseweb="select"] > div {{ '
+                f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+                f'box-shadow:none !important; border-radius:6px !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
             )
+            with st.container(key=_pf_select_key):
+                selected_position_label = st.selectbox(
+                    "View position details", ["-- Select a position --"] + list(position_options.keys()),
+                    key="portfolio_position_detail_select",
+                )
             if selected_position_label != "-- Select a position --":
                 selected_holding = position_options[selected_position_label]
                 title_col, target_col, target_save_col = st.columns([3, 1.3, 1])
