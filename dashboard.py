@@ -2044,75 +2044,130 @@ def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set
     )
 
 
+def _insight_dismiss_button_html(insight_id: str) -> str:
+    """
+    Kleine '×'-dismissknop rechtsboven een Insight-kolom. De klik zelf
+    werkt via een gewoon onclick-attribuut -- dat WORDT uitgevoerd, ook
+    via st.markdown(); alleen losse <script>-tags worden genegeerd (zie
+    streamlit_css_lessen.md #1). Verbergt de kolom direct EN schrijft een
+    tijdstempel naar localStorage (5 dagen geldig, voorkomt alert
+    fatigue). Het HERtoepassen van een eerdere dismiss bij de
+    eerstvolgende page-load/Streamlit-rerun gebeurt in
+    _render_insight_dismiss_autohide_script().
+    """
+    return (
+        f"<span onclick=\"window.localStorage.setItem('hesty_dismissed_insight_{insight_id}', "
+        f"Date.now().toString()); this.closest('[data-insight-col]').style.display='none';\" "
+        f'style="position:absolute; top:-4px; right:2px; cursor:pointer; color:#8992A3; '
+        f'font-size:0.95rem; line-height:1; opacity:0.5; transition:opacity 0.15s;" '
+        f'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" '
+        f'title="Dismiss for 5 days">&times;</span>'
+    )
+
+
+def _render_insight_dismiss_autohide_script() -> None:
+    """
+    Verbergt bij page-load/rerun automatisch elke Insight-kolom die de
+    afgelopen 5 dagen al gedismissed is. De klik zelf (zie
+    _insight_dismiss_button_html) lost alleen de HUIDIGE render op --
+    bij de eerstvolgende Streamlit-rerun (bv. door een widget elders op
+    de pagina) wordt de hele 3-koloms-HTML opnieuw vanaf 0 opgebouwd, dus
+    moet een eerdere dismiss ELKE keer opnieuw toegepast worden.
+    st.components.v1.html() + MutationObserver is de bevestigd werkende
+    omweg hiervoor (streamlit_css_lessen.md #1): losse <script>-tags in
+    st.markdown() worden nooit uitgevoerd, dit wel (draait in een eigen
+    iframe, bereikt de echte pagina via window.parent.document).
+    """
+    components.html(
+        """
+        <script>
+        function hestyApplyDismissedInsights() {
+            var doc = window.parent.document;
+            var now = Date.now();
+            var FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+            doc.querySelectorAll('[data-insight-col]').forEach(function(el) {
+                var id = el.getAttribute('data-insight-col');
+                var key = 'hesty_dismissed_insight_' + id;
+                var stored = window.parent.localStorage.getItem(key);
+                if (stored) {
+                    var dismissedAt = parseInt(stored, 10);
+                    if (!isNaN(dismissedAt) && (now - dismissedAt) < FIVE_DAYS_MS) {
+                        el.style.display = 'none';
+                    } else {
+                        window.parent.localStorage.removeItem(key);
+                    }
+                }
+            });
+        }
+        hestyApplyDismissedInsights();
+        new MutationObserver(hestyApplyDismissedInsights).observe(window.parent.document.body, {childList: true, subtree: true});
+        </script>
+        """,
+        height=0,
+    )
+
+
 def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     """
-    'Herbalanceer-trigger'-kaart -- zelfde subtiele-border/strakke-
-    uitlijning-stijl als de Snowballers-kaarten. action='buy' wordt
-    voorgesteld als iets om je volgende DCA-aankoop op te richten
-    (i.p.v. een harde verkoop-instructie); action='sell' blijft een
-    neutrale constatering.
+    Herbalanceer-trigger als borderloze kolom-content -- zelfde visuele
+    taal als de Best/Worst-kolommen in 'Your Portfolio Today': klein
+    icoon+label bovenaan, dan het HOOFDCIJFER (hoeveel pp van target af)
+    groot/bold als visuele held, dan de asset-naam in dezelfde ALL-CAPS-
+    stijl, dan een korte context-regel. Geen eigen kaart/rand/achtergrond
+    meer.
     """
-    accent_rgb = TODAY_POSITIVE_BORDER_RGB if suggestion["action"] == "buy" else TODAY_NEGATIVE_BORDER_RGB
     color = TODAY_POSITIVE_TEXT if suggestion["action"] == "buy" else TODAY_NEGATIVE_TEXT
+    insight_id = f"rebalance-{suggestion['ticker']}"
     if suggestion["action"] == "buy":
-        message = (
-            f'<b style="color:#EAEDF1;">{suggestion["naam"]}</b> is below its target weight '
-            f'({suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target). '
-            f'Consider pointing your next DCA at it.'
-        )
+        context = "Consider pointing your next DCA at it."
     else:
-        message = (
-            f'<b style="color:#EAEDF1;">{suggestion["naam"]}</b> is above its target weight '
-            f'({suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target).'
-        )
+        context = f'{suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target.'
     return (
-        f'<div style="background: {TODAY_CARD_BG}; '
-        f'border: 1px solid rgba({accent_rgb},0.2); border-radius: 10px; padding: 0.75rem 0.9rem;">'
-        f'<div style="display:flex; align-items:center; gap:0.4rem;">'
-        f'{_icon_span("balance", size_px=15, color=color)}'
-        f'<span style="font-size:0.7rem; font-weight:700; color:{color}; text-transform:uppercase; letter-spacing:0.05em;">Rebalance trigger</span>'
+        f'<div data-insight-col="{insight_id}" style="position:relative; display:flex; '
+        f'flex-direction:column; align-items:flex-start; min-width:0;">'
+        f'{_insight_dismiss_button_html(insight_id)}'
+        f'<div style="display:flex; align-items:center; gap:0.3rem;">'
+        f'{_icon_span("balance", size_px=13, color=color)}'
+        f'<span style="font-size:0.62rem; color:{color}; text-transform:uppercase; letter-spacing:0.1em; '
+        f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Rebalance trigger</span>'
         f'</div>'
-        f'<div style="font-size:0.83rem; color:#8992A3; margin-top:6px; line-height:1.5;">{message}</div>'
-        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:6px;">'
-        f'Off target by <b style="color:{color};">{abs(suggestion["diff_pct"]):.1f}pp</b>'
-        f'</div>'
+        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
+        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
+        f'{abs(suggestion["diff_pct"]):.1f}pp</div>'
+        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
+        f'max-width:100%;" title="{suggestion["naam"]}">{suggestion["naam"].upper()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">Off target &mdash; {context}</div>'
         f'</div>'
     )
 
 
 def _watchlist_snack_card_html(alert: dict) -> str:
     """
-    'Watchlist-Snack'-kaart -- vroege heads-up zodra een watchlist-item
-    binnen 'near_pct' van z'n koopdoel komt, VOORDAT de alert zelf
-    afgaat. Zelfde kaartstijl als de Rebalance-trigger-kaart, andere
-    accentkleur (amber) om 'm visueel te onderscheiden van een
-    koop/verkoop-signaal.
+    'Watchlist-Snack' als borderloze kolom-content -- zelfde structuur
+    als _rebalance_trigger_card_html hierboven, andere accentkleur
+    (amber) om 'm visueel te onderscheiden van een koop/verkoop-signaal.
     """
+    color = "#E8A93C"
+    insight_id = f"watchlist-{alert['ticker']}"
     return (
-        f'<div style="background: linear-gradient(135deg, rgba(232,169,60,0.14), rgba(232,169,60,0.02)); '
-        f'border: 1px solid rgba(232,169,60,0.35); border-radius: 10px; padding: 0.75rem 0.9rem;">'
-        f'<div style="display:flex; align-items:center; gap:0.4rem;">'
-        f'{_icon_span("sell", size_px=15, color="#E8A93C")}'
-        f'<span style="font-size:0.7rem; font-weight:700; color:#E8A93C; text-transform:uppercase; letter-spacing:0.05em;">Watchlist alert</span>'
+        f'<div data-insight-col="{insight_id}" style="position:relative; display:flex; '
+        f'flex-direction:column; align-items:flex-start; min-width:0;">'
+        f'{_insight_dismiss_button_html(insight_id)}'
+        f'<div style="display:flex; align-items:center; gap:0.3rem;">'
+        f'{_icon_span("sell", size_px=13, color=color)}'
+        f'<span style="font-size:0.62rem; color:{color}; text-transform:uppercase; letter-spacing:0.1em; '
+        f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Watchlist alert</span>'
         f'</div>'
-        f'<div style="font-size:0.83rem; color:#8992A3; margin-top:6px; line-height:1.5;">'
-        f'<b style="color:#EAEDF1;">{alert["naam"]}</b> ({alert["ticker"]}) is almost within reach of your buy target '
-        f'-- {alert["distance_pct"]:.1f}% to go.'
+        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
+        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
+        f'{alert["distance_pct"]:.1f}% to go</div>'
+        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
+        f'max-width:100%;" title="{alert["naam"]}">{alert["naam"].upper()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">'
+        f'Now at {alert["current_price"]:.2f}, target {alert["alert_target_price"]:.2f}</div>'
         f'</div>'
-        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:6px;">'
-        f'Now at <b style="color:#EAEDF1;">{alert["current_price"]:.2f}</b>, target <b style="color:#EAEDF1;">{alert["alert_target_price"]:.2f}</b>'
-        f'</div>'
-        f'</div>'
-    )
-
-
-def _render_health_cards(cards_html: list) -> None:
-    """Rendert de Portfolio Health & DCA Insights-kaarten in een responsieve grid (zelfde auto-fill-aanpak als de signaal-kaarten)."""
-    combined = "".join(cards_html)
-    st.markdown(
-        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); '
-        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
-        unsafe_allow_html=True,
     )
 
 
@@ -7116,12 +7171,15 @@ def render_today():
                     with mcol3:
                         st.metric("Worst today", "n/a")
 
-            # --- Portfolio Health & DCA Insights (nieuw) -- helpt bij WAAR je
-            # je volgende DCA-aankoop op moet richten, i.p.v. alleen te laten
-            # zien wat er vandaag toevallig is gebeurd. Herbalanceer-triggers
-            # hergebruiken de bestaande build_rebalancing_suggestions()-logica
-            # (ongewijzigd, al aanwezig voor Analyze); Watchlist-Snack is
-            # nieuw (get_watchlist_near_target_alerts hierboven). ---
+            # --- Portfolio Health & DCA Insights -- zelfde borderloze,
+            # 3-koloms behandeling als 'Your Portfolio Today' hierboven:
+            # geen kaart/rand meer per insight, 1 vloeiende sectiekop
+            # (icoon + titel, geen dikke omlijning), en 3 gelijke kolommen
+            # met dezelfde dunne verticale scheidslijnen. Herbalanceer-
+            # triggers hergebruiken de bestaande build_rebalancing_
+            # suggestions()-logica (ongewijzigd, al aanwezig voor
+            # Analyze); Watchlist-Snack is nieuw. Elke kolom is los
+            # dismissbaar (5 dagen, via localStorage). ---
             if holdings:
                 total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
                 rebalancing = build_rebalancing_suggestions(holdings, total_portfolio_value)
@@ -7129,17 +7187,37 @@ def render_today():
                     get_watchlist_near_target_alerts(watchlist_items, market_data) if watchlist_items else []
                 )
 
-                health_cards_html = [
+                # Gecombineerd, gecapt op 3 -- exact zoveel kolommen als de
+                # sectie heeft (Insight 1/2/3).
+                health_cards_html = ([
                     _rebalance_trigger_card_html(suggestion, "$")
                     for suggestion in rebalancing["suggestions"][:2]
                 ] + [
                     _watchlist_snack_card_html(alert) for alert in near_target_watchlist
-                ]
+                ])[:3]
 
                 if health_cards_html:
-                    with st.container(border=True):
-                        st.markdown("**Portfolio Health & DCA Insights**")
-                        _render_health_cards(health_cards_html)
+                    st.markdown(
+                        _flowing_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+                        unsafe_allow_html=True,
+                    )
+
+                    # Altijd 3 kolommen opbouwen, ook als er minder dan 3
+                    # insights zijn -- een lege kolom behoudt gewoon de
+                    # structuur (en de scheidslijn), zoals gevraagd.
+                    insight_cols = []
+                    for i in range(3):
+                        content = health_cards_html[i] if i < len(health_cards_html) else ""
+                        divider = (
+                            "border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem;"
+                            if i < 2 else ""
+                        )
+                        insight_cols.append(f'<div style="flex:1; min-width:0; {divider}">{content}</div>')
+                    st.markdown(
+                        f'<div style="display:flex; align-items:flex-start; gap:1.75rem;">{"".join(insight_cols)}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _render_insight_dismiss_autohide_script()
 
             # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
             # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
