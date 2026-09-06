@@ -1378,8 +1378,9 @@ def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
             if pd.isna(price_today) or pd.isna(price_yesterday) or price_yesterday <= 0:
                 continue
             change_pct = (price_today / price_yesterday - 1) * 100
-            performers.append({"naam": h["naam"], "change_pct": change_pct})
-            total_value_today += shares * price_today
+            position_value_today = shares * price_today
+            performers.append({"naam": h["naam"], "change_pct": change_pct, "position_value_today": position_value_today})
+            total_value_today += position_value_today
             total_value_yesterday += shares * price_yesterday
         except Exception:
             continue
@@ -1395,12 +1396,22 @@ def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
     best = max(performers, key=lambda p: p["change_pct"])
     worst = min(performers, key=lambda p: p["change_pct"])
 
+    # Portfolio-weging van best/worst -- laat zien hoeveel IMPACT deze
+    # stijger/daler daadwerkelijk heeft (een +8% dagbeweging op een
+    # positie van 1% van je portfolio is heel iets anders dan dezelfde
+    # +8% op een positie van 20%). total_value_today is hier altijd > 0,
+    # want elke performer droeg een positieve shares*price bij.
+    best_weight_pct = (best["position_value_today"] / total_value_today) * 100 if total_value_today else 0.0
+    worst_weight_pct = (worst["position_value_today"] / total_value_today) * 100 if total_value_today else 0.0
+
     return {
         "portfolio_change_pct": round(portfolio_change_pct, 2),
         "best_performer": best["naam"],
         "best_change_pct": round(best["change_pct"], 2),
+        "best_weight_pct": round(best_weight_pct, 2),
         "worst_performer": worst["naam"],
         "worst_change_pct": round(worst["change_pct"], 2),
+        "worst_weight_pct": round(worst_weight_pct, 2),
     }
 
 
@@ -1885,26 +1896,37 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     )
 
 
-def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, accent_rgb: str, color: str) -> str:
+def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct: float, weight_pct: float, accent_rgb: str, color: str) -> str:
     """
-    Fancy hero-tegel voor een enkele, uitgelichte stat (bv. Top gainer/
-    loser, Best/Worst today) -- gradient + gloed + icoon-badge, i.p.v.
-    een plat kleurblok. Gedeeld tussen 'Yesterday's biggest movers' en
-    'Your Portfolio Today', zodat beide er consistent uitzien.
+    Best/Worst-tegel voor 'Your Portfolio Today'. Het dagrendement is
+    hier bewust de visuele held (groot, bold, bovenaan) -- de asset-naam
+    is nadrukkelijk ONDERGESCHIKT: compact, gedempt grijs, en met
+    text-transform:capitalize zodat een ALL-CAPS broker-naam (bv.
+    'VANECK SEMICONDUCTOR ETF') rustig oogt i.p.v. te schreeuwen.
+    Portfolio-weging staat er klein bij -- laat in 1 oogopslag zien
+    hoeveel IMPACT deze stijger/daler daadwerkelijk had (+8% op een 1%-
+    positie is heel iets anders dan +8% op een 20%-positie).
 
-    'icon_name' is een Material Symbol-naam (bv. 'trending_up'), niet
-    een rauwe emoji -- consistent met de zijbalk en de andere hero-
-    tegels elders op de site.
+    Font-family expliciet + !important naar Inter afgedwongen op elk
+    tekstniveau -- voorkomt dat de globale h1/h2/h3-Fraunces-serif-regel
+    hier ooit kan doorsijpelen, mocht Streamlit dit ergens in een
+    kop-element wrappen.
     """
     return (
-        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); '
-        f'border: 1.5px solid rgba({accent_rgb},0.5); border-radius: 12px; '
-        f'box-shadow: 0 0 14px rgba({accent_rgb},0.15); padding: 0.7rem 0.5rem; text-align:center;">'
-        f'<div style="width:30px; height:30px; border-radius:50%; background:rgba({accent_rgb},0.18); '
-        f'display:flex; align-items:center; justify-content:center; margin:0 auto;">{_icon_span(icon_name, size_px=16, color=color)}</div>'
-        f'<div style="font-size:0.6rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.8px; margin-top:6px;">{label}</div>'
-        f'<div style="font-size:0.95rem; font-weight:800; color:#EAEDF1; margin-top:1px;">{ticker}</div>'
-        f'<div style="font-size:1.25rem; font-weight:800; color:{color}; margin-top:1px;">{pct:+.1f}%</div>'
+        f'<div style="background: {TODAY_CARD_BG}; '
+        f'border: 1px solid rgba({accent_rgb},0.2); border-radius: 12px; '
+        f'padding: 0.75rem 0.85rem; font-family:\'Inter\', sans-serif !important;">'
+        f'<div style="display:flex; align-items:center; gap:0.35rem;">'
+        f'{_icon_span(icon_name, size_px=14, color=color)}'
+        f'<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.06em; '
+        f'font-weight:600; font-family:\'Inter\', sans-serif !important;">{label}</span>'
+        f'</div>'
+        f'<div style="font-size:1.65rem; font-weight:800; color:{color}; margin-top:4px; line-height:1.1; '
+        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">{pct:+.1f}%</div>'
+        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:6px; text-transform:capitalize; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" '
+        f'title="{asset_name}">{asset_name.lower()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:2px; font-family:\'Inter\', sans-serif !important;">Weight: {weight_pct:.1f}%</div>'
         f'</div>'
     )
 
@@ -1915,6 +1937,20 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
 # ('marktimpact'). Geen live marktkapitalisatie-data (dat zou 11+ extra
 # aanroepen per page-load betekenen) -- een periodiek bijgewerkte,
 # benaderde verdeling volstaat voor dit doel.
+# Gedempt fintech-kleurenpalet, SPECIFIEK voor Today's positieve/negatieve
+# indicatoren (Tailwind emerald/rose i.p.v. de fellere jade/rood die de
+# rest van de site gebruikt -- bewust ALLEEN hier toegepast, niet als
+# vervanging van de site-brede --color-jade/--color-negative-variabelen,
+# dus Discover/Portfolio/Analyze blijven ongewijzigd). Kaarten zelf
+# houden een neutrale, donkere achtergrond (TODAY_CARD_BG) -- de kleur
+# zit ALLEEN in de dunne rand (20% opacity, zoals Tailwind's /20) en de
+# tekst, niet in een gekleurde gradient-achtergrond.
+TODAY_POSITIVE_TEXT = "#34D399"      # Tailwind emerald-400
+TODAY_POSITIVE_BORDER_RGB = "16,185,129"  # Tailwind emerald-500
+TODAY_NEGATIVE_TEXT = "#FB7185"      # Tailwind rose-400
+TODAY_NEGATIVE_BORDER_RGB = "244,63,94"   # Tailwind rose-500
+TODAY_CARD_BG = "rgba(137,146,163,0.04)"
+
 US_SECTOR_MARKET_WEIGHTS = {
     "Technology": 32, "Financials": 13, "Health Care": 10, "Consumer Discretionary": 10,
     "Communication Services": 9, "Industrials": 8, "Consumer Staples": 6, "Energy": 3,
@@ -1950,28 +1986,21 @@ def _get_portfolio_sector_names(holdings: list) -> set:
 def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_portfolio_match: bool, discover_url: str) -> str:
     """
     1 blok in de Global Sector Heatmap. Grootte (flex-basis) schaalt met
-    'weight' (marktimpact), kleur met 'return_pct' (prestatie) -- zelfde
-    gedempte groen/rood-palet en dunne omlijning als de Snowballers-
-    kaarten, i.p.v. felle Finviz-neonkleuren. Het hele blok is 1 klikbare
-    link naar Discover's Sectors & Themes-subview.
+    'weight' (marktimpact). Kaart-achtergrond is bewust NEUTRAAL en
+    donker (TODAY_CARD_BG) -- de emerald/rose-kleur zit alleen in de
+    dunne rand (20% opacity) en het percentage-cijfer zelf, geen
+    gekleurde gradient-achtergrond. Het hele blok is 1 klikbare link
+    naar Discover's Sectors & Themes-subview.
     """
     if return_pct > 0:
-        color = "#1FAE96"
-        accent_rgb = "31,174,150"
+        color = TODAY_POSITIVE_TEXT
+        border_rgb = TODAY_POSITIVE_BORDER_RGB
     elif return_pct < 0:
-        color = "#E5484D"
-        accent_rgb = "229,72,77"
+        color = TODAY_NEGATIVE_TEXT
+        border_rgb = TODAY_NEGATIVE_BORDER_RGB
     else:
         color = "#EAEDF1"
-        accent_rgb = "137,146,163"
-
-    # Intensiteit van de achtergrondtint volgt de GROOTTE van de beweging
-    # (subtiel bij een kleine beweging, iets steviger bij een grote) --
-    # begrensd zodat het nooit fel/neon wordt, consistent met de rest
-    # van de gedempte UI.
-    intensity = min(abs(return_pct) / 15.0, 1.0)
-    bg_alpha = 0.05 + intensity * 0.12
-    border_alpha = 0.25 + intensity * 0.25
+        border_rgb = "137,146,163"
 
     # Grotere sectoren (hoger 'weight') krijgen zowel meer flex-grow als
     # een hogere min-width -- benadert een treemap-achtige, ongelijke
@@ -1987,8 +2016,8 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
     return (
         f'<a href="{discover_url}" target="_self" style="text-decoration:none; '
         f'flex: {weight} 1 {min_width}px; position:relative; display:block; '
-        f'background: linear-gradient(135deg, rgba({accent_rgb},{bg_alpha + 0.06:.3f}), rgba({accent_rgb},{bg_alpha:.3f})); '
-        f'border: 1px solid rgba({accent_rgb},{border_alpha:.3f}); border-radius: 10px; '
+        f'background: {TODAY_CARD_BG}; '
+        f'border: 1px solid rgba({border_rgb},0.2); border-radius: 10px; '
         f'padding: 0.7rem 0.8rem; min-height: 76px; box-sizing:border-box;">'
         f'{compass_badge}'
         f'<div style="font-size:0.78rem; font-weight:700; color:#EAEDF1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{sector}</div>'
@@ -2027,8 +2056,8 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     (i.p.v. een harde verkoop-instructie); action='sell' blijft een
     neutrale constatering.
     """
-    accent_rgb = "31,174,150" if suggestion["action"] == "buy" else "229,72,77"
-    color = "#1FAE96" if suggestion["action"] == "buy" else "#E5484D"
+    accent_rgb = TODAY_POSITIVE_BORDER_RGB if suggestion["action"] == "buy" else TODAY_NEGATIVE_BORDER_RGB
+    color = TODAY_POSITIVE_TEXT if suggestion["action"] == "buy" else TODAY_NEGATIVE_TEXT
     if suggestion["action"] == "buy":
         message = (
             f'<b style="color:#EAEDF1;">{suggestion["naam"]}</b> is below its target weight '
@@ -2041,8 +2070,8 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
             f'({suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target).'
         )
     return (
-        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.12), rgba({accent_rgb},0.02)); '
-        f'border: 1px solid rgba({accent_rgb},0.3); border-radius: 10px; padding: 0.75rem 0.9rem;">'
+        f'<div style="background: {TODAY_CARD_BG}; '
+        f'border: 1px solid rgba({accent_rgb},0.2); border-radius: 10px; padding: 0.75rem 0.9rem;">'
         f'<div style="display:flex; align-items:center; gap:0.4rem;">'
         f'{_icon_span("balance", size_px=15, color=color)}'
         f'<span style="font-size:0.7rem; font-weight:700; color:{color}; text-transform:uppercase; letter-spacing:0.05em;">Rebalance trigger</span>'
@@ -7036,26 +7065,31 @@ def render_today():
 
                 with st.container(border=True):
                     if daily_stats:
+                        # Totale dagverandering is nu de prominente kop van het
+                        # kader (groot, linksboven) i.p.v. een klein badge naast
+                        # de titel -- dit IS het belangrijkste getal op de kaart.
                         vs_yesterday_pct = daily_stats["portfolio_change_pct"]
-                        vs_yesterday_color = "#1FAE96" if vs_yesterday_pct >= 0 else "#E5484D"
+                        vs_yesterday_color = TODAY_POSITIVE_TEXT if vs_yesterday_pct >= 0 else TODAY_NEGATIVE_TEXT
                         st.markdown(
-                            f'<div style="display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap;">'
-                            f'<span style="font-weight:700;">Your Portfolio Today</span>'
-                            f'<span style="font-size:0.85rem; font-weight:700; color:{vs_yesterday_color};">'
-                            f'{vs_yesterday_pct:+.1f}%</span>'
-                            f'</div>',
+                            f'<div style="font-size:0.7rem; color:#8992A3; text-transform:uppercase; '
+                            f'letter-spacing:0.06em; font-weight:700; font-family:\'Inter\', sans-serif !important;">'
+                            f'Your Portfolio Today</div>'
+                            f'<div style="font-size:2.1rem; font-weight:800; color:{vs_yesterday_color}; '
+                            f'margin-top:2px; line-height:1.1; font-family:\'Inter\', sans-serif !important; '
+                            f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown("**Your Portfolio Today**")
 
+                    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
                     dcol2, dcol3 = st.columns(2, gap="medium")
                     with dcol2:
                         if daily_stats:
                             st.markdown(
-                                _hero_stat_tile_html(
+                                _portfolio_mover_tile_html(
                                     "Best today", "trending_up", daily_stats["best_performer"], daily_stats["best_change_pct"],
-                                    "31,174,150", "#1FAE96",
+                                    daily_stats["best_weight_pct"], TODAY_POSITIVE_BORDER_RGB, TODAY_POSITIVE_TEXT,
                                 ),
                                 unsafe_allow_html=True,
                             )
@@ -7064,9 +7098,9 @@ def render_today():
                     with dcol3:
                         if daily_stats:
                             st.markdown(
-                                _hero_stat_tile_html(
+                                _portfolio_mover_tile_html(
                                     "Worst today", "trending_down", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
-                                    "229,72,77", "#E5484D",
+                                    daily_stats["worst_weight_pct"], TODAY_NEGATIVE_BORDER_RGB, TODAY_NEGATIVE_TEXT,
                                 ),
                                 unsafe_allow_html=True,
                             )
@@ -7186,7 +7220,7 @@ def render_today():
                 records_52wk = get_52_week_records(holdings, market_data, max_items=3) if holdings else []
                 for r in records_52wk:
                     icon_name = "trending_up" if r["type"] == "high" else "trending_down"
-                    icon_color = "#1FAE96" if r["type"] == "high" else "#E5484D"
+                    icon_color = TODAY_POSITIVE_TEXT if r["type"] == "high" else TODAY_NEGATIVE_TEXT
                     label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
                     day_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
 
@@ -7226,7 +7260,7 @@ def render_today():
                 )
                 for s in personal_surprises:
                     icon_name = "trending_up" if s["beat"] else "trending_down"
-                    icon_color = "#1FAE96" if s["beat"] else "#E5484D"
+                    icon_color = TODAY_POSITIVE_TEXT if s["beat"] else TODAY_NEGATIVE_TEXT
                     screener_rows.append(_radar_row_html(
                         _icon_span(icon_name, size_px=15, color=icon_color),
                         f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
@@ -7252,7 +7286,7 @@ def render_today():
                 ]
                 for s in market_wide_surprises[:2]:
                     icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
-                    icon_color = "#1FAE96" if s["earnings_beat"] else "#E5484D"
+                    icon_color = TODAY_POSITIVE_TEXT if s["earnings_beat"] else TODAY_NEGATIVE_TEXT
                     macro_rows.append(_radar_row_html(
                         _icon_span(icon_name, size_px=15, color=icon_color),
                         f"Also worth noting (not in your portfolio): "
