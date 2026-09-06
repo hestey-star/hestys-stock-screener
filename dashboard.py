@@ -1981,15 +1981,12 @@ def _get_portfolio_sector_names(holdings: list) -> set:
 
 def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_portfolio_match: bool, discover_url: str) -> str:
     """
-    1 blok in de Global Sector Heatmap. Grootte (flex-basis EN min-height)
-    schaalt met 'weight' (marktimpact) -- Technology/Financials worden zo
-    fysiek groter dan Utilities/Materials, een echte treemap-illusie i.p.v.
-    een grid van gelijke blokken. Geen rand en geen neutrale achtergrond
-    meer -- alleen een zeer zachte, performance-gebaseerde kleurtint
-    (nooit hoger dan ~0.09 alpha) en het gekleurde percentage-cijfer zelf
-    dragen de betekenis, net zo mat/gedempt als het rood/groen in de
-    portfolio-sectie hierboven. Het hele blok is 1 klikbare link naar
-    Discover's Sectors & Themes-subview.
+    1 blok in de Global Sector Heatmap-grid. Geen rand en geen neutrale
+    achtergrond -- alleen een zeer zachte, performance-gebaseerde
+    kleurtint (nooit hoger dan ~0.09 alpha) en het gekleurde percentage-
+    cijfer zelf dragen de betekenis, net zo mat/gedempt als het rood/
+    groen in de portfolio-sectie hierboven. Het hele blok is 1 klikbare
+    link naar Discover's Sectors & Themes-subview.
     """
     if return_pct > 0:
         color = TODAY_POSITIVE_TEXT
@@ -2008,17 +2005,16 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
     intensity = min(abs(return_pct) / 15.0, 1.0)
     bg_alpha = 0.03 + intensity * 0.06
 
-    # Grotere sectoren (hoger 'weight') krijgen meer flex-grow, een hogere
-    # min-width EN een hogere min-height -- benadert een treemap-achtige,
-    # ongelijke blokverdeling (breder EN hoger) binnen de grenzen van een
-    # simpele flex-wrap-layout.
-    min_width = 120 + min(weight, 32) * 4
-    min_height = 68 + min(weight, 32) * 0.7
+    # Grote, impactvolle sectoren (marktgewicht >= 10%) krijgen 2 grid-
+    # kolommen i.p.v. 1 -- een vaste col-span i.p.v. een variabele
+    # flex-basis, zodat blokken nooit uitrekken om een onvolledige rij
+    # te vullen (dat is precies wat CSS Grid, anders dan flexbox, van
+    # nature al NIET doet: een onvolledige rij laat de resterende
+    # kolommen gewoon leeg).
+    col_span = 2 if weight >= 10 else 1
 
-    # Kompas-icoon nu INLINE, links van de sectornaam, i.p.v. absoluut
-    # gepositioneerd rechtsboven -- dat laatste overlapte de tekst zodra
-    # een blok smal was of de naam lang (bv. 'Communication Services').
-    # Inline naast de tekst kan nooit meer overlappen, ongeacht blokbreedte.
+    # Kompas-icoon inline, links van de sectornaam -- kan nooit overlappen,
+    # ongeacht blokbreedte. Naam mag wrappen i.p.v. worden afgekapt.
     compass_icon = (
         f'<span style="font-size:0.8rem; flex-shrink:0; line-height:1.25;" '
         f'title="Matches assets in your portfolio">🧭</span>'
@@ -2027,9 +2023,9 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
 
     return (
         f'<a href="{discover_url}" target="_self" style="text-decoration:none; '
-        f'flex: {weight} 1 {min_width}px; display:block; '
+        f'grid-column: span {col_span}; display:block; '
         f'background: rgba({tint_rgb},{bg_alpha:.3f}); border-radius: 10px; '
-        f'padding: 0.7rem 0.8rem; min-height: {min_height:.0f}px; box-sizing:border-box;">'
+        f'padding: 0.7rem 0.8rem; min-height: 76px; box-sizing:border-box;">'
         f'<div style="display:flex; align-items:flex-start; gap:5px;">'
         f'{compass_icon}'
         f'<span style="font-size:0.78rem; font-weight:700; color:#EAEDF1; line-height:1.25; '
@@ -2042,9 +2038,12 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
 
 def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set, discover_url: str) -> None:
     """
-    Rendert de sector-heatmap als 1 flex-wrap-grid van tegels, gesorteerd
-    op marktgewicht (grootste sector eerst) zodat de grootste blokken
-    bovenaan/links staan -- net als bij een echte treemap.
+    Rendert de sector-heatmap als een strak CSS Grid (4 kolommen op
+    desktop, 2 op mobiel), gesorteerd op marktgewicht (grootste sector
+    eerst) zodat de grote, brede (col-span-2) blokken bovenaan/links
+    staan -- net als bij een echte treemap. Grid i.p.v. flex-wrap: een
+    onvolledige laatste rij rekt hierdoor NIET uit om de pagina te
+    vullen, de resterende ruimte blijft gewoon leeg.
     """
     sorted_items = sorted(
         rotation, key=lambda r: weights.get(r["sector"], 1), reverse=True,
@@ -2057,7 +2056,9 @@ def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set
         for r in sorted_items
     )
     st.markdown(
-        f'<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">{tiles_html}</div>',
+        '<style>.hesty-sector-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:0.6rem;} '
+        '@media (max-width:640px){.hesty-sector-grid{grid-template-columns:repeat(2, 1fr);}}</style>'
+        f'<div class="hesty-sector-grid">{tiles_html}</div>',
         unsafe_allow_html=True,
     )
 
@@ -2238,39 +2239,37 @@ def _bucket_events_by_weekday(dated_items: list) -> dict:
 
 def _week_agenda_html(buckets: dict) -> str:
     """
-    Rendert de horizontale, scanbare Week-Agenda (Ma t/m Vr) -- 1 kolom
-    per dag, vandaag visueel geaccentueerd, met per dag een korte lijst
-    van lange-termijn-catalysts (of een neutrale '--' als er niets
-    gepland staat). display:flex + overflow-x:auto i.p.v. st.columns(),
-    zodat het op mobiel prettig horizontaal scrollt i.p.v. de kolommen
-    steeds smaller te persen.
+    Rendert de Week-Agenda als 5 gelijke, borderloze kolommen (Ma t/m Vr)
+    over de volle breedte -- geen aparte, omlijnde dagkaarten meer, maar
+    dezelfde dunne verticale scheidslijnen als de rest van de pagina.
+    Catalysts staan als cleane bullet-regel in ALL-CAPS.
     """
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     today_label = labels[datetime.now().date().weekday()] if datetime.now().date().weekday() < 5 else None
 
     day_cols = []
-    for label in labels:
+    for i, label in enumerate(labels):
         is_today = label == today_label
         items = buckets.get(label, [])
         if items:
             items_html = "".join(
-                f'<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.4rem; font-size:0.72rem; color:#8992A3; line-height:1.35;">'
-                f'<span style="flex-shrink:0; margin-top:1px;">{icon_html}</span><span>{text}</span></div>'
-                for icon_html, text in items
+                f'<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.5rem; '
+                f'font-size:0.68rem; color:#CBD5E1; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
+                f'<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>{text.upper()}</span></div>'
+                for _icon_html, text in items
             )
         else:
-            items_html = '<div style="margin-top:0.4rem; font-size:0.72rem; color:#8992A3;">&mdash;</div>'
+            items_html = '<div style="margin-top:0.5rem; font-size:0.68rem; color:#8992A3;">&mdash;</div>'
 
-        border = "1.5px solid rgba(31,174,150,0.5)" if is_today else "1px solid rgba(137,146,163,0.2)"
-        bg = "background: rgba(31,174,150,0.06);" if is_today else "background: rgba(137,146,163,0.04);"
         label_color = "#1FAE96" if is_today else "#8992A3"
+        divider = "border-right:1px solid rgba(137,146,163,0.15); padding-right:1.5rem;" if i < 4 else ""
         day_cols.append(
-            f'<div style="min-width:150px; flex-shrink:0; {bg} border:{border}; border-radius:10px; padding:0.65rem 0.75rem;">'
-            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>'
+            f'<div style="flex:1; min-width:0; {divider}">'
+            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; letter-spacing:0.08em;">{label}</div>'
             f'{items_html}'
             f'</div>'
         )
-    return f'<div style="display:flex; gap:0.5rem; overflow-x:auto; padding-bottom:4px;">{"".join(day_cols)}</div>'
+    return f'<div style="display:flex; align-items:flex-start; gap:1.5rem;">{"".join(day_cols)}</div>'
 
 
 # --- 'Stories'-cirkels (Instagram-stijl) bovenaan de Daily Radar -- elk
@@ -2333,8 +2332,13 @@ def _show_story_dialog(story_id: str, story_data: dict) -> None:
 
 
 def _render_stories_row(story_data: dict) -> None:
-    """Rendert de rij 'Story'-cirkels + labels erboven aan de Daily Radar-sectie."""
-    cols = st.columns(len(_STORY_DEFINITIONS))
+    """
+    Rendert de rij 'Story'-cirkels + labels aan de linkerkant van de
+    Daily Radar-sectie -- een 4e, brede 'spacer'-kolom erna houdt de 3
+    cirkels compact bij elkaar links, i.p.v. dat st.columns() ze over de
+    volle paginabreedte uitspreidt.
+    """
+    cols = st.columns([1, 1, 1, 7], gap="small")
     for i, story in enumerate(_STORY_DEFINITIONS):
         circle_key = f"story_circle_{story['id']}"
         with cols[i]:
@@ -2344,7 +2348,8 @@ def _render_stories_row(story_data: dict) -> None:
                     "", icon=f":material/{story['icon']}:", key=f"story_btn_{story['id']}",
                 )
             st.markdown(
-                f'<div style="text-align:center; font-size:0.68rem; color:#8992A3; margin-top:4px;">{story["label"]}</div>',
+                f'<div style="text-align:center; font-size:0.64rem; color:#8992A3; margin-top:4px; '
+                f'white-space:nowrap;">{story["label"]}</div>',
                 unsafe_allow_html=True,
             )
         if clicked:
