@@ -1223,6 +1223,40 @@ def check_triggered_watchlist_alerts(watchlist_items: list, market_data: dict) -
     return triggered
 
 
+def get_watchlist_near_target_alerts(watchlist_items: list, market_data: dict, near_pct: float = 2.0, max_items: int = 3) -> list:
+    """
+    Zelfde basis als check_triggered_watchlist_alerts(), maar dan voor
+    watchlist-items die hun alert-koers nog NIET geraakt hebben, maar er
+    wel al dichtbij zijn (binnen 'near_pct' procent van de streefprijs).
+    Bedoeld voor de 'Watchlist-Snack'-kaart op Today -- een vroege
+    heads-up voordat de alert zelf afgaat.
+
+    'distance_pct' is altijd positief en geeft aan hoeveel procent de
+    huidige koers nog van de streefprijs verwijderd is. Al-getriggerde
+    of afgehandelde alerts worden overgeslagen (die horen bij de
+    bestaande, prominente alert-melding bovenaan Today).
+    """
+    near = []
+    for w in watchlist_items:
+        target_price = w.get("alert_target_price")
+        if target_price is None or w.get("alert_dismissed") or not target_price:
+            continue
+        current_price = market_data.get(w["ticker"], {}).get("current_price")
+        if current_price is None:
+            continue
+        direction = w.get("alert_direction")
+        if direction == "below" and current_price > target_price:
+            distance_pct = (current_price - target_price) / target_price * 100
+        elif direction == "above" and current_price < target_price:
+            distance_pct = (target_price - current_price) / target_price * 100
+        else:
+            continue  # al getriggerd, of geen geldige richting
+        if distance_pct <= near_pct:
+            near.append({**w, "current_price": current_price, "distance_pct": distance_pct})
+    near.sort(key=lambda x: x["distance_pct"])
+    return near[:max_items]
+
+
 def build_rebalancing_suggestions(holdings: list, total_value: float, materiality_threshold_pct: float = 1.0) -> dict:
     """
     Berekent concrete koop/verkoop-suggesties voor elke positie met een
@@ -1873,6 +1907,340 @@ def _hero_stat_tile_html(label: str, icon_name: str, ticker: str, pct: float, ac
         f'<div style="font-size:1.25rem; font-weight:800; color:{color}; margin-top:1px;">{pct:+.1f}%</div>'
         f'</div>'
     )
+
+
+# Approximatieve marktgewicht-verdeling per sector (afgerond op de
+# S&P 500-samenstelling resp. een grove EU-proxy) -- ALLEEN gebruikt om
+# de blokken in de Global Sector Heatmap relatief te laten schalen
+# ('marktimpact'). Geen live marktkapitalisatie-data (dat zou 11+ extra
+# aanroepen per page-load betekenen) -- een periodiek bijgewerkte,
+# benaderde verdeling volstaat voor dit doel.
+US_SECTOR_MARKET_WEIGHTS = {
+    "Technology": 32, "Financials": 13, "Health Care": 10, "Consumer Discretionary": 10,
+    "Communication Services": 9, "Industrials": 8, "Consumer Staples": 6, "Energy": 3,
+    "Utilities": 2.5, "Real Estate": 2, "Materials": 2,
+}
+EU_SECTOR_MARKET_WEIGHTS = {
+    "Banks": 16, "Health Care": 15, "Industrial Goods & Services": 14, "Automobiles & Parts": 10,
+    "Food & Beverage": 10, "Oil & Gas": 8, "Technology": 8, "Utilities": 7,
+    "Basic Resources": 6, "Telecommunications": 6,
+}
+
+
+def _get_portfolio_sector_names(holdings: list) -> set:
+    """
+    Geeft de set van (naar onze eigen sector-namen gemapte) GICS-sectoren
+    terug waar de huidige holdings in zitten -- gebruikt om de heatmap-
+    blokken te markeren die matchen met het portfolio van de gebruiker.
+    Elke ticker-lookup valt individueel stil terug (geen crash bij 1
+    ticker zonder sector-info).
+    """
+    sectors = set()
+    for h in holdings:
+        try:
+            info = get_cached_ticker_info(h["ticker"])
+            mapped = YFINANCE_SECTOR_TO_OURS.get(info.get("sector"))
+            if mapped:
+                sectors.add(mapped)
+        except Exception:
+            continue
+    return sectors
+
+
+def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_portfolio_match: bool, discover_url: str) -> str:
+    """
+    1 blok in de Global Sector Heatmap. Grootte (flex-basis) schaalt met
+    'weight' (marktimpact), kleur met 'return_pct' (prestatie) -- zelfde
+    gedempte groen/rood-palet en dunne omlijning als de Snowballers-
+    kaarten, i.p.v. felle Finviz-neonkleuren. Het hele blok is 1 klikbare
+    link naar Discover's Sectors & Themes-subview.
+    """
+    if return_pct > 0:
+        color = "#1FAE96"
+        accent_rgb = "31,174,150"
+    elif return_pct < 0:
+        color = "#E5484D"
+        accent_rgb = "229,72,77"
+    else:
+        color = "#EAEDF1"
+        accent_rgb = "137,146,163"
+
+    # Intensiteit van de achtergrondtint volgt de GROOTTE van de beweging
+    # (subtiel bij een kleine beweging, iets steviger bij een grote) --
+    # begrensd zodat het nooit fel/neon wordt, consistent met de rest
+    # van de gedempte UI.
+    intensity = min(abs(return_pct) / 15.0, 1.0)
+    bg_alpha = 0.05 + intensity * 0.12
+    border_alpha = 0.25 + intensity * 0.25
+
+    # Grotere sectoren (hoger 'weight') krijgen zowel meer flex-grow als
+    # een hogere min-width -- benadert een treemap-achtige, ongelijke
+    # blokverdeling binnen de grenzen van een simpele flex-wrap-layout.
+    min_width = 120 + min(weight, 32) * 4
+
+    compass_badge = (
+        f'<span style="position:absolute; top:8px; right:10px; font-size:0.85rem;" '
+        f'title="Matches assets in your portfolio">🧭</span>'
+        if is_portfolio_match else ""
+    )
+
+    return (
+        f'<a href="{discover_url}" target="_self" style="text-decoration:none; '
+        f'flex: {weight} 1 {min_width}px; position:relative; display:block; '
+        f'background: linear-gradient(135deg, rgba({accent_rgb},{bg_alpha + 0.06:.3f}), rgba({accent_rgb},{bg_alpha:.3f})); '
+        f'border: 1px solid rgba({accent_rgb},{border_alpha:.3f}); border-radius: 10px; '
+        f'padding: 0.7rem 0.8rem; min-height: 76px; box-sizing:border-box;">'
+        f'{compass_badge}'
+        f'<div style="font-size:0.78rem; font-weight:700; color:#EAEDF1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{sector}</div>'
+        f'<div style="font-size:1.05rem; font-weight:800; color:{color}; margin-top:4px;">{return_pct:+.1f}%</div>'
+        f'</a>'
+    )
+
+
+def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set, discover_url: str) -> None:
+    """
+    Rendert de sector-heatmap als 1 flex-wrap-grid van tegels, gesorteerd
+    op marktgewicht (grootste sector eerst) zodat de grootste blokken
+    bovenaan/links staan -- net als bij een echte treemap.
+    """
+    sorted_items = sorted(
+        rotation, key=lambda r: weights.get(r["sector"], 1), reverse=True,
+    )
+    tiles_html = "".join(
+        _sector_heatmap_tile_html(
+            r["sector"], r["return_pct"], weights.get(r["sector"], 1),
+            r["sector"] in portfolio_sectors, discover_url,
+        )
+        for r in sorted_items
+    )
+    st.markdown(
+        f'<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">{tiles_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
+    """
+    'Herbalanceer-trigger'-kaart -- zelfde subtiele-border/strakke-
+    uitlijning-stijl als de Snowballers-kaarten. action='buy' wordt
+    voorgesteld als iets om je volgende DCA-aankoop op te richten
+    (i.p.v. een harde verkoop-instructie); action='sell' blijft een
+    neutrale constatering.
+    """
+    accent_rgb = "31,174,150" if suggestion["action"] == "buy" else "229,72,77"
+    color = "#1FAE96" if suggestion["action"] == "buy" else "#E5484D"
+    if suggestion["action"] == "buy":
+        message = (
+            f'<b style="color:#EAEDF1;">{suggestion["naam"]}</b> is below its target weight '
+            f'({suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target). '
+            f'Consider pointing your next DCA at it.'
+        )
+    else:
+        message = (
+            f'<b style="color:#EAEDF1;">{suggestion["naam"]}</b> is above its target weight '
+            f'({suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target).'
+        )
+    return (
+        f'<div style="background: linear-gradient(135deg, rgba({accent_rgb},0.12), rgba({accent_rgb},0.02)); '
+        f'border: 1px solid rgba({accent_rgb},0.3); border-radius: 10px; padding: 0.75rem 0.9rem;">'
+        f'<div style="display:flex; align-items:center; gap:0.4rem;">'
+        f'{_icon_span("balance", size_px=15, color=color)}'
+        f'<span style="font-size:0.7rem; font-weight:700; color:{color}; text-transform:uppercase; letter-spacing:0.05em;">Rebalance trigger</span>'
+        f'</div>'
+        f'<div style="font-size:0.83rem; color:#8992A3; margin-top:6px; line-height:1.5;">{message}</div>'
+        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:6px;">'
+        f'Off target by <b style="color:{color};">{abs(suggestion["diff_pct"]):.1f}pp</b>'
+        f'</div>'
+        f'</div>'
+    )
+
+
+def _watchlist_snack_card_html(alert: dict) -> str:
+    """
+    'Watchlist-Snack'-kaart -- vroege heads-up zodra een watchlist-item
+    binnen 'near_pct' van z'n koopdoel komt, VOORDAT de alert zelf
+    afgaat. Zelfde kaartstijl als de Rebalance-trigger-kaart, andere
+    accentkleur (amber) om 'm visueel te onderscheiden van een
+    koop/verkoop-signaal.
+    """
+    return (
+        f'<div style="background: linear-gradient(135deg, rgba(232,169,60,0.14), rgba(232,169,60,0.02)); '
+        f'border: 1px solid rgba(232,169,60,0.35); border-radius: 10px; padding: 0.75rem 0.9rem;">'
+        f'<div style="display:flex; align-items:center; gap:0.4rem;">'
+        f'{_icon_span("sell", size_px=15, color="#E8A93C")}'
+        f'<span style="font-size:0.7rem; font-weight:700; color:#E8A93C; text-transform:uppercase; letter-spacing:0.05em;">Watchlist alert</span>'
+        f'</div>'
+        f'<div style="font-size:0.83rem; color:#8992A3; margin-top:6px; line-height:1.5;">'
+        f'<b style="color:#EAEDF1;">{alert["naam"]}</b> ({alert["ticker"]}) is almost within reach of your buy target '
+        f'-- {alert["distance_pct"]:.1f}% to go.'
+        f'</div>'
+        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:6px;">'
+        f'Now at <b style="color:#EAEDF1;">{alert["current_price"]:.2f}</b>, target <b style="color:#EAEDF1;">{alert["alert_target_price"]:.2f}</b>'
+        f'</div>'
+        f'</div>'
+    )
+
+
+def _render_health_cards(cards_html: list) -> None:
+    """Rendert de Portfolio Health & DCA Insights-kaarten in een responsieve grid (zelfde auto-fill-aanpak als de signaal-kaarten)."""
+    combined = "".join(cards_html)
+    st.markdown(
+        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); '
+        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def get_macro_events_for_week(max_items: int = 10) -> list:
+    """
+    Geeft alle macro-events terug die vallen in de HUIDIGE kalenderweek
+    (maandag t/m vrijdag) -- i.p.v. get_todays_macro_events()'s 'alleen
+    vandaag'-venster. Gebruikt voor de Week-Agenda op Today.
+    """
+    today = datetime.now().date()
+    monday = today - timedelta(days=today.weekday())
+    friday = monday + timedelta(days=4)
+    events = [
+        e for e in MACRO_EVENTS_2026
+        if monday <= datetime.strptime(e["date"], "%Y-%m-%d").date() <= friday
+    ]
+    events.sort(key=lambda e: e["date"])
+    return events[:max_items]
+
+
+def _bucket_events_by_weekday(dated_items: list) -> dict:
+    """
+    Verdeelt een lijst van (date, icon_html, text)-tuples over Ma t/m Vr
+    van de HUIDIGE week -- gedeelde bucketing-logica voor de Week-Agenda,
+    zodat macro-events, ex-dividend-data en earnings-data allemaal op
+    dezelfde manier onder de juiste dag terechtkomen. Events buiten deze
+    week (zou niet moeten gebeuren bij de aanroepers hieronder, maar
+    voor de zekerheid) worden stil genegeerd.
+    """
+    labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    today = datetime.now().date()
+    monday = today - timedelta(days=today.weekday())
+    buckets = {label: [] for label in labels}
+    for item_date, icon_html, text in dated_items:
+        offset = (item_date - monday).days
+        if 0 <= offset <= 4:
+            buckets[labels[offset]].append((icon_html, text))
+    return buckets
+
+
+def _week_agenda_html(buckets: dict) -> str:
+    """
+    Rendert de horizontale, scanbare Week-Agenda (Ma t/m Vr) -- 1 kolom
+    per dag, vandaag visueel geaccentueerd, met per dag een korte lijst
+    van lange-termijn-catalysts (of een neutrale '--' als er niets
+    gepland staat). display:flex + overflow-x:auto i.p.v. st.columns(),
+    zodat het op mobiel prettig horizontaal scrollt i.p.v. de kolommen
+    steeds smaller te persen.
+    """
+    labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    today_label = labels[datetime.now().date().weekday()] if datetime.now().date().weekday() < 5 else None
+
+    day_cols = []
+    for label in labels:
+        is_today = label == today_label
+        items = buckets.get(label, [])
+        if items:
+            items_html = "".join(
+                f'<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.4rem; font-size:0.72rem; color:#8992A3; line-height:1.35;">'
+                f'<span style="flex-shrink:0; margin-top:1px;">{icon_html}</span><span>{text}</span></div>'
+                for icon_html, text in items
+            )
+        else:
+            items_html = '<div style="margin-top:0.4rem; font-size:0.72rem; color:#8992A3;">&mdash;</div>'
+
+        border = "1.5px solid rgba(31,174,150,0.5)" if is_today else "1px solid rgba(137,146,163,0.2)"
+        bg = "background: rgba(31,174,150,0.06);" if is_today else "background: rgba(137,146,163,0.04);"
+        label_color = "#1FAE96" if is_today else "#8992A3"
+        day_cols.append(
+            f'<div style="min-width:150px; flex-shrink:0; {bg} border:{border}; border-radius:10px; padding:0.65rem 0.75rem;">'
+            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; letter-spacing:0.05em;">{label}</div>'
+            f'{items_html}'
+            f'</div>'
+        )
+    return f'<div style="display:flex; gap:0.5rem; overflow-x:auto; padding-bottom:4px;">{"".join(day_cols)}</div>'
+
+
+# --- 'Stories'-cirkels (Instagram-stijl) bovenaan de Daily Radar -- elk
+# opent een modale slide-over (st.dialog) met een kort, scanbaar
+# overzicht in plaats van alles als platte tekst op de pagina te
+# proppen. ---
+_STORY_DEFINITIONS = [
+    {"id": "day_numbers", "label": "Your day", "icon": "bar_chart"},
+    {"id": "screener_hits", "label": "Screener hits", "icon": "search"},
+    {"id": "macro_trend", "label": "Macro trend", "icon": "public"},
+]
+
+
+def _story_circle_css(circle_key: str, is_first: bool) -> str:
+    """CSS om een st.container(key=...) + st.button erin te laten ogen als een ronde 'Story'-cirkel, in dezelfde teal-accentkleur als de rest van de site."""
+    return (
+        f'<style>'
+        f'.st-key-{circle_key} button {{ '
+        f'border-radius:50% !important; width:56px !important; height:56px !important; padding:0 !important; '
+        f'border:2px solid rgba(31,174,150,0.6) !important; background:rgba(31,174,150,0.1) !important; '
+        f'display:flex !important; align-items:center !important; justify-content:center !important; }} '
+        f'.st-key-{circle_key} button:hover {{ border-color:#1FAE96 !important; background:rgba(31,174,150,0.2) !important; }} '
+        f'</style>'
+    )
+
+
+@st.dialog(" ", width="large")
+def _show_story_dialog(story_id: str, story_data: dict) -> None:
+    """
+    Rendert de slide-over-inhoud voor 1 'Story'. 'story_data' bevat alles
+    wat render_today() al heeft opgehaald (geen extra netwerk-aanroepen
+    vanuit de dialog zelf).
+    """
+    if story_id == "day_numbers":
+        st.markdown(f"#### {_icon_span('bar_chart', size_px=20, color='#1FAE96')} Your day in numbers", unsafe_allow_html=True)
+        rows = story_data.get("day_rows", [])
+        if rows:
+            _render_radar_rows(rows)
+        else:
+            st.caption("Nothing new to flag right now. A quiet day on your radar.")
+    elif story_id == "screener_hits":
+        st.markdown(f"#### {_icon_span('search', size_px=20, color='#1FAE96')} New screener hits", unsafe_allow_html=True)
+        rows = story_data.get("screener_rows", [])
+        if rows:
+            _render_radar_rows(rows)
+        else:
+            st.caption("No new screener activity to report right now.")
+        st.page_link(discover_page, label="Browse all signals on Discover")
+    elif story_id == "macro_trend":
+        st.markdown(f"#### {_icon_span('public', size_px=20, color='#1FAE96')} Macro trend", unsafe_allow_html=True)
+        rows = story_data.get("macro_rows", [])
+        if rows:
+            _render_radar_rows(rows)
+        else:
+            st.caption("No notable sector or theme extremes right now.")
+        st.page_link(discover_page, label="See sector & theme rotation on Discover")
+
+    if st.button("Close", key=f"close_story_{story_id}"):
+        st.rerun()
+
+
+def _render_stories_row(story_data: dict) -> None:
+    """Rendert de rij 'Story'-cirkels + labels erboven aan de Daily Radar-sectie."""
+    cols = st.columns(len(_STORY_DEFINITIONS))
+    for i, story in enumerate(_STORY_DEFINITIONS):
+        circle_key = f"story_circle_{story['id']}"
+        with cols[i]:
+            st.markdown(_story_circle_css(circle_key, i == 0), unsafe_allow_html=True)
+            with st.container(key=circle_key):
+                clicked = st.button(
+                    "", icon=f":material/{story['icon']}:", key=f"story_btn_{story['id']}",
+                )
+            st.markdown(
+                f'<div style="text-align:center; font-size:0.68rem; color:#8992A3; margin-top:4px;">{story["label"]}</div>',
+                unsafe_allow_html=True,
+            )
+        if clicked:
+            _show_story_dialog(story["id"], story_data)
 
 
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
@@ -6708,61 +7076,73 @@ def render_today():
                     st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
                     st.page_link(portfolio_page, label="View My Portfolio")
 
-            # --- Yesterday's Top Movers (verplaatst hierheen vanuit Discover --
-            # dit is een leuk, marktbreed dagelijks contactmoment, past beter bij
-            # Today's 'wat is er vandaag interessant'-insteek dan bij Discover) ---
+            # --- Portfolio Health & DCA Insights (nieuw) -- helpt bij WAAR je
+            # je volgende DCA-aankoop op moet richten, i.p.v. alleen te laten
+            # zien wat er vandaag toevallig is gebeurd. Herbalanceer-triggers
+            # hergebruiken de bestaande build_rebalancing_suggestions()-logica
+            # (ongewijzigd, al aanwezig voor Analyze); Watchlist-Snack is
+            # nieuw (get_watchlist_near_target_alerts hierboven). ---
+            if holdings:
+                total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
+                rebalancing = build_rebalancing_suggestions(holdings, total_portfolio_value)
+                near_target_watchlist = (
+                    get_watchlist_near_target_alerts(watchlist_items, market_data) if watchlist_items else []
+                )
+
+                health_cards_html = [
+                    _rebalance_trigger_card_html(suggestion, "$")
+                    for suggestion in rebalancing["suggestions"][:2]
+                ] + [
+                    _watchlist_snack_card_html(alert) for alert in near_target_watchlist
+                ]
+
+                if health_cards_html:
+                    with st.container(border=True):
+                        st.markdown("**Portfolio Health & DCA Insights**")
+                        _render_health_cards(health_cards_html)
+
+            # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
+            # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
+            # sterk/zwak' meer dan de dagkoers van 1 los aandeel). Hergebruikt
+            # build_sector_rotation() (al bestond voor Discover's Sector
+            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar. ---
             with st.container(border=True):
-                st.markdown("**Yesterday's biggest movers**")
-                if os.path.exists("top_movers.csv"):
-                    df_movers = pd.read_csv("top_movers.csv").dropna(subset=["change_pct"])
-                    if not df_movers.empty:
-                        top_gainer = df_movers.loc[df_movers["change_pct"].idxmax()]
-                        top_loser = df_movers.loc[df_movers["change_pct"].idxmin()]
-
-                        mover_col1, mover_col2 = st.columns(2, gap="medium")
-                        with mover_col1:
-                            st.markdown(
-                                _hero_stat_tile_html("Top gainer", "trending_up", top_gainer["ticker"], top_gainer["change_pct"], "31,174,150", "#1FAE96"),
-                                unsafe_allow_html=True,
-                            )
-                        with mover_col2:
-                            st.markdown(
-                                _hero_stat_tile_html("Top loser", "trending_down", top_loser["ticker"], top_loser["change_pct"], "229,72,77", "#E5484D"),
-                                unsafe_allow_html=True,
-                            )
-                        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-                        with st.expander("See more movers", key="see_more_movers_expander"):
-                            gainers = df_movers.sort_values("change_pct", ascending=False).head(5)
-                            losers = df_movers.sort_values("change_pct", ascending=True).head(5)
-
-                            st.markdown("**Top gainers**")
-                            _render_signal_cards([
-                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", True, [])
-                                for _, row in gainers.iterrows()
-                            ])
-                            st.markdown("**Top losers**")
-                            _render_signal_cards([
-                                _signal_card_html(row["ticker"], "Change", f"{row['change_pct']:+.1f}%", False, [])
-                                for _, row in losers.iterrows()
-                            ])
-                        # 'Last updated' bewust ONDERAAN i.p.v. bovenaan -- de
-                        # belangrijkste info (de daadwerkelijke movers) hoort
-                        # als eerste in beeld te komen, niet een meta-regel.
-                        st.caption(f"Last updated: {file_last_modified('top_movers.csv')}")
-                    else:
-                        st.caption("No mover data available right now.")
+                st.markdown("**Global Sector Heatmap**")
+                st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
+                           "color = performance. 🧭 marks a sector you're already invested in.")
+                heatmap_region = st.segmented_control(
+                    "Region", options=["US", "EU"], selection_mode="single",
+                    default="US", key="today_heatmap_region", label_visibility="collapsed",
+                )
+                if heatmap_region is None:
+                    heatmap_region = "US"
+                with st.spinner("Checking sector performance..."):
+                    heatmap_rotation = build_sector_rotation(region=heatmap_region)
+                if heatmap_rotation:
+                    heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
+                    portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
+                    _render_sector_heatmap(
+                        heatmap_rotation, heatmap_weights, portfolio_sectors,
+                        "/discover?subview=sectors_themes",
+                    )
+                    st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
+                    st.page_link(discover_page, label="Explore sectors & themes on Discover")
                 else:
-                    st.caption("No data yet. This updates once daily via the scheduled scan. Check back tomorrow.")
+                    st.caption("No sector data available right now.")
 
-            # --- Today's radar (events + opportunities + earnings-verrassingen, samengevoegd) ---
+            # --- Daily Radar: 'Stories' + Week-Agenda (vervangt de platte
+            # 'Today's radar'-tekstlijst). Zelfde onderliggende data-
+            # verzameling als voorheen -- nu opgedeeld in 3 scanbare
+            # 'Stories' (modale slide-overs, Instagram-stijl) + een
+            # horizontale week-agenda voor lange-termijn-catalysts. ---
             with st.container(border=True):
-                st.markdown("**Today's radar**")
+                st.markdown("**Daily Radar**")
 
-                # Alle items verzamelen i.p.v. losse st.markdown()-aanroepen
-                # per bullet -- dat voelde als een lange, rommelige wand van
-                # gemengde emoji-bullets, vooral op mobiel. Nu 1 samenhangend
-                # blok aan het eind.
-                radar_rows = []
+                # 3 aparte lijsten i.p.v. 1 platte 'radar_rows' -- elke Story
+                # toont z'n eigen deel van dezelfde onderliggende data.
+                day_rows = []
+                screener_rows = []
+                macro_rows = []
 
                 macro_events = get_todays_macro_events(max_items=3)
                 with st.spinner("Checking today's radar..."):
@@ -6772,14 +7152,14 @@ def render_today():
                 ]
                 for event in todays_events[:3]:
                     time_part = f" ({event['time']})" if "time" in event else ""
-                    radar_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
+                    day_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
 
                 # Aankomende earnings deze week -- niet alleen vandaag, ook een
                 # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
                 upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, market_data, days_ahead=5, max_items=3)
                 for e in upcoming_earnings:
                     day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
-                    radar_rows.append(_radar_row_html(
+                    day_rows.append(_radar_row_html(
                         _icon_span("calendar_month", size_px=15, color="#8992A3"),
                         f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).",
                     ))
@@ -6790,13 +7170,13 @@ def render_today():
                     risk_profile = database.get_risk_profile(user_email)
                     concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
                     if concentration_alert:
-                        radar_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
+                        day_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
 
                 # Aankomende ex-dividend-data voor je HUIDIGE posities.
                 upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3)
                 for d in upcoming_ex_div:
                     day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
-                    radar_rows.append(_radar_row_html(
+                    day_rows.append(_radar_row_html(
                         _icon_span("payments", size_px=15, color="#8992A3"),
                         f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']}).",
                     ))
@@ -6808,13 +7188,13 @@ def render_today():
                     icon_name = "trending_up" if r["type"] == "high" else "trending_down"
                     icon_color = "#1FAE96" if r["type"] == "high" else "#E5484D"
                     label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    radar_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
+                    day_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
 
                 # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
                 # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
                 deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
                 for t in deep_dive_triggers:
-                    radar_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
+                    day_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
 
                 weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
                 last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
@@ -6824,7 +7204,7 @@ def render_today():
 
                 opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
                 weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
-                radar_rows.append(_radar_row_html(
+                screener_rows.append(_radar_row_html(
                     _icon_span("search", size_px=15, color="#8992A3"),
                     f"<b>{opportunities['total_signals']}</b> signal(s) found "
                     f"({opportunities['daily_signals']} daily{weekly_part}). "
@@ -6847,7 +7227,7 @@ def render_today():
                 for s in personal_surprises:
                     icon_name = "trending_up" if s["beat"] else "trending_down"
                     icon_color = "#1FAE96" if s["beat"] else "#E5484D"
-                    radar_rows.append(_radar_row_html(
+                    screener_rows.append(_radar_row_html(
                         _icon_span(icon_name, size_px=15, color=icon_color),
                         f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
                     ))
@@ -6873,7 +7253,7 @@ def render_today():
                 for s in market_wide_surprises[:2]:
                     icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
                     icon_color = "#1FAE96" if s["earnings_beat"] else "#E5484D"
-                    radar_rows.append(_radar_row_html(
+                    macro_rows.append(_radar_row_html(
                         _icon_span(icon_name, size_px=15, color=icon_color),
                         f"Also worth noting (not in your portfolio): "
                         f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
@@ -6888,7 +7268,7 @@ def render_today():
                     extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
                     region_suffix = f" ({alert['region']})" if alert.get("region") else ""
                     kind_label = "sector" if alert["kind"] == "sector" else "theme"
-                    radar_rows.append(_radar_row_html(
+                    macro_rows.append(_radar_row_html(
                         move_emoji,
                         f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
                         f"{alert['pct']:+.1f}% this month{extreme_marker}"
@@ -6918,13 +7298,36 @@ def render_today():
                                         flipped.append(result)
                         for f in flipped[:3]:
                             emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                            radar_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
+                            screener_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
 
-                if radar_rows:
-                    _render_radar_rows(radar_rows)
-                else:
-                    st.caption("Nothing new to flag right now. A quiet day on your radar.")
+                # --- Stories-rij (Instagram-stijl cirkels) -- elke cirkel
+                # opent een modale slide-over met z'n eigen deel van de
+                # hierboven verzamelde data. ---
+                story_data = {"day_rows": day_rows, "screener_rows": screener_rows, "macro_rows": macro_rows}
+                _render_stories_row(story_data)
 
+                st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
+
+                # --- Horizontale Week-Agenda (Ma t/m Vr) -- dezelfde soort
+                # catalysts als hierboven, nu gebundeld PER DAG i.p.v. als
+                # losse platte regels. ---
+                dated_agenda_items = []
+                for me in get_macro_events_for_week(max_items=10):
+                    me_date = datetime.strptime(me["date"], "%Y-%m-%d").date()
+                    time_part = f" ({me['time']})" if "time" in me else ""
+                    dated_agenda_items.append((me_date, _icon_span("event", size_px=13, color="#8992A3"), f"{me['name']}{time_part}"))
+                for e in earnings_today:
+                    dated_agenda_items.append((datetime.now().date(), _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
+                for e in upcoming_earnings:
+                    e_date = datetime.now().date() + timedelta(days=e["days_until"])
+                    dated_agenda_items.append((e_date, _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
+                for d in upcoming_ex_div:
+                    d_date = datetime.now().date() + timedelta(days=d["days_until"])
+                    dated_agenda_items.append((d_date, _icon_span("payments", size_px=13, color="#8992A3"), f"<b>{d['naam']}</b> ex-dividend"))
+
+                st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
+
+                st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
                 st.caption("See the full signal lists under:")
                 st.page_link(discover_page, label="Discover")
 
