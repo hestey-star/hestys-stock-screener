@@ -2111,16 +2111,25 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     """
     Herbalanceer-trigger als borderloze kolom-content -- zelfde visuele
     taal als de Best/Worst-kolommen in 'Your Portfolio Today': klein
-    icoon+label bovenaan, dan het HOOFDCIJFER (hoeveel pp van target af)
-    groot/bold als visuele held, dan de asset-naam in dezelfde ALL-CAPS-
-    stijl, dan een korte context-regel. Geen eigen kaart/rand/achtergrond
-    meer.
+    icoon+label bovenaan, dan het HOOFDCIJFER als visuele held, dan de
+    asset-naam in dezelfde ALL-CAPS-stijl, dan een korte context-regel.
+
+    Hoofdcijfer als regulier '%' (i.p.v. 'pp') met een expliciet
+    +/- teken en 'below/above target'-label eronder -- sneller te
+    scannen dan de eerdere, abstractere 'Xpp off target'-notatie: een
+    '-' + 'below target' laat in 1 oogopslag zien dat de positie
+    ACHTERLOOPT op het doelgewicht (buy-suggestie), '+' + 'above
+    target' dat 'ie ERBOVEN zit (sell-constatering).
     """
     color = TODAY_POSITIVE_TEXT if suggestion["action"] == "buy" else TODAY_NEGATIVE_TEXT
     insight_id = f"rebalance-{suggestion['ticker']}"
     if suggestion["action"] == "buy":
+        sign = "-"
+        target_label = "below target"
         context = "Consider pointing your next DCA at it."
     else:
+        sign = "+"
+        target_label = "above target"
         context = f'{suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target.'
     return (
         f'<div data-insight-col="{insight_id}" style="position:relative; display:flex; '
@@ -2133,11 +2142,12 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
         f'</div>'
         f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
-        f'{abs(suggestion["diff_pct"]):.1f}pp</div>'
-        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
+        f'{sign}{abs(suggestion["diff_pct"]):.1f}%</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:2px; font-family:\'Inter\', sans-serif !important;">{target_label}</div>'
+        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:8px; '
         f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
         f'max-width:100%;" title="{suggestion["naam"]}">{suggestion["naam"].upper()}</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">Off target &mdash; {context}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">{context}</div>'
         f'</div>'
     )
 
