@@ -48,6 +48,23 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
 
+/* Streamlit's eigen branding verbergen (hamburger-menu, footer, Deploy-
+   knop/toolbar, de regenboog-decoratiebalk bovenaan, en de "Running..."-
+   statuswidget) -- voor een schonere, minder duidelijk-'gemaakt-met-
+   Streamlit'-uitstraling.
+   BEWUST GEEN header {visibility:hidden} hier -- Hesty's gebruikt een
+   custom zijbalk-navigatie (st.navigation(..., position="hidden") +
+   een eigen st.sidebar-menu), en de zijbalk-toggle-knop op mobiel/
+   smalle schermen kon niet met zekerheid worden bevestigd als volledig
+   ONafhankelijk van de algehele header-balk. Het risico op een
+   onbruikbare app (geen manier meer om de zijbalk te openen op mobiel)
+   was te groot om te riskeren voor een puur cosmetische wijziging. */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+div[data-testid="stToolbar"] {visibility: hidden; height: 0%;}
+div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
+div[data-testid="stStatusWidget"] {visibility: hidden; height: 0%;}
+
 /* --- Ontwerptaal-fundament: kleuren als CSS-variabelen, 1 centrale
    plek om het palet te definieren i.p.v. losse rgba(...)-waarden overal
    door de code heen. Jade is bewust GERESERVEERD voor primaire acties,
