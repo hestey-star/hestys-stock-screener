@@ -62,7 +62,13 @@ st.markdown("""
    was te groot om te riskeren voor een puur cosmetische wijziging. */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-div[data-testid="stToolbar"] {visibility: hidden; height: 0%;}
+/* stToolbar NIET meer verbergen -- vermoedelijke oorzaak van een bug
+   waarbij het zijbalk-uitklap-pijltje (zichtbaar zodra de zijbalk is
+   ingeklapt) na het inklappen nergens meer te vinden was: dat pijltje
+   lijkt in dezelfde header-regio te leven als deze toolbar, en
+   'visibility:hidden; height:0%' op de HELE toolbar-container trok het
+   pijltje daar kennelijk in mee. Zelfde soort risico als bij de header
+   hierboven al werd vermeden -- nu ook hier consequent toegepast. */
 div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
 div[data-testid="stStatusWidget"] {visibility: hidden; height: 0%;}
 
