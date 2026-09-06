@@ -5094,83 +5094,109 @@ def render_portfolio():
             _flowing_section_header_html("Portfolio", "account_balance_wallet", is_first=True),
             unsafe_allow_html=True,
         )
-        with st.container(border=True):
-            total_value = sum(h.get("position_value") or 0 for h in holdings)
-            stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
-            cash_value_eur = database.get_cash_value(user_email)  # altijd opgeslagen in EUR
+        # --- Header: totale portfoliowaarde + toggles -- GEEN omlijnd
+        # kader meer (borderloze stijl, net als Today), 2 kolommen over de
+        # volle breedte (Streamlit's st.columns() stapelt dit al vanzelf op
+        # mobiel, geen extra CSS nodig). De positietabel verderop krijgt
+        # nog WEL een eigen st.container(border=True) -- die blijft
+        # voorlopig ongewijzigd, dat is de volgende restyling-stap. ---
+        total_value = sum(h.get("position_value") or 0 for h in holdings)
+        stored_currency = next((h.get("value_currency") for h in holdings if h.get("value_currency")), None)
+        cash_value_eur = database.get_cash_value(user_email)  # altijd opgeslagen in EUR
 
-            # 1 rij kolommen i.p.v. 2 gestapelde rijen (currency-selector
-            # apart bovenaan, Total value/acties eronder) -- dat gaf een
-            # leeg vak aan de kant zonder content in ELKE rij. Nu alles
-            # rechts (currency, toggle+knop) netjes onder elkaar in
-            # dezelfde kolom, naast Total value/Cash links.
-            overview_col1, overview_col2 = st.columns([2, 1])
-            with overview_col2:
-                display_currency = st.selectbox(
-                    "Display currency", ["EUR", "USD"], key="display_currency",
-                    label_visibility="collapsed", help="Display currency",
-                )
+        overview_col1, overview_col2 = st.columns([2, 1])
+        with overview_col2:
+            display_currency = st.selectbox(
+                "Display currency", ["EUR", "USD"], key="display_currency",
+                label_visibility="collapsed", help="Display currency",
+            )
 
-            if total_value > 0 and stored_currency != display_currency:
-                st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
+        if total_value > 0 and stored_currency != display_currency:
+            st.warning(f"Values currently shown are in {stored_currency}, not {display_currency}. Click 'Update portfolio value' to convert.")
 
-            with overview_col1:
-                if total_value > 0:
-                    shown_currency = display_currency if stored_currency == display_currency else stored_currency
-                    shown_symbol = "€" if shown_currency == "EUR" else "$"
-                    label_suffix = "" if stored_currency == display_currency else f" ({stored_currency})"
+        with overview_col1:
+            if total_value > 0:
+                shown_currency = display_currency if stored_currency == display_currency else stored_currency
+                shown_symbol = "€" if shown_currency == "EUR" else "$"
+                label_suffix = "" if stored_currency == display_currency else f" ({stored_currency})"
 
-                    # Cash stond vast in EUR getoond, ook als de weergave-
-                    # valuta USD was -- omrekenen naar dezelfde valuta als
-                    # Total portfolio value hierboven, consistent met hoe
-                    # de posities zelf ook omgerekend worden.
-                    if shown_currency == "EUR":
-                        cash_display_value, cash_symbol = cash_value_eur, "€"
-                    else:
-                        eur_to_shown_rate = get_fx_rate("EUR", shown_currency)
-                        if eur_to_shown_rate:
-                            cash_display_value, cash_symbol = cash_value_eur * eur_to_shown_rate, shown_symbol
-                        else:
-                            # FX-conversie mislukt (zeldzaam) -- toon liever
-                            # het correcte EUR-bedrag dan een fout $-bedrag.
-                            cash_display_value, cash_symbol = cash_value_eur, "€"
-
-                    total_day_change_html = ""
-                    if total_day_change_pct is not None:
-                        change_color = "#1FAE96" if total_day_change_pct >= 0 else "#E5484D"
-                        change_bg = "rgba(31,174,150,0.15)" if total_day_change_pct >= 0 else "rgba(229,72,77,0.15)"
-                        change_arrow = "&#9650;" if total_day_change_pct >= 0 else "&#9660;"
-                        change_sign = "+" if total_day_change_pct >= 0 else "-"
-                        total_day_change_html = (
-                            f'<div style="margin-top:2px;">'
-                            f'<span style="font-size:0.9rem; font-weight:700; color:{change_color};">'
-                            f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f}</span> '
-                            f'<span style="background:{change_bg}; color:{change_color}; font-weight:700; '
-                            f'font-size:0.8rem; padding:0.1rem 0.45rem; border-radius:10px;">'
-                            f'{total_day_change_pct:+.1f}% {change_arrow}</span>'
-                            f'</div>'
-                        )
-                    label_suffix_html = f'<span style="font-size:0.85rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
-                    st.markdown(
-                        f'<div style="display:flex; align-items:baseline; gap:0.6rem; flex-wrap:wrap;">'
-                        f'<div style="font-size:2.1rem; font-weight:700; color:#EAEDF1; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{shown_symbol}{total_value:,.0f}{label_suffix_html}</div>'
-                        f'<div style="font-size:0.85rem; color:#8992A3;">Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
-                        f'</div>'
-                        f'{total_day_change_html}',
-                        unsafe_allow_html=True,
-                    )
+                # Cash stond vast in EUR getoond, ook als de weergave-
+                # valuta USD was -- omrekenen naar dezelfde valuta als
+                # Total portfolio value hierboven, consistent met hoe
+                # de posities zelf ook omgerekend worden.
+                if shown_currency == "EUR":
+                    cash_display_value, cash_symbol = cash_value_eur, "€"
                 else:
-                    st.caption("Click 'Update portfolio value' to fetch current prices.")
-            with overview_col2:
-                toggle_col, button_col = st.columns([1, 1.3])
-                with toggle_col:
+                    eur_to_shown_rate = get_fx_rate("EUR", shown_currency)
+                    if eur_to_shown_rate:
+                        cash_display_value, cash_symbol = cash_value_eur * eur_to_shown_rate, shown_symbol
+                    else:
+                        # FX-conversie mislukt (zeldzaam) -- toon liever
+                        # het correcte EUR-bedrag dan een fout $-bedrag.
+                        cash_display_value, cash_symbol = cash_value_eur, "€"
+
+                # Dagrendement nu in de gedempte emerald/rose-tint (zelfde
+                # TODAY_POSITIVE_TEXT/TODAY_NEGATIVE_TEXT als Today) i.p.v.
+                # het felle neon-rood/groen, en zonder de zware pil-
+                # achtergrond -- gewoon platte, bold gekleurde tekst.
+                total_day_change_html = ""
+                if total_day_change_pct is not None:
+                    change_color = TODAY_POSITIVE_TEXT if total_day_change_pct >= 0 else TODAY_NEGATIVE_TEXT
+                    change_arrow = "&#9650;" if total_day_change_pct >= 0 else "&#9660;"
+                    change_sign = "+" if total_day_change_pct >= 0 else "-"
+                    total_day_change_html = (
+                        f'<div style="margin-top:8px; font-size:1rem; font-weight:700; color:{change_color}; '
+                        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
+                        f'{change_sign}{shown_symbol}{abs(total_day_change_value):,.0f} '
+                        f'{total_day_change_pct:+.1f}% {change_arrow}</div>'
+                    )
+                label_suffix_html = f'<span style="font-size:0.9rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
+                st.markdown(
+                    f'<div style="font-size:2.75rem; font-weight:800; color:#EAEDF1; font-family:\'Inter\', sans-serif !important; '
+                    f'font-variant-numeric: tabular-nums; line-height:1.1;">{shown_symbol}{total_value:,.0f}{label_suffix_html}</div>'
+                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:6px; font-family:\'Inter\', sans-serif !important;">'
+                    f'Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
+                    f'{total_day_change_html}',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("Click 'Update portfolio value' to fetch current prices.")
+
+        with overview_col2:
+            # Toggle + Update-knop rechts uitgelijnd, in de minimalistische
+            # stijl van de rest van de site: het toggle verliest z'n zware
+            # rand (transparant, alleen de actieve optie krijgt een zachte
+            # teal-achtergrond), en de Update-knop krijgt exact dezelfde
+            # subtiele teal-outline-stijl + padding als Today's refresh-knop.
+            st.markdown("<div style='height: 0.3rem'></div>", unsafe_allow_html=True)
+            _pf_toggle_key = "portfolio_view_mode_toggle_wrap"
+            _pf_update_key = "portfolio_update_btn_wrap"
+            st.markdown(
+                f'<style>'
+                f'.st-key-{_pf_toggle_key} div[data-testid="stSegmentedControl"] button {{ '
+                f'border:none !important; background:transparent !important; color:#8992A3 !important; '
+                f'font-weight:600 !important; font-size:0.82rem !important; }} '
+                f'.st-key-{_pf_toggle_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {{ '
+                f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
+                f'.st-key-{_pf_update_key} button {{ '
+                f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
+                f'color:#1FAE96 !important; font-weight:600 !important; padding:0.3rem 0.9rem !important; '
+                f'border-radius:6px !important; }} '
+                f'.st-key-{_pf_update_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
+            )
+            toggle_col, button_col = st.columns([1, 1.1])
+            with toggle_col:
+                with st.container(key=_pf_toggle_key):
                     portfolio_view_mode = st.segmented_control(
                         "View", options=["Daily", "All-time"], default="Daily",
                         key="portfolio_view_mode", label_visibility="collapsed",
                     )
-                    if portfolio_view_mode is None:
-                        portfolio_view_mode = "Daily"
-                with button_col:
+                if portfolio_view_mode is None:
+                    portfolio_view_mode = "Daily"
+            with button_col:
+                with st.container(key=_pf_update_key):
                     if st.button("Update", width="stretch", icon=":material/refresh:", help="Update portfolio value"):
                         with st.spinner("Fetching current prices and exchange rates..."):
                             success, message = refresh_portfolio_values(holdings, user_email, display_currency)
@@ -5179,6 +5205,8 @@ def render_portfolio():
                             st.rerun()
                         else:
                             st.warning(message)
+
+        with st.container(border=True):
 
             def _format_value(holding):
                 value = holding.get("position_value")
