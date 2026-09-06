@@ -2254,12 +2254,18 @@ def _week_agenda_html(buckets: dict) -> str:
         if items:
             items_html = "".join(
                 f'<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.5rem; '
-                f'font-size:0.68rem; color:#CBD5E1; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
+                f'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
                 f'<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>{text.upper()}</span></div>'
                 for _icon_html, text in items
             )
         else:
-            items_html = '<div style="margin-top:0.5rem; font-size:0.68rem; color:#8992A3;">&mdash;</div>'
+            # 'NO EVENTS' i.p.v. een kale '--' -- zelfde ALL-CAPS/bullet-stijl
+            # als een gevulde dag, zodat een lege dag niet visueel dood oogt.
+            items_html = (
+                '<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.5rem; '
+                'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
+                '<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>No events</span></div>'
+            )
 
         label_color = "#1FAE96" if is_today else "#8992A3"
         divider = "border-right:1px solid rgba(137,146,163,0.15); padding-right:1.5rem;" if i < 4 else ""
@@ -7484,9 +7490,19 @@ def render_today():
 
             st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
 
-            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-            st.caption("See the full signal lists under:")
-            st.page_link(discover_page, label="Discover")
+            # --- Top news / Market news -- borderloos gestyled via de eigen
+            # st.expander(key=...)-klasse (dezelfde, bevestigd betrouwbare
+            # .st-key-{key}-techniek als elders op de site), zodat rand en
+            # achtergrond exact matchen met de rest van de minimalistische
+            # pagina i.p.v. Streamlit's eigen, vaste expander-kader. ---
+            st.markdown(
+                '<style>'
+                '.st-key-top_news_for_you_expander, .st-key-market_news_expander { '
+                'border: none !important; background: transparent !important; '
+                'box-shadow: none !important; padding-left: 0 !important; padding-right: 0 !important; } '
+                '</style>',
+                unsafe_allow_html=True,
+            )
 
             # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
             # met Market news voelde dit als een lange wand van tekst ---
