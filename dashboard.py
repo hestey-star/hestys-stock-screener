@@ -6008,20 +6008,33 @@ def render_discover():
     # --- Niet-ingelogde dagelijkse e-mail-opt-in -- BOVENAAN de pagina,
     #     nog VOOR de hero-sectie, zodat het e-mailveld op mobiel ZONDER
     #     scrollen zichtbaar is (aanleiding: 137 unieke bezoekers, 0
-    #     opt-ins). De regio-keuze (timezone) wordt nu pas getoond NADAT
-    #     een e-mailadres is ingevuld -- minder initiele keuzestress bij
-    #     de eerste, cruciale actie. ALLEEN voor niet-ingelogde
-    #     bezoekers -- een ingelogde gebruiker beheert z'n e-mail-
-    #     voorkeuren al via Settings.
+    #     opt-ins). ALLEEN voor niet-ingelogde bezoekers -- een
+    #     ingelogde gebruiker beheert z'n e-mail-voorkeuren al via
+    #     Settings.
+    #
+    #     BELANGRIJKE LES: een eerdere versie toonde de regio-keuze pas
+    #     NA het invullen van een e-mailadres (progressieve onthulling).
+    #     Dat gaf een layout-verschuiving zodra je begon te typen, en
+    #     Streamlit behandelt een knop die van positie/context
+    #     verandert tussen 2 renders als een NIEUWE widget -- de eerste
+    #     klik op 'Activate' (die de regio liet verschijnen) telde
+    #     daardoor niet mee als indiening, en je moest een 2e keer
+    #     klikken. FIX: regio + knop staan nu in 1 vaste layout die
+    #     nooit verschuift, dus 1 klik volstaat altijd.
+    #
+    #     max-width toegevoegd -- zonder eigen breedte-begrenzing rekte
+    #     deze sectie op desktop over de volle, brede paginabreedte uit
+    #     (enorm gestrekt oogde), terwijl 't op mobiel al goed paste.
     if not current_user.is_logged_in:
         import database as _database_for_optin
 
         st.markdown(
             f"""
-            <div id="signup" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+            <div id="signup" style="scroll-margin-top: 80px; max-width: 480px; margin: 0.5rem auto 1rem auto;
+                        background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
                         border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
                         box-shadow: 0 0 24px rgba(31,174,150,0.12);
-                        padding: 1.1rem 1.25rem; margin: 0.5rem 0 1rem 0;">
+                        padding: 1.1rem 1.25rem;">
                 <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
                     {_icon_span("mail", size_px=14, color="#1FAE96")} Free daily signals
                 </div>
@@ -6033,19 +6046,21 @@ def render_discover():
             unsafe_allow_html=True,
         )
 
-        optin_email = st.text_input(
-            "Email address", placeholder="you@example.com",
-            key="discover_optin_email", label_visibility="collapsed",
-        )
-
-        # De regio-keuze verschijnt pas ZODRA er een e-mailadres is
-        # ingevuld (via session_state, na de rerun die text_input's
-        # eigen blur/enter-gedrag triggert) -- de gebruiker ziet 'm
-        # dus niet meteen bij binnenkomst. Standaard "EU" als iemand
-        # direct doorklikt zonder de regio te zien/aan te passen --
-        # aanpasbaar zodra 'm wel zichtbaar wordt.
-        optin_email_filled = bool(st.session_state.get("discover_optin_email", "").strip())
-        if optin_email_filled:
+        optin_form_wrap_key = "optin_form_wrapper"
+        try:
+            optin_form_ctx = st.container(key=optin_form_wrap_key)
+            st.markdown(
+                f'<style>.st-key-{optin_form_wrap_key} {{ max-width: 480px !important; '
+                f'margin: 0 auto !important; }}</style>',
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            optin_form_ctx = st.container()
+        with optin_form_ctx:
+            optin_email = st.text_input(
+                "Email address", placeholder="you@example.com",
+                key="discover_optin_email", label_visibility="collapsed",
+            )
             optin_region_col, optin_button_col = st.columns([1, 1])
             with optin_region_col:
                 optin_region = st.selectbox(
@@ -6055,9 +6070,6 @@ def render_discover():
                 )
             with optin_button_col:
                 optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
-        else:
-            optin_region = st.session_state.get("discover_optin_region", "EU")
-            optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
 
         if optin_submitted:
             if not optin_email or "@" not in optin_email:
