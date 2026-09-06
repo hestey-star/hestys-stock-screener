@@ -2331,15 +2331,14 @@ _STORY_DEFINITIONS = [
 
 def _portfolio_responsive_css() -> str:
     """
-    Gedeelde, responsieve 3-koloms-stylesheet voor zowel 'Your Portfolio
-    Today' als 'Portfolio Health & DCA Insights' -- 1x gedefinieerd
-    zodat beide secties 'm betrouwbaar kunnen gebruiken, ongeacht welke
-    van de twee als eerste rendert (bv. als daily_stats ontbreekt, mag
-    de Insights-sectie niet zonder deze CSS komen te zitten). Desktop:
-    3 gelijke kolommen met dunne verticale scheidslijnen. Mobiel
-    (<640px): gestapeld als 3 losse kaartjes (achtergrond + dunne rand)
-    i.p.v. kolommen naast elkaar, zodat ALL-CAPS-namen niet in de knel
-    komen op een smal scherm.
+    Responsieve stylesheet voor 'Your Portfolio Today' (Insights is
+    inmiddels een eigen, verticale lijst geworden en gebruikt dit niet
+    meer). Desktop: kolom 1 ('Your Portfolio Today' zelf) krijgt een
+    eigen, zachte achtergrondtegel (geen scheidslijn ernaast -- de
+    ademruimte komt uit de flex-gap) zodat 'ie duidelijk de belangrijkste
+    metric van de pagina is; kolom 2/3 (Best/Worst) blijven cleane
+    tekstkolommen, gescheiden door een dunne verticale lijn. Mobiel
+    (<640px): alle 3 gestapeld als losse kaartjes.
     """
     return (
         '<style>'
@@ -2347,11 +2346,14 @@ def _portfolio_responsive_css() -> str:
         '.hesty-portfolio-col { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); '
         'padding-right:1.75rem; } '
         '.hesty-portfolio-col-last { border-right:none !important; padding-right:0 !important; } '
+        '.hesty-portfolio-hero-col { flex:1; min-width:0; background:rgba(15,23,42,0.4); '
+        'border-radius:14px; padding:1.15rem 1.35rem; box-sizing:border-box; } '
         '@media (max-width:640px) { '
         '.hesty-portfolio-row { flex-direction:column; gap:0.75rem; } '
         '.hesty-portfolio-col { width:100%; box-sizing:border-box; border-right:none !important; '
         'padding-right:0 !important; background:rgba(137,146,163,0.04); '
         'border:1px solid rgba(148,163,184,0.15); border-radius:12px; padding:0.85rem 1rem; } '
+        '.hesty-portfolio-hero-col { width:100%; padding:1rem 1.15rem; } '
         '.hesty-portfolio-col-empty { display:none !important; } '
         '} '
         '</style>'
@@ -7356,13 +7358,13 @@ def render_today():
 
                     col1_html = (
                         f'<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
-                        f'<div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
+                        f'<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
                         f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Your Portfolio Today</div>'
-                        f'<div style="font-size:2.1rem; font-weight:800; color:{vs_yesterday_color}; margin-top:6px; '
+                        f'<div style="font-size:2.75rem; font-weight:800; color:{vs_yesterday_color}; margin-top:8px; '
                         f'line-height:1.1; font-family:\'Inter\', sans-serif !important; '
                         f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>'
                         f'<a href="/portfolio" target="_self" class="inline-link" '
-                        f'style="font-size:0.78rem; margin-top:14px;">View My Portfolio</a>'
+                        f'style="font-size:0.78rem; margin-top:16px;">View My Portfolio</a>'
                         f'</div>'
                     )
                     col2_html = _portfolio_mover_tile_html(
@@ -7376,7 +7378,7 @@ def render_today():
 
                     three_col_html = (
                         f'<div class="hesty-portfolio-row">'
-                        f'<div class="hesty-portfolio-col">{col1_html}</div>'
+                        f'<div class="hesty-portfolio-hero-col">{col1_html}</div>'
                         f'<div class="hesty-portfolio-col">{col2_html}</div>'
                         f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
                         f'</div>'
