@@ -2150,19 +2150,18 @@ def _session_cached(cache_key: str, ttl_seconds: int, compute_fn):
 
 def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     """
-    Herbalanceer-trigger als borderloze kolom-content -- zelfde visuele
-    taal als de Best/Worst-kolommen in 'Your Portfolio Today': klein
-    icoon+label bovenaan, dan het HOOFDCIJFER als visuele held, dan de
-    asset-naam in dezelfde ALL-CAPS-stijl, dan een korte context-regel.
+    Herbalanceer-trigger als 1 rij in een verticale lijst (Insights heeft
+    nu een EIGEN identiteit t.o.v. het 3-koloms portfolio-blok erboven --
+    geen kolommen/verticale scheidslijnen meer hier, alleen een dunne
+    HORIZONTALE lijn onder elke rij). Geen kaart-achtergrond.
 
-    Hoofdcijfer als regulier '%' (i.p.v. 'pp') met een expliciet
-    +/- teken en 'below/above target'-label eronder -- sneller te
-    scannen dan de eerdere, abstractere 'Xpp off target'-notatie: een
-    '-' + 'below target' laat in 1 oogopslag zien dat de positie
-    ACHTERLOOPT op het doelgewicht (buy-suggestie), '+' + 'above
-    target' dat 'ie ERBOVEN zit (sell-constatering).
+    Het hoofdcijfer is NEUTRAAL gekleurd (het site-brede lichte
+    tekst-wit, #EAEDF1) i.p.v. rood/groen -- dit is een doel-afwijking,
+    geen dagrendement, en zou anders verward kunnen worden met winst/
+    verlies. '-'/'below target' vs '+'/'above target' blijft het
+    onderscheid duidelijk maken.
     """
-    color = TODAY_POSITIVE_TEXT if suggestion["action"] == "buy" else TODAY_NEGATIVE_TEXT
+    color = "#EAEDF1"
     insight_id = f"rebalance-{suggestion['ticker']}"
     if suggestion["action"] == "buy":
         sign = "-"
@@ -2173,12 +2172,12 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
         target_label = "above target"
         context = f'{suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target.'
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; display:flex; '
-        f'flex-direction:column; align-items:flex-start; min-width:0;">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; '
+        f'padding:14px 28px 14px 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
-        f'{_icon_span("balance", size_px=13, color=color)}'
-        f'<span style="font-size:0.62rem; color:{color}; text-transform:uppercase; letter-spacing:0.1em; '
+        f'{_icon_span("balance", size_px=13, color="#8992A3")}'
+        f'<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
         f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Rebalance trigger</span>'
         f'</div>'
         f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
@@ -2186,24 +2185,26 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
         f'{sign}{abs(suggestion["diff_pct"]):.1f}%</div>'
         f'<div style="font-size:0.66rem; color:#8992A3; margin-top:2px; font-family:\'Inter\', sans-serif !important;">{target_label}</div>'
         f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:8px; '
-        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
-        f'max-width:100%;" title="{suggestion["naam"]}">{suggestion["naam"].upper()}</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">{context}</div>'
+        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word; '
+        f'max-width:640px;">{suggestion["naam"].upper()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important; '
+        f'max-width:640px;">{context}</div>'
         f'</div>'
     )
 
 
 def _watchlist_snack_card_html(alert: dict) -> str:
     """
-    'Watchlist-Snack' als borderloze kolom-content -- zelfde structuur
-    als _rebalance_trigger_card_html hierboven, andere accentkleur
-    (amber) om 'm visueel te onderscheiden van een koop/verkoop-signaal.
+    'Watchlist-Snack' als 1 rij in dezelfde verticale lijst -- zelfde
+    structuur als _rebalance_trigger_card_html hierboven. Amber blijft
+    hier de accentkleur (dit is een 'watch dit'-signaal, geen
+    rendementscijfer, dus geen verwarring met winst/verlies).
     """
     color = "#E8A93C"
     insight_id = f"watchlist-{alert['ticker']}"
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; display:flex; '
-        f'flex-direction:column; align-items:flex-start; min-width:0;">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; '
+        f'padding:14px 28px 14px 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
         f'{_icon_span("sell", size_px=13, color=color)}'
@@ -2214,9 +2215,10 @@ def _watchlist_snack_card_html(alert: dict) -> str:
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
         f'{alert["distance_pct"]:.1f}% to go</div>'
         f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
-        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
-        f'max-width:100%;" title="{alert["naam"]}">{alert["naam"].upper()}</div>'
-        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">'
+        f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word; '
+        f'max-width:640px;">{alert["naam"].upper()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important; '
+        f'max-width:640px;">'
         f'Now at {alert["current_price"]:.2f}, target {alert["alert_target_price"]:.2f}</div>'
         f'</div>'
     )
@@ -7421,24 +7423,14 @@ def render_today():
                         unsafe_allow_html=True,
                     )
 
-                    # Altijd 3 kolommen opbouwen, ook als er minder dan 3
-                    # insights zijn -- op desktop behoudt een lege kolom
-                    # gewoon de structuur (en de scheidslijn), zoals eerder
-                    # gevraagd; op mobiel wordt een lege kolom verborgen
-                    # (een leeg omlijnd kaartje zou daar raar ogen).
-                    insight_cols = []
-                    for i in range(3):
-                        content = health_cards_html[i] if i < len(health_cards_html) else ""
-                        col_classes = "hesty-portfolio-col"
-                        if i == 2:
-                            col_classes += " hesty-portfolio-col-last"
-                        if not content:
-                            col_classes += " hesty-portfolio-col-empty"
-                        insight_cols.append(f'<div class="{col_classes}">{content}</div>')
-                    st.markdown(
-                        f'<div class="hesty-portfolio-row">{"".join(insight_cols)}</div>',
-                        unsafe_allow_html=True,
-                    )
+                    # Bewuste breuk met de 3-koloms-layout van het portfolio-
+                    # blok hierboven -- Insights is nu een simpele, verticale
+                    # lijst (elke insight = 1 rij met een dunne HORIZONTALE
+                    # lijn eronder, geen kaart-achtergrond, geen verticale
+                    # scheidslijnen) i.p.v. dezelfde 3-koloms-look, zodat het
+                    # niet langer aanvoelt als 1 doorlopend vak met het blok
+                    # erboven.
+                    st.markdown("".join(health_cards_html), unsafe_allow_html=True)
                     _render_insight_dismiss_autohide_script()
 
             # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
