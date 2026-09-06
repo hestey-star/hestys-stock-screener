@@ -1896,49 +1896,20 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     )
 
 
-# Bekende financiele afkortingen die in hoofdletters MOETEN blijven staan
-# bij het titel-casen van een (vaak volledig-hoofdletter-broker-)naam --
-# Python's kale .title()/CSS' text-transform:capitalize verbasteren
-# 'ETF' anders tot 'Etf', wat onprofessioneel oogt.
-_FINANCE_NAME_ABBREVIATIONS = {
-    "ETF", "ETC", "ETN", "USD", "EUR", "GBP", "CHF", "UCITS", "INC", "CORP",
-    "LTD", "PLC", "NV", "SA", "AG", "SE", "CO", "REIT", "ADR", "NA", "SPA", "AS",
-}
-
-
-def _smart_asset_title_case(name: str) -> str:
-    """
-    Titel-cased een asset-naam, MAAR houdt bekende financiele afkortingen
-    (ETF, USD, UCITS, INC, ...) in hoofdletters -- i.p.v. simpelweg
-    .lower() + CSS text-transform:capitalize (dat brak 'ETF' naar 'Etf').
-    Interpunctie aan een woord vast (bv. 'INC.') wordt apart gehouden,
-    zodat de afkortingen-check er nog steeds op matcht.
-    """
-    words = name.split(" ")
-    result = []
-    for word in words:
-        core = word.strip(".,")
-        suffix = word[len(core):]
-        if core.upper() in _FINANCE_NAME_ABBREVIATIONS:
-            result.append(core.upper() + suffix)
-        else:
-            result.append(core.capitalize() + suffix)
-    return " ".join(result)
-
-
 def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct: float, weight_pct: float, color: str) -> str:
     """
     Best/Worst-kolom voor 'Your Portfolio Today'. GEEN eigen kaart/
-    achtergrond/rand meer -- dat oogde als 2 zware, logge blokken met
-    te veel lege ruimte. Dit is nu pure, lichte content binnen een
-    kolom; de scheiding tussen Best en Worst komt van 1 dunne
-    verticale lijn op de buitenste flex-container (zie de aanroep in
-    render_today()), niet van 2 losse omlijnde kaarten.
+    achtergrond/rand meer -- pure, lichte content binnen een kolom; de
+    scheiding tussen de kolommen komt van dunne verticale lijnen op de
+    buitenste 3-koloms flex-container (zie de aanroep in render_today()),
+    niet van losse omlijnde kaarten.
 
-    align-items:flex-start op de kolom zelf zorgt dat beide kolommen
-    bovenaan uitlijnen, ongeacht tekstlengte van de asset-naam.
+    Asset-naam ALTIJD in hoofdletters (expliciete keuze -- consistente,
+    strakke ALL-CAPS-uitstraling i.p.v. titel-casing), groter en in een
+    lichter grijs (#CBD5E1) dan de overige metadata, voor betere
+    leesbaarheid. align-items:flex-start op de kolom zelf zorgt dat alle
+    3 kolommen bovenaan uitlijnen, ongeacht tekstlengte.
     """
-    display_name = _smart_asset_title_case(asset_name)
     return (
         f'<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
@@ -1948,9 +1919,10 @@ def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct:
         f'</div>'
         f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:5px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">{pct:+.1f}%</div>'
-        f'<div style="font-size:0.72rem; color:#8992A3; margin-top:5px; font-family:\'Inter\', sans-serif !important; '
-        f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;" title="{asset_name}">{display_name}</div>'
-        f'<div style="font-size:0.65rem; color:#8992A3; margin-top:2px; font-family:\'Inter\', sans-serif !important;">Weight: {weight_pct:.1f}%</div>'
+        f'<div style="font-size:0.88rem; color:#CBD5E1; font-weight:500; margin-top:6px; '
+        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
+        f'max-width:100%;" title="{asset_name}">{asset_name.upper()}</div>'
+        f'<div style="font-size:0.66rem; color:#8992A3; margin-top:4px; font-family:\'Inter\', sans-serif !important;">Weight: {weight_pct:.1f}%</div>'
         f'</div>'
     )
 
@@ -7081,11 +7053,16 @@ def render_today():
                             database.dismiss_watchlist_alert(alert["id"], user_email)
                             st.rerun()
 
-            # --- Your portfolio today -- geen zwaar omlijnd kader meer, maar
-            # Discover's borderloze 'flowing section'-stijl (icoon + titel,
-            # dunne scheidingslijn erboven i.p.v. een dikke omlijning). Best/
-            # Worst staan nu naast elkaar als 2 lichte kolommen, gescheiden
-            # door 1 dunne verticale lijn i.p.v. 2 losse, zware kaarten. ---
+            # --- Your portfolio today -- 3 gelijke, borderloze kolommen naast
+            # elkaar (Portfolio-rendement / Best today / Worst today), elk
+            # gescheiden door 1 dunne verticale lijn. Alles als 1 zelfstandig
+            # HTML-blok opgebouwd (i.p.v. st.columns() + CSS-nesting erop) --
+            # zelfde 'eigen HTML'-aanpak als de streamlit_css_lessen.md
+            # aanraadt voor precieze controle zonder tegen Streamlit's eigen,
+            # onbekende DOM-lagen te hoeven vechten. De 'View My Portfolio'-
+            # link zit daarom ook als een gewone <a> (.inline-link-klasse,
+            # zelfde patroon als elders op de site) in kolom 1 zelf, i.p.v.
+            # een losse st.page_link()-widget eronder. ---
             if holdings:
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
@@ -7098,34 +7075,46 @@ def render_today():
                 if daily_stats:
                     vs_yesterday_pct = daily_stats["portfolio_change_pct"]
                     vs_yesterday_color = TODAY_POSITIVE_TEXT if vs_yesterday_pct >= 0 else TODAY_NEGATIVE_TEXT
-                    st.markdown(
-                        f'<div style="font-size:1.9rem; font-weight:800; color:{vs_yesterday_color}; '
-                        f'margin:0.2rem 0 0.9rem 0; line-height:1.1; font-family:\'Inter\', sans-serif !important; '
-                        f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>',
-                        unsafe_allow_html=True,
+
+                    col1_html = (
+                        f'<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
+                        f'<div style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
+                        f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Your Portfolio Today</div>'
+                        f'<div style="font-size:2.1rem; font-weight:800; color:{vs_yesterday_color}; margin-top:6px; '
+                        f'line-height:1.1; font-family:\'Inter\', sans-serif !important; '
+                        f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>'
+                        f'<a href="/portfolio" target="_self" class="inline-link" '
+                        f'style="font-size:0.78rem; margin-top:14px;">View My Portfolio</a>'
+                        f'</div>'
+                    )
+                    col2_html = _portfolio_mover_tile_html(
+                        "Best today", "trending_up", daily_stats["best_performer"], daily_stats["best_change_pct"],
+                        daily_stats["best_weight_pct"], TODAY_POSITIVE_TEXT,
+                    )
+                    col3_html = _portfolio_mover_tile_html(
+                        "Worst today", "trending_down", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
+                        daily_stats["worst_weight_pct"], TODAY_NEGATIVE_TEXT,
                     )
 
-                    mover_row_html = (
-                        f'<div style="display:flex; align-items:flex-start; gap:1.5rem;">'
-                        f'<div style="flex:1; min-width:0; padding-right:1.5rem; '
-                        f'border-right:1px solid rgba(137,146,163,0.15);">'
-                        f'{_portfolio_mover_tile_html("Best today", "trending_up", daily_stats["best_performer"], daily_stats["best_change_pct"], daily_stats["best_weight_pct"], TODAY_POSITIVE_TEXT)}'
-                        f'</div>'
-                        f'<div style="flex:1; min-width:0;">'
-                        f'{_portfolio_mover_tile_html("Worst today", "trending_down", daily_stats["worst_performer"], daily_stats["worst_change_pct"], daily_stats["worst_weight_pct"], TODAY_NEGATIVE_TEXT)}'
-                        f'</div>'
+                    three_col_html = (
+                        f'<div style="display:flex; align-items:flex-start; gap:1.75rem;">'
+                        f'<div style="flex:1; min-width:0; padding-right:1.75rem; '
+                        f'border-right:1px solid rgba(137,146,163,0.15);">{col1_html}</div>'
+                        f'<div style="flex:1; min-width:0; padding-right:1.75rem; '
+                        f'border-right:1px solid rgba(137,146,163,0.15);">{col2_html}</div>'
+                        f'<div style="flex:1; min-width:0;">{col3_html}</div>'
                         f'</div>'
                     )
-                    st.markdown(mover_row_html, unsafe_allow_html=True)
+                    st.markdown(three_col_html, unsafe_allow_html=True)
                 else:
-                    mcol1, mcol2 = st.columns(2, gap="medium")
+                    mcol1, mcol2, mcol3 = st.columns(3, gap="medium")
                     with mcol1:
-                        st.metric("Best today", "n/a")
+                        st.metric("Your Portfolio Today", "n/a")
+                        st.page_link(portfolio_page, label="View My Portfolio")
                     with mcol2:
+                        st.metric("Best today", "n/a")
+                    with mcol3:
                         st.metric("Worst today", "n/a")
-
-                st.markdown("<div style='height: 0.6rem'></div>", unsafe_allow_html=True)
-                st.page_link(portfolio_page, label="View My Portfolio")
 
             # --- Portfolio Health & DCA Insights (nieuw) -- helpt bij WAAR je
             # je volgende DCA-aankoop op moet richten, i.p.v. alleen te laten
