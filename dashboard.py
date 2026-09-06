@@ -39,6 +39,7 @@ import yfinance as yf
 
 from emailer import send_email
 import database
+import radar_data
 
 st.set_page_config(page_title="Hesty's", page_icon="◆", layout="wide")
 
@@ -2224,23 +2225,6 @@ def _watchlist_snack_card_html(alert: dict) -> str:
     )
 
 
-def get_macro_events_for_week(max_items: int = 10) -> list:
-    """
-    Geeft alle macro-events terug die vallen in de HUIDIGE kalenderweek
-    (maandag t/m vrijdag) -- i.p.v. get_todays_macro_events()'s 'alleen
-    vandaag'-venster. Gebruikt voor de Week-Agenda op Today.
-    """
-    today = datetime.now().date()
-    monday = today - timedelta(days=today.weekday())
-    friday = monday + timedelta(days=4)
-    events = [
-        e for e in MACRO_EVENTS_2026
-        if monday <= datetime.strptime(e["date"], "%Y-%m-%d").date() <= friday
-    ]
-    events.sort(key=lambda e: e["date"])
-    return events[:max_items]
-
-
 def _bucket_events_by_weekday(dated_items: list) -> dict:
     """
     Verdeelt een lijst van (date, icon_html, text)-tuples over Ma t/m Vr
@@ -2546,30 +2530,6 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         )
 
     return mobile_html + desktop_html
-
-
-def _radar_row_html(icon: str, text: str) -> str:
-    """
-    Rendert 1 compacte 'Today's radar'-gebeurtenis-regel -- i.p.v. losse
-    st.markdown()-aanroepen per bullet (voelde als een lange, rommelige
-    wand van gemengde emoji-bullets, vooral op mobiel). 'text' mag HTML
-    bevatten (bv. <b>...</b> voor nadruk), wordt zo doorgegeven.
-    """
-    return (
-        f'<div style="display:flex; align-items:flex-start; gap:0.6rem; padding:7px 0; '
-        f'border-bottom:1px solid rgba(137,146,163,0.12);">'
-        f'<span style="font-size:1rem; flex-shrink:0; line-height:1.4;">{icon}</span>'
-        f'<span style="font-size:0.88rem; color:#EAEDF1; line-height:1.4;">{text}</span>'
-        f'</div>'
-    )
-
-
-def _render_radar_rows(rows_html: list) -> None:
-    """Rendert alle Today's radar-regels als 1 samenhangend blok i.p.v. losse st.markdown-aanroepen per regel."""
-    if not rows_html:
-        return
-    combined = "".join(rows_html)
-    st.markdown(f'<div>{combined}</div>', unsafe_allow_html=True)
 
 
 def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_WINDOW_DAYS) -> list:
@@ -3203,7 +3163,7 @@ def get_earnings_surprises_from_signals(max_items: int = 5, max_days_old: int = 
 # aangekondigde macro-events (FOMC + ECB-rentebesluiten). Bron: officiële
 # Fed/ECB-kalenders. Bijwerken zodra een nieuw jaar bekend wordt gemaakt
 # (meestal 1x per jaar, eind vorig jaar/begin dit jaar).
-from macro_events import MACRO_EVENTS_2026, get_todays_macro_events
+from macro_events import get_todays_macro_events
 
 
 def get_upcoming_ex_dividend_dates(holdings: list, market_data: dict, days_ahead: int = 5, max_items: int = 3) -> list:
@@ -7230,175 +7190,40 @@ def render_today():
                 with st.container(key=radar_refresh_key):
                     if st.button("", icon=":material/refresh:", key=f"{radar_refresh_key}_click", help="Refresh data"):
                         st.session_state.pop(f"today_radar_bundle_{user_email}", None)
+                        with st.spinner("Refreshing daily radar..."):
+                            fresh_bundle = radar_data.compute_daily_radar_bundle(
+                                user_email, holdings, watchlist_items, market_data,
+                            )
+                            database.set_daily_radar_cache(user_email, fresh_bundle)
                         st.rerun()
 
-            # 3 aparte lijsten i.p.v. 1 platte 'radar_rows' -- elke Story
-            # toont z'n eigen deel van dezelfde onderliggende data.
-            def _compute_radar_bundle():
-                """
-                Verzamelt ALLE data voor de 3 Stories + de Week-Agenda in 1x --
-                inclusief de dure, live netwerk-aanroepen (sector/theme-extremen,
-                trend-flips per holding). Wordt via _session_cached() aangeroepen
-                zodat dit NIET opnieuw draait bij elke Streamlit-rerun (bv. een
-                klik op een Story-cirkel) -- dat was de kern van de trage laadtijd.
-                """
-                day_rows = []
-                screener_rows = []
-                macro_rows = []
+            # --- Data ophalen: eerst de achtergrond-berekende cache
+            # (database.get_daily_radar_cache(), elke 6 uur ververst door
+            # daily_radar_batch.py via GitHub Actions), pas als die
+            # ontbreekt of te oud is (>7 uur -- iets ruimer dan de 6-uurs
+            # cron, voorkomt onnodige live fallbacks door kleine planning-
+            # vertragingen) een LIVE herberekening via dezelfde
+            # radar_data.compute_daily_radar_bundle() die het batch-script
+            # ook gebruikt (geen aparte kopie van de logica hier -- 1
+            # bron van waarheid). Binnen 1 sessie bovendien nog een keer
+            # met _session_cached() omwikkeld, zodat een Streamlit-rerun
+            # (bv. een ander widget elders op de pagina) niet zelfs de
+            # databasequery hoeft te herhalen.
+            def _load_radar_bundle():
+                cached = database.get_daily_radar_cache(user_email)
+                if cached and cached.get("computed_at"):
+                    computed_at = datetime.fromisoformat(cached["computed_at"])
+                    if computed_at.tzinfo is None:
+                        computed_at = computed_at.replace(tzinfo=timezone.utc)
+                    age_hours = (datetime.now(timezone.utc) - computed_at).total_seconds() / 3600
+                    if age_hours < 7:
+                        return cached["data"]
+                return radar_data.compute_daily_radar_bundle(user_email, holdings, watchlist_items, market_data)
 
-                macro_events = get_todays_macro_events(max_items=3)
-                with st.spinner("Checking today's radar..."):
-                    earnings_today = get_todays_portfolio_earnings(tracked_items, market_data, max_items=3)
-                todays_events = macro_events + [
-                    {"name": f"{e['naam']} ({e['ticker']}) reports earnings today"} for e in earnings_today
-                ]
-                for event in todays_events[:3]:
-                    time_part = f" ({event['time']})" if "time" in event else ""
-                    day_rows.append(_radar_row_html(_icon_span("event", size_px=15, color="#8992A3"), f"{event['name']}{time_part}"))
-
-                # Aankomende earnings deze week -- niet alleen vandaag, ook een
-                # heads-up ervoor, zodat je niet pas op de dag zelf verrast wordt.
-                upcoming_earnings = get_upcoming_portfolio_earnings(tracked_items, market_data, days_ahead=5, max_items=3)
-                for e in upcoming_earnings:
-                    day_word = "tomorrow" if e["days_until"] == 1 else f"in {e['days_until']} days"
-                    day_rows.append(_radar_row_html(
-                        _icon_span("calendar_month", size_px=15, color="#8992A3"),
-                        f"<b>{e['naam']}</b> ({e['ticker']}) reports earnings {day_word} ({e['earnings_date']}).",
-                    ))
-
-                # Concentratie-waarschuwing -- alleen tonen als je eigen doel-grens
-                # daadwerkelijk overschreden wordt (geen ruis op normale dagen).
-                if holdings:
-                    risk_profile = database.get_risk_profile(user_email)
-                    concentration_alert = get_concentration_alert(holdings, risk_profile["max_position_pct"])
-                    if concentration_alert:
-                        day_rows.append(_radar_row_html(_icon_span("balance", size_px=15, color="#8992A3"), concentration_alert))
-
-                # Aankomende ex-dividend-data voor je HUIDIGE posities.
-                upcoming_ex_div = get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3)
-                for d in upcoming_ex_div:
-                    day_word = "today" if d["days_until"] == 0 else ("tomorrow" if d["days_until"] == 1 else f"in {d['days_until']} days")
-                    day_rows.append(_radar_row_html(
-                        _icon_span("payments", size_px=15, color="#8992A3"),
-                        f"<b>{d['naam']}</b> goes ex-dividend {day_word} ({d['ex_div_date']}).",
-                    ))
-
-                # 52-weken-record -- een leuk, opvallend signaal als een van je
-                # posities vandaag een nieuwe hoogte/laagte raakt.
-                records_52wk = get_52_week_records(holdings, market_data, max_items=3) if holdings else []
-                for r in records_52wk:
-                    icon_name = "trending_up" if r["type"] == "high" else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if r["type"] == "high" else TODAY_NEGATIVE_TEXT
-                    label = "new 52-week high" if r["type"] == "high" else "new 52-week low"
-                    day_rows.append(_radar_row_html(_icon_span(icon_name, size_px=15, color=icon_color), f"<b>{r['naam']}</b> ({r['ticker']}) just hit a {label}."))
-
-                # Deep-dive verkoop-triggers (prijs of datum) die bereikt zijn --
-                # ingesteld op een rustig moment, geen actie nodig behalve ernaar kijken.
-                deep_dive_triggers = get_deep_dive_triggers_hit(user_email, max_items=3)
-                for t in deep_dive_triggers:
-                    day_rows.append(_radar_row_html(_icon_span("notifications", size_px=15, color="#8992A3"), f"<b>{t['naam']}</b> ({t['ticker']}) {t['detail']}."))
-
-                weekly_scan_date = get_file_last_commit_date("supertrend_signals.csv")
-                last_seen_weekly = database.get_last_seen_weekly_signals_date(user_email)
-                weekly_is_new = weekly_scan_date is not None and weekly_scan_date != last_seen_weekly
-                if weekly_is_new:
-                    database.set_last_seen_weekly_signals_date(user_email, weekly_scan_date)
-
-                opportunities = build_opportunities_today(holdings, watchlist_items, include_weekly=weekly_is_new)
-                weekly_part = f", {opportunities['weekly_signals']} weekly" if weekly_is_new else ""
-                opportunities["weekly_part"] = weekly_part
-
-                tracked_tickers = {item["ticker"] for item in tracked_items}
-
-                # Persoonlijke earnings-surprises: rechtstreeks via yfinance
-                # (get_recent_earnings_surprises_for_tracked_items) i.p.v.
-                # de supertrend-signalen-CSV -- werkt zo voor ELKE gevolgde
-                # ticker, ongeacht of 'ie toevallig ook een signaal is
-                # (de oude aanpak miste een verrassing als de ticker net
-                # niet aan de signaal-criteria voldeed).
-                personal_surprises = get_recent_earnings_surprises_for_tracked_items(
-                    tracked_items, market_data, max_days_old=7, max_items=3,
-                )
-                for s in personal_surprises:
-                    icon_name = "trending_up" if s["beat"] else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if s["beat"] else TODAY_NEGATIVE_TEXT
-                    screener_rows.append(_radar_row_html(
-                        _icon_span(icon_name, size_px=15, color=icon_color),
-                        f"<b>{s['naam']}</b> ({s['ticker']}): {s['surprise_pct']:+.1f}% earnings surprise ({s['earnings_date']})",
-                    ))
-
-                # Markt-brede verrassingen (NIET in je eigen portfolio/watchlist) --
-                # strenger venster (1 dag i.p.v. 7), want minder persoonlijk relevant,
-                # maar toch de moeite waard om even te vermelden. Blijft via de
-                # supertrend-signalen-CSV (niet elke marktticker is live te
-                # bevragen zonder de pagina traag te maken).
-                def _is_recent_earnings(earnings_date_str, max_days=1):
-                    try:
-                        earnings_date = pd.to_datetime(earnings_date_str).date()
-                        days_since = (datetime.now().date() - earnings_date).days
-                        return 0 <= days_since <= max_days
-                    except Exception:
-                        return False
-
-                all_recent_surprises = get_earnings_surprises_from_signals(max_items=50)
-                market_wide_surprises = [
-                    s for s in all_recent_surprises
-                    if s["ticker"] not in tracked_tickers and _is_recent_earnings(s["earnings_date"], max_days=1)
-                ]
-                for s in market_wide_surprises[:2]:
-                    icon_name = "trending_up" if s["earnings_beat"] else "trending_down"
-                    icon_color = TODAY_POSITIVE_TEXT if s["earnings_beat"] else TODAY_NEGATIVE_TEXT
-                    macro_rows.append(_radar_row_html(
-                        _icon_span(icon_name, size_px=15, color=icon_color),
-                        f"Also worth noting (not in your portfolio): "
-                        f"<b>{s['ticker']}</b> {s['earnings_surprise_pct']:+.1f}% surprise ({s['earnings_date']})"
-                    ))
-
-                # Sector/theme-drempel-meldingen -- een extreme 1-maands-beweging
-                # kan een koop-/verkoopmoment zijn.
-                with st.spinner("Checking for sector/theme extremes..."):
-                    threshold_alerts = get_sector_theme_threshold_alerts()
-                for alert in threshold_alerts[:3]:
-                    move_emoji = "🔥" if alert["direction"] == "up" else "🥶"
-                    extreme_marker = " (extreme move!)" if alert["level"] == "extreme" else ""
-                    region_suffix = f" ({alert['region']})" if alert.get("region") else ""
-                    kind_label = "sector" if alert["kind"] == "sector" else "theme"
-                    macro_rows.append(_radar_row_html(
-                        move_emoji,
-                        f"<b>{alert['name']}</b>{region_suffix} ({kind_label}) is "
-                        f"{alert['pct']:+.1f}% this month{extreme_marker}"
-                    ))
-
-                if holdings:
-                    weekly_scan_recent_date = get_file_last_commit_date("supertrend_signals.csv")
-                    weekly_scan_within_days = (
-                        weekly_scan_recent_date is not None
-                        and (datetime.now().date() - datetime.strptime(weekly_scan_recent_date, "%Y-%m-%d").date()).days <= 3
-                    )
-                    if weekly_scan_within_days:
-                        from portfolio_watch import check_holding
-                        # Let op: 'recent_gewijzigd' uit portfolio_watch.py zelf is een
-                        # WEKELIJKSE check (2 weken) -- bedoeld voor de wekelijkse mail.
-                        # Hier op de site tonen we een flip specifiek 2 KALENDERDAGEN,
-                        # berekend op basis van de exacte flip-datum ('sinds').
-                        FLIP_VISIBLE_DAYS_ON_TODAY = 2
-                        today_date = datetime.now().date()
-                        with st.spinner("Checking for trend flips..."):
-                            flipped = []
-                            for h in holdings:
-                                result = check_holding(h["naam"], h["ticker"])
-                                if result and result.get("sinds"):
-                                    days_since_flip = (today_date - result["sinds"]).days
-                                    if days_since_flip <= FLIP_VISIBLE_DAYS_ON_TODAY:
-                                        flipped.append(result)
-                        for f in flipped[:3]:
-                            emoji = "🟢" if f["status"] == "BULLISH" else "🔴"
-                            screener_rows.append(_radar_row_html(emoji, f"<b>{f['naam']}</b> just flipped to {f['status']}"))
-                return (day_rows, screener_rows, macro_rows, earnings_today, upcoming_earnings, upcoming_ex_div, opportunities)
-
-            day_rows, screener_rows, macro_rows, earnings_today, upcoming_earnings, upcoming_ex_div, opportunities = (
-                _session_cached(f"today_radar_bundle_{user_email}", 300, _compute_radar_bundle)
-            )
+            radar_bundle = _session_cached(f"today_radar_bundle_{user_email}", 300, _load_radar_bundle)
+            day_items = radar_bundle["day_items"]
+            macro_items = radar_bundle["macro_items"]
+            opportunities = radar_bundle["opportunities"]
 
             # --- Today's Insights Summary -- vervangt de klikbare Stories-
             # cirkels door direct scanbare, platte tekst: dezelfde 3
@@ -7406,9 +7231,9 @@ def render_today():
             # catalysts) als voorheen, nu meteen zichtbaar i.p.v. achter een
             # klik verstopt. ---
             summary_rows = [
-                ("✓", "DAILY SUMMARY", f"{len(day_rows)} item(s) on your radar today."),
-                ("🔍", "SCREENER HITS", f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners."),
-                ("⚡", "MACRO CATALYST", f"{len(macro_rows)} key global market movement(s) detected today."),
+                ("\u2713", "DAILY SUMMARY", f"{len(day_items)} item(s) on your radar today."),
+                ("\U0001F50D", "SCREENER HITS", f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners."),
+                ("\u26A1", "MACRO CATALYST", f"{len(macro_items)} key global market movement(s) detected today."),
             ]
             st.markdown(
                 "".join(
@@ -7425,24 +7250,21 @@ def render_today():
                 unsafe_allow_html=True,
             )
 
-            st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
+            st.markdown("<div style=\'height: 0.9rem\'></div>", unsafe_allow_html=True)
 
-            # --- Horizontale Week-Agenda (Ma t/m Vr) -- dezelfde soort
-            # catalysts als hierboven, nu gebundeld PER DAG i.p.v. als
-            # losse platte regels. ---
-            dated_agenda_items = []
-            for me in get_macro_events_for_week(max_items=10):
-                me_date = datetime.strptime(me["date"], "%Y-%m-%d").date()
-                time_part = f" ({me['time']})" if "time" in me else ""
-                dated_agenda_items.append((me_date, _icon_span("event", size_px=13, color="#8992A3"), f"{me['name']}{time_part}"))
-            for e in earnings_today:
-                dated_agenda_items.append((datetime.now().date(), _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
-            for e in upcoming_earnings:
-                e_date = datetime.now().date() + timedelta(days=e["days_until"])
-                dated_agenda_items.append((e_date, _icon_span("calendar_month", size_px=13, color="#8992A3"), f"<b>{e['naam']}</b> earnings"))
-            for d in upcoming_ex_div:
-                d_date = datetime.now().date() + timedelta(days=d["days_until"])
-                dated_agenda_items.append((d_date, _icon_span("payments", size_px=13, color="#8992A3"), f"<b>{d['naam']}</b> ex-dividend"))
+            # --- Horizontale Week-Agenda (Ma t/m Vr) -- rauwe, gedateerde
+            # events komen al kant-en-klare uit de radar-bundel (batch of
+            # live, zelfde vorm); hier alleen omzetten naar de (datum,
+            # icoon-HTML, tekst)-tuples die _bucket_events_by_weekday()
+            # verwacht. ---
+            dated_agenda_items = [
+                (
+                    datetime.strptime(d["date"], "%Y-%m-%d").date(),
+                    _icon_span(d["icon"], size_px=13, color="#8992A3"),
+                    d["text"],
+                )
+                for d in radar_bundle["dated_agenda_items"]
+            ]
 
             st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
 

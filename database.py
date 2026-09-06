@@ -863,6 +863,43 @@ def upsert_ticker_market_data(rows: list) -> None:
         client.table("ticker_market_data").upsert(row_with_timestamp, on_conflict="ticker").execute()
 
 
+def get_daily_radar_cache(user_email: str) -> dict | None:
+    """
+    Geeft de achtergrond-berekende Daily Radar-bundel voor deze gebruiker
+    terug (data + computed_at), of None als er nog nooit een cache is
+    weggeschreven (net aangemeld, of de batch heeft deze gebruiker nog
+    niet bereikt) -- de aanroeper valt dan zelf terug op een live
+    berekening. Gevuld door daily_radar_batch.py (elke 6 uur via GitHub
+    Actions) EN door dashboard.py's eigen 'Refresh data'-knop (schrijft
+    een verse live-berekening meteen terug, zodat een volgende page-load
+    er ook van profiteert, niet alleen de huidige sessie).
+    """
+    client = get_supabase_client()
+    response = (
+        client.table("user_daily_radar_cache")
+        .select("data, computed_at")
+        .eq("user_email", hash_email(user_email))
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+    return None
+
+
+def set_daily_radar_cache(user_email: str, data: dict) -> None:
+    """
+    Schrijft (of werkt bij) de Daily Radar-bundel voor deze gebruiker.
+    'data' moet JSON-serialiseerbaar zijn (platte dicts/lists/strings --
+    zie radar_data.compute_daily_radar_bundle()'s output).
+    """
+    client = get_supabase_client()
+    client.table("user_daily_radar_cache").upsert({
+        "user_email": hash_email(user_email),
+        "data": data,
+        "computed_at": datetime.now().isoformat(),
+    }, on_conflict="user_email").execute()
+
+
 def get_roic_trend_history(tickers: list) -> dict:
     """
     Haalt de 'vorige-week'-stand (ROIC-trend + fair-value-bucket) op voor

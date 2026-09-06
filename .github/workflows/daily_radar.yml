@@ -1,0 +1,34 @@
+name: Daily Radar cache (elke 6 uur)
+
+on:
+  schedule:
+    # Elke 6 uur, BEWUST niet op :00 -- zelfde reden als daily.yml: het
+    # hele uur is het drukste moment op heel GitHub Actions, een paar
+    # minuten ernaast verkleint de kans op een vertraagde/overgeslagen run.
+    # 4 vaste tijdstippen, 6 uur uit elkaar, dekt alle tijdzones redelijk
+    # (elke gebruiker is dus hooguit ~6 uur van een verse cache verwijderd).
+    - cron: "13 1,7,13,19 * * *"
+  workflow_dispatch: {}  # handmatig te triggeren vanuit de Actions-tab, voor een directe test
+
+jobs:
+  refresh-daily-radar-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # get_file_last_commit_date() heeft de git-geschiedenis nodig
+
+      - name: Python installeren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies installeren
+        run: pip install -r requirements.txt
+
+      - name: Daily Radar-cache verversen voor alle gebruikers
+        run: python daily_radar_batch.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
