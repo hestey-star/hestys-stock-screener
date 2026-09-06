@@ -2264,12 +2264,14 @@ def _bucket_events_by_weekday(dated_items: list) -> dict:
 def _week_agenda_html(buckets: dict) -> str:
     """
     Rendert de Week-Agenda: 5 gelijke, borderloze kolommen (Ma t/m Vr)
-    naast elkaar op desktop, met dunne verticale scheidslijnen. Op
-    mobiel (<640px) stapelt de agenda verticaal -- 1 dag per rij met
-    dunne HORIZONTALE scheidslijnen i.p.v. 5 kolommen die op een smal
-    scherm te krap/onleesbaar zouden worden. Via een vaste CSS-klasse +
-    media query (i.p.v. inline styles, die niet responsief kunnen zijn).
-    Catalysts staan als cleane bullet-regel in ALL-CAPS.
+    naast elkaar op desktop, met dunne verticale scheidslijnen -- zelfde
+    gap (1.75rem) en dezelfde scheidslijnkleur/-dikte als het portfolio-
+    blok hierboven, zodat de volle breedte van de pagina consistent
+    oogt. Op mobiel (<640px) stapelt de agenda verticaal -- 1 dag per
+    rij met dunne HORIZONTALE scheidslijnen i.p.v. 5 kolommen die op een
+    smal scherm te krap/onleesbaar zouden worden. Via een vaste
+    CSS-klasse + media query (i.p.v. inline styles, die niet responsief
+    kunnen zijn). Catalysts staan als cleane bullet-regel in ALL-CAPS.
     """
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     today_label = labels[datetime.now().date().weekday()] if datetime.now().date().weekday() < 5 else None
@@ -2281,7 +2283,8 @@ def _week_agenda_html(buckets: dict) -> str:
         if items:
             items_html = "".join(
                 f'<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.5rem; '
-                f'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
+                f'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em; '
+                f'font-family:\'Inter\', sans-serif !important;">'
                 f'<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>{text.upper()}</span></div>'
                 for _icon_html, text in items
             )
@@ -2290,7 +2293,8 @@ def _week_agenda_html(buckets: dict) -> str:
             # als een gevulde dag, zodat een lege dag niet visueel dood oogt.
             items_html = (
                 '<div style="display:flex; align-items:flex-start; gap:0.35rem; margin-top:0.5rem; '
-                'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em;">'
+                'font-size:0.68rem; color:#94A3B8; line-height:1.4; text-transform:uppercase; letter-spacing:0.01em; '
+                'font-family:\'Inter\', sans-serif !important;">'
                 '<span style="flex-shrink:0; color:#8992A3;">&bull;</span><span>No events</span></div>'
             )
 
@@ -2298,14 +2302,15 @@ def _week_agenda_html(buckets: dict) -> str:
         day_class = "hesty-week-day hesty-week-day-last" if i == 4 else "hesty-week-day"
         day_cols.append(
             f'<div class="{day_class}">'
-            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; letter-spacing:0.08em;">{label}</div>'
+            f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; '
+            f'letter-spacing:0.08em; font-family:\'Inter\', sans-serif !important;">{label}</div>'
             f'{items_html}'
             f'</div>'
         )
     return (
         '<style>'
-        '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.5rem; } '
-        '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.5rem; } '
+        '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.75rem; } '
+        '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem; } '
         '.hesty-week-day-last { border-right:none !important; padding-right:0 !important; } '
         '@media (max-width:640px) { '
         '.hesty-week-agenda { flex-direction:column; gap:0; } '
@@ -2316,232 +2321,6 @@ def _week_agenda_html(buckets: dict) -> str:
         '</style>'
         f'<div class="hesty-week-agenda">{"".join(day_cols)}</div>'
     )
-
-
-# --- 'Stories'-cirkels (Instagram-stijl) bovenaan de Daily Radar -- elk
-# opent een modale slide-over (st.dialog) met een kort, scanbaar
-# overzicht in plaats van alles als platte tekst op de pagina te
-# proppen. ---
-_STORY_DEFINITIONS = [
-    {"id": "day_numbers", "label": "Daily Summary", "icon": "bar_chart"},
-    {"id": "screener_hits", "label": "Screener Hits", "icon": "search"},
-    {"id": "macro_trend", "label": "Macro Catalyst", "icon": "public"},
-]
-
-
-def _portfolio_responsive_css() -> str:
-    """
-    Responsieve stylesheet voor 'Your Portfolio Today' (Insights is
-    inmiddels een eigen, verticale lijst geworden en gebruikt dit niet
-    meer). Desktop: kolom 1 ('Your Portfolio Today' zelf) krijgt een
-    eigen, zachte achtergrondtegel (geen scheidslijn ernaast -- de
-    ademruimte komt uit de flex-gap) zodat 'ie duidelijk de belangrijkste
-    metric van de pagina is; kolom 2/3 (Best/Worst) blijven cleane
-    tekstkolommen, gescheiden door een dunne verticale lijn. Mobiel
-    (<640px): alle 3 gestapeld als losse kaartjes.
-    """
-    return (
-        '<style>'
-        '.hesty-portfolio-row { display:flex; align-items:flex-start; gap:1.75rem; } '
-        '.hesty-portfolio-col { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); '
-        'padding-right:1.75rem; } '
-        '.hesty-portfolio-col-last { border-right:none !important; padding-right:0 !important; } '
-        '.hesty-portfolio-hero-col { flex:1; min-width:0; background:rgba(15,23,42,0.4); '
-        'border-radius:14px; padding:1.15rem 1.35rem; box-sizing:border-box; } '
-        '@media (max-width:640px) { '
-        '.hesty-portfolio-row { flex-direction:column; gap:0.75rem; } '
-        '.hesty-portfolio-col { width:100%; box-sizing:border-box; border-right:none !important; '
-        'padding-right:0 !important; background:rgba(137,146,163,0.04); '
-        'border:1px solid rgba(148,163,184,0.15); border-radius:12px; padding:0.85rem 1rem; } '
-        '.hesty-portfolio-hero-col { width:100%; padding:1rem 1.15rem; } '
-        '.hesty-portfolio-col-empty { display:none !important; } '
-        '} '
-        '</style>'
-    )
-
-
-def _story_circle_css(circle_key: str, is_active: bool) -> str:
-    """
-    CSS om een st.container(key=...) + st.button erin te laten ogen als
-    een ronde 'Story'-cirkel, in dezelfde teal-accentkleur als de rest
-    van de site. 'is_active' geeft de op dit moment OPEN story een
-    steviger, volledig ondoorzichtig randje -- duidelijke visuele
-    feedback over welk paneel eronder openstaat.
-    """
-    border = "2.5px solid #1FAE96" if is_active else "2px solid rgba(31,174,150,0.6)"
-    bg = "rgba(31,174,150,0.22)" if is_active else "rgba(31,174,150,0.1)"
-    return (
-        f'<style>'
-        f'.st-key-{circle_key} button {{ '
-        f'border-radius:50% !important; width:56px !important; height:56px !important; padding:0 !important; '
-        f'border:{border} !important; background:{bg} !important; '
-        f'display:flex !important; align-items:center !important; justify-content:center !important; }} '
-        f'.st-key-{circle_key} button:hover {{ border-color:#1FAE96 !important; background:rgba(31,174,150,0.2) !important; }} '
-        f'</style>'
-    )
-
-
-def _dialog_header_html(icon_name: str, title: str) -> str:
-    """ALL-CAPS icoon+titel-kop bovenaan een Story-paneel -- zelfde strakke, sans-serif taal als de rest van de site."""
-    return (
-        f'<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">'
-        f'{_icon_span(icon_name, size_px=20, color="#1FAE96")}'
-        f'<span style="font-weight:800; font-size:1rem; letter-spacing:0.07em; text-transform:uppercase; '
-        f'color:#EAEDF1; font-family:\'Inter\', sans-serif !important;">{title}</span>'
-        f'</div>'
-    )
-
-
-def _dialog_stat_row_html(icon_name: str, count, label: str) -> str:
-    """1 cleane, uitgelijnde rij in een Story-paneel: icoon + dikgedrukt cijfer + korte beschrijving -- i.p.v. 1 lange lap tekst."""
-    return (
-        f'<div style="display:flex; align-items:center; gap:0.55rem; padding:7px 0; '
-        f'border-bottom:1px solid rgba(137,146,163,0.12);">'
-        f'{_icon_span(icon_name, size_px=15, color="#8992A3")}'
-        f'<span style="font-size:0.85rem; color:#CBD5E1;">'
-        f'<b style="color:#EAEDF1; font-size:0.98rem;">{count}</b> {label}</span>'
-        f'</div>'
-    )
-
-
-def _render_story_panel(story_id: str, story_data: dict) -> None:
-    """
-    Rendert de Story-content INLINE, direct onder de cirkels-rij --
-    vervangt de eerdere st.dialog()-modal volledig: geen verduisterende
-    achtergrond meer, de rest van de pagina zakt gewoon elegant mee naar
-    beneden (zowel op mobiel als desktop, dat is intrinsiek hoe normale
-    documentflow werkt). st.container(key=...) is hier de WRAPPER i.p.v.
-    losse st.markdown()-open/-sluit-tags rond andere widgets (dat nest
-    in Streamlit NIET betrouwbaar -- elke st.markdown()-aanroep is een
-    eigen, op-zichzelf-staand DOM-blok) zodat rand/achtergrond via CSS
-    op die ene, stabiele .st-key-klasse gezet kunnen worden. Volledige
-    breedte + ruime zijpadding, zodat tekst (bv. de macro-vlammetjes)
-    comfortabel leesbaar is en niet raar afbreekt, ook op smalle
-    schermen.
-    """
-    panel_key = "today_story_panel"
-    close_key = f"{panel_key}_close_{story_id}"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{panel_key} {{ background:rgba(137,146,163,0.04) !important; '
-        f'border:1px solid rgba(148,163,184,0.15) !important; border-radius:12px !important; '
-        f'padding:1rem 1.25rem !important; margin-top:0.6rem !important; width:100% !important; '
-        f'box-sizing:border-box !important; }} '
-        f'.st-key-{close_key} button {{ all:unset !important; cursor:pointer !important; '
-        f'color:#8992A3 !important; font-size:1.3rem !important; line-height:1 !important; '
-        f'padding:0 4px !important; float:right !important; }} '
-        f'.st-key-{close_key} button:hover {{ color:#EAEDF1 !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=panel_key):
-        with st.container(key=close_key):
-            if st.button("×", key=f"{close_key}_btn"):
-                st.session_state["today_open_story"] = None
-                st.rerun()
-
-        if story_id == "day_numbers":
-            st.markdown(_dialog_header_html("bar_chart", "Daily Summary"), unsafe_allow_html=True)
-            rows = story_data.get("day_rows", [])
-            if rows:
-                st.caption(f"{len(rows)} item(s) on your radar today.")
-                _render_radar_rows(rows)
-            else:
-                st.caption("Nothing new to flag right now. A quiet day on your radar.")
-
-        elif story_id == "screener_hits":
-            st.markdown(_dialog_header_html("search", "Screener Hits"), unsafe_allow_html=True)
-            opportunities = story_data.get("opportunities") or {}
-            st.caption(
-                f"{opportunities.get('total_signals', 0)} signals found today in your daily screeners "
-                f"({opportunities.get('daily_signals', 0)} daily{opportunities.get('weekly_part', '')})."
-            )
-            st.markdown(
-                _dialog_stat_row_html("account_balance_wallet", opportunities.get("in_portfolio_count", 0), "items match your current portfolio")
-                + _dialog_stat_row_html("visibility", opportunities.get("in_watchlist_count", 0), "items are on your watchlist")
-                + _dialog_stat_row_html("auto_awesome", opportunities.get("new_opportunities_count", 0), "brand new ideas discovered"),
-                unsafe_allow_html=True,
-            )
-            extra_rows = story_data.get("screener_rows", [])
-            if extra_rows:
-                st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
-                st.caption("Also worth a look:")
-                _render_radar_rows(extra_rows)
-            st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
-            st.markdown(
-                '<a href="/discover" target="_self" class="button-link">Browse all signals on Discover</a>',
-                unsafe_allow_html=True,
-            )
-
-        elif story_id == "macro_trend":
-            st.markdown(_dialog_header_html("public", "Macro Catalyst"), unsafe_allow_html=True)
-            rows = story_data.get("macro_rows", [])
-            if rows:
-                st.caption(f"{len(rows)} notable move(s) worth flagging.")
-                _render_radar_rows(rows)
-            else:
-                st.caption("No notable sector or theme extremes right now.")
-            st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
-            st.markdown(
-                '<a href="/discover?subview=sectors_themes" target="_self" class="button-link">See sector & theme rotation on Discover</a>',
-                unsafe_allow_html=True,
-            )
-
-
-def _render_stories_row(story_data: dict) -> None:
-    """
-    Rendert de rij 'Story'-cirkels + labels compact links -- een 4e,
-    brede 'spacer'-kolom erna houdt ze bij elkaar i.p.v. dat st.columns()
-    ze over de volle paginabreedte uitspreidt. De rij is ZELF ook
-    horizontaal scrollbaar (overflow-x + flex-nowrap, scrollbar
-    verborgen) via de eigen st.container(key=...)-klasse -- zodra er
-    ooit meer stories bijkomen dan er in 1 rij passen, schuift de rij
-    door i.p.v. de cirkels te verkleinen/wrappen, precies zoals
-    Instagram-stories werken.
-
-    Klikken toggelt een sessie-status (geen st.dialog meer): dezelfde
-    cirkel nogmaals klikken sluit het paneel, een andere cirkel klikken
-    wisselt direct naar dat paneel.
-    """
-    open_key = "today_open_story"
-    if open_key not in st.session_state:
-        st.session_state[open_key] = None
-
-    scroll_key = "today_stories_scroll"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{scroll_key} [data-testid="stHorizontalBlock"] {{ '
-        f'flex-wrap:nowrap !important; overflow-x:auto !important; '
-        f'scrollbar-width:none !important; -ms-overflow-style:none !important; }} '
-        f'.st-key-{scroll_key} [data-testid="stHorizontalBlock"]::-webkit-scrollbar {{ display:none !important; height:0 !important; }} '
-        f'.st-key-{scroll_key} [data-testid="column"] {{ flex-shrink:0 !important; width:auto !important; min-width:64px !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=scroll_key):
-        cols = st.columns([1] * len(_STORY_DEFINITIONS) + [6], gap="small")
-        clicked_story_id = None
-        for i, story in enumerate(_STORY_DEFINITIONS):
-            circle_key = f"story_circle_{story['id']}"
-            is_active = st.session_state[open_key] == story["id"]
-            with cols[i]:
-                st.markdown(_story_circle_css(circle_key, is_active), unsafe_allow_html=True)
-                with st.container(key=circle_key):
-                    if st.button("", icon=f":material/{story['icon']}:", key=f"story_btn_{story['id']}"):
-                        clicked_story_id = story["id"]
-                st.markdown(
-                    f'<div style="text-align:center; font-size:0.64rem; color:#8992A3; margin-top:4px; '
-                    f'white-space:nowrap;">{story["label"]}</div>',
-                    unsafe_allow_html=True,
-                )
-
-    if clicked_story_id is not None:
-        # Zelfde cirkel nogmaals -> sluiten. Andere cirkel -> direct wisselen.
-        st.session_state[open_key] = None if st.session_state[open_key] == clicked_story_id else clicked_story_id
-        st.rerun()
-
-    if st.session_state[open_key]:
-        _render_story_panel(st.session_state[open_key], story_data)
 
 
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
@@ -7394,92 +7173,34 @@ def render_today():
                     with mcol3:
                         st.metric("Worst today", "n/a")
 
-            # --- Portfolio Health & DCA Insights -- zelfde borderloze,
-            # 3-koloms behandeling als 'Your Portfolio Today' hierboven:
-            # geen kaart/rand meer per insight, 1 vloeiende sectiekop
-            # (icoon + titel, geen dikke omlijning), en 3 gelijke kolommen
-            # met dezelfde dunne verticale scheidslijnen. Herbalanceer-
-            # triggers hergebruiken de bestaande build_rebalancing_
-            # suggestions()-logica (ongewijzigd, al aanwezig voor
-            # Analyze); Watchlist-Snack is nieuw. Elke kolom is los
-            # dismissbaar (5 dagen, via localStorage). ---
-            if holdings:
-                total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
-                rebalancing = build_rebalancing_suggestions(holdings, total_portfolio_value)
-                near_target_watchlist = (
-                    get_watchlist_near_target_alerts(watchlist_items, market_data) if watchlist_items else []
+            # --- Daily Radar -- 2e hoofdsectie van de pagina (direct onder
+            # Your Portfolio Today). Geen klikbare Stories-cirkels meer: de
+            # belangrijkste bulletins staan nu direct, plat leesbaar onder de
+            # titel (Today's Insights Summary) -- zie _compute_radar_bundle()
+            # verderop voor dezelfde onderliggende data als voorheen. Een
+            # handmatige ververs-knop rechtsboven in de titelregel; de pagina
+            # laadt standaard nog steeds gewoon uit de gecachete data (zie
+            # _session_cached()). ---
+            radar_header_col, radar_refresh_col = st.columns([11, 1])
+            with radar_header_col:
+                st.markdown(
+                    _flowing_section_header_html("Daily Radar", "radar", is_first=False),
+                    unsafe_allow_html=True,
                 )
-
-                # Gecombineerd, gecapt op 3 -- exact zoveel kolommen als de
-                # sectie heeft (Insight 1/2/3).
-                health_cards_html = ([
-                    _rebalance_trigger_card_html(suggestion, "$")
-                    for suggestion in rebalancing["suggestions"][:2]
-                ] + [
-                    _watchlist_snack_card_html(alert) for alert in near_target_watchlist
-                ])[:3]
-
-                if health_cards_html:
-                    st.markdown(
-                        _flowing_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
-                        unsafe_allow_html=True,
-                    )
-
-                    # Bewuste breuk met de 3-koloms-layout van het portfolio-
-                    # blok hierboven -- Insights is nu een simpele, verticale
-                    # lijst (elke insight = 1 rij met een dunne HORIZONTALE
-                    # lijn eronder, geen kaart-achtergrond, geen verticale
-                    # scheidslijnen) i.p.v. dezelfde 3-koloms-look, zodat het
-                    # niet langer aanvoelt als 1 doorlopend vak met het blok
-                    # erboven.
-                    st.markdown("".join(health_cards_html), unsafe_allow_html=True)
-                    _render_insight_dismiss_autohide_script()
-
-            # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
-            # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
-            # sterk/zwak' meer dan de dagkoers van 1 los aandeel). Hergebruikt
-            # build_sector_rotation() (al bestond voor Discover's Sector
-            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar.
-            # Geen omlijnd kader meer -- zelfde borderloze 'flowing section'-
-            # stijl (icoon + titel) als de secties hierboven. ---
-            st.markdown(
-                _flowing_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
-                unsafe_allow_html=True,
-            )
-            st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
-                       "color = performance. 🧭 marks a sector you're already invested in.")
-            heatmap_region = st.segmented_control(
-                "Region", options=["US", "EU"], selection_mode="single",
-                default="US", key="today_heatmap_region", label_visibility="collapsed",
-            )
-            if heatmap_region is None:
-                heatmap_region = "US"
-            with st.spinner("Checking sector performance..."):
-                heatmap_rotation = _session_cached(
-                    f"today_heatmap_{heatmap_region}", 900,
-                    lambda: build_sector_rotation(region=heatmap_region),
+            with radar_refresh_col:
+                radar_refresh_key = "today_radar_refresh"
+                st.markdown(
+                    f'<style>.st-key-{radar_refresh_key} button {{ all:unset !important; cursor:pointer !important; '
+                    f'color:#8992A3 !important; font-size:1rem !important; padding:4px !important; '
+                    f'display:flex !important; justify-content:flex-end !important; width:100% !important; }} '
+                    f'.st-key-{radar_refresh_key} button:hover {{ color:#1FAE96 !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
                 )
-            if heatmap_rotation:
-                heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
-                portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
-                _render_sector_heatmap(
-                    heatmap_rotation, heatmap_weights, portfolio_sectors,
-                    "/discover?subview=sectors_themes",
-                )
-                st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
-                st.page_link(discover_page, label="Explore sectors & themes on Discover")
-            else:
-                st.caption("No sector data available right now.")
-
-            # --- Daily Radar: 'Stories' + Week-Agenda (vervangt de platte
-            # 'Today's radar'-tekstlijst). Zelfde onderliggende data-
-            # verzameling als voorheen -- nu opgedeeld in 3 scanbare
-            # 'Stories' (modale slide-overs, Instagram-stijl) + een
-            # horizontale week-agenda voor lange-termijn-catalysts. ---
-            st.markdown(
-                _flowing_section_header_html("Daily Radar", "radar", is_first=False),
-                unsafe_allow_html=True,
-            )
+                with st.container(key=radar_refresh_key):
+                    if st.button("", icon=":material/refresh:", key=f"{radar_refresh_key}_click", help="Refresh data"):
+                        st.session_state.pop(f"today_radar_bundle_{user_email}", None)
+                        st.rerun()
 
             # 3 aparte lijsten i.p.v. 1 platte 'radar_rows' -- elke Story
             # toont z'n eigen deel van dezelfde onderliggende data.
@@ -7649,14 +7370,30 @@ def render_today():
                 _session_cached(f"today_radar_bundle_{user_email}", 300, _compute_radar_bundle)
             )
 
-            # --- Stories-rij (Instagram-stijl cirkels) -- elke cirkel
-            # opent een modale slide-over met z'n eigen deel van de
-            # hierboven verzamelde data. ---
-            story_data = {
-                "day_rows": day_rows, "screener_rows": screener_rows, "macro_rows": macro_rows,
-                "opportunities": opportunities,
-            }
-            _render_stories_row(story_data)
+            # --- Today's Insights Summary -- vervangt de klikbare Stories-
+            # cirkels door direct scanbare, platte tekst: dezelfde 3
+            # categorieen data (dag-gebeurtenissen, screener-hits, macro-
+            # catalysts) als voorheen, nu meteen zichtbaar i.p.v. achter een
+            # klik verstopt. ---
+            summary_rows = [
+                ("✓", "DAILY SUMMARY", f"{len(day_rows)} item(s) on your radar today."),
+                ("🔍", "SCREENER HITS", f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners."),
+                ("⚡", "MACRO CATALYST", f"{len(macro_rows)} key global market movement(s) detected today."),
+            ]
+            st.markdown(
+                "".join(
+                    f'<div style="display:flex; align-items:flex-start; gap:0.5rem; margin-top:8px; '
+                    f'font-size:0.83rem; color:#CBD5E1; line-height:1.5; font-family:\'Inter\', sans-serif !important;">'
+                    f'<span style="flex-shrink:0;">{icon}</span>'
+                    f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+                    f'</div>'
+                    for icon, label, text in summary_rows
+                )
+                + '<div style="margin-top:12px;">'
+                  '<a href="/discover" target="_self" class="inline-link" style="font-size:0.82rem;">'
+                  'Explore all signals on Discover &rarr;</a></div>',
+                unsafe_allow_html=True,
+            )
 
             st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
 
@@ -7678,6 +7415,83 @@ def render_today():
                 dated_agenda_items.append((d_date, _icon_span("payments", size_px=13, color="#8992A3"), f"<b>{d['naam']}</b> ex-dividend"))
 
             st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
+
+            # --- Portfolio Health & DCA Insights -- zelfde borderloze,
+            # 3-koloms behandeling als 'Your Portfolio Today' hierboven:
+            # geen kaart/rand meer per insight, 1 vloeiende sectiekop
+            # (icoon + titel, geen dikke omlijning), en 3 gelijke kolommen
+            # met dezelfde dunne verticale scheidslijnen. Herbalanceer-
+            # triggers hergebruiken de bestaande build_rebalancing_
+            # suggestions()-logica (ongewijzigd, al aanwezig voor
+            # Analyze); Watchlist-Snack is nieuw. Elke kolom is los
+            # dismissbaar (5 dagen, via localStorage). ---
+            if holdings:
+                total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
+                rebalancing = build_rebalancing_suggestions(holdings, total_portfolio_value)
+                near_target_watchlist = (
+                    get_watchlist_near_target_alerts(watchlist_items, market_data) if watchlist_items else []
+                )
+
+                # Gecombineerd, gecapt op 3 -- exact zoveel kolommen als de
+                # sectie heeft (Insight 1/2/3).
+                health_cards_html = ([
+                    _rebalance_trigger_card_html(suggestion, "$")
+                    for suggestion in rebalancing["suggestions"][:2]
+                ] + [
+                    _watchlist_snack_card_html(alert) for alert in near_target_watchlist
+                ])[:3]
+
+                if health_cards_html:
+                    st.markdown(
+                        _flowing_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+                        unsafe_allow_html=True,
+                    )
+
+                    # Bewuste breuk met de 3-koloms-layout van het portfolio-
+                    # blok hierboven -- Insights is nu een simpele, verticale
+                    # lijst (elke insight = 1 rij met een dunne HORIZONTALE
+                    # lijn eronder, geen kaart-achtergrond, geen verticale
+                    # scheidslijnen) i.p.v. dezelfde 3-koloms-look, zodat het
+                    # niet langer aanvoelt als 1 doorlopend vak met het blok
+                    # erboven.
+                    st.markdown("".join(health_cards_html), unsafe_allow_html=True)
+                    _render_insight_dismiss_autohide_script()
+
+            # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
+            # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
+            # sterk/zwak' meer dan de dagkoers van 1 los aandeel). Hergebruikt
+            # build_sector_rotation() (al bestond voor Discover's Sector
+            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar.
+            # Geen omlijnd kader meer -- zelfde borderloze 'flowing section'-
+            # stijl (icoon + titel) als de secties hierboven. ---
+            st.markdown(
+                _flowing_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
+                unsafe_allow_html=True,
+            )
+            st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
+                       "color = performance. 🧭 marks a sector you're already invested in.")
+            heatmap_region = st.segmented_control(
+                "Region", options=["US", "EU"], selection_mode="single",
+                default="US", key="today_heatmap_region", label_visibility="collapsed",
+            )
+            if heatmap_region is None:
+                heatmap_region = "US"
+            with st.spinner("Checking sector performance..."):
+                heatmap_rotation = _session_cached(
+                    f"today_heatmap_{heatmap_region}", 900,
+                    lambda: build_sector_rotation(region=heatmap_region),
+                )
+            if heatmap_rotation:
+                heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
+                portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
+                _render_sector_heatmap(
+                    heatmap_rotation, heatmap_weights, portfolio_sectors,
+                    "/discover?subview=sectors_themes",
+                )
+                st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
+                st.page_link(discover_page, label="Explore sectors & themes on Discover")
+            else:
+                st.caption("No sector data available right now.")
 
             # --- Your Daily Briefing -- eigen hoofdsectie, helemaal onderaan.
             # Zelfde borderloze 'flowing section'-stijl als de rest van de
