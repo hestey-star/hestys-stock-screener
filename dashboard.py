@@ -1903,6 +1903,28 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     )
 
 
+def _bold_section_divider_html(emoji: str, title: str, with_top_rule: bool = True) -> str:
+    """
+    Prominentere sectie-titel dan _flowing_section_header_html hierboven --
+    groter, bold, ALL-CAPS, tracking-wider -- specifiek bedoeld om een
+    HARDE visuele knip te maken tussen grote onderdelen (Positions vs.
+    Rebalancing) nu de zware kaders eromheen weg zijn en anders alles in
+    1 drukke sliert dreigt over te lopen. 'with_top_rule' voegt een
+    paginabrede, iets steviger zichtbare scheidingslijn + ruime witruimte
+    (my-8) toe BOVEN de titel.
+    """
+    rule_html = (
+        '<hr style="border:none; border-top:1px solid rgba(30,41,59,0.8); margin:2rem 0;">'
+        if with_top_rule else ""
+    )
+    return (
+        f'{rule_html}'
+        f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; text-transform:uppercase; '
+        f'letter-spacing:0.06em; font-family:\'Inter\', sans-serif !important; margin-bottom:0.9rem;">'
+        f'{emoji} {title}</div>'
+    )
+
+
 def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct: float, weight_pct: float, color: str) -> str:
     """
     Best/Worst-kolom voor 'Your Portfolio Today'. GEEN eigen kaart/
@@ -5203,11 +5225,23 @@ def render_portfolio():
                         else:
                             st.warning(message)
 
-        # --- Positietabel: geen omlijnd kader meer om de hele tabel-sectie
-        # (die zware buitenrand is nu weg); de rijen ademen puur van links
-        # naar rechts, elk gescheiden door de flinterdunne border-bottom
-        # (zie .portfolio-row-desktop/-mobile hierboven). ---
-        with st.container(border=False):
+        # --- Positietabel: geen dikke omlijning meer, maar WEL een hele
+        # zachte, egale achtergrond (bg-slate-950/40) + royale padding --
+        # zodat de tabel een duidelijk, rustig 'eiland' vormt t.o.v. de
+        # Rebalancing-sectie eronder, zonder terug te vallen op een harde
+        # rand. Prominente 'POSITIONS'-titel erboven maakt de sectiegrens
+        # nu ook tekstueel duidelijk.
+        st.markdown(
+            _bold_section_divider_html("📊", "Positions", with_top_rule=False),
+            unsafe_allow_html=True,
+        )
+        _pf_table_card_key = "portfolio_table_card"
+        st.markdown(
+            f'<style>.st-key-{_pf_table_card_key} {{ background:rgba(2,6,23,0.4) !important; '
+            f'border-radius:14px !important; padding:1.25rem 1.5rem !important; }} </style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_pf_table_card_key):
 
             def _format_value(holding):
                 value = holding.get("position_value")
@@ -5659,14 +5693,16 @@ def render_portfolio():
 
         if rebalance_result["any_targets_set"]:
             st.markdown(
-                _flowing_section_header_html("Rebalancing", "swap_horiz"),
+                _bold_section_divider_html("⚖️", "Rebalancing", with_top_rule=True),
                 unsafe_allow_html=True,
             )
-            # --- Geen omlijnd kader meer om de hele sectie -- items zijn nu
-            # 1 doorlopende, ademende lijst, puur gescheiden door een
-            # flinterdunne horizontale lijn per item (zelfde rgba-waarde
-            # als de rest van de vernieuwde pagina's). Logica/berekeningen
-            # (euro-bedragen, shares, percentages) volledig ongewijzigd. ---
+            # --- Rebalancing is nu een 2-koloms grid van losse kaarten
+            # (elk met een dunne, subtiele rand) i.p.v. een verticale
+            # tabel-achtige lijst -- voelt daardoor als een actiegerichte
+            # 'to-do lijst' i.p.v. een datatabel, en maakt in 1 oogopslag
+            # duidelijk dat dit een APART blok is t.o.v. de Positions-
+            # tabel hierboven. Logica/berekeningen (euro-bedragen, shares,
+            # percentages) volledig ongewijzigd. ---
             if rebalance_result["targets_sum_pct"] > 100:
                 # Zachte, chique amber-waarschuwing i.p.v. Streamlit's eigen
                 # felle st.warning()-balk.
@@ -5684,6 +5720,7 @@ def render_portfolio():
                     unsafe_allow_html=True,
                 )
             if rebalance_result["suggestions"]:
+                rebalance_cards_html = []
                 for sugg in rebalance_result["suggestions"]:
                     action_word = "Buy" if sugg["action"] == "buy" else "Sell"
                     action_color = TODAY_POSITIVE_TEXT if sugg["action"] == "buy" else TODAY_NEGATIVE_TEXT
@@ -5702,7 +5739,7 @@ def render_portfolio():
                     bar_target_pct = min(sugg["target_pct"], 100)
                     bar_html = (
                         '<div style="position:relative; height:4px; background:rgba(137,146,163,0.10); '
-                        'border-radius:2px; margin-top:0.35rem;">'
+                        'border-radius:2px; margin-top:0.5rem;">'
                         f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
                         f'background:{action_color}; border-radius:2px;"></div>'
                         f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-2px; height:8px; '
@@ -5710,8 +5747,8 @@ def render_portfolio():
                         '</div>'
                     )
 
-                    st.markdown(
-                        f'<div style="padding:0.7rem 0; border-bottom:1px solid rgba(148,163,184,0.1);">'
+                    rebalance_cards_html.append(
+                        f'<div style="border:1px solid rgba(30,41,59,0.6); border-radius:10px; padding:0.9rem 1rem;">'
                         f'<div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">'
                         f'<div><span style="color:#EAEDF1; font-weight:600; text-transform:uppercase; '
                         f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">{sugg["naam"].upper()}</span> '
@@ -5723,9 +5760,16 @@ def render_portfolio():
                         f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
                         '</div>'
                         f'{bar_html}'
-                        '</div>',
-                        unsafe_allow_html=True,
+                        '</div>'
                     )
+                st.markdown(
+                    '<style>'
+                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:1rem; } '
+                    '@media (max-width:640px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
+                    '</style>'
+                    f'<div class="hesty-rebalance-grid">{"".join(rebalance_cards_html)}</div>',
+                    unsafe_allow_html=True,
+                )
             else:
                 st.caption("All positions with a target weight are already close enough to their target -- nothing to rebalance right now.")
         # Geen 'else' hier -- als er nergens een target is ingesteld, blijft
