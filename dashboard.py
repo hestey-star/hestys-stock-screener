@@ -7239,7 +7239,8 @@ def render_today():
                 "".join(
                     f'<div style="display:flex; align-items:flex-start; gap:0.5rem; margin-top:8px; '
                     f'font-size:0.83rem; color:#CBD5E1; line-height:1.5; font-family:\'Inter\', sans-serif !important;">'
-                    f'<span style="flex-shrink:0;">{icon}</span>'
+                    f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
+                    f'align-items:center;">{icon}</span>'
                     f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
                     f'</div>'
                     for icon, label, text in summary_rows
