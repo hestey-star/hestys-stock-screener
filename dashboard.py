@@ -2261,9 +2261,12 @@ def _bucket_events_by_weekday(dated_items: list) -> dict:
 
 def _week_agenda_html(buckets: dict) -> str:
     """
-    Rendert de Week-Agenda als 5 gelijke, borderloze kolommen (Ma t/m Vr)
-    over de volle breedte -- geen aparte, omlijnde dagkaarten meer, maar
-    dezelfde dunne verticale scheidslijnen als de rest van de pagina.
+    Rendert de Week-Agenda: 5 gelijke, borderloze kolommen (Ma t/m Vr)
+    naast elkaar op desktop, met dunne verticale scheidslijnen. Op
+    mobiel (<640px) stapelt de agenda verticaal -- 1 dag per rij met
+    dunne HORIZONTALE scheidslijnen i.p.v. 5 kolommen die op een smal
+    scherm te krap/onleesbaar zouden worden. Via een vaste CSS-klasse +
+    media query (i.p.v. inline styles, die niet responsief kunnen zijn).
     Catalysts staan als cleane bullet-regel in ALL-CAPS.
     """
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -2290,14 +2293,27 @@ def _week_agenda_html(buckets: dict) -> str:
             )
 
         label_color = "#1FAE96" if is_today else "#8992A3"
-        divider = "border-right:1px solid rgba(137,146,163,0.15); padding-right:1.5rem;" if i < 4 else ""
+        day_class = "hesty-week-day hesty-week-day-last" if i == 4 else "hesty-week-day"
         day_cols.append(
-            f'<div style="flex:1; min-width:0; {divider}">'
+            f'<div class="{day_class}">'
             f'<div style="font-size:0.68rem; font-weight:700; color:{label_color}; text-transform:uppercase; letter-spacing:0.08em;">{label}</div>'
             f'{items_html}'
             f'</div>'
         )
-    return f'<div style="display:flex; align-items:flex-start; gap:1.5rem;">{"".join(day_cols)}</div>'
+    return (
+        '<style>'
+        '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.5rem; } '
+        '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.5rem; } '
+        '.hesty-week-day-last { border-right:none !important; padding-right:0 !important; } '
+        '@media (max-width:640px) { '
+        '.hesty-week-agenda { flex-direction:column; gap:0; } '
+        '.hesty-week-day { width:100%; border-right:none !important; padding-right:0 !important; '
+        'border-bottom:1px solid rgba(137,146,163,0.15); padding-bottom:0.75rem; margin-bottom:0.75rem; } '
+        '.hesty-week-day-last { border-bottom:none !important; padding-bottom:0 !important; margin-bottom:0 !important; } '
+        '} '
+        '</style>'
+        f'<div class="hesty-week-agenda">{"".join(day_cols)}</div>'
+    )
 
 
 # --- 'Stories'-cirkels (Instagram-stijl) bovenaan de Daily Radar -- elk
@@ -2311,40 +2327,58 @@ _STORY_DEFINITIONS = [
 ]
 
 
-def _story_circle_css(circle_key: str, is_first: bool) -> str:
-    """CSS om een st.container(key=...) + st.button erin te laten ogen als een ronde 'Story'-cirkel, in dezelfde teal-accentkleur als de rest van de site."""
+def _portfolio_responsive_css() -> str:
+    """
+    Gedeelde, responsieve 3-koloms-stylesheet voor zowel 'Your Portfolio
+    Today' als 'Portfolio Health & DCA Insights' -- 1x gedefinieerd
+    zodat beide secties 'm betrouwbaar kunnen gebruiken, ongeacht welke
+    van de twee als eerste rendert (bv. als daily_stats ontbreekt, mag
+    de Insights-sectie niet zonder deze CSS komen te zitten). Desktop:
+    3 gelijke kolommen met dunne verticale scheidslijnen. Mobiel
+    (<640px): gestapeld als 3 losse kaartjes (achtergrond + dunne rand)
+    i.p.v. kolommen naast elkaar, zodat ALL-CAPS-namen niet in de knel
+    komen op een smal scherm.
+    """
+    return (
+        '<style>'
+        '.hesty-portfolio-row { display:flex; align-items:flex-start; gap:1.75rem; } '
+        '.hesty-portfolio-col { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); '
+        'padding-right:1.75rem; } '
+        '.hesty-portfolio-col-last { border-right:none !important; padding-right:0 !important; } '
+        '@media (max-width:640px) { '
+        '.hesty-portfolio-row { flex-direction:column; gap:0.75rem; } '
+        '.hesty-portfolio-col { width:100%; box-sizing:border-box; border-right:none !important; '
+        'padding-right:0 !important; background:rgba(137,146,163,0.04); '
+        'border:1px solid rgba(148,163,184,0.15); border-radius:12px; padding:0.85rem 1rem; } '
+        '.hesty-portfolio-col-empty { display:none !important; } '
+        '} '
+        '</style>'
+    )
+
+
+def _story_circle_css(circle_key: str, is_active: bool) -> str:
+    """
+    CSS om een st.container(key=...) + st.button erin te laten ogen als
+    een ronde 'Story'-cirkel, in dezelfde teal-accentkleur als de rest
+    van de site. 'is_active' geeft de op dit moment OPEN story een
+    steviger, volledig ondoorzichtig randje -- duidelijke visuele
+    feedback over welk paneel eronder openstaat.
+    """
+    border = "2.5px solid #1FAE96" if is_active else "2px solid rgba(31,174,150,0.6)"
+    bg = "rgba(31,174,150,0.22)" if is_active else "rgba(31,174,150,0.1)"
     return (
         f'<style>'
         f'.st-key-{circle_key} button {{ '
         f'border-radius:50% !important; width:56px !important; height:56px !important; padding:0 !important; '
-        f'border:2px solid rgba(31,174,150,0.6) !important; background:rgba(31,174,150,0.1) !important; '
+        f'border:{border} !important; background:{bg} !important; '
         f'display:flex !important; align-items:center !important; justify-content:center !important; }} '
         f'.st-key-{circle_key} button:hover {{ border-color:#1FAE96 !important; background:rgba(31,174,150,0.2) !important; }} '
         f'</style>'
     )
 
 
-def _dialog_style_css() -> str:
-    """
-    Styled de native st.dialog()-overlay naar dezelfde designtaal als de
-    rest van de site: diepdonkere achtergrond, dunne subtiele rand
-    (slate-800-achtig) en een zachte backdrop-blur i.p.v. Streamlit's
-    eigen, generieke modal-styling. st.dialog() heeft standaard al een
-    eigen '×'-sluitknop rechtsboven en sluit ook op Escape/buiten-klik --
-    geen losse 'Close'-knop meer nodig.
-    """
-    return (
-        '<style>'
-        '[data-testid="stDialog"] { backdrop-filter: blur(6px) !important; } '
-        '[data-testid="stDialog"] > div { '
-        'background:#0B1210 !important; border:1px solid rgba(148,163,184,0.15) !important; '
-        'border-radius:14px !important; } '
-        '</style>'
-    )
-
-
 def _dialog_header_html(icon_name: str, title: str) -> str:
-    """ALL-CAPS icoon+titel-kop bovenaan een Story-dialoog -- zelfde strakke, sans-serif taal als de rest van de site."""
+    """ALL-CAPS icoon+titel-kop bovenaan een Story-paneel -- zelfde strakke, sans-serif taal als de rest van de site."""
     return (
         f'<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">'
         f'{_icon_span(icon_name, size_px=20, color="#1FAE96")}'
@@ -2355,7 +2389,7 @@ def _dialog_header_html(icon_name: str, title: str) -> str:
 
 
 def _dialog_stat_row_html(icon_name: str, count, label: str) -> str:
-    """1 cleane, uitgelijnde rij in een Story-dialoog: icoon + dikgedrukt cijfer + korte beschrijving -- i.p.v. 1 lange lap tekst."""
+    """1 cleane, uitgelijnde rij in een Story-paneel: icoon + dikgedrukt cijfer + korte beschrijving -- i.p.v. 1 lange lap tekst."""
     return (
         f'<div style="display:flex; align-items:center; gap:0.55rem; padding:7px 0; '
         f'border-bottom:1px solid rgba(137,146,163,0.12);">'
@@ -2366,90 +2400,144 @@ def _dialog_stat_row_html(icon_name: str, count, label: str) -> str:
     )
 
 
-@st.dialog(" ", width="large")
-def _show_story_dialog(story_id: str, story_data: dict) -> None:
+def _render_story_panel(story_id: str, story_data: dict) -> None:
     """
-    Rendert de slide-over-inhoud voor 1 'Story'. 'story_data' bevat alles
-    wat render_today() al heeft opgehaald (geen extra netwerk-/database-
-    aanroepen vanuit de dialog zelf -- dat is precies wat 'm instant
-    maakt, samen met de _session_cached()-laag rond de dure aanroepen
-    die dit oplevert). ALL-CAPS-koppen + cleane, gebulleteerde rijen
-    i.p.v. 1 lange lap tekst, en dezelfde donkere/dunne-rand-designtaal
-    (zie _dialog_style_css()) als de rest van de site.
+    Rendert de Story-content INLINE, direct onder de cirkels-rij --
+    vervangt de eerdere st.dialog()-modal volledig: geen verduisterende
+    achtergrond meer, de rest van de pagina zakt gewoon elegant mee naar
+    beneden (zowel op mobiel als desktop, dat is intrinsiek hoe normale
+    documentflow werkt). st.container(key=...) is hier de WRAPPER i.p.v.
+    losse st.markdown()-open/-sluit-tags rond andere widgets (dat nest
+    in Streamlit NIET betrouwbaar -- elke st.markdown()-aanroep is een
+    eigen, op-zichzelf-staand DOM-blok) zodat rand/achtergrond via CSS
+    op die ene, stabiele .st-key-klasse gezet kunnen worden. Volledige
+    breedte + ruime zijpadding, zodat tekst (bv. de macro-vlammetjes)
+    comfortabel leesbaar is en niet raar afbreekt, ook op smalle
+    schermen.
     """
-    st.markdown(_dialog_style_css(), unsafe_allow_html=True)
+    panel_key = "today_story_panel"
+    close_key = f"{panel_key}_close_{story_id}"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{panel_key} {{ background:rgba(137,146,163,0.04) !important; '
+        f'border:1px solid rgba(148,163,184,0.15) !important; border-radius:12px !important; '
+        f'padding:1rem 1.25rem !important; margin-top:0.6rem !important; width:100% !important; '
+        f'box-sizing:border-box !important; }} '
+        f'.st-key-{close_key} button {{ all:unset !important; cursor:pointer !important; '
+        f'color:#8992A3 !important; font-size:1.3rem !important; line-height:1 !important; '
+        f'padding:0 4px !important; float:right !important; }} '
+        f'.st-key-{close_key} button:hover {{ color:#EAEDF1 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=panel_key):
+        with st.container(key=close_key):
+            if st.button("×", key=f"{close_key}_btn"):
+                st.session_state["today_open_story"] = None
+                st.rerun()
 
-    if story_id == "day_numbers":
-        st.markdown(_dialog_header_html("bar_chart", "Daily Summary"), unsafe_allow_html=True)
-        rows = story_data.get("day_rows", [])
-        if rows:
-            st.caption(f"{len(rows)} item(s) on your radar today.")
-            _render_radar_rows(rows)
-        else:
-            st.caption("Nothing new to flag right now. A quiet day on your radar.")
+        if story_id == "day_numbers":
+            st.markdown(_dialog_header_html("bar_chart", "Daily Summary"), unsafe_allow_html=True)
+            rows = story_data.get("day_rows", [])
+            if rows:
+                st.caption(f"{len(rows)} item(s) on your radar today.")
+                _render_radar_rows(rows)
+            else:
+                st.caption("Nothing new to flag right now. A quiet day on your radar.")
 
-    elif story_id == "screener_hits":
-        st.markdown(_dialog_header_html("search", "Screener Hits"), unsafe_allow_html=True)
-        opportunities = story_data.get("opportunities") or {}
-        st.caption(
-            f"{opportunities.get('total_signals', 0)} signals found today in your daily screeners "
-            f"({opportunities.get('daily_signals', 0)} daily{opportunities.get('weekly_part', '')})."
-        )
-        st.markdown(
-            _dialog_stat_row_html("account_balance_wallet", opportunities.get("in_portfolio_count", 0), "items match your current portfolio")
-            + _dialog_stat_row_html("visibility", opportunities.get("in_watchlist_count", 0), "items are on your watchlist")
-            + _dialog_stat_row_html("auto_awesome", opportunities.get("new_opportunities_count", 0), "brand new ideas discovered"),
-            unsafe_allow_html=True,
-        )
-        extra_rows = story_data.get("screener_rows", [])
-        if extra_rows:
-            st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
-            st.caption("Also worth a look:")
-            _render_radar_rows(extra_rows)
-        st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
-        st.markdown(
-            '<a href="/discover" target="_self" class="button-link">Browse all signals on Discover</a>',
-            unsafe_allow_html=True,
-        )
+        elif story_id == "screener_hits":
+            st.markdown(_dialog_header_html("search", "Screener Hits"), unsafe_allow_html=True)
+            opportunities = story_data.get("opportunities") or {}
+            st.caption(
+                f"{opportunities.get('total_signals', 0)} signals found today in your daily screeners "
+                f"({opportunities.get('daily_signals', 0)} daily{opportunities.get('weekly_part', '')})."
+            )
+            st.markdown(
+                _dialog_stat_row_html("account_balance_wallet", opportunities.get("in_portfolio_count", 0), "items match your current portfolio")
+                + _dialog_stat_row_html("visibility", opportunities.get("in_watchlist_count", 0), "items are on your watchlist")
+                + _dialog_stat_row_html("auto_awesome", opportunities.get("new_opportunities_count", 0), "brand new ideas discovered"),
+                unsafe_allow_html=True,
+            )
+            extra_rows = story_data.get("screener_rows", [])
+            if extra_rows:
+                st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+                st.caption("Also worth a look:")
+                _render_radar_rows(extra_rows)
+            st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
+            st.markdown(
+                '<a href="/discover" target="_self" class="button-link">Browse all signals on Discover</a>',
+                unsafe_allow_html=True,
+            )
 
-    elif story_id == "macro_trend":
-        st.markdown(_dialog_header_html("public", "Macro Catalyst"), unsafe_allow_html=True)
-        rows = story_data.get("macro_rows", [])
-        if rows:
-            st.caption(f"{len(rows)} notable move(s) worth flagging.")
-            _render_radar_rows(rows)
-        else:
-            st.caption("No notable sector or theme extremes right now.")
-        st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
-        st.markdown(
-            '<a href="/discover?subview=sectors_themes" target="_self" class="button-link">See sector & theme rotation on Discover</a>',
-            unsafe_allow_html=True,
-        )
+        elif story_id == "macro_trend":
+            st.markdown(_dialog_header_html("public", "Macro Catalyst"), unsafe_allow_html=True)
+            rows = story_data.get("macro_rows", [])
+            if rows:
+                st.caption(f"{len(rows)} notable move(s) worth flagging.")
+                _render_radar_rows(rows)
+            else:
+                st.caption("No notable sector or theme extremes right now.")
+            st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
+            st.markdown(
+                '<a href="/discover?subview=sectors_themes" target="_self" class="button-link">See sector & theme rotation on Discover</a>',
+                unsafe_allow_html=True,
+            )
 
 
 def _render_stories_row(story_data: dict) -> None:
     """
-    Rendert de rij 'Story'-cirkels + labels aan de linkerkant van de
-    Daily Radar-sectie -- een 4e, brede 'spacer'-kolom erna houdt de 3
-    cirkels compact bij elkaar links, i.p.v. dat st.columns() ze over de
-    volle paginabreedte uitspreidt.
+    Rendert de rij 'Story'-cirkels + labels compact links -- een 4e,
+    brede 'spacer'-kolom erna houdt ze bij elkaar i.p.v. dat st.columns()
+    ze over de volle paginabreedte uitspreidt. De rij is ZELF ook
+    horizontaal scrollbaar (overflow-x + flex-nowrap, scrollbar
+    verborgen) via de eigen st.container(key=...)-klasse -- zodra er
+    ooit meer stories bijkomen dan er in 1 rij passen, schuift de rij
+    door i.p.v. de cirkels te verkleinen/wrappen, precies zoals
+    Instagram-stories werken.
+
+    Klikken toggelt een sessie-status (geen st.dialog meer): dezelfde
+    cirkel nogmaals klikken sluit het paneel, een andere cirkel klikken
+    wisselt direct naar dat paneel.
     """
-    cols = st.columns([1, 1, 1, 7], gap="small")
-    for i, story in enumerate(_STORY_DEFINITIONS):
-        circle_key = f"story_circle_{story['id']}"
-        with cols[i]:
-            st.markdown(_story_circle_css(circle_key, i == 0), unsafe_allow_html=True)
-            with st.container(key=circle_key):
-                clicked = st.button(
-                    "", icon=f":material/{story['icon']}:", key=f"story_btn_{story['id']}",
+    open_key = "today_open_story"
+    if open_key not in st.session_state:
+        st.session_state[open_key] = None
+
+    scroll_key = "today_stories_scroll"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{scroll_key} [data-testid="stHorizontalBlock"] {{ '
+        f'flex-wrap:nowrap !important; overflow-x:auto !important; '
+        f'scrollbar-width:none !important; -ms-overflow-style:none !important; }} '
+        f'.st-key-{scroll_key} [data-testid="stHorizontalBlock"]::-webkit-scrollbar {{ display:none !important; height:0 !important; }} '
+        f'.st-key-{scroll_key} [data-testid="column"] {{ flex-shrink:0 !important; width:auto !important; min-width:64px !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=scroll_key):
+        cols = st.columns([1] * len(_STORY_DEFINITIONS) + [6], gap="small")
+        clicked_story_id = None
+        for i, story in enumerate(_STORY_DEFINITIONS):
+            circle_key = f"story_circle_{story['id']}"
+            is_active = st.session_state[open_key] == story["id"]
+            with cols[i]:
+                st.markdown(_story_circle_css(circle_key, is_active), unsafe_allow_html=True)
+                with st.container(key=circle_key):
+                    if st.button("", icon=f":material/{story['icon']}:", key=f"story_btn_{story['id']}"):
+                        clicked_story_id = story["id"]
+                st.markdown(
+                    f'<div style="text-align:center; font-size:0.64rem; color:#8992A3; margin-top:4px; '
+                    f'white-space:nowrap;">{story["label"]}</div>',
+                    unsafe_allow_html=True,
                 )
-            st.markdown(
-                f'<div style="text-align:center; font-size:0.64rem; color:#8992A3; margin-top:4px; '
-                f'white-space:nowrap;">{story["label"]}</div>',
-                unsafe_allow_html=True,
-            )
-        if clicked:
-            _show_story_dialog(story["id"], story_data)
+
+    if clicked_story_id is not None:
+        # Zelfde cirkel nogmaals -> sluiten. Andere cirkel -> direct wisselen.
+        st.session_state[open_key] = None if st.session_state[open_key] == clicked_story_id else clicked_story_id
+        st.rerun()
+
+    if st.session_state[open_key]:
+        _render_story_panel(st.session_state[open_key], story_data)
 
 
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
@@ -7254,6 +7342,7 @@ def render_today():
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
 
+                st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
                 st.markdown(
                     _flowing_section_header_html("Your Portfolio Today", "account_balance_wallet", is_first=True),
                     unsafe_allow_html=True,
@@ -7284,12 +7373,10 @@ def render_today():
                     )
 
                     three_col_html = (
-                        f'<div style="display:flex; align-items:flex-start; gap:1.75rem;">'
-                        f'<div style="flex:1; min-width:0; padding-right:1.75rem; '
-                        f'border-right:1px solid rgba(137,146,163,0.15);">{col1_html}</div>'
-                        f'<div style="flex:1; min-width:0; padding-right:1.75rem; '
-                        f'border-right:1px solid rgba(137,146,163,0.15);">{col2_html}</div>'
-                        f'<div style="flex:1; min-width:0;">{col3_html}</div>'
+                        f'<div class="hesty-portfolio-row">'
+                        f'<div class="hesty-portfolio-col">{col1_html}</div>'
+                        f'<div class="hesty-portfolio-col">{col2_html}</div>'
+                        f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
                         f'</div>'
                     )
                     st.markdown(three_col_html, unsafe_allow_html=True)
@@ -7335,18 +7422,21 @@ def render_today():
                     )
 
                     # Altijd 3 kolommen opbouwen, ook als er minder dan 3
-                    # insights zijn -- een lege kolom behoudt gewoon de
-                    # structuur (en de scheidslijn), zoals gevraagd.
+                    # insights zijn -- op desktop behoudt een lege kolom
+                    # gewoon de structuur (en de scheidslijn), zoals eerder
+                    # gevraagd; op mobiel wordt een lege kolom verborgen
+                    # (een leeg omlijnd kaartje zou daar raar ogen).
                     insight_cols = []
                     for i in range(3):
                         content = health_cards_html[i] if i < len(health_cards_html) else ""
-                        divider = (
-                            "border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem;"
-                            if i < 2 else ""
-                        )
-                        insight_cols.append(f'<div style="flex:1; min-width:0; {divider}">{content}</div>')
+                        col_classes = "hesty-portfolio-col"
+                        if i == 2:
+                            col_classes += " hesty-portfolio-col-last"
+                        if not content:
+                            col_classes += " hesty-portfolio-col-empty"
+                        insight_cols.append(f'<div class="{col_classes}">{content}</div>')
                     st.markdown(
-                        f'<div style="display:flex; align-items:flex-start; gap:1.75rem;">{"".join(insight_cols)}</div>',
+                        f'<div class="hesty-portfolio-row">{"".join(insight_cols)}</div>',
                         unsafe_allow_html=True,
                     )
                     _render_insight_dismiss_autohide_script()
