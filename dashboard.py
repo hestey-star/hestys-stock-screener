@@ -7685,47 +7685,83 @@ def render_today():
 
             st.markdown(_week_agenda_html(_bucket_events_by_weekday(dated_agenda_items)), unsafe_allow_html=True)
 
-            # --- Top news / Market news -- borderloos gestyled via de eigen
-            # st.expander(key=...)-klasse (dezelfde, bevestigd betrouwbare
-            # .st-key-{key}-techniek als elders op de site), zodat rand en
-            # achtergrond exact matchen met de rest van de minimalistische
-            # pagina i.p.v. Streamlit's eigen, vaste expander-kader. ---
+            # --- Your Daily Briefing -- eigen hoofdsectie, helemaal onderaan.
+            # Zelfde borderloze 'flowing section'-stijl als de rest van de
+            # pagina (geen st.expander()-kader meer), 2 kolommen naast elkaar
+            # op desktop (Top News For You / Global Market News), gescheiden
+            # door exact dezelfde dunne verticale lijn als het portfolio-blok
+            # -- en op mobiel netjes gestapeld i.p.v. naast elkaar geperst. ---
             st.markdown(
-                '<style>'
-                '.st-key-top_news_for_you_expander, .st-key-market_news_expander { '
-                'border: none !important; background: transparent !important; '
-                'box-shadow: none !important; padding-left: 0 !important; padding-right: 0 !important; } '
-                '</style>',
+                _flowing_section_header_html("Your Daily Briefing", "newspaper", is_first=False),
                 unsafe_allow_html=True,
             )
 
-            # --- Top nieuws (portfolio + watchlist) -- nu inklapbaar, want samen
-            # met Market news voelde dit als een lange wand van tekst ---
-            with st.expander("Top news for you", expanded=False, key="top_news_for_you_expander", icon=":material/newspaper:"):
-                st.caption("The 5 most recent news items across your portfolio and watchlist "
-                           "(up to 3 per position, from the last 3 days), most recent first.")
-                with st.spinner("Checking news..."):
-                    top_news = get_top_news_for_tickers(tracked_items, max_items=5)
-                if top_news:
-                    for n in top_news:
-                        pub_date = n["published"].strftime("%Y-%m-%d")
-                        st.markdown(f"- **{n['naam']}**: [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
-                else:
-                    st.caption("No recent news found for your tracked positions.")
+            with st.spinner("Checking news..."):
+                top_news = get_top_news_for_tickers(tracked_items, max_items=5)
+            with st.spinner("Checking market news..."):
+                market_news = get_top_news_for_tickers(
+                    [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
+                    max_items=3,
+                )
 
-            # --- Algemeen marktnieuws (simpele proxy: S&P 500 + AEX) -- ook inklapbaar ---
-            with st.expander("Market news", expanded=False, key="market_news_expander", icon=":material/public:"):
-                with st.spinner("Checking market news..."):
-                    market_news = get_top_news_for_tickers(
-                        [{"naam": "S&P 500", "ticker": "^GSPC"}, {"naam": "AEX", "ticker": "^AEX"}],
-                        max_items=3,
-                    )
-                if market_news:
-                    for n in market_news:
-                        pub_date = n["published"].strftime("%Y-%m-%d")
-                        st.markdown(f"- [{n['title']}]({n['link']}) *({n['publisher']}, {pub_date})*")
-                else:
-                    st.caption("No market news available right now.")
+            def _news_item_html(n: dict, show_name: bool) -> str:
+                # Asset-naam blijft strak bold + ALL-CAPS vóór de titel (zelfde
+                # conventie als de rest van Today) -- bron + datum verhuizen
+                # naar een eigen, kleine/gedempte regel ERONDER, zodat de
+                # titel zelf alle ruimte krijgt i.p.v. te moeten delen met een
+                # opdringerige inline '(bron, datum)'-toevoeging.
+                pub_date = n["published"].strftime("%Y-%m-%d")
+                name_prefix = f'<b>{n["naam"].upper()}:</b> ' if show_name else ""
+                return (
+                    f'<div style="margin-bottom:13px;">'
+                    f'<a href="{n["link"]}" target="_blank" class="hesty-news-link">{name_prefix}{n["title"]}</a>'
+                    f'<div class="hesty-news-meta">{n["publisher"]} &bull; {pub_date}</div>'
+                    f'</div>'
+                )
+
+            top_news_html = (
+                "".join(_news_item_html(n, show_name=True) for n in top_news) if top_news
+                else '<div style="font-size:0.8rem; color:#8992A3;">No recent news found for your tracked positions.</div>'
+            )
+            market_news_html = (
+                "".join(_news_item_html(n, show_name=False) for n in market_news) if market_news
+                else '<div style="font-size:0.8rem; color:#8992A3;">No market news available right now.</div>'
+            )
+
+            st.markdown(
+                '<style>'
+                '.hesty-news-row { display:flex; align-items:flex-start; gap:1.75rem; } '
+                '.hesty-news-col { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); '
+                'padding-right:1.75rem; } '
+                '.hesty-news-col-last { border-right:none !important; padding-right:0 !important; } '
+                '.hesty-news-link, .hesty-news-link:visited { '
+                'color:#E2E8F0 !important; text-decoration:none !important; font-size:0.85rem; '
+                'line-height:1.4; display:block; font-family:\'Inter\', sans-serif !important; } '
+                '.hesty-news-link:hover { color:#1FAE96 !important; } '
+                '.hesty-news-meta { font-size:0.68rem; color:#64748B; margin-top:3px; } '
+                '@media (max-width:640px) { '
+                '.hesty-news-row { flex-direction:column; gap:0; } '
+                '.hesty-news-col { width:100%; border-right:none !important; padding-right:0 !important; '
+                'border-bottom:1px solid rgba(137,146,163,0.15); padding-bottom:1rem; margin-bottom:1rem; } '
+                '.hesty-news-col-last { border-bottom:none !important; padding-bottom:0 !important; margin-bottom:0 !important; } '
+                '} '
+                '</style>'
+                '<div class="hesty-news-row">'
+                '<div class="hesty-news-col">'
+                '<div style="font-size:0.85rem; font-weight:700; color:#EAEDF1;">Top News For You</div>'
+                '<div style="font-size:0.68rem; color:#64748B; margin-top:2px; margin-bottom:11px;">'
+                'The 5 most recent items across your portfolio and watchlist (last 3 days), most recent first.</div>'
+                f'{top_news_html}'
+                '</div>'
+                '<div class="hesty-news-col hesty-news-col-last">'
+                '<div style="font-size:0.85rem; font-weight:700; color:#EAEDF1;">Global Market News</div>'
+                '<div style="font-size:0.68rem; color:#64748B; margin-top:2px; margin-bottom:11px;">'
+                'Latest S&amp;P 500 and AEX headlines.</div>'
+                f'{market_news_html}'
+                '</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def render_premium():
