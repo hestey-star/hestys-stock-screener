@@ -6061,21 +6061,29 @@ def render_discover():
                 "Email address", placeholder="you@example.com",
                 key="discover_optin_email", label_visibility="collapsed",
             )
-            optin_region_col, optin_button_col = st.columns([1, 1])
-            with optin_region_col:
-                optin_region = st.selectbox(
-                    "Region", ["EU", "US_East", "US_West"],
+            # Regio-dropdown bewust klein en ONDER het e-mailveld -- stond
+            # eerst naast de Activate-knop, wat 'm evenveel visueel gewicht
+            # gaf als de belangrijkste actie (inschrijven) zelf. Ook geen
+            # automatische 'EU'-selectie meer -- 'Choose time' staat nu als
+            # niet-gekozen default vooraan, zodat een bezoeker een bewuste
+            # keuze moet maken i.p.v. per ongeluk de verkeerde regio te
+            # laten staan.
+            optin_region_narrow_col = st.columns([2, 3])[0]
+            with optin_region_narrow_col:
+                optin_region_raw = st.selectbox(
+                    "Region", ["Choose time", "EU", "US_East", "US_West"],
                     format_func=lambda x: x.replace("_", " "),
                     key="discover_optin_region", label_visibility="collapsed",
                 )
-            with optin_button_col:
-                optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
+            optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
 
         if optin_submitted:
             if not optin_email or "@" not in optin_email:
                 st.error("Please enter a valid email address.")
+            elif optin_region_raw == "Choose time":
+                st.error("Please choose your timezone.")
             else:
-                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region_raw)
                 send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
                 st.success("Almost there! Check your inbox to confirm your subscription.")
 
