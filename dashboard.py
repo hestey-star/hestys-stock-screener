@@ -2015,19 +2015,26 @@ def _sector_heatmap_tile_html(sector: str, return_pct: float, weight: float, is_
     min_width = 120 + min(weight, 32) * 4
     min_height = 68 + min(weight, 32) * 0.7
 
-    compass_badge = (
-        f'<span style="position:absolute; top:8px; right:10px; font-size:0.85rem;" '
+    # Kompas-icoon nu INLINE, links van de sectornaam, i.p.v. absoluut
+    # gepositioneerd rechtsboven -- dat laatste overlapte de tekst zodra
+    # een blok smal was of de naam lang (bv. 'Communication Services').
+    # Inline naast de tekst kan nooit meer overlappen, ongeacht blokbreedte.
+    compass_icon = (
+        f'<span style="font-size:0.8rem; flex-shrink:0; line-height:1.25;" '
         f'title="Matches assets in your portfolio">🧭</span>'
         if is_portfolio_match else ""
     )
 
     return (
         f'<a href="{discover_url}" target="_self" style="text-decoration:none; '
-        f'flex: {weight} 1 {min_width}px; position:relative; display:block; '
+        f'flex: {weight} 1 {min_width}px; display:block; '
         f'background: rgba({tint_rgb},{bg_alpha:.3f}); border-radius: 10px; '
         f'padding: 0.7rem 0.8rem; min-height: {min_height:.0f}px; box-sizing:border-box;">'
-        f'{compass_badge}'
-        f'<div style="font-size:0.78rem; font-weight:700; color:#EAEDF1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{sector}</div>'
+        f'<div style="display:flex; align-items:flex-start; gap:5px;">'
+        f'{compass_icon}'
+        f'<span style="font-size:0.78rem; font-weight:700; color:#EAEDF1; line-height:1.25; '
+        f'white-space:normal; overflow-wrap:break-word;">{sector}</span>'
+        f'</div>'
         f'<div style="font-size:1.05rem; font-weight:800; color:{color}; margin-top:4px;">{return_pct:+.1f}%</div>'
         f'</a>'
     )
