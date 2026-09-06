@@ -414,20 +414,20 @@ div[data-testid="stFileUploader"] section {
     min-height: 0 !important;
 }
 div[data-testid="stFileUploader"] section button {
-    background: #1FAE96 !important;
-    color: #0B1210 !important;
-    border: none !important;
-    font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    padding: 0.65rem 1.3rem !important;
-    border-radius: 8px !important;
+    background: transparent !important;
+    color: #1FAE96 !important;
+    border: 1px solid rgba(31,174,150,0.35) !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    padding: 0.4rem 1rem !important;
+    border-radius: 6px !important;
     width: 100% !important;
-    box-shadow: 0 2px 8px rgba(31,174,150,0.25) !important;
-    transition: background 0.15s ease, box-shadow 0.15s ease !important;
+    box-shadow: none !important;
+    transition: background 0.15s ease !important;
 }
 div[data-testid="stFileUploader"] section button:hover {
-    background: #24C7AB !important;
-    box-shadow: 0 4px 12px rgba(31,174,150,0.35) !important;
+    background: rgba(31,174,150,0.12) !important;
+    box-shadow: none !important;
 }
 </style>
 <style>
@@ -5744,10 +5744,22 @@ def render_portfolio():
         ":material/receipt_long: Log transaction",
         ":material/visibility: Watchlist",
     ]
-    manage_section_selected = st.segmented_control(
-        "Manage section", options=manage_section_options,
-        default=manage_section_options[0], key="manage_section_select", label_visibility="collapsed",
+    _manage_tabs_key = "manage_section_select_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button {{ '
+        f'border:none !important; background:transparent !important; color:#8992A3 !important; '
+        f'font-weight:600 !important; font-size:0.85rem !important; }} '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {{ '
+        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
     )
+    with st.container(key=_manage_tabs_key):
+        manage_section_selected = st.segmented_control(
+            "Manage section", options=manage_section_options,
+            default=manage_section_options[0], key="manage_section_select", label_visibility="collapsed",
+        )
     if manage_section_selected is None:
         manage_section_selected = manage_section_options[0]
     # De iconen-prefix (":material/...: ") eraf strippen zodat de rest van
@@ -5756,7 +5768,9 @@ def render_portfolio():
     manage_section = manage_section_selected.split(": ", 1)[-1]
 
     if manage_section == "Import from broker":
-        with st.container(border=True):
+        # Geen omlijnd kader meer om deze sectie -- content ademt clean op
+        # de achtergrond, net als de rest van de vernieuwde pagina.
+        with st.container(border=False):
             # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
             # Upload is nu de EERSTE, meest prominente actie -- geen
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
@@ -5773,8 +5787,12 @@ def render_portfolio():
             except TypeError:
                 degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
                                                label_visibility="collapsed")
-            st.caption("Export your broker's 'Transactions' CSV and upload it here to import "
-                       "your full buy/sell history in one go, instead of logging each one by hand.")
+            st.markdown(
+                '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
+                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here to import '
+                'your full buy/sell history in one go, instead of logging each one by hand.</div>',
+                unsafe_allow_html=True,
+            )
 
             if hasattr(database, "get_last_csv_import"):
                 try:
@@ -5784,7 +5802,11 @@ def render_portfolio():
                 if last_csv_import:
                     import_dt = datetime.fromisoformat(last_csv_import["timestamp"])
                     filename_txt = f" ('{last_csv_import['filename']}')" if last_csv_import.get("filename") else ""
-                    st.caption(f"Last CSV import: {import_dt.strftime('%b %d, %Y at %H:%M')}{filename_txt}")
+                    st.markdown(
+                        f'<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
+                        f'margin-top:2px;">Last CSV import: {import_dt.strftime("%b %d, %Y at %H:%M")}{filename_txt}</div>',
+                        unsafe_allow_html=True,
+                    )
 
             # 'Supported brokers'-lijst i.p.v. een losse badge -- schaalt
             # netjes mee zodra er een 2e/3e broker bijkomt. Favicon via
@@ -5797,11 +5819,16 @@ def render_portfolio():
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=degiro.com&sz=32" '
                 'style="width:18px; height:18px; border-radius:4px;">'
-                '<span style="color:#EAEDF1; font-size:0.9rem;">DEGIRO</span>'
+                '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">DEGIRO</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
-            st.page_link(support_page, label="Request a new broker", icon=":material/add_circle:")
+            st.markdown(
+                '<a href="/support" target="_self" class="inline-link" style="font-size:0.78rem; '
+                'text-transform:uppercase; letter-spacing:0.03em; font-weight:600;">Request a new broker &rarr;</a>',
+                unsafe_allow_html=True,
+            )
 
             already_imported = st.session_state.get("degiro_imported_filenames", set())
 
@@ -6581,9 +6608,13 @@ def render_portfolio():
                     st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
                     st.rerun()
 
-    st.caption("Manage email preferences and cash amount under Settings. "
-               "You'll also automatically receive a weekly email with this update, "
-               "at the address you're logged in with.")
+    st.markdown(
+        '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
+        'line-height:1.5;">Manage email preferences and cash amount under Settings. '
+        'You\'ll also automatically receive a weekly email with this update, '
+        'at the address you\'re logged in with.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 
