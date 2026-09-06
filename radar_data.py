@@ -625,17 +625,29 @@ def compute_daily_radar_bundle(user_email: str, holdings: list, watchlist_items:
     # --- Week-agenda: alle gedateerde events (macro + earnings + ex-div)
     # als (datum-string, icon, text)-tuples, zodat dashboard.py ze zelf
     # per weekdag kan bucketen (_bucket_events_by_weekday()) -- dezelfde
-    # bucketing-functie blijft in dashboard.py, dit is puur de rauwe data. ---
-    dated_agenda_items = []
-    from macro_events import MACRO_EVENTS_2026
+    # bucketing-functie blijft in dashboard.py, dit is puur de rauwe data.
+    #
+    # Weekgrens: op een ZATERDAG/ZONDAG wijst 'de huidige week' (via
+    # weekday()) naar de net-afgelopen maandag t/m vrijdag -- die week is
+    # dan al voorbij en toont dus GEEN aankomende events meer (bv. een
+    # vrijdag-CPI die pas over een paar dagen komt). In het weekend rollen
+    # we daarom door naar de AANKOMENDE maandag i.p.v. terug te kijken.
+    from macro_events import get_high_impact_macro_events_for_range
     from datetime import timedelta as _timedelta
     today_d = datetime.now().date()
-    monday = today_d - _timedelta(days=today_d.weekday())
+    if today_d.weekday() >= 5:  # 5 = zaterdag, 6 = zondag
+        monday = today_d + _timedelta(days=7 - today_d.weekday())
+    else:
+        monday = today_d - _timedelta(days=today_d.weekday())
     friday = monday + _timedelta(days=4)
+
+    # Alleen 'High Impact'-events (CPI, FOMC, ECB) op de week-agenda --
+    # PPI (impact='medium') is te veel ruis voor dit compacte overzicht.
     week_macro_events = sorted(
-        (e for e in MACRO_EVENTS_2026 if monday <= datetime.strptime(e["date"], "%Y-%m-%d").date() <= friday),
+        get_high_impact_macro_events_for_range(monday, friday),
         key=lambda e: e["date"],
     )
+    dated_agenda_items = []
     for me in week_macro_events:
         time_part = f" ({me['time']})" if "time" in me else ""
         dated_agenda_items.append({"date": me["date"], "icon": "event", "text": f"{me['name']}{time_part}"})

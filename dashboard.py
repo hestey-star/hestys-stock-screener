@@ -2230,10 +2230,20 @@ def _bucket_events_by_weekday(dated_items: list) -> dict:
     dezelfde manier onder de juiste dag terechtkomen. Events buiten deze
     week (zou niet moeten gebeuren bij de aanroepers hieronder, maar
     voor de zekerheid) worden stil genegeerd.
+
+    Weekgrens (MOET exact gelijk lopen met radar_data.py's eigen
+    berekening, anders vallen 's weekends alle events buiten de 0-4-
+    range en verdwijnen ze stil): op zaterdag/zondag wijst 'de huidige
+    week' via kale weekday()-aftrek naar de al-afgelopen maandag t/m
+    vrijdag. In het weekend rollen we daarom door naar de AANKOMENDE
+    maandag i.p.v. terug te kijken.
     """
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     today = datetime.now().date()
-    monday = today - timedelta(days=today.weekday())
+    if today.weekday() >= 5:  # 5 = zaterdag, 6 = zondag
+        monday = today + timedelta(days=7 - today.weekday())
+    else:
+        monday = today - timedelta(days=today.weekday())
     buckets = {label: [] for label in labels}
     for item_date, icon_html, text in dated_items:
         offset = (item_date - monday).days
