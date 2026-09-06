@@ -6005,6 +6005,68 @@ def render_portfolio():
 
 
 def render_discover():
+    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- BOVENAAN de pagina,
+    #     nog VOOR de hero-sectie, zodat het e-mailveld op mobiel ZONDER
+    #     scrollen zichtbaar is (aanleiding: 137 unieke bezoekers, 0
+    #     opt-ins). De regio-keuze (timezone) wordt nu pas getoond NADAT
+    #     een e-mailadres is ingevuld -- minder initiele keuzestress bij
+    #     de eerste, cruciale actie. ALLEEN voor niet-ingelogde
+    #     bezoekers -- een ingelogde gebruiker beheert z'n e-mail-
+    #     voorkeuren al via Settings.
+    if not current_user.is_logged_in:
+        import database as _database_for_optin
+
+        st.markdown(
+            f"""
+            <div id="signup" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
+                        border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
+                        box-shadow: 0 0 24px rgba(31,174,150,0.12);
+                        padding: 1.1rem 1.25rem; margin: 0.5rem 0 1rem 0;">
+                <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
+                    {_icon_span("mail", size_px=14, color="#1FAE96")} Free daily signals
+                </div>
+                <div style="color:#EAEDF1; font-size:1.1rem; font-weight:700; margin-top:6px; line-height:1.3;">
+                    Quality stocks turning bullish today &mdash; free, every weekday morning &#9749;
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        optin_email = st.text_input(
+            "Email address", placeholder="you@example.com",
+            key="discover_optin_email", label_visibility="collapsed",
+        )
+
+        # De regio-keuze verschijnt pas ZODRA er een e-mailadres is
+        # ingevuld (via session_state, na de rerun die text_input's
+        # eigen blur/enter-gedrag triggert) -- de gebruiker ziet 'm
+        # dus niet meteen bij binnenkomst. Standaard "EU" als iemand
+        # direct doorklikt zonder de regio te zien/aan te passen --
+        # aanpasbaar zodra 'm wel zichtbaar wordt.
+        optin_email_filled = bool(st.session_state.get("discover_optin_email", "").strip())
+        if optin_email_filled:
+            optin_region_col, optin_button_col = st.columns([1, 1])
+            with optin_region_col:
+                optin_region = st.selectbox(
+                    "Region", ["EU", "US_East", "US_West"],
+                    format_func=lambda x: x.replace("_", " "),
+                    key="discover_optin_region", label_visibility="collapsed",
+                )
+            with optin_button_col:
+                optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
+        else:
+            optin_region = st.session_state.get("discover_optin_region", "EU")
+            optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
+
+        if optin_submitted:
+            if not optin_email or "@" not in optin_email:
+                st.error("Please enter a valid email address.")
+            else:
+                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
+                send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
+                st.success("Almost there! Check your inbox to confirm your subscription.")
+
     if not current_user.is_logged_in:
         # --- Hero-sectie: 1 gerichte, heldere binnenkomer voor nieuwe
         # bezoekers, vóór alle navigatie/content -- i.p.v. meteen met
@@ -6227,57 +6289,6 @@ def render_discover():
             st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
 
     else:
-        # --- Niet-ingelogde dagelijkse e-mail-opt-in -- laagdrempelig, geen
-        #     account nodig. ALLEEN voor niet-ingelogde bezoekers -- een
-        #     ingelogde gebruiker beheert z'n e-mail-voorkeuren al via
-        #     Settings, en hoeft dit hier niet nogmaals te zien.
-        #     Formulier direct zichtbaar (geen aparte 'onthul'-knop meer --
-        #     dat gaf samen met de hero-knop het gevoel van '2x eenzelfde
-        #     knop moeten indrukken' voor je bij het e-mailveld komt).
-        if not current_user.is_logged_in:
-            import database as _database_for_optin
-
-            st.markdown(
-                f"""
-                <div id="signup" style="scroll-margin-top: 80px; background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
-                            border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
-                            box-shadow: 0 0 24px rgba(31,174,150,0.12);
-                            padding: 1.4rem 1.5rem; margin: 0.5rem 0 1.5rem 0;">
-                    <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
-                        {_icon_span("mail", size_px=14, color="#1FAE96")} Free daily signals
-                    </div>
-                    <div style="color:#EAEDF1; font-size:1.25rem; font-weight:700; margin-top:8px; line-height:1.35;">
-                        Quality stocks turning bullish today.
-                    </div>
-                    <div style="color:#C3E8E0; font-size:1rem; margin-top:4px; font-weight:500;">
-                        Free, straight to your inbox, every weekday morning ☕
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            optin_col1, optin_col2, optin_col3 = st.columns([2, 1, 1])
-            with optin_col1:
-                optin_email = st.text_input("Email address", placeholder="you@example.com", key="discover_optin_email", label_visibility="collapsed")
-            with optin_col2:
-                optin_region = st.selectbox(
-                    "Region", ["EU", "US_East", "US_West"],
-                    format_func=lambda x: x.replace("_", " "),
-                    key="discover_optin_region", label_visibility="collapsed",
-                )
-            with optin_col3:
-                optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary")
-
-            if optin_submitted:
-                if not optin_email or "@" not in optin_email:
-                    st.error("Please enter a valid email address.")
-                else:
-                    confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region)
-                    send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
-                    st.success("Almost there! Check your inbox to confirm your subscription.")
-
-
         st.markdown(
             f"""
             <div id="signals" style="scroll-margin-top: 80px; background: rgba(137,146,163,0.05);
