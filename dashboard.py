@@ -5662,56 +5662,72 @@ def render_portfolio():
                 _flowing_section_header_html("Rebalancing", "swap_horiz"),
                 unsafe_allow_html=True,
             )
-            with st.container(border=True):
-                if rebalance_result["targets_sum_pct"] > 100:
-                    st.warning(
-                        f"Your target weights add up to {rebalance_result['targets_sum_pct']:.0f}% -- "
-                        f"more than 100%, so not every target can be fully reached at once. "
-                        f"Consider lowering a few targets under 'Manage'."
+            # --- Geen omlijnd kader meer om de hele sectie -- items zijn nu
+            # 1 doorlopende, ademende lijst, puur gescheiden door een
+            # flinterdunne horizontale lijn per item (zelfde rgba-waarde
+            # als de rest van de vernieuwde pagina's). Logica/berekeningen
+            # (euro-bedragen, shares, percentages) volledig ongewijzigd. ---
+            if rebalance_result["targets_sum_pct"] > 100:
+                # Zachte, chique amber-waarschuwing i.p.v. Streamlit's eigen
+                # felle st.warning()-balk.
+                st.markdown(
+                    f'<div style="background:rgba(69,26,3,0.2); border:1px solid rgba(120,53,15,0.35); '
+                    f'border-radius:8px; padding:0.7rem 1rem; margin-bottom:0.9rem; display:flex; '
+                    f'align-items:flex-start; gap:0.5rem;">'
+                    f'{_icon_span("warning", size_px=16, color="#E8A93C")}'
+                    f'<span style="color:#E8A93C; font-size:0.85rem; line-height:1.5; '
+                    f'font-family:\'Inter\', sans-serif !important;">'
+                    f'Your target weights add up to {rebalance_result["targets_sum_pct"]:.0f}% -- '
+                    f'more than 100%, so not every target can be fully reached at once. '
+                    f'Consider lowering a few targets under \'Manage\'.</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            if rebalance_result["suggestions"]:
+                for sugg in rebalance_result["suggestions"]:
+                    action_word = "Buy" if sugg["action"] == "buy" else "Sell"
+                    action_color = TODAY_POSITIVE_TEXT if sugg["action"] == "buy" else TODAY_NEGATIVE_TEXT
+                    shares_txt = ""
+                    if sugg["diff_shares"] is not None:
+                        shares_txt = (
+                            f' <span style="color:#8992A3; font-weight:400;">&middot; '
+                            f'{abs(sugg["diff_shares"]):.2f} shares</span>'
+                        )
+
+                    # Lichte, subtiele balk: huidige% als vulling, een
+                    # verticale streep op de target%-positie -- geeft in
+                    # 1 oogopslag de afstand tot het doel, naast de
+                    # tekstuele percentages.
+                    bar_current_pct = min(sugg["current_pct"], 100)
+                    bar_target_pct = min(sugg["target_pct"], 100)
+                    bar_html = (
+                        '<div style="position:relative; height:4px; background:rgba(137,146,163,0.10); '
+                        'border-radius:2px; margin-top:0.35rem;">'
+                        f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
+                        f'background:{action_color}; border-radius:2px;"></div>'
+                        f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-2px; height:8px; '
+                        'width:2px; background:#EAEDF1; border-radius:1px;"></div>'
+                        '</div>'
                     )
-                if rebalance_result["suggestions"]:
-                    for sugg in rebalance_result["suggestions"]:
-                        action_word = "Buy" if sugg["action"] == "buy" else "Sell"
-                        action_color = "#1FAE96" if sugg["action"] == "buy" else "#E5484D"
-                        shares_txt = ""
-                        if sugg["diff_shares"] is not None:
-                            shares_txt = (
-                                f' <span style="color:#8992A3; font-weight:400;">&middot; '
-                                f'{abs(sugg["diff_shares"]):.2f} shares</span>'
-                            )
 
-                        # Lichte, subtiele balk: huidige% als vulling, een
-                        # verticale streep op de target%-positie -- geeft in
-                        # 1 oogopslag de afstand tot het doel, naast de
-                        # tekstuele percentages.
-                        bar_current_pct = min(sugg["current_pct"], 100)
-                        bar_target_pct = min(sugg["target_pct"], 100)
-                        bar_html = (
-                            '<div style="position:relative; height:4px; background:rgba(137,146,163,0.10); '
-                            'border-radius:2px; margin-top:0.35rem;">'
-                            f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
-                            f'background:{action_color}; border-radius:2px;"></div>'
-                            f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-2px; height:8px; '
-                            'width:2px; background:#EAEDF1; border-radius:1px;"></div>'
-                            '</div>'
-                        )
-
-                        st.markdown(
-                            f'<div style="padding:0.5rem 0; border-bottom:1px solid rgba(137,146,163,0.12);">'
-                            f'<div style="display:flex; justify-content:space-between; align-items:center;">'
-                            f'<div><span style="color:#EAEDF1; font-weight:600;">{sugg["naam"]}</span> '
-                            f'<span style="color:#8992A3; font-size:0.8rem;">({sugg["ticker"]})</span><br>'
-                            f'<span style="color:#8992A3; font-size:0.78rem;">{sugg["current_pct"]:.1f}% now '
-                            f'&#8594; {sugg["target_pct"]:.1f}% target</span></div>'
-                            f'<span style="color:{action_color}; font-weight:700;">{action_word} {rebalance_symbol}'
-                            f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
-                            '</div>'
-                            f'{bar_html}'
-                            '</div>',
-                            unsafe_allow_html=True,
-                        )
-                else:
-                    st.caption("All positions with a target weight are already close enough to their target -- nothing to rebalance right now.")
+                    st.markdown(
+                        f'<div style="padding:0.7rem 0; border-bottom:1px solid rgba(148,163,184,0.1);">'
+                        f'<div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">'
+                        f'<div><span style="color:#EAEDF1; font-weight:600; text-transform:uppercase; '
+                        f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">{sugg["naam"].upper()}</span> '
+                        f'<span style="color:#8992A3; font-size:0.8rem;">({sugg["ticker"]})</span><br>'
+                        f'<span style="color:#64748B; font-size:0.7rem; font-family:\'Inter\', sans-serif !important;">'
+                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</span></div>'
+                        f'<span style="color:{action_color}; font-weight:700; white-space:nowrap; '
+                        f'font-family:\'Inter\', sans-serif !important;">{action_word} {rebalance_symbol}'
+                        f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
+                        '</div>'
+                        f'{bar_html}'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("All positions with a target weight are already close enough to their target -- nothing to rebalance right now.")
         # Geen 'else' hier -- als er nergens een target is ingesteld, blijft
         # deze sectie gewoon volledig ongetoond (geen lege sectie/verwijzing-
         # ruis voor gebruikers die de target-weight-feature niet gebruiken).
