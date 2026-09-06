@@ -5406,26 +5406,75 @@ def render_portfolio():
                 selected_holding = position_options[selected_position_label]
                 title_col, target_col, target_save_col = st.columns([3, 1.3, 1])
                 with title_col:
-                    st.markdown(f"**{selected_holding['naam']} ({selected_holding['ticker']})**")
-                with target_col:
-                    detail_new_target = st.number_input(
-                        "Target weight %", min_value=0.0, max_value=100.0, step=0.5,
-                        value=float(selected_holding.get("target_weight") or 0.0),
-                        key=f"detail_target_weight_{selected_holding['id']}",
-                        help="The % of your portfolio you want this position to make up",
+                    # Titel krachtig in ALL-CAPS, zelfde conventie als de
+                    # rest van de site (Today's asset-namen, portfolio-
+                    # tabel-tickers) i.p.v. platte st.markdown()-bold.
+                    st.markdown(
+                        f'<div style="font-size:1.1rem; font-weight:800; color:#EAEDF1; '
+                        f'text-transform:uppercase; letter-spacing:0.02em; '
+                        f'font-family:\'Inter\', sans-serif !important;">'
+                        f'{selected_holding["naam"].upper()} ({selected_holding["ticker"]})</div>',
+                        unsafe_allow_html=True,
                     )
+                with target_col:
+                    _target_input_key = f"detail_target_weight_wrap_{selected_holding['id']}"
+                    st.markdown(
+                        f'<style>.st-key-{_target_input_key} div[data-baseweb="input"] {{ '
+                        f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+                        f'box-shadow:none !important; }} '
+                        f'</style>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.container(key=_target_input_key):
+                        detail_new_target = st.number_input(
+                            "Target weight %", min_value=0.0, max_value=100.0, step=0.5,
+                            value=float(selected_holding.get("target_weight") or 0.0),
+                            key=f"detail_target_weight_{selected_holding['id']}",
+                            help="The % of your portfolio you want this position to make up",
+                        )
                 with target_save_col:
                     st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
-                    if st.button("Save", key=f"detail_save_target_{selected_holding['id']}"):
-                        database.set_target_weight(
-                            selected_holding["id"], user_email,
-                            detail_new_target if detail_new_target > 0 else None,
-                        )
-                        st.rerun()
-                detail_col1, detail_col2 = st.columns(2, gap="medium")
+                    _save_target_key = f"detail_save_target_wrap_{selected_holding['id']}"
+                    st.markdown(
+                        f'<style>.st-key-{_save_target_key} button {{ '
+                        f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
+                        f'color:#1FAE96 !important; font-weight:600 !important; padding:0.3rem 0.9rem !important; '
+                        f'border-radius:6px !important; }} '
+                        f'.st-key-{_save_target_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+                        f'</style>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.container(key=_save_target_key):
+                        if st.button("Save", key=f"detail_save_target_{selected_holding['id']}"):
+                            database.set_target_weight(
+                                selected_holding["id"], user_email,
+                                detail_new_target if detail_new_target > 0 else None,
+                            )
+                            st.rerun()
 
-                with detail_col1:
-                    with st.container(border=True):
+                # --- Transacties (links) / prijsgrafiek (rechts) -- geen
+                # omlijnde kaders meer, alleen een dunne verticale
+                # scheidslijn tussen de 2 kolommen (zelfde rgba-waarde als
+                # overal elders op het platform). ---
+                _detail_row_key = f"portfolio_detail_row_{selected_holding['id']}"
+                st.markdown(
+                    f'<style>'
+                    f'.st-key-{_detail_row_key} [data-testid="column"]:first-child {{ '
+                    f'border-right:1px solid rgba(148,163,184,0.15); padding-right:1.5rem; }} '
+                    f'.st-key-{_detail_row_key} [data-testid="column"]:last-child {{ padding-left:1.5rem; }} '
+                    f'@media (max-width:640px) {{ '
+                    f'.st-key-{_detail_row_key} [data-testid="column"]:first-child {{ '
+                    f'border-right:none !important; padding-right:0 !important; '
+                    f'border-bottom:1px solid rgba(148,163,184,0.15); padding-bottom:1rem; margin-bottom:1rem; }} '
+                    f'.st-key-{_detail_row_key} [data-testid="column"]:last-child {{ padding-left:0 !important; }} '
+                    f'}} '
+                    f'</style>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_detail_row_key):
+                    detail_col1, detail_col2 = st.columns(2, gap="medium")
+
+                    with detail_col1:
                         transactions = database.get_transactions_for_holding(user_email, selected_holding["id"])
                         detail_currency_symbol = "€" if selected_holding.get("value_currency") == "EUR" else "$"
                         if transactions:
@@ -5460,7 +5509,7 @@ def render_portfolio():
                                 # total_return_pct is een verhouding, valuta-onafhankelijk -- geen conversie nodig
                             if perf and perf.get("total_return_pct") is not None:
                                 pct = perf["total_return_pct"]
-                                return_color = "#1FAE96" if pct >= 0 else "#E5484D"
+                                return_color = TODAY_POSITIVE_TEXT if pct >= 0 else TODAY_NEGATIVE_TEXT
                                 return_icon = "trending_up" if pct >= 0 else "trending_down"
                                 st.markdown(
                                     f'<div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.2rem;" '
@@ -5478,7 +5527,7 @@ def render_portfolio():
                                 # totaalrendement'-situatie verklaart, i.p.v. dat de
                                 # gebruiker alleen op de tooltip moet vertrouwen.
                                 if perf.get("realized_pnl") and abs(perf["realized_pnl"]) >= 0.01:
-                                    realized_color = "#1FAE96" if perf["realized_pnl"] >= 0 else "#E5484D"
+                                    realized_color = TODAY_POSITIVE_TEXT if perf["realized_pnl"] >= 0 else TODAY_NEGATIVE_TEXT
                                     st.markdown(
                                         f'<div style="font-size:0.78rem; color:#8992A3; margin-bottom:0.5rem;">'
                                         f'Includes <span style="color:{realized_color}; font-weight:600;">'
@@ -5510,7 +5559,7 @@ def render_portfolio():
                             tx_rows_html = []
                             for t in transactions_to_show:
                                 is_buy = t["transaction_type"] == "buy"
-                                type_color = "#1FAE96" if is_buy else "#E5484D"
+                                type_color = TODAY_POSITIVE_TEXT if is_buy else TODAY_NEGATIVE_TEXT
                                 type_icon = "add_circle" if is_buy else "remove_circle"
                                 type_label = "Buy" if is_buy else "Sell"
                                 # Het symbool per transactie is gebaseerd op DIE
@@ -5528,18 +5577,20 @@ def render_portfolio():
                                     f'padding:0.5rem 0.15rem; border-bottom:1px solid rgba(137,146,163,0.12);">'
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
                                     f'{_icon_span(type_icon, size_px=16, color=type_color)}'
-                                    f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem;">{type_label}</span>'
-                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
+                                    f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem; '
+                                    f'font-family:\'Inter\', sans-serif !important;">{type_label}</span>'
+                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'Inter\', sans-serif !important; '
+                                    f'font-variant-numeric: tabular-nums;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
                                     f'</div>'
-                                    f'<span style="color:#8992A3; font-size:0.78rem; white-space:nowrap; flex-shrink:0;">{t["transaction_date"]}</span>'
+                                    f'<span style="color:#64748B; font-size:0.68rem; white-space:nowrap; flex-shrink:0; '
+                                    f'font-family:\'Inter\', sans-serif !important;">{t["transaction_date"]}</span>'
                                     f'</div>'
                                 )
                             st.markdown("".join(tx_rows_html), unsafe_allow_html=True)
                         else:
                             st.caption("No transactions logged for this position yet -- log one under 'Manage' below.")
 
-                with detail_col2:
-                    with st.container(border=True):
+                    with detail_col2:
                         st.caption("Price -- last 6 months")
                         retry_chart_key = f"retry_chart_{selected_holding['ticker']}"
                         with st.spinner("Loading chart..."):
@@ -5571,10 +5622,15 @@ def render_portfolio():
                                     margin=dict(t=10, b=10, l=10, r=10),
                                     height=220,
                                     showlegend=False,
-                                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                                    # As-teksten (bv. 'Apr 2026', '110') klein en
+                                    # gedempt (text-xs text-slate-500) -- laat de
+                                    # koerslijn zelf spreken, de assen zijn puur
+                                    # ondersteunend en horen niet te concurreren.
+                                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)", tickfont=dict(size=9, color="#64748B")),
                                     yaxis=dict(
                                         gridcolor="rgba(137,146,163,0.15)",
                                         range=[y_min - y_padding, y_max + y_padding],
+                                        tickfont=dict(size=9, color="#64748B"),
                                     ),
                                 )
                                 st.plotly_chart(mini_fig)
