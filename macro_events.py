@@ -79,3 +79,47 @@ def get_high_impact_macro_events_for_range(start_date, end_date) -> list:
         if e.get("impact") == "high"
         and start_date <= datetime.strptime(e["date"], "%Y-%m-%d").date() <= end_date
     ]
+
+# Officiele NYSE/beurskalender-feestdagen -- volledig GESLOTEN dagen.
+# Bron: officiele NYSE-holiday-kalender (nyse.com/markets/hours-calendars).
+# Independence Day 2026 valt op zaterdag 4 juli -> beurs sluit i.p.v.
+# daarvoor op de vrijdag ervoor (3 juli), zoals gebruikelijk bij een
+# NYSE-feestdag die in het weekend valt. Moet jaarlijks bijgewerkt
+# worden zodra de kalender voor het volgende jaar gepubliceerd wordt.
+US_MARKET_HOLIDAYS_2026 = [
+    {"date": "2026-01-01", "name": "New Year's Day"},
+    {"date": "2026-01-19", "name": "Martin Luther King Jr. Day"},
+    {"date": "2026-02-16", "name": "Washington's Birthday"},
+    {"date": "2026-04-03", "name": "Good Friday"},
+    {"date": "2026-05-25", "name": "Memorial Day"},
+    {"date": "2026-06-19", "name": "Juneteenth National Independence Day"},
+    {"date": "2026-07-03", "name": "Independence Day (observed)"},
+    {"date": "2026-09-07", "name": "Labor Day"},
+    {"date": "2026-11-26", "name": "Thanksgiving Day"},
+    {"date": "2026-12-25", "name": "Christmas Day"},
+]
+
+
+# Bekende VROEGE-sluitingsdagen (beurs blijft open, sluit om 13:00 EST
+# i.p.v. de gebruikelijke 16:00 EST) -- alleen de dagen die niet zelf
+# al een volledige feestdag zijn.
+US_MARKET_EARLY_CLOSE_DAYS_2026 = [
+    {"date": "2026-11-27", "name": "Day after Thanksgiving", "close_time": "13:00 EST"},
+    {"date": "2026-12-24", "name": "Christmas Eve", "close_time": "13:00 EST"},
+]
+
+
+def get_market_holiday(date_str: str):
+    """Geeft de holiday-entry terug als de beurs op deze datum VOLLEDIG gesloten is, anders None."""
+    for h in US_MARKET_HOLIDAYS_2026:
+        if h["date"] == date_str:
+            return h
+    return None
+
+
+def get_market_early_close(date_str: str):
+    """Geeft de early-close-entry terug als de beurs op deze datum VROEG sluit, anders None."""
+    for e in US_MARKET_EARLY_CLOSE_DAYS_2026:
+        if e["date"] == date_str:
+            return e
+    return None

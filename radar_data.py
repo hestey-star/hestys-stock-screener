@@ -632,7 +632,7 @@ def compute_daily_radar_bundle(user_email: str, holdings: list, watchlist_items:
     # dan al voorbij en toont dus GEEN aankomende events meer (bv. een
     # vrijdag-CPI die pas over een paar dagen komt). In het weekend rollen
     # we daarom door naar de AANKOMENDE maandag i.p.v. terug te kijken.
-    from macro_events import get_high_impact_macro_events_for_range
+    from macro_events import get_high_impact_macro_events_for_range, get_market_holiday, get_market_early_close
     from datetime import timedelta as _timedelta
     today_d = datetime.now().date()
     if today_d.weekday() >= 5:  # 5 = zaterdag, 6 = zondag
@@ -659,6 +659,31 @@ def compute_daily_radar_bundle(user_email: str, holdings: list, watchlist_items:
     for d in upcoming_ex_div:
         d_date = today_d + _timedelta(days=d["days_until"])
         dated_agenda_items.append({"date": str(d_date), "icon": "payments", "text": f"<b>{d['naam']}</b> ex-dividend"})
+
+    # --- US Market Holidays / vroege sluitingen -- een VOLLEDIGE
+    # marktsluiting OVERSCHRIJFT al het andere op die dag (ook de
+    # eventuele High Impact macro-events erboven): een gesloten beurs is
+    # altijd het belangrijkste wat er die dag te melden valt, en moet
+    # meteen in het oog springen i.p.v. te verdrinken tussen andere
+    # bulletjes. Een VROEGE sluiting overschrijft niets -- de beurs is
+    # gewoon open, dus dat wordt als extra regel TOEGEVOEGD.
+    for _offset in range(5):
+        _day = monday + _timedelta(days=_offset)
+        _day_str = str(_day)
+        _holiday = get_market_holiday(_day_str)
+        if _holiday:
+            dated_agenda_items = [item for item in dated_agenda_items if item["date"] != _day_str]
+            dated_agenda_items.append({
+                "date": _day_str, "icon": "event",
+                "text": f"US markets closed ({_holiday['name']})",
+            })
+            continue
+        _early_close = get_market_early_close(_day_str)
+        if _early_close:
+            dated_agenda_items.append({
+                "date": _day_str, "icon": "event",
+                "text": f"US markets close early ({_early_close['close_time']})",
+            })
 
     return {
         "day_items": day_items,
