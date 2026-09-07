@@ -7480,8 +7480,6 @@ def render_discover():
 
 
 def render_today():
-    st.markdown("### Today")
-
     if not current_user.is_logged_in:
         st.markdown(
             """
@@ -7538,8 +7536,6 @@ def render_today():
         user_email = current_user.email
         holdings = filter_active_holdings(database.get_user_holdings(user_email))
         watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
-
-        st.write("Here are your daily points that deserve your attention.")
 
         if not holdings and not watchlist_items:
             st.info("Add assets under My Portfolio or your Watchlist to get personal signals and news here.")
@@ -8578,11 +8574,23 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # --- Actieve pagina krijgt een linker accent-balk + jade tekstkleur. ---
+    # --- Sidebar-achtergrond EXACT gelijk aan de hoofd-app (monochroom
+    # effect) + een flinterdunne rand rechts i.p.v. een zichtbaar
+    # kleurverschil tussen zijbalk en pagina. #0B1210 is dezelfde
+    # diepdonkere tint die elders al bewust als 'paginakleur' gebruikt
+    # wordt (zie bv. de tekstkleur op de gele hero-CTA-knop, die
+    # doelbewust met de achtergrond matcht). Actieve pagina krijgt nu
+    # dezelfde platte, zachte teal-achtergrondvulling als de navigatie-
+    # tabs elders op de site (Daily/All-time-toggle, Manage-tabs) i.p.v.
+    # de eerdere linker accent-balk + kleurverloop. ---
     _active_url_path = getattr(pg, "url_path", "")
     _nav_css_parts = ["""
     <style>
     div[data-testid="stSidebarNav"] { display: none; }
+    div[data-testid="stSidebar"] {
+        background-color: #0B1210 !important;
+        border-right: 1px solid rgba(148,163,184,0.15) !important;
+    }
     div[data-testid="stSidebar"] a[href$="/discover"],
     div[data-testid="stSidebar"] a[href$="/today"],
     div[data-testid="stSidebar"] a[href$="/portfolio"],
@@ -8593,7 +8601,7 @@ with st.sidebar:
         font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
         text-decoration: none !important; color: #8992A3 !important;
-        border-left: 3px solid transparent; margin-bottom: 3px;
+        margin-bottom: 3px;
     }
     div[data-testid="stSidebar"] a[href$="/discover"]:hover,
     div[data-testid="stSidebar"] a[href$="/today"]:hover,
@@ -8608,8 +8616,8 @@ with st.sidebar:
         _nav_css_parts.append(f"""
     div[data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
         color: #1FAE96 !important;
-        background: linear-gradient(90deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-        border-left: 3px solid #1FAE96 !important;
+        background: rgba(31,174,150,0.15) !important;
+        border-radius: 8px !important;
     }}
     """)
     _nav_css_parts.append("</style>")
