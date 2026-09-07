@@ -7508,10 +7508,9 @@ def render_today():
             # HTML-blok opgebouwd (i.p.v. st.columns() + CSS-nesting erop) --
             # zelfde 'eigen HTML'-aanpak als de streamlit_css_lessen.md
             # aanraadt voor precieze controle zonder tegen Streamlit's eigen,
-            # onbekende DOM-lagen te hoeven vechten. De 'View My Portfolio'-
-            # link zit daarom ook als een gewone <a> (.inline-link-klasse,
-            # zelfde patroon als elders op de site) in kolom 1 zelf, i.p.v.
-            # een losse st.page_link()-widget eronder. ---
+            # onbekende DOM-lagen te hoeven vechten. Geen losse 'View My
+            # Portfolio'-link meer in kolom 1 -- laatste stukje handmatige
+            # navigatieruis, verwijderd. ---
             if holdings:
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
@@ -7533,8 +7532,6 @@ def render_today():
                         f'<div style="font-size:2.75rem; font-weight:800; color:{vs_yesterday_color}; margin-top:8px; '
                         f'line-height:1.1; font-family:\'Inter\', sans-serif !important; '
                         f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>'
-                        f'<a href="/portfolio" target="_self" class="inline-link" '
-                        f'style="font-size:0.78rem; margin-top:16px;">View My Portfolio</a>'
                         f'</div>'
                     )
                     col2_html = _portfolio_mover_tile_html(
@@ -7558,7 +7555,6 @@ def render_today():
                     mcol1, mcol2, mcol3 = st.columns(3, gap="medium")
                     with mcol1:
                         st.metric("Your Portfolio Today", "n/a")
-                        st.page_link(portfolio_page, label="View My Portfolio")
                     with mcol2:
                         st.metric("Best today", "n/a")
                     with mcol3:
