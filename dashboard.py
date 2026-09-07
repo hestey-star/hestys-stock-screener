@@ -2358,13 +2358,14 @@ def _week_agenda_html(buckets: dict) -> str:
         )
     return (
         '<style>'
-        # Zachte, egale achtergrondvulling om de HELE agenda (zelfde
-        # rgba als de 'Your Portfolio Today'-heldkolom) -- laat de
-        # week-agenda als een aparte, herkenbare tijdlijn boven de
-        # bulletins uitspringen, i.p.v. op dezelfde kale achtergrond te
-        # zweven als de rest van de sectie.
-        '.hesty-week-agenda-card { background:rgba(15,23,42,0.4); border-radius:14px; '
-        'padding:1.15rem 1.35rem; box-sizing:border-box; } '
+        # Duidelijk zichtbare, matte achtergrondvulling (solide tint,
+        # geen lage-opacity-overlay meer -- die viel bijna volledig weg
+        # tegen de diepdonkere site-achtergrond) + een flinterdunne
+        # rand voor extra definitie. Laat de week-agenda nu ECHT als
+        # een aparte, herkenbare tijdlijn-tegel boven de bulletins
+        # uitspringen.
+        '.hesty-week-agenda-card { background:#151f32; border:1px solid rgba(148,163,184,0.12); '
+        'border-radius:14px; padding:1.15rem 1.35rem; box-sizing:border-box; } '
         '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.75rem; } '
         '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem; } '
         '.hesty-week-day-last { border-right:none !important; padding-right:0 !important; } '
