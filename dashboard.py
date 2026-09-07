@@ -6657,7 +6657,8 @@ def render_portfolio():
                                 f'padding:0.5rem 0.2rem !important; margin:0 !important; display:flex !important; '
                                 f'align-items:center !important; justify-content:space-between !important; '
                                 f'width:100% !important; max-width:100% !important; '
-                                f'overflow-x:hidden !important; box-sizing:border-box !important; }} '
+                                f'overflow-x:hidden !important; box-sizing:border-box !important; '
+                                f'cursor:default !important; touch-action:pan-y !important; }} '
                                 f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
                                 f'flex-direction:row !important; flex-wrap:nowrap !important; '
                                 f'align-items:center !important; width:100% !important; max-width:100% !important; }} '
@@ -6671,7 +6672,18 @@ def render_portfolio():
                                 # min-width:0 op * is voor de vaste-breedte-elementen (logo,
                                 # ticker, knoppen) onschadelijk -- die blijven vast dankzij
                                 # hun eigen flex-shrink:0/expliciete breedte hieronder.
-                                f'.st-key-{row_key} * {{ min-width:0 !important; }} '
+                                #
+                                # Ook -webkit-user-drag:none + user-select:none op ALLES --
+                                # de 'versleepbare rij'-bug kwam van de favicon-<img>: browsers
+                                # maken afbeeldingen STANDAARD sleepbaar (draggable), ook zonder
+                                # een expliciete draggable="true"-attribuut of drag-and-drop-
+                                # library (die dit project sowieso niet gebruikt). Dat sleepte
+                                # zichtbaar een 'schaduw' van de rij mee bij een touch/muis-
+                                # gebaar. touch-action:pan-y op de rij zelf zorgt bovendien dat
+                                # verticaal scrollen altijd gewoon soepel doorloopt i.p.v. dat
+                                # een rij het gebaar als eigen gebeurtenis probeert te 'vangen'.
+                                f'.st-key-{row_key} * {{ min-width:0 !important; '
+                                f'-webkit-user-drag:none !important; user-select:none !important; }} '
                                 # Kolom 1 (logo+naam): MOET krimpen (flex-1 min-w-0) zodat
                                 # lange namen kunnen afkappen i.p.v. de rij breder te duwen
                                 # dan het scherm.
@@ -6721,7 +6733,9 @@ def render_portfolio():
                                         f'<div style="width:28px; height:28px; flex-shrink:0; display:flex; '
                                         f'align-items:center; justify-content:center;">'
                                         f'<img src="https://www.google.com/s2/favicons?domain={favicon_domain}&sz=32" '
-                                        f'style="width:18px; height:18px; border-radius:4px;" '
+                                        f'draggable="false" '
+                                        f'style="width:18px; height:18px; border-radius:4px; -webkit-user-drag:none; '
+                                        f'user-select:none; pointer-events:none;" '
                                         f'onerror="this.style.display=\'none\'"></div>'
                                     )
                                 else:
