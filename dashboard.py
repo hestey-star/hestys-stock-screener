@@ -5096,11 +5096,6 @@ def render_portfolio():
     from portfolio_watch import check_holding
 
     user_email = current_user.email
-    st.markdown(
-        '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
-        unsafe_allow_html=True,
-    )
-    st.subheader(f"Welcome, {current_user.name}")
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
     holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
@@ -5156,6 +5151,16 @@ def render_portfolio():
 
         overview_col1, overview_col2 = st.columns([2, 1])
         with overview_col2:
+            # Privacy-indicator verhuisd van een grote, groen-omrande pil
+            # linksboven naar een cleane, gedempte tekstregel hier -- direct
+            # boven de valuta/Update-controls waar 'ie hoort, zonder de
+            # linkerkant (het portfoliobedrag) te storen.
+            st.markdown(
+                '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; '
+                'color:#64748B; font-weight:500; font-family:\'Inter\', sans-serif !important; '
+                'text-align:right; margin-bottom:0.3rem;">&#128274; Private data</div>',
+                unsafe_allow_html=True,
+            )
             display_currency = st.selectbox(
                 "Display currency", ["EUR", "USD"], key="display_currency",
                 label_visibility="collapsed", help="Display currency",
