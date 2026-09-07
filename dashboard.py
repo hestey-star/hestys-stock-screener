@@ -6628,24 +6628,29 @@ def render_portfolio():
                             row_key = None
                         if row_key:
                             border_css = "" if is_last_in_col else "border-bottom:1px solid rgba(148,163,184,0.1);"
-                            # Padding nu op py-1 (0.25rem) -- superslank, net
-                            # genoeg voor het 28px-logo-blok. Daarnaast worden
-                            # ALLE Streamlit-eigen wrapper-elementen binnen deze
-                            # rij (kolommen, blokken, widget-containers) hard
-                            # gedwongen tot items-center + margin/padding:0 --
-                            # dit is de daadwerkelijke fix voor het losse
-                            # klokje/prullenbak: die zaten in APARTE kolommen
-                            # met elk hun EIGEN, van elkaar verschillende
-                            # Streamlit-standaard-marge rond een popover vs.
-                            # een gewone knop, wat de eerdere verspringing
-                            # veroorzaakte.
+                            # Padding op py-2 (0.5rem) -- slank maar met net
+                            # genoeg lucht. Daarnaast worden ALLE Streamlit-
+                            # eigen wrapper-elementen binnen deze rij
+                            # (horizontale blok, kolommen, widget-containers)
+                            # hard gedwongen tot een horizontale flex-rij --
+                            # dit is de daadwerkelijke fix voor de 'lompe
+                            # blokken' op mobiel: Streamlit's EIGEN, ingebouwde
+                            # mobiele CSS zet st.columns() standaard om naar
+                            # flex-direction:column onder een bepaalde
+                            # schermbreedte (vandaar dat logo/naam/knoppen
+                            # onder elkaar zakten) -- die override forceren we
+                            # hier terug naar row, altijd, ongeacht schermgrootte.
                             st.markdown(
                                 f'<style>'
                                 f'.st-key-{row_key} {{ {border_css} '
-                                f'padding:0.25rem 0.2rem !important; margin:0 !important; display:flex !important; '
+                                f'padding:0.5rem 0.2rem !important; margin:0 !important; display:flex !important; '
+                                f'align-items:center !important; width:100% !important; }} '
+                                f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
+                                f'flex-direction:row !important; flex-wrap:nowrap !important; '
                                 f'align-items:center !important; width:100% !important; }} '
                                 f'.st-key-{row_key} [data-testid="column"] {{ '
-                                f'display:flex !important; align-items:center !important; padding:0 !important; }} '
+                                f'display:flex !important; align-items:center !important; padding:0 !important; '
+                                f'width:auto !important; min-width:0 !important; }} '
                                 f'.st-key-{row_key} [data-testid="stVerticalBlock"] {{ gap:0 !important; }} '
                                 f'.st-key-{row_key} [data-testid="element-container"], '
                                 f'.st-key-{row_key} [data-testid="stPopover"], '
