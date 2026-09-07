@@ -5770,7 +5770,7 @@ def render_portfolio():
                     bar_target_pct = min(sugg["target_pct"], 100)
                     bar_html = (
                         '<div style="position:relative; height:3px; background:rgba(137,146,163,0.10); '
-                        'border-radius:2px; margin-top:0.4rem;">'
+                        'border-radius:2px; margin-top:0.3rem;">'
                         f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
                         f'background:{action_color}; border-radius:2px;"></div>'
                         f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-1.5px; height:6px; '
@@ -5780,34 +5780,36 @@ def render_portfolio():
 
                     rebalance_cards_html.append(
                         f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-                        f'border-radius:10px; padding:0.7rem 0.85rem;">'
-                        # Naam/ticker op een eigen regel -- kleiner en compacter
-                        # (text-sm i.p.v. de ongestylede, browser-standaard
-                        # 1rem van voorheen) maar nog steeds strak ALL-CAPS.
-                        # Mag vrij naar 2 regels breken (lange ETF-namen)
-                        # ZONDER de datarij eronder te verstoren, want die zit
-                        # in een eigen, onafhankelijke flex-rij.
-                        f'<div style="color:#EAEDF1; font-size:0.8rem; font-weight:600; text-transform:uppercase; '
+                        f'border-radius:10px; padding:0.45rem 0.85rem;">'
+                        # Naam (links) en Buy/Sell-data (rechts) nu op 1 en
+                        # dezelfde regel, verticaal gecentreerd -- i.p.v. 2
+                        # losse, gestapelde rijen. Dat scheelt een hele regel
+                        # hoogte t.o.v. de vorige versie, precies wat een
+                        # 'flinterdunne strip' nodig heeft. min-width:0 +
+                        # overflow:hidden op de naam zodat een lange naam
+                        # afkapt i.p.v. de Buy/Sell-data van het scherm te
+                        # duwen; white-space:nowrap + flex-shrink:0 rechts
+                        # houdt die kant altijd volledig zichtbaar.
+                        f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem;">'
+                        f'<div style="min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; '
+                        f'color:#EAEDF1; font-size:0.8rem; font-weight:600; text-transform:uppercase; '
                         f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">'
                         f'{sugg["naam"].upper()} <span style="color:#8992A3; font-weight:400; '
                         f'text-transform:none;">({sugg["ticker"]})</span></div>'
-                        # Percentages/doel: nog kleiner en gedempter (bijna
-                        # text-[10px], slate-500) -- puur ondersteunende info.
-                        f'<div style="color:#64748B; font-size:0.65rem; margin-top:0.2rem; '
-                        f'font-family:\'Inter\', sans-serif !important;">'
-                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</div>'
-                        # Buy/Sell-actie: 3 losse, duidelijk onderscheiden
-                        # niveaus i.p.v. 1 zware, uniform-vetgedrukte regel --
-                        # de actie zelf compact/matte kleur, het bedrag helder
-                        # wit+bold als visuele held, shares klein/gedempt.
-                        f'<div style="display:flex; justify-content:flex-end; align-items:baseline; gap:0.3rem; '
-                        f'margin-top:0.35rem; white-space:nowrap;">'
+                        f'<div style="display:flex; align-items:baseline; gap:0.3rem; flex-shrink:0; white-space:nowrap;">'
                         f'<span style="color:{action_color}; font-weight:600; font-size:0.8rem; '
                         f'font-family:\'Inter\', sans-serif !important;">{action_word}</span>'
                         f'<span style="color:#F1F5F9; font-weight:700; font-size:0.85rem; '
                         f'font-family:\'Inter\', sans-serif !important;">{rebalance_symbol}{abs(sugg["diff_value"]):,.0f}</span>'
                         f'{shares_txt}'
                         '</div>'
+                        '</div>'
+                        # Percentages/doel: nog kleiner en gedempter (bijna
+                        # text-[10px], slate-500) -- puur ondersteunende info,
+                        # samen met de balk de enige 2e regel van de kaart.
+                        f'<div style="color:#64748B; font-size:0.65rem; margin-top:0.15rem; '
+                        f'font-family:\'Inter\', sans-serif !important;">'
+                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</div>'
                         f'{bar_html}'
                         '</div>'
                     )
