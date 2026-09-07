@@ -1884,7 +1884,7 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
     )
 
 
-def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False) -> str:
+def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False, action_html: str = "") -> str:
     """
     HET ene, universele sectiekop-patroon voor Today en My Portfolio --
     exact de krachtige, groene stijl van de oorspronkelijke 'Portfolio'-
@@ -1898,22 +1898,34 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     EINDE van de vorige sectie; weggelaten bij de EERSTE sectie op een
     pagina (geen vorig blok om van te scheiden).
 
+    'action_html' (optioneel) is een stukje kant-en-klare HTML (meestal
+    1 subtiele <a class="inline-link">-link) dat rechtsboven verschijnt,
+    op DEZELFDE hoogte als de titel -- voor sectie-navigatielinks
+    ('Explore all signals on Discover', 'Adjust target allocations in My
+    Portfolio') die functioneel nuttig blijven maar niet meer in de
+    data-kolommen zelf hoeven te staan.
+
     Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijl
     (_flowing_section_header_html) -- deze pas ik hier niet aan, dat was
     niet gevraagd.
     """
     if is_first:
-        header_open = '<div style="display:flex; align-items:center; gap:0.55rem;">'
+        style_block = ""
+        gap_class = ""
     else:
-        header_open = (
+        style_block = (
             '<style>.hesty-section-gap { margin-top:5rem; } '
             '@media (max-width:768px) { .hesty-section-gap { margin-top:3rem; } }</style>'
-            '<div class="hesty-section-gap" style="display:flex; align-items:center; gap:0.55rem;">'
         )
+        gap_class = ' class="hesty-section-gap"'
     return (
-        f'{header_open}'
+        f'{style_block}'
+        f'<div{gap_class} style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap;">'
+        f'<div style="display:flex; align-items:center; gap:0.55rem;">'
         f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
         f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span>'
+        f'</div>'
+        f'{action_html}'
         f'</div>'
         f'<hr style="border:none; border-top:1px solid rgba(30,41,59,0.6); margin:0.5rem 0 1.5rem 0;">'
     )
@@ -7562,8 +7574,14 @@ def render_today():
             # _session_cached()). ---
             radar_header_col, radar_refresh_col = st.columns([11, 1])
             with radar_header_col:
+                _radar_explore_link_html = (
+                    '<a href="/discover" target="_self" class="inline-link" '
+                    'style="font-size:0.78rem; white-space:nowrap;">Explore all signals on Discover &rarr;</a>'
+                )
                 st.markdown(
-                    _uniform_section_header_html("Daily Radar", "radar", is_first=False),
+                    _uniform_section_header_html(
+                        "Daily Radar", "radar", is_first=False, action_html=_radar_explore_link_html,
+                    ),
                     unsafe_allow_html=True,
                 )
             with radar_refresh_col:
@@ -7678,14 +7696,9 @@ def render_today():
                     )
                     + '</div>'
                     for icon, label, text, snippet in summary_rows
-                )
-                + '<div style="margin-top:12px;">'
-                  '<a href="/discover" target="_self" class="inline-link" style="font-size:0.82rem;">'
-                  'Explore all signals on Discover &rarr;</a></div>',
+                ),
                 unsafe_allow_html=True,
             )
-
-            st.markdown("<div style='height: 0.9rem'></div>", unsafe_allow_html=True)
 
             # --- Portfolio Health & DCA Insights -- horizontale kolommen,
             # net als 'Your Portfolio Today' hierboven, maar BEWUST ZONDER
@@ -7713,8 +7726,15 @@ def render_today():
                 ])[:3]
 
                 if health_cards_html:
+                    _insights_link_html = (
+                        '<a href="/portfolio" target="_self" class="inline-link" '
+                        'style="font-size:0.78rem; white-space:nowrap;">Adjust target allocations in My Portfolio &rarr;</a>'
+                    )
                     st.markdown(
-                        _uniform_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+                        _uniform_section_header_html(
+                            "Portfolio Health & DCA Insights", "insights", is_first=False,
+                            action_html=_insights_link_html,
+                        ),
                         unsafe_allow_html=True,
                     )
 
@@ -7730,13 +7750,7 @@ def render_today():
                         '.hesty-insights-col { width:100%; } '
                         '} '
                         '</style>'
-                        f'<div class="hesty-insights-row">{insight_cols_html}</div>'
-                        # 'Adjust target allocations' -- zelfde .inline-link-stijl
-                        # (teal accent + hover) als de andere navigatielinks op de
-                        # site, netjes onder de kolommen.
-                        '<div style="margin-top:1.1rem;">'
-                        '<a href="/portfolio" target="_self" class="inline-link" style="font-size:0.82rem;">'
-                        'Adjust target allocations in My Portfolio &rarr;</a></div>',
+                        f'<div class="hesty-insights-row">{insight_cols_html}</div>',
                         unsafe_allow_html=True,
                     )
                     _render_insight_dismiss_autohide_script()
@@ -8567,32 +8581,112 @@ pg.run()
 st.markdown("<div style='height: 8rem'></div>", unsafe_allow_html=True)
 st.divider()
 
+
+def _footer_accordion_column_header_html(title: str, col_id: str) -> str:
+    """
+    2 versies van dezelfde titel in 1x meegegeven: een platte, bold
+    st.markdown("**TITLE**")-look voor DESKTOP (ongewijzigd), en een
+    klikbare rij met +/- -icoontje voor MOBIEL -- CSS (media query)
+    kiest welke zichtbaar is, nooit allebei tegelijk. De content eronder
+    (st.page_link()-weets, gewrapt in st.container(key=...)) is op
+    desktop altijd volledig zichtbaar (geen max-height-beperking daar);
+    op mobiel begint 'ie ingeklapt (max-height:0) en klapt open via het
+    JS-scriptje onderaan de footer (_render_footer_accordion_script()).
+    """
+    content_key = f"footer_acc_content_{col_id}"
+    return (
+        f'<style>'
+        f'.hesty-footer-acc-header-{col_id} {{ display:none; }} '
+        f'@media (max-width:768px) {{ '
+        f'.hesty-footer-title-{col_id} {{ display:none !important; }} '
+        f'.hesty-footer-acc-header-{col_id} {{ display:flex !important; align-items:center; '
+        f'justify-content:space-between; cursor:pointer; padding:0.7rem 0; '
+        f'border-bottom:1px solid rgba(148,163,184,0.12); }} '
+        f'.st-key-{content_key} {{ max-height:0; overflow:hidden; transition:max-height 0.25s ease; }} '
+        f'.st-key-{content_key}.hesty-footer-acc-open {{ max-height:500px; }} '
+        f'}} '
+        f'</style>'
+        f'<div class="hesty-footer-title-{col_id}"><b>{title}</b></div>'
+        f'<div class="hesty-footer-acc-header hesty-footer-acc-header-{col_id}" data-footer-target="{content_key}">'
+        f'<span style="font-weight:700; font-size:0.85rem; color:#EAEDF1;">{title}</span>'
+        f'<span class="hesty-footer-acc-icon" style="color:#8992A3; font-size:1rem; '
+        f'transition:transform 0.2s ease;">+</span>'
+        f'</div>'
+    ), content_key
+
+
+def _render_footer_accordion_script() -> None:
+    """
+    Bindt de klik-op-titel-om-open-te-klappen-interactie voor de mobiele
+    footer-accordeons. Zelfde, bevestigd betrouwbare aanpak als
+    _render_insight_dismiss_autohide_script() elders op de site:
+    st.components.v1.html() + event delegation op window.parent.document
+    .body (overleeft Streamlit-reruns, i.p.v. losse listeners per
+    element die bij een rerun weer verdwijnen). Puur client-side (geen
+    st.rerun() nodig) -- voelt daardoor instant aan, geen server-round-
+    trip per tik.
+    """
+    components.html(
+        """
+        <script>
+        function hestyBindFooterAccordion() {
+            var doc = window.parent.document;
+            if (doc.body.__hestyFooterAccBound) { return; }
+            doc.body.__hestyFooterAccBound = true;
+            doc.body.addEventListener('click', function(e) {
+                var header = e.target.closest('.hesty-footer-acc-header');
+                if (!header) { return; }
+                var targetKey = header.getAttribute('data-footer-target');
+                var content = doc.querySelector('.st-key-' + targetKey);
+                if (!content) { return; }
+                var isOpen = content.classList.toggle('hesty-footer-acc-open');
+                var icon = header.querySelector('.hesty-footer-acc-icon');
+                if (icon) { icon.textContent = isOpen ? '\\u2212' : '+'; }
+            });
+        }
+        hestyBindFooterAccordion();
+        </script>
+        """,
+        height=0,
+    )
+
+
 footer_col1, footer_col2, footer_col3, footer_col4 = st.columns(4)
 with footer_col1:
-    st.markdown("**PRODUCT**")
-    st.page_link(discover_page, label="Discover")
-    st.page_link(today_page, label="Today")
-    st.page_link(portfolio_page, label="My Portfolio")
-    st.page_link(analyze_page, label="Analyze")
+    _header_html, _content_key = _footer_accordion_column_header_html("PRODUCT", "product")
+    st.markdown(_header_html, unsafe_allow_html=True)
+    with st.container(key=_content_key):
+        st.page_link(discover_page, label="Discover")
+        st.page_link(today_page, label="Today")
+        st.page_link(portfolio_page, label="My Portfolio")
+        st.page_link(analyze_page, label="Analyze")
 with footer_col2:
-    st.markdown("**ACCOUNT**")
-    st.page_link(settings_page, label="Settings")
-    st.page_link(premium_page, label="Premium")
+    _header_html, _content_key = _footer_accordion_column_header_html("ACCOUNT", "account")
+    st.markdown(_header_html, unsafe_allow_html=True)
+    with st.container(key=_content_key):
+        st.page_link(settings_page, label="Settings")
+        st.page_link(premium_page, label="Premium")
 with footer_col3:
-    st.markdown("**SUPPORT**")
-    st.page_link(support_page, label="Support")
-    st.page_link(privacy_page, label="Privacy Policy")
+    _header_html, _content_key = _footer_accordion_column_header_html("SUPPORT", "support")
+    st.markdown(_header_html, unsafe_allow_html=True)
+    with st.container(key=_content_key):
+        st.page_link(support_page, label="Support")
+        st.page_link(privacy_page, label="Privacy Policy")
 with footer_col4:
-    st.markdown("**SOCIALS**")
-    # Externe URL -- gewoon een rauwe <a>-link is hier veilig (in
-    # tegenstelling tot interne Streamlit-paden, die st.page_link()
-    # MOETEN gebruiken om de eerder gevonden 'Page Not Found'-bug te
-    # vermijden).
-    st.markdown(
-        '<a href="https://x.com/HestysInvest" target="_blank" style="text-decoration:none; '
-        'color:#8992A3; font-size:0.9rem;">X (@HestysInvest)</a>',
-        unsafe_allow_html=True,
-    )
+    _header_html, _content_key = _footer_accordion_column_header_html("SOCIALS", "socials")
+    st.markdown(_header_html, unsafe_allow_html=True)
+    with st.container(key=_content_key):
+        # Externe URL -- gewoon een rauwe <a>-link is hier veilig (in
+        # tegenstelling tot interne Streamlit-paden, die st.page_link()
+        # MOETEN gebruiken om de eerder gevonden 'Page Not Found'-bug te
+        # vermijden).
+        st.markdown(
+            '<a href="https://x.com/HestysInvest" target="_blank" style="text-decoration:none; '
+            'color:#8992A3; font-size:0.9rem;">X (@HestysInvest)</a>',
+            unsafe_allow_html=True,
+        )
+
+_render_footer_accordion_script()
 
 st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
 st.caption("Hesty's combines technical signals, fundamental screens, and portfolio analysis to help "
