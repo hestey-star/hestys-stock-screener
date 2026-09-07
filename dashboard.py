@@ -2308,15 +2308,19 @@ def _bucket_events_by_weekday(dated_items: list) -> dict:
 
 def _week_agenda_html(buckets: dict) -> str:
     """
-    Rendert de Week-Agenda: 5 gelijke, borderloze kolommen (Ma t/m Vr)
-    naast elkaar op desktop, met dunne verticale scheidslijnen -- zelfde
-    gap (1.75rem) en dezelfde scheidslijnkleur/-dikte als het portfolio-
-    blok hierboven, zodat de volle breedte van de pagina consistent
-    oogt. Op mobiel (<640px) stapelt de agenda verticaal -- 1 dag per
-    rij met dunne HORIZONTALE scheidslijnen i.p.v. 5 kolommen die op een
-    smal scherm te krap/onleesbaar zouden worden. Via een vaste
-    CSS-klasse + media query (i.p.v. inline styles, die niet responsief
-    kunnen zijn). Catalysts staan als cleane bullet-regel in ALL-CAPS.
+    Rendert de Week-Agenda in een eigen, zacht gevulde kaart (zelfde
+    achtergrondtint als de 'Your Portfolio Today'-heldkolom, afgeronde
+    hoeken, royale padding) -- laat de agenda als herkenbare tijdlijn
+    boven de bulletins eronder uitspringen, die op de kale site-
+    achtergrond blijven ademen. Daarbinnen: 5 gelijke, borderloze
+    kolommen (Ma t/m Vr) naast elkaar op desktop, met dunne verticale
+    scheidslijnen -- zelfde gap (1.75rem) en scheidslijnkleur/-dikte als
+    het portfolio-blok hierboven. Op mobiel (<768px) stapelt de agenda
+    verticaal -- 1 dag per rij met dunne HORIZONTALE scheidslijnen i.p.v.
+    5 kolommen die op een smal scherm te krap/onleesbaar zouden worden.
+    Via een vaste CSS-klasse + media query (i.p.v. inline styles, die
+    niet responsief kunnen zijn). Catalysts staan als cleane bullet-regel
+    in ALL-CAPS.
     """
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
     today_label = labels[datetime.now().date().weekday()] if datetime.now().date().weekday() < 5 else None
@@ -2354,6 +2358,13 @@ def _week_agenda_html(buckets: dict) -> str:
         )
     return (
         '<style>'
+        # Zachte, egale achtergrondvulling om de HELE agenda (zelfde
+        # rgba als de 'Your Portfolio Today'-heldkolom) -- laat de
+        # week-agenda als een aparte, herkenbare tijdlijn boven de
+        # bulletins uitspringen, i.p.v. op dezelfde kale achtergrond te
+        # zweven als de rest van de sectie.
+        '.hesty-week-agenda-card { background:rgba(15,23,42,0.4); border-radius:14px; '
+        'padding:1.15rem 1.35rem; box-sizing:border-box; } '
         '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.75rem; } '
         '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem; } '
         '.hesty-week-day-last { border-right:none !important; padding-right:0 !important; } '
@@ -2364,7 +2375,7 @@ def _week_agenda_html(buckets: dict) -> str:
         '.hesty-week-day-last { border-bottom:none !important; padding-bottom:0 !important; margin-bottom:0 !important; } '
         '} '
         '</style>'
-        f'<div class="hesty-week-agenda">{"".join(day_cols)}</div>'
+        f'<div class="hesty-week-agenda-card"><div class="hesty-week-agenda">{"".join(day_cols)}</div></div>'
     )
 
 
