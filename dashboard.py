@@ -8579,16 +8579,21 @@ with st.sidebar:
     # kleurverschil tussen zijbalk en pagina. #0B1210 is dezelfde
     # diepdonkere tint die elders al bewust als 'paginakleur' gebruikt
     # wordt (zie bv. de tekstkleur op de gele hero-CTA-knop, die
-    # doelbewust met de achtergrond matcht). Actieve pagina krijgt nu
-    # dezelfde platte, zachte teal-achtergrondvulling als de navigatie-
-    # tabs elders op de site (Daily/All-time-toggle, Manage-tabs) i.p.v.
-    # de eerdere linker accent-balk + kleurverloop. ---
+    # doelbewust met de achtergrond matcht) -- bevestigd exact via
+    # .streamlit/config.toml's [theme] backgroundColor = "#101825".
+    # Streamlit's sidebar gebruikt standaard secondaryBackgroundColor
+    # (#1B2536, zichtbaar lichter/blauwer), vandaar het eerdere
+    # kleurverschil -- expliciet overschreven naar backgroundColor.
+    # Actieve pagina krijgt nu dezelfde platte, zachte teal-achtergrond-
+    # vulling als de navigatietabs elders op de site (Daily/All-time-
+    # toggle, Manage-tabs) i.p.v. de eerdere linker accent-balk +
+    # kleurverloop. ---
     _active_url_path = getattr(pg, "url_path", "")
     _nav_css_parts = ["""
     <style>
     div[data-testid="stSidebarNav"] { display: none; }
     div[data-testid="stSidebar"] {
-        background-color: #0B1210 !important;
+        background-color: #101825 !important;
         border-right: 1px solid rgba(148,163,184,0.15) !important;
     }
     div[data-testid="stSidebar"] a[href$="/discover"],
