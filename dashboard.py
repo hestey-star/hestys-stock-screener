@@ -6655,24 +6655,32 @@ def render_portfolio():
                                 f'<style>'
                                 f'.st-key-{row_key} {{ {border_css} '
                                 f'padding:0.5rem 0.2rem !important; margin:0 !important; display:flex !important; '
-                                f'align-items:center !important; width:100% !important; max-width:100% !important; '
+                                f'align-items:center !important; justify-content:space-between !important; '
+                                f'width:100% !important; max-width:100% !important; '
                                 f'overflow-x:hidden !important; box-sizing:border-box !important; }} '
                                 f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
                                 f'flex-direction:row !important; flex-wrap:nowrap !important; '
                                 f'align-items:center !important; width:100% !important; max-width:100% !important; }} '
-                                # Kolom 1 (logo+naam): MAG en MOET krimpen (flex:1 +
-                                # min-width:0) zodat lange namen kunnen afkappen i.p.v.
-                                # de rij breder te duwen dan het scherm -- dit was de
-                                # daadwerkelijke oorzaak van de horizontale-scroll-bug:
-                                # zonder min-width:0 weigert een flex-item van nature
-                                # te krimpen onder z'n eigen inhoud (hier: de volledige,
-                                # niet-afgebroken bedrijfsnaam).
+                                # Universele min-width:0-reset op ALLES binnen deze rij --
+                                # dit was de ontbrekende schakel: min-width:0 op alleen de
+                                # kolom zelf hielp niet, want Streamlit wrapt elke kolom nog
+                                # in eigen tussenlagen (stVerticalBlock, element-container)
+                                # die STANDAARD 'min-width:auto' hebben (weigeren te krimpen
+                                # onder hun eigen inhoud) -- overflow-x:hidden verborg het
+                                # gevolg daarvan (de knoppen) i.p.v. het echt op te lossen.
+                                # min-width:0 op * is voor de vaste-breedte-elementen (logo,
+                                # ticker, knoppen) onschadelijk -- die blijven vast dankzij
+                                # hun eigen flex-shrink:0/expliciete breedte hieronder.
+                                f'.st-key-{row_key} * {{ min-width:0 !important; }} '
+                                # Kolom 1 (logo+naam): MOET krimpen (flex-1 min-w-0) zodat
+                                # lange namen kunnen afkappen i.p.v. de rij breder te duwen
+                                # dan het scherm.
                                 f'.st-key-{row_key} [data-testid="column"]:first-child {{ '
                                 f'display:flex !important; align-items:center !important; padding:0 !important; '
-                                f'flex:1 1 0% !important; min-width:0 !important; overflow:hidden !important; }} '
+                                f'flex:1 1 0% !important; overflow:hidden !important; }} '
                                 # Kolom 2/3 (klokje, prullenbak): vaste breedte, NOOIT
-                                # krimpen -- blijven altijd volledig zichtbaar, strak
-                                # rechts verankerd.
+                                # krimpen (flex-shrink-0) -- blijven altijd volledig
+                                # zichtbaar, strak rechts verankerd.
                                 f'.st-key-{row_key} [data-testid="column"]:nth-child(2), '
                                 f'.st-key-{row_key} [data-testid="column"]:nth-child(3) {{ '
                                 f'display:flex !important; align-items:center !important; padding:0 !important; '
