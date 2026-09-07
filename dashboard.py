@@ -1884,6 +1884,35 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
     )
 
 
+def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False) -> str:
+    """
+    HET ene, universele sectiekop-patroon voor Today en My Portfolio (Wet 1
+    van de mobile/structuur-doorlichting) -- vervangt de eerdere twee,
+    onderling verschillende varianten (_flowing_section_header_html's
+    grotere witte titel, _bold_section_divider_html's nog grotere ALL-CAPS-
+    titel) door 1 consistente opbouw: compact icoontje + kleine, gedempte
+    ALL-CAPS-titel (text-xs, tracking-wider, slate-400), met een flinter-
+    dunne scheidingslijn + royale witruimte (my-8) erboven. Weggelaten bij
+    de EERSTE sectie op een pagina (geen vorig blok om van te scheiden).
+
+    Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijlen
+    (_flowing_section_header_html) -- deze wet is voorlopig alleen voor
+    Today en My Portfolio, zoals gevraagd.
+    """
+    divider_html = (
+        "" if is_first else
+        '<hr style="border:none; border-top:1px solid rgba(30,41,59,0.6); margin:2rem 0;">'
+    )
+    return (
+        f'{divider_html}'
+        f'<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem;">'
+        f'{_icon_span(icon_name, size_px=15, color="#94A3B8")}'
+        f'<span style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; '
+        f'color:#94A3B8; font-family:\'Inter\', sans-serif !important;">{title}</span>'
+        f'</div>'
+    )
+
+
 def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = False) -> str:
     """
     Kop voor een sectie die NIET meer in een st.expander() zit (onderdeel
@@ -1902,27 +1931,6 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span></div>'
     )
 
-
-def _bold_section_divider_html(emoji: str, title: str, with_top_rule: bool = True) -> str:
-    """
-    Prominentere sectie-titel dan _flowing_section_header_html hierboven --
-    groter, bold, ALL-CAPS, tracking-wider -- specifiek bedoeld om een
-    HARDE visuele knip te maken tussen grote onderdelen (Positions vs.
-    Rebalancing) nu de zware kaders eromheen weg zijn en anders alles in
-    1 drukke sliert dreigt over te lopen. 'with_top_rule' voegt een
-    paginabrede, iets steviger zichtbare scheidingslijn + ruime witruimte
-    (my-8) toe BOVEN de titel.
-    """
-    rule_html = (
-        '<hr style="border:none; border-top:1px solid rgba(30,41,59,0.8); margin:2rem 0;">'
-        if with_top_rule else ""
-    )
-    return (
-        f'{rule_html}'
-        f'<div style="font-size:1.15rem; font-weight:800; color:#EAEDF1; text-transform:uppercase; '
-        f'letter-spacing:0.06em; font-family:\'Inter\', sans-serif !important; margin-bottom:0.9rem;">'
-        f'{emoji} {title}</div>'
-    )
 
 
 def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct: float, weight_pct: float, color: str) -> str:
@@ -2086,7 +2094,7 @@ def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set
     )
     st.markdown(
         '<style>.hesty-sector-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:0.6rem;} '
-        '@media (max-width:640px){.hesty-sector-grid{grid-template-columns:repeat(2, 1fr);}}</style>'
+        '@media (max-width:768px){.hesty-sector-grid{grid-template-columns:repeat(2, 1fr);}}</style>'
         f'<div class="hesty-sector-grid">{tiles_html}</div>',
         unsafe_allow_html=True,
     )
@@ -2331,7 +2339,7 @@ def _week_agenda_html(buckets: dict) -> str:
         '.hesty-week-agenda { display:flex; align-items:flex-start; gap:1.75rem; } '
         '.hesty-week-day { flex:1; min-width:0; border-right:1px solid rgba(137,146,163,0.15); padding-right:1.75rem; } '
         '.hesty-week-day-last { border-right:none !important; padding-right:0 !important; } '
-        '@media (max-width:640px) { '
+        '@media (max-width:768px) { '
         '.hesty-week-agenda { flex-direction:column; gap:0; } '
         '.hesty-week-day { width:100%; border-right:none !important; padding-right:0 !important; '
         'border-bottom:1px solid rgba(137,146,163,0.15); padding-bottom:0.75rem; margin-bottom:0.75rem; } '
@@ -2360,7 +2368,7 @@ def _portfolio_responsive_css() -> str:
         '.hesty-portfolio-col-last { border-right:none !important; padding-right:0 !important; } '
         '.hesty-portfolio-hero-col { flex:1; min-width:0; background:rgba(15,23,42,0.4); '
         'border-radius:14px; padding:1.15rem 1.35rem; box-sizing:border-box; } '
-        '@media (max-width:640px) { '
+        '@media (max-width:768px) { '
         '.hesty-portfolio-row { flex-direction:column; gap:0.75rem; } '
         '.hesty-portfolio-col { width:100%; box-sizing:border-box; border-right:none !important; '
         'padding-right:0 !important; background:rgba(137,146,163,0.04); '
@@ -2462,20 +2470,6 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             detail_html = ""
             price_display = "-"
 
-    # De naam (variabele, soms erg lange lengte -- bv. ETF-namen) en het
-    # prijsdetail (koers, of avg-cost-pijl) staan in GENESTE flex-items:
-    # de naam mag inkorten met '...' als het niet past, maar het
-    # prijsdetail (flex-shrink:0) blijft ALTIJD volledig zichtbaar --
-    # voorkomt dat op mobiel de koers wegvalt doordat de HELE regel
-    # (naam+koers samen) werd afgekapt.
-    subtitle_html = (
-        f'<div style="display:flex; align-items:baseline; gap:0.3rem; min-width:0; flex:1;">'
-        f'<span style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
-        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{name.upper()}</span>'
-        f'{detail_html}'
-        f'</div>'
-    )
-
     # Aantal stuks, als klein onderschrift onder de Value-cel -- 'shares:g'
     # verwijdert overbodige nullen (10 i.p.v. 10.000000, 0.085 voor
     # fractionele crypto-posities).
@@ -2485,24 +2479,31 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
     )
 
     mobile_html = (
-        f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); padding:1.1rem 0.2rem;">'
-        f'<div style="display:flex; gap:0.6rem; align-items:flex-start;">'
+        f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); '
+        f'padding:0.85rem 0.2rem; box-sizing:border-box; overflow:hidden;">'
+        f'<div style="display:flex; align-items:center; gap:0.6rem; width:100%; min-width:0;">'
         f'{logo_html}'
+        # Links: logo + ALL-CAPS naam (hoofdregel) + ticker/subnaam eronder
+        # (gedempt, klein) -- vervangt de eerdere kriskras-opbouw (ticker
+        # boven, naam onder, verspreid over 2 rijen samen met waarde/
+        # verandering) door 1 nette, verticaal gestapelde linkerkolom.
         f'<div style="flex:1; min-width:0;">'
-        f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem;">'
-        f'<span style="font-weight:800; color:#EAEDF1; font-size:1rem; letter-spacing:0.01em;">{ticker}</span>'
-        f'<div style="text-align:right;">'
-        f'<span style="font-weight:700; color:#EAEDF1; font-size:0.98rem; font-family:\'Inter\', sans-serif; font-variant-numeric: tabular-nums; white-space:nowrap;">{value_text}</span>'
-        f'{shares_html}'
+        f'<div style="font-weight:700; color:#EAEDF1; font-size:0.92rem; text-transform:uppercase; '
+        f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; overflow:hidden; '
+        f'text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
+        f'<div style="color:#8992A3; font-size:0.7rem; font-family:\'Inter\', sans-serif !important; '
+        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{ticker}</div>'
         f'</div>'
+        # Rechts: alleen de 2 kerncijfers, gestapeld en rechts uitgelijnd --
+        # waarde boven (groot), rendement/verandering eronder (klein).
+        f'<div style="flex-shrink:0; text-align:right;">'
+        f'<div style="font-weight:700; color:#EAEDF1; font-size:0.92rem; font-family:\'Inter\', sans-serif !important; '
+        f'font-variant-numeric: tabular-nums; white-space:nowrap;">{value_text}</div>'
+        f'<div style="font-size:0.72rem; white-space:nowrap;">{change_html}</div>'
         f'</div>'
-        f'<div style="display:flex; justify-content:space-between; align-items:baseline; gap:0.5rem; margin-top:2px;">'
-        f'{subtitle_html}'
-        f'<span style="font-size:0.8rem; white-space:nowrap; flex-shrink:0;">{change_html}</span>'
         f'</div>'
         f'<div style="height:3px; background:rgba(137,146,163,0.1); border-radius:2px; margin-top:8px;">'
         f'<div style="height:100%; width:{bar_pct:.0f}%; background:rgba(31,174,150,0.55); border-radius:2px;"></div>'
-        f'</div>'
         f'</div>'
         f'</div>'
         f'</div>'
@@ -5232,7 +5233,7 @@ def render_portfolio():
         # rand. Prominente 'POSITIONS'-titel erboven maakt de sectiegrens
         # nu ook tekstueel duidelijk.
         st.markdown(
-            _bold_section_divider_html("📊", "Positions", with_top_rule=False),
+            _uniform_section_header_html("Positions", "table_chart", is_first=True),
             unsafe_allow_html=True,
         )
         _pf_table_card_key = "portfolio_table_card"
@@ -5496,7 +5497,7 @@ def render_portfolio():
                     f'.st-key-{_detail_row_key} [data-testid="column"]:first-child {{ '
                     f'border-right:1px solid rgba(148,163,184,0.15); padding-right:1.5rem; }} '
                     f'.st-key-{_detail_row_key} [data-testid="column"]:last-child {{ padding-left:1.5rem; }} '
-                    f'@media (max-width:640px) {{ '
+                    f'@media (max-width:768px) {{ '
                     f'.st-key-{_detail_row_key} [data-testid="column"]:first-child {{ '
                     f'border-right:none !important; padding-right:0 !important; '
                     f'border-bottom:1px solid rgba(148,163,184,0.15); padding-bottom:1rem; margin-bottom:1rem; }} '
@@ -5693,7 +5694,7 @@ def render_portfolio():
 
         if rebalance_result["any_targets_set"]:
             st.markdown(
-                _bold_section_divider_html("⚖️", "Rebalancing", with_top_rule=True),
+                _uniform_section_header_html("Rebalancing", "swap_horiz", is_first=False),
                 unsafe_allow_html=True,
             )
             # --- Rebalancing is nu een 2-koloms grid van losse kaarten
@@ -5776,7 +5777,7 @@ def render_portfolio():
                 st.markdown(
                     '<style>'
                     '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:1rem; } '
-                    '@media (max-width:640px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
+                    '@media (max-width:768px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
                     '</style>'
                     f'<div class="hesty-rebalance-grid">{"".join(rebalance_cards_html)}</div>',
                     unsafe_allow_html=True,
@@ -5791,7 +5792,7 @@ def render_portfolio():
     # 3. MANAGE
     # ============================================================
     st.markdown(
-        _flowing_section_header_html("Manage", "tune"),
+        _uniform_section_header_html("Manage", "tune", is_first=False),
         unsafe_allow_html=True,
     )
     manage_section_options = [
@@ -7500,7 +7501,7 @@ def render_today():
 
                 st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
                 st.markdown(
-                    _flowing_section_header_html("Your Portfolio Today", "account_balance_wallet", is_first=True),
+                    _uniform_section_header_html("Your Portfolio Today", "account_balance_wallet", is_first=True),
                     unsafe_allow_html=True,
                 )
 
@@ -7557,7 +7558,7 @@ def render_today():
             radar_header_col, radar_refresh_col = st.columns([11, 1])
             with radar_header_col:
                 st.markdown(
-                    _flowing_section_header_html("Daily Radar", "radar", is_first=False),
+                    _uniform_section_header_html("Daily Radar", "radar", is_first=False),
                     unsafe_allow_html=True,
                 )
             with radar_refresh_col:
@@ -7708,7 +7709,7 @@ def render_today():
 
                 if health_cards_html:
                     st.markdown(
-                        _flowing_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+                        _uniform_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
                         unsafe_allow_html=True,
                     )
 
@@ -7719,7 +7720,7 @@ def render_today():
                         '<style>'
                         '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
                         '.hesty-insights-col { flex:1; min-width:0; } '
-                        '@media (max-width:640px) { '
+                        '@media (max-width:768px) { '
                         '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
                         '.hesty-insights-col { width:100%; } '
                         '} '
@@ -7743,7 +7744,7 @@ def render_today():
             # Geen omlijnd kader meer -- zelfde borderloze 'flowing section'-
             # stijl (icoon + titel) als de secties hierboven. ---
             st.markdown(
-                _flowing_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
+                _uniform_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
                 unsafe_allow_html=True,
             )
             st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
@@ -7778,7 +7779,7 @@ def render_today():
             # door exact dezelfde dunne verticale lijn als het portfolio-blok
             # -- en op mobiel netjes gestapeld i.p.v. naast elkaar geperst. ---
             st.markdown(
-                _flowing_section_header_html("Your Daily Briefing", "newspaper", is_first=False),
+                _uniform_section_header_html("Your Daily Briefing", "newspaper", is_first=False),
                 unsafe_allow_html=True,
             )
 
@@ -7830,10 +7831,10 @@ def render_today():
                 'line-height:1.4; display:block; font-family:\'Inter\', sans-serif !important; } '
                 '.hesty-news-link:hover { color:#1FAE96 !important; } '
                 '.hesty-news-meta { font-size:0.68rem; color:#64748B; margin-top:3px; } '
-                '@media (max-width:640px) { '
+                '@media (max-width:768px) { '
                 '.hesty-news-row { flex-direction:column; gap:0; } '
                 '.hesty-news-col { width:100%; border-right:none !important; padding-right:0 !important; '
-                'border-bottom:1px solid rgba(137,146,163,0.15); padding-bottom:1rem; margin-bottom:1rem; } '
+                'border-bottom:1px solid rgba(137,146,163,0.15); padding-bottom:1.5rem; margin-bottom:1.5rem; } '
                 '.hesty-news-col-last { border-bottom:none !important; padding-bottom:0 !important; margin-bottom:0 !important; } '
                 '.hesty-news-col-subcaption { min-height:0; } '
                 '} '
