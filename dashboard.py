@@ -8576,50 +8576,61 @@ with st.sidebar:
 
     # --- Sidebar-achtergrond EXACT gelijk aan de hoofd-app (monochroom
     # effect) + een flinterdunne rand rechts i.p.v. een zichtbaar
-    # kleurverschil tussen zijbalk en pagina. #0B1210 is dezelfde
-    # diepdonkere tint die elders al bewust als 'paginakleur' gebruikt
-    # wordt (zie bv. de tekstkleur op de gele hero-CTA-knop, die
-    # doelbewust met de achtergrond matcht) -- bevestigd exact via
-    # .streamlit/config.toml's [theme] backgroundColor = "#101825".
+    # kleurverschil tussen zijbalk en pagina. #101825 is de EXACTE
+    # backgroundColor uit .streamlit/config.toml's [theme]-blok.
     # Streamlit's sidebar gebruikt standaard secondaryBackgroundColor
-    # (#1B2536, zichtbaar lichter/blauwer), vandaar het eerdere
-    # kleurverschil -- expliciet overschreven naar backgroundColor.
-    # Actieve pagina krijgt nu dezelfde platte, zachte teal-achtergrond-
-    # vulling als de navigatietabs elders op de site (Daily/All-time-
-    # toggle, Manage-tabs) i.p.v. de eerdere linker accent-balk +
-    # kleurverloop. ---
+    # (#1B2536, zichtbaar lichter/blauwer), vandaar het kleurverschil.
+    #
+    # BELANGRIJKE FIX t.o.v. de vorige poging: alle selectors hieronder
+    # gebruiken nu [data-testid="..."] ZONDER een voorafgaand tag-type
+    # (dus niet meer 'div[data-testid=...]') -- recente Streamlit-versies
+    # renderen de zijbalk als <section>, niet als <div>, waardoor een
+    # tag-gekwalificeerde selector als 'div[data-testid="stSidebar"]'
+    # NOOIT matchte en de achtergrondkleur dus nooit daadwerkelijk werd
+    # overschreven, ongeacht !important. Bovendien nu 3 mogelijke
+    # wrapper-lagen tegelijk geraakt (stSidebar zelf + 2 bekende, recente
+    # interne wrapper-testid's) als extra vangnet, en zowel 'background'
+    # als 'background-color' gezet (voor het geval Streamlit's eigen CSS
+    # de 'background'-shorthand gebruikt, die anders alsnog had kunnen
+    # doorschemeren ondanks een background-color-override).
     _active_url_path = getattr(pg, "url_path", "")
     _nav_css_parts = ["""
     <style>
-    div[data-testid="stSidebarNav"] { display: none; }
-    div[data-testid="stSidebar"] {
+    [data-testid="stSidebarNav"] { display: none; }
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] > div,
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarUserContent"] {
+        background: #101825 !important;
         background-color: #101825 !important;
+    }
+    [data-testid="stSidebar"] {
         border-right: 1px solid rgba(148,163,184,0.15) !important;
     }
-    div[data-testid="stSidebar"] a[href$="/discover"],
-    div[data-testid="stSidebar"] a[href$="/today"],
-    div[data-testid="stSidebar"] a[href$="/portfolio"],
-    div[data-testid="stSidebar"] a[href$="/analyze"],
-    div[data-testid="stSidebar"] a[href$="/support"],
-    div[data-testid="stSidebar"] a[href$="/premium"] {
+    [data-testid="stSidebar"] a[href$="/discover"],
+    [data-testid="stSidebar"] a[href$="/today"],
+    [data-testid="stSidebar"] a[href$="/portfolio"],
+    [data-testid="stSidebar"] a[href$="/analyze"],
+    [data-testid="stSidebar"] a[href$="/support"],
+    [data-testid="stSidebar"] a[href$="/premium"] {
         display: flex; align-items: center; gap: 0.75rem;
         font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
         text-decoration: none !important; color: #8992A3 !important;
         margin-bottom: 3px;
     }
-    div[data-testid="stSidebar"] a[href$="/discover"]:hover,
-    div[data-testid="stSidebar"] a[href$="/today"]:hover,
-    div[data-testid="stSidebar"] a[href$="/portfolio"]:hover,
-    div[data-testid="stSidebar"] a[href$="/analyze"]:hover,
-    div[data-testid="stSidebar"] a[href$="/support"]:hover,
-    div[data-testid="stSidebar"] a[href$="/premium"]:hover {
+    [data-testid="stSidebar"] a[href$="/discover"]:hover,
+    [data-testid="stSidebar"] a[href$="/today"]:hover,
+    [data-testid="stSidebar"] a[href$="/portfolio"]:hover,
+    [data-testid="stSidebar"] a[href$="/analyze"]:hover,
+    [data-testid="stSidebar"] a[href$="/support"]:hover,
+    [data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
     """]
     if _active_url_path:
         _nav_css_parts.append(f"""
-    div[data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
+    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
         color: #1FAE96 !important;
         background: rgba(31,174,150,0.15) !important;
         border-radius: 8px !important;
