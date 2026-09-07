@@ -5757,55 +5757,63 @@ def render_portfolio():
                     shares_txt = ""
                     if sugg["diff_shares"] is not None:
                         shares_txt = (
-                            f' <span style="color:#8992A3; font-weight:400;">&middot; '
+                            f' <span style="color:#64748B; font-size:0.68rem; font-weight:400;">&middot; '
                             f'{abs(sugg["diff_shares"]):.2f} shares</span>'
                         )
 
                     # Lichte, subtiele balk: huidige% als vulling, een
                     # verticale streep op de target%-positie -- geeft in
                     # 1 oogopslag de afstand tot het doel, naast de
-                    # tekstuele percentages.
+                    # tekstuele percentages. Nog compacter (h-0.75, minder
+                    # marge erboven) zodat 'ie puur functioneel aanwezig is.
                     bar_current_pct = min(sugg["current_pct"], 100)
                     bar_target_pct = min(sugg["target_pct"], 100)
                     bar_html = (
-                        '<div style="position:relative; height:4px; background:rgba(137,146,163,0.10); '
-                        'border-radius:2px; margin-top:0.5rem;">'
+                        '<div style="position:relative; height:3px; background:rgba(137,146,163,0.10); '
+                        'border-radius:2px; margin-top:0.4rem;">'
                         f'<div style="position:absolute; height:100%; width:{bar_current_pct:.1f}%; '
                         f'background:{action_color}; border-radius:2px;"></div>'
-                        f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-2px; height:8px; '
+                        f'<div style="position:absolute; left:{bar_target_pct:.1f}%; top:-1.5px; height:6px; '
                         'width:2px; background:#EAEDF1; border-radius:1px;"></div>'
                         '</div>'
                     )
 
                     rebalance_cards_html.append(
-                        f'<div style="border:1px solid rgba(30,41,59,0.6); border-radius:10px; padding:0.9rem 1rem;">'
-                        # Naam/ticker op een eigen regel -- mag vrij naar 2
-                        # regels breken (lange ETF-namen) ZONDER de datarij
-                        # eronder te verstoren, want die zit nu in een eigen,
-                        # onafhankelijke flex-rij.
-                        f'<div style="color:#EAEDF1; font-weight:600; text-transform:uppercase; '
+                        f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+                        f'border-radius:10px; padding:0.7rem 0.85rem;">'
+                        # Naam/ticker op een eigen regel -- kleiner en compacter
+                        # (text-sm i.p.v. de ongestylede, browser-standaard
+                        # 1rem van voorheen) maar nog steeds strak ALL-CAPS.
+                        # Mag vrij naar 2 regels breken (lange ETF-namen)
+                        # ZONDER de datarij eronder te verstoren, want die zit
+                        # in een eigen, onafhankelijke flex-rij.
+                        f'<div style="color:#EAEDF1; font-size:0.8rem; font-weight:600; text-transform:uppercase; '
                         f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">'
                         f'{sugg["naam"].upper()} <span style="color:#8992A3; font-weight:400; '
                         f'text-transform:none;">({sugg["ticker"]})</span></div>'
-                        # Datarij: percentages/doel LINKS, Buy/Sell-bedrag +
-                        # shares RECHTS -- altijd op dezelfde horizontale
-                        # lijn via justify-content:space-between +
-                        # align-items:center, ongeacht hoeveel regels de
-                        # naam hierboven inneemt.
-                        f'<div style="display:flex; justify-content:space-between; align-items:center; '
-                        f'gap:0.5rem; margin-top:0.3rem;">'
-                        f'<span style="color:#64748B; font-size:0.7rem; font-family:\'Inter\', sans-serif !important;">'
-                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</span>'
-                        f'<span style="color:{action_color}; font-weight:700; white-space:nowrap; '
-                        f'font-family:\'Inter\', sans-serif !important;">{action_word} {rebalance_symbol}'
-                        f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
+                        # Percentages/doel: nog kleiner en gedempter (bijna
+                        # text-[10px], slate-500) -- puur ondersteunende info.
+                        f'<div style="color:#64748B; font-size:0.65rem; margin-top:0.2rem; '
+                        f'font-family:\'Inter\', sans-serif !important;">'
+                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</div>'
+                        # Buy/Sell-actie: 3 losse, duidelijk onderscheiden
+                        # niveaus i.p.v. 1 zware, uniform-vetgedrukte regel --
+                        # de actie zelf compact/matte kleur, het bedrag helder
+                        # wit+bold als visuele held, shares klein/gedempt.
+                        f'<div style="display:flex; justify-content:flex-end; align-items:baseline; gap:0.3rem; '
+                        f'margin-top:0.35rem; white-space:nowrap;">'
+                        f'<span style="color:{action_color}; font-weight:600; font-size:0.8rem; '
+                        f'font-family:\'Inter\', sans-serif !important;">{action_word}</span>'
+                        f'<span style="color:#F1F5F9; font-weight:700; font-size:0.85rem; '
+                        f'font-family:\'Inter\', sans-serif !important;">{rebalance_symbol}{abs(sugg["diff_value"]):,.0f}</span>'
+                        f'{shares_txt}'
                         '</div>'
                         f'{bar_html}'
                         '</div>'
                     )
                 st.markdown(
                     '<style>'
-                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:1rem; } '
+                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.75rem; } '
                     '@media (max-width:768px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
                     '</style>'
                     f'<div class="hesty-rebalance-grid">{"".join(rebalance_cards_html)}</div>',
