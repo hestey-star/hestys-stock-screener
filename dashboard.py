@@ -1888,20 +1888,30 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     """
     HET ene, universele sectiekop-patroon voor Today en My Portfolio --
     exact de krachtige, groene stijl van de oorspronkelijke 'Portfolio'-
-    kop (groen icoontje + bold, lichte titel op leesformaat), NIET de
-    kleine gedempte grijze variant van een eerdere, te subtiele poging.
-    De scheidingslijn zit nu ONDER de kop (mt-2 mb-6) -- de universele
-    scheiding tussen kop en de feitelijke sectie-inhoud -- i.p.v. erboven.
-    Bovenmarge op de kop zelf zorgt voor lucht t.o.v. de VORIGE sectie;
-    weggelaten bij de EERSTE sectie op een pagina.
+    kop (groen icoontje + bold, lichte titel op leesformaat). De
+    scheidingslijn zit ONDER de kop (mt-2 mb-6) -- de universele scheiding
+    tussen kop en de feitelijke sectie-inhoud.
+
+    Royale bovenmarge op de kop zelf (5rem desktop / 3rem mobiel, via een
+    gedeelde CSS-klasse + media query -- inline style kan geen
+    breakpoints) zorgt voor een duidelijke, luchtige afstand t.o.v. het
+    EINDE van de vorige sectie; weggelaten bij de EERSTE sectie op een
+    pagina (geen vorig blok om van te scheiden).
 
     Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijl
     (_flowing_section_header_html) -- deze pas ik hier niet aan, dat was
     niet gevraagd.
     """
-    top_margin = "0" if is_first else "2rem"
+    if is_first:
+        header_open = '<div style="display:flex; align-items:center; gap:0.55rem;">'
+    else:
+        header_open = (
+            '<style>.hesty-section-gap { margin-top:5rem; } '
+            '@media (max-width:768px) { .hesty-section-gap { margin-top:3rem; } }</style>'
+            '<div class="hesty-section-gap" style="display:flex; align-items:center; gap:0.55rem;">'
+        )
     return (
-        f'<div style="display:flex; align-items:center; gap:0.55rem; margin-top:{top_margin};">'
+        f'{header_open}'
         f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
         f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span>'
         f'</div>'
