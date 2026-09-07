@@ -5800,18 +5800,21 @@ def render_portfolio():
         ":material/visibility: Watchlist",
     ]
     _manage_tabs_key = "manage_section_select_wrap"
-    # Steviger, defensievere versie van dezelfde regels als de Daily/
-    # All-time-toggle bovenaan de pagina -- raakt ook de buitenste
-    # stSegmentedControl-container en eventuele label-elementen (niet
-    # alleen de losse button's), voor het geval de opvallende groene
-    # rand daar vandaan kwam i.p.v. van het button-element zelf.
+    # Nog een keer versterkt -- raakt nu ook expliciet de BaseWeb
+    # button-group-wrapper (de component die st.segmented_control() onder
+    # de motorkap gebruikt) en dwingt border-width apart op 0, voor het
+    # geval een eerdere, minder brede selector de daadwerkelijke rand-
+    # bron nog niet volledig raakte.
     st.markdown(
         f'<style>'
-        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] {{ '
-        f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"], '
+        f'.st-key-{_manage_tabs_key} div[data-baseweb="button-group"] {{ '
+        f'border:none !important; border-width:0 !important; background:transparent !important; '
+        f'box-shadow:none !important; }} '
         f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button, '
-        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] label {{ '
-        f'border:none !important; outline:none !important; box-shadow:none !important; '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] label, '
+        f'.st-key-{_manage_tabs_key} div[data-baseweb="button-group"] button {{ '
+        f'border:none !important; border-width:0 !important; outline:none !important; box-shadow:none !important; '
         f'background:transparent !important; color:#8992A3 !important; '
         f'font-weight:600 !important; font-size:0.85rem !important; }} '
         f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
@@ -6196,7 +6199,47 @@ def render_portfolio():
                     st.rerun()
 
     elif manage_section == "Log transaction":
-        with st.container(border=True):
+        # --- Geen omlijnd kader meer om het hele formulier -- alles ademt
+        # clean op de achtergrond. 1 brede, scope-gevende container-key
+        # eromheen zodat de CSS hieronder ALLE inputs/dropdowns/toggles/
+        # +--knoppen in dit formulier in 1x kan raken (minimalistische
+        # dunne rand, platte segmented-controls, subtiele teal Save-knop),
+        # zonder andere pagina's se widgets te raken. ---
+        _log_tx_form_key = "log_tx_form_wrap"
+        st.markdown(
+            f'<style>'
+            # Tekstvelden, dropdowns en de datumkiezer: flinterdunne,
+            # zachte rand i.p.v. Streamlit's standaard gevulde/glimmende
+            # look, met een subtiele focus-state.
+            f'.st-key-{_log_tx_form_key} div[data-baseweb="input"], '
+            f'.st-key-{_log_tx_form_key} div[data-baseweb="select"] > div, '
+            f'.st-key-{_log_tx_form_key} div[data-baseweb="datepicker"] div[data-baseweb="input"] {{ '
+            f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+            f'box-shadow:none !important; }} '
+            f'.st-key-{_log_tx_form_key} div[data-baseweb="input"]:focus-within, '
+            f'.st-key-{_log_tx_form_key} div[data-baseweb="select"] > div:focus-within {{ '
+            f'border-color:rgba(31,174,150,0.45) !important; }} '
+            # +/- stap-knoppen naast de numerieke velden: platte tekst-
+            # knoppen i.p.v. zware omlijnde blokjes.
+            f'.st-key-{_log_tx_form_key} button[data-testid="stNumberInputStepUp"], '
+            f'.st-key-{_log_tx_form_key} button[data-testid="stNumberInputStepDown"] {{ '
+            f'background:transparent !important; border:none !important; box-shadow:none !important; '
+            f'color:#8992A3 !important; }} '
+            # Segmented-controls (Existing/New position, Buy/Sell): zelfde
+            # platte stijl als de Daily/All-time-toggle bovenaan de pagina.
+            f'.st-key-{_log_tx_form_key} div[data-testid="stSegmentedControl"] {{ '
+            f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+            f'.st-key-{_log_tx_form_key} div[data-testid="stSegmentedControl"] button, '
+            f'.st-key-{_log_tx_form_key} div[data-testid="stSegmentedControl"] label {{ '
+            f'border:none !important; outline:none !important; box-shadow:none !important; '
+            f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
+            f'.st-key-{_log_tx_form_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+            f'.st-key-{_log_tx_form_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+            f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_log_tx_form_key):
             # --- Log a transaction (werkt ook zonder bestaande posities -- een
             # nieuwe positie kan direct via een eerste 'Log a buy' worden
             # aangemaakt) ---
@@ -6299,7 +6342,20 @@ def render_portfolio():
 
             can_save = (tx_holding is not None) or (new_position_symbol is not None)
 
-            if can_save and st.button("Save transaction", type="primary"):
+            _save_tx_key = "log_tx_save_btn_wrap"
+            st.markdown(
+                f'<style>.st-key-{_save_tx_key} button {{ '
+                f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
+                f'color:#1FAE96 !important; font-weight:600 !important; padding:0.3rem 0.9rem !important; '
+                f'border-radius:6px !important; }} '
+                f'.st-key-{_save_tx_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_save_tx_key):
+                save_tx_clicked = can_save and st.button("Save transaction")
+
+            if save_tx_clicked:
                 if tx_shares <= 0 or tx_price <= 0:
                     st.error("Shares and price must both be greater than 0.")
                 else:
@@ -6373,7 +6429,18 @@ def render_portfolio():
             if tx_holding is not None:
                 tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
                 if tx_history:
-                    if st.checkbox(f"Show transaction history ({len(tx_history)})", key=f"show_tx_history_{tx_holding['id']}"):
+                    _tx_history_cb_key = f"show_tx_history_wrap_{tx_holding['id']}"
+                    st.markdown(
+                        f'<style>.st-key-{_tx_history_cb_key} [data-testid="stCheckbox"] p {{ '
+                        f'font-size:0.75rem !important; color:#64748B !important; }} </style>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.container(key=_tx_history_cb_key):
+                        show_tx_history_checked = st.checkbox(
+                            f"Show transaction history ({len(tx_history)})",
+                            key=f"show_tx_history_{tx_holding['id']}",
+                        )
+                    if show_tx_history_checked:
                         for t in tx_history:
                             hcol1, hcol2 = st.columns([5, 1])
                             with hcol1:
@@ -6449,10 +6516,21 @@ def render_portfolio():
             # per-positie-versie hierboven, i.p.v. tekst moeten typen.
             st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
             if not st.session_state.get("confirm_reset_all_holdings", False):
-                if st.button(
-                    "Start over: delete all my positions", type="tertiary",
-                    icon=":material/delete_forever:", key="reset_all_holdings_btn",
-                ):
+                _reset_all_btn_key = "reset_all_holdings_btn_wrap"
+                st.markdown(
+                    f'<style>.st-key-{_reset_all_btn_key} button {{ '
+                    f'font-size:0.75rem !important; color:#64748B !important; '
+                    f'background:transparent !important; border:none !important; box-shadow:none !important; }} '
+                    f'.st-key-{_reset_all_btn_key} button:hover {{ color:#94A3B8 !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_reset_all_btn_key):
+                    reset_all_clicked = st.button(
+                        "Start over: delete all my positions",
+                        icon=":material/delete_forever:", key="reset_all_holdings_btn",
+                    )
+                if reset_all_clicked:
                     st.session_state["confirm_reset_all_holdings"] = True
                     st.rerun()
             else:
