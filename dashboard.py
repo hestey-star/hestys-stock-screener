@@ -6598,14 +6598,30 @@ def render_portfolio():
                             row_key = None
                         if row_key:
                             border_css = "" if is_last_in_col else "border-bottom:1px solid rgba(148,163,184,0.1);"
-                            # Padding drastisch verminderd (was 0.6rem, nu
-                            # 0.3rem) -- compacte, slanke rijen i.p.v. logge
-                            # blokken, zodat er veel meer tickers per scherm
-                            # passen.
+                            # Padding nu op py-1 (0.25rem) -- superslank, net
+                            # genoeg voor het 28px-logo-blok. Daarnaast worden
+                            # ALLE Streamlit-eigen wrapper-elementen binnen deze
+                            # rij (kolommen, blokken, widget-containers) hard
+                            # gedwongen tot items-center + margin/padding:0 --
+                            # dit is de daadwerkelijke fix voor het losse
+                            # klokje/prullenbak: die zaten in APARTE kolommen
+                            # met elk hun EIGEN, van elkaar verschillende
+                            # Streamlit-standaard-marge rond een popover vs.
+                            # een gewone knop, wat de eerdere verspringing
+                            # veroorzaakte.
                             st.markdown(
-                                f'<style>.st-key-{row_key} {{ {border_css} '
-                                f'padding:0.3rem 0.2rem !important; margin:0 !important; display:flex !important; '
-                                f'align-items:center !important; width:100% !important; }}</style>',
+                                f'<style>'
+                                f'.st-key-{row_key} {{ {border_css} '
+                                f'padding:0.25rem 0.2rem !important; margin:0 !important; display:flex !important; '
+                                f'align-items:center !important; width:100% !important; }} '
+                                f'.st-key-{row_key} [data-testid="column"] {{ '
+                                f'display:flex !important; align-items:center !important; padding:0 !important; }} '
+                                f'.st-key-{row_key} [data-testid="stVerticalBlock"] {{ gap:0 !important; }} '
+                                f'.st-key-{row_key} [data-testid="element-container"], '
+                                f'.st-key-{row_key} [data-testid="stPopover"], '
+                                f'.st-key-{row_key} [data-testid="stButton"] {{ '
+                                f'margin:0 !important; padding:0 !important; }} '
+                                f'</style>',
                                 unsafe_allow_html=True,
                             )
                         with row_ctx:
