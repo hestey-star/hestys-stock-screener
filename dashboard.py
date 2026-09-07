@@ -5749,12 +5749,23 @@ def render_portfolio():
 
                     rebalance_cards_html.append(
                         f'<div style="border:1px solid rgba(30,41,59,0.6); border-radius:10px; padding:0.9rem 1rem;">'
-                        f'<div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">'
-                        f'<div><span style="color:#EAEDF1; font-weight:600; text-transform:uppercase; '
-                        f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">{sugg["naam"].upper()}</span> '
-                        f'<span style="color:#8992A3; font-size:0.8rem;">({sugg["ticker"]})</span><br>'
+                        # Naam/ticker op een eigen regel -- mag vrij naar 2
+                        # regels breken (lange ETF-namen) ZONDER de datarij
+                        # eronder te verstoren, want die zit nu in een eigen,
+                        # onafhankelijke flex-rij.
+                        f'<div style="color:#EAEDF1; font-weight:600; text-transform:uppercase; '
+                        f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">'
+                        f'{sugg["naam"].upper()} <span style="color:#8992A3; font-weight:400; '
+                        f'text-transform:none;">({sugg["ticker"]})</span></div>'
+                        # Datarij: percentages/doel LINKS, Buy/Sell-bedrag +
+                        # shares RECHTS -- altijd op dezelfde horizontale
+                        # lijn via justify-content:space-between +
+                        # align-items:center, ongeacht hoeveel regels de
+                        # naam hierboven inneemt.
+                        f'<div style="display:flex; justify-content:space-between; align-items:center; '
+                        f'gap:0.5rem; margin-top:0.3rem;">'
                         f'<span style="color:#64748B; font-size:0.7rem; font-family:\'Inter\', sans-serif !important;">'
-                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</span></div>'
+                        f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</span>'
                         f'<span style="color:{action_color}; font-weight:700; white-space:nowrap; '
                         f'font-family:\'Inter\', sans-serif !important;">{action_word} {rebalance_symbol}'
                         f'{abs(sugg["diff_value"]):,.0f}{shares_txt}</span>'
@@ -5789,13 +5800,23 @@ def render_portfolio():
         ":material/visibility: Watchlist",
     ]
     _manage_tabs_key = "manage_section_select_wrap"
+    # Steviger, defensievere versie van dezelfde regels als de Daily/
+    # All-time-toggle bovenaan de pagina -- raakt ook de buitenste
+    # stSegmentedControl-container en eventuele label-elementen (niet
+    # alleen de losse button's), voor het geval de opvallende groene
+    # rand daar vandaan kwam i.p.v. van het button-element zelf.
     st.markdown(
         f'<style>'
-        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button {{ '
-        f'border:none !important; background:transparent !important; color:#8992A3 !important; '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] {{ '
+        f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button, '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] label {{ '
+        f'border:none !important; outline:none !important; box-shadow:none !important; '
+        f'background:transparent !important; color:#8992A3 !important; '
         f'font-weight:600 !important; font-size:0.85rem !important; }} '
-        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {{ '
-        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+        f'.st-key-{_manage_tabs_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
