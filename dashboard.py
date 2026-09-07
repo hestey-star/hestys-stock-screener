@@ -6598,9 +6598,13 @@ def render_portfolio():
                             row_key = None
                         if row_key:
                             border_css = "" if is_last_in_col else "border-bottom:1px solid rgba(148,163,184,0.1);"
+                            # Padding drastisch verminderd (was 0.6rem, nu
+                            # 0.3rem) -- compacte, slanke rijen i.p.v. logge
+                            # blokken, zodat er veel meer tickers per scherm
+                            # passen.
                             st.markdown(
                                 f'<style>.st-key-{row_key} {{ {border_css} '
-                                f'padding:0.6rem 0.2rem !important; margin:0 !important; display:flex !important; '
+                                f'padding:0.3rem 0.2rem !important; margin:0 !important; display:flex !important; '
                                 f'align-items:center !important; width:100% !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
@@ -6614,23 +6618,38 @@ def render_portfolio():
                                 # ticker-naar-domein-gok (die voor GOOG->'goog.com' of
                                 # een future als 'GC=F' compleet onzinnig zou zijn) --
                                 # ontbreekt 'website' (bv. bij futures/grondstoffen),
-                                # dan gewoon geen favicon tonen.
+                                # dan een strakke letter-placeholder i.p.v. helemaal
+                                # niets, zodat de tekst ernaast NOOIT verspringt.
                                 try:
                                     website = get_cached_ticker_info(w["ticker"]).get("website")
                                 except Exception:
                                     website = None
-                                favicon_html = ""
+                                first_letter = w["naam"].strip()[0].upper() if w["naam"].strip() else "?"
+                                # Logo-slot met EXACT vaste breedte/hoogte (28x28,
+                                # ~ w-8/h-8) -- ongeacht of er een echt logo is of
+                                # de letter-placeholder, dit blokje neemt altijd
+                                # dezelfde ruimte in, dus de tekst ernaast staat
+                                # altijd kaarsrecht onder elkaar.
                                 if website:
                                     favicon_domain = website.replace("https://", "").replace("http://", "").split("/")[0]
-                                    favicon_html = (
+                                    logo_html = (
+                                        f'<div style="width:28px; height:28px; flex-shrink:0; display:flex; '
+                                        f'align-items:center; justify-content:center;">'
                                         f'<img src="https://www.google.com/s2/favicons?domain={favicon_domain}&sz=32" '
-                                        'style="width:18px; height:18px; border-radius:4px;" '
-                                        'onerror="this.style.display=\'none\'">'
+                                        f'style="width:18px; height:18px; border-radius:4px;" '
+                                        f'onerror="this.style.display=\'none\'"></div>'
+                                    )
+                                else:
+                                    logo_html = (
+                                        f'<div style="width:28px; height:28px; flex-shrink:0; border-radius:50%; '
+                                        f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
+                                        f'justify-content:center; font-size:0.68rem; font-weight:700; color:#8992A3; '
+                                        f'font-family:\'Inter\', sans-serif !important;">{first_letter}</div>'
                                     )
                                 st.markdown(
-                                    f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
-                                    f'margin-top:-0.3rem; overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
-                                    f'{favicon_html}'
+                                    f'<div style="display:flex; align-items:center; gap:0.5rem; '
+                                    f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
+                                    f'{logo_html}'
                                     f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
                                     f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; '
                                     f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"].upper()}</span>'
@@ -6662,7 +6681,7 @@ def render_portfolio():
                                 if bell_wrap_key:
                                     st.markdown(
                                         f'<style>.st-key-{bell_wrap_key} button {{ '
-                                        f'padding: 0.2rem 0.55rem !important; '
+                                        f'padding: 0.15rem 0.4rem !important; '
                                         f'min-width: 0 !important; min-height: 0 !important; '
                                         f'display: flex !important; align-items: center !important; '
                                         f'justify-content: center !important; gap: 0.2rem !important; '
