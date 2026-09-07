@@ -6590,7 +6590,18 @@ def render_portfolio():
         with watchlist_narrow_col:
             # Geen omlijnd kader meer om het hele tabblad -- content ademt
             # clean op de achtergrond, net als Rebalancing/Log transaction.
-            with st.container(border=False):
+            # Extra vangnet tegen horizontale overflow (bovenop de per-rij-
+            # fix hieronder): de hoofdcontainer zelf mag NOOIT breder worden
+            # dan het scherm, wat ook de oorzaak zou zijn (bv. een toekomstig
+            # element dat vergeet zichzelf in te perken).
+            _watchlist_wrap_key = "watchlist_main_wrap"
+            st.markdown(
+                f'<style>.st-key-{_watchlist_wrap_key} {{ max-width:100% !important; '
+                f'overflow-x:hidden !important; box-sizing:border-box !important; width:100% !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_watchlist_wrap_key):
                 # --- WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today ---
                 st.caption("Track tickers you don't own yet -- they'll show up with personalized "
                            "signals and news on the Today page.")
@@ -6644,13 +6655,28 @@ def render_portfolio():
                                 f'<style>'
                                 f'.st-key-{row_key} {{ {border_css} '
                                 f'padding:0.5rem 0.2rem !important; margin:0 !important; display:flex !important; '
-                                f'align-items:center !important; width:100% !important; }} '
+                                f'align-items:center !important; width:100% !important; max-width:100% !important; '
+                                f'overflow-x:hidden !important; box-sizing:border-box !important; }} '
                                 f'.st-key-{row_key} [data-testid="stHorizontalBlock"] {{ '
                                 f'flex-direction:row !important; flex-wrap:nowrap !important; '
-                                f'align-items:center !important; width:100% !important; }} '
-                                f'.st-key-{row_key} [data-testid="column"] {{ '
+                                f'align-items:center !important; width:100% !important; max-width:100% !important; }} '
+                                # Kolom 1 (logo+naam): MAG en MOET krimpen (flex:1 +
+                                # min-width:0) zodat lange namen kunnen afkappen i.p.v.
+                                # de rij breder te duwen dan het scherm -- dit was de
+                                # daadwerkelijke oorzaak van de horizontale-scroll-bug:
+                                # zonder min-width:0 weigert een flex-item van nature
+                                # te krimpen onder z'n eigen inhoud (hier: de volledige,
+                                # niet-afgebroken bedrijfsnaam).
+                                f'.st-key-{row_key} [data-testid="column"]:first-child {{ '
                                 f'display:flex !important; align-items:center !important; padding:0 !important; '
-                                f'width:auto !important; min-width:0 !important; }} '
+                                f'flex:1 1 0% !important; min-width:0 !important; overflow:hidden !important; }} '
+                                # Kolom 2/3 (klokje, prullenbak): vaste breedte, NOOIT
+                                # krimpen -- blijven altijd volledig zichtbaar, strak
+                                # rechts verankerd.
+                                f'.st-key-{row_key} [data-testid="column"]:nth-child(2), '
+                                f'.st-key-{row_key} [data-testid="column"]:nth-child(3) {{ '
+                                f'display:flex !important; align-items:center !important; padding:0 !important; '
+                                f'flex:0 0 auto !important; flex-shrink:0 !important; width:auto !important; }} '
                                 f'.st-key-{row_key} [data-testid="stVerticalBlock"] {{ gap:0 !important; }} '
                                 f'.st-key-{row_key} [data-testid="element-container"], '
                                 f'.st-key-{row_key} [data-testid="stPopover"], '
@@ -6697,13 +6723,19 @@ def render_portfolio():
                                         f'justify-content:center; font-size:0.68rem; font-weight:700; color:#8992A3; '
                                         f'font-family:\'Inter\', sans-serif !important;">{first_letter}</div>'
                                     )
+                                # min-width:0 + flex:1 op de naam-span zelf (niet alleen
+                                # op de buitenste rij-div) -- zonder dit weigert de flex-
+                                # child te krimpen onder de volledige, niet-afgebroken
+                                # naamlengte, wat de rij (en daarmee de hele pagina)
+                                # breder duwde dan het scherm.
                                 st.markdown(
-                                    f'<div style="display:flex; align-items:center; gap:0.5rem; '
-                                    f'overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
+                                    f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0; '
+                                    f'width:100%; overflow:hidden;" title="{w["naam"]} ({w["ticker"]})">'
                                     f'{logo_html}'
                                     f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
                                     f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; '
-                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"].upper()}</span>'
+                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto;">'
+                                    f'{w["naam"].upper()}</span>'
                                     f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
                                     '</div>',
                                     unsafe_allow_html=True,
