@@ -6558,7 +6558,9 @@ def render_portfolio():
         except Exception:
             watchlist_narrow_col = st.columns([1])[0]
         with watchlist_narrow_col:
-            with st.container(border=True):
+            # Geen omlijnd kader meer om het hele tabblad -- content ademt
+            # clean op de achtergrond, net als Rebalancing/Log transaction.
+            with st.container(border=False):
                 # --- WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today ---
                 st.caption("Track tickers you don't own yet -- they'll show up with personalized "
                            "signals and news on the Today page.")
@@ -6575,18 +6577,18 @@ def render_portfolio():
                     # zelf -- alleen zichtbaar in de alert-popover, waar het
                     # nodig is als context voor de streefprijs.
                     #
-                    # 2-koloms-indeling + zebra-striping (afwisselend lichtgrijze
-                    # rijen) toegevoegd na feedback op een lange, 1-koloms-lijst
-                    # (16+ items) -- halveert de scroll-lengte en maakt elke rij
-                    # makkelijker te volgen.
+                    # 2-koloms-indeling behouden; zebra-striping (afwisselend
+                    # gekleurde rij-boxen) VERVANGEN door een flinterdunne
+                    # border-bottom per rij -- zelfde, lichtere designtaal als
+                    # Rebalancing hierboven i.p.v. losse gekleurde kaartjes.
                     watchlist_tickers = [w["ticker"] for w in watchlist_items]
                     watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
-                    def _render_watchlist_row(w, row_idx):
-                        # Zebra-striping via st.container(key=...) -- geeft een
-                        # betrouwbare .st-key-{key}-klasse (bevestigd, al eerder
-                        # gebruikt voor de prullenbak-knop), met een veilige
-                        # fallback voor een oudere Streamlit-versie die 'key' op
+                    def _render_watchlist_row(w, row_idx, is_last_in_col):
+                        # st.container(key=...) geeft een betrouwbare
+                        # .st-key-{key}-klasse (bevestigd, al eerder gebruikt
+                        # voor de prullenbak-knop), met een veilige fallback
+                        # voor een oudere Streamlit-versie die 'key' op
                         # st.container() nog niet ondersteunt.
                         row_key = f"watchlist_row_{w['id']}"
                         try:
@@ -6595,11 +6597,10 @@ def render_portfolio():
                             row_ctx = st.container()
                             row_key = None
                         if row_key:
-                            row_bg = "rgba(137,146,163,0.06)" if row_idx % 2 == 0 else "rgba(137,146,163,0.02)"
+                            border_css = "" if is_last_in_col else "border-bottom:1px solid rgba(148,163,184,0.1);"
                             st.markdown(
-                                f'<style>.st-key-{row_key} {{ background:{row_bg} !important; '
-                                f'border-radius:6px !important; padding:0.25rem 0.4rem !important; '
-                                f'margin:-0.7rem 0 !important; display:flex !important; '
+                                f'<style>.st-key-{row_key} {{ {border_css} '
+                                f'padding:0.6rem 0.2rem !important; margin:0 !important; display:flex !important; '
                                 f'align-items:center !important; width:100% !important; }}</style>',
                                 unsafe_allow_html=True,
                             )
@@ -6630,8 +6631,9 @@ def render_portfolio():
                                     f'<div style="display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0; '
                                     f'margin-top:-0.3rem; overflow:hidden; white-space:nowrap;" title="{w["naam"]} ({w["ticker"]})">'
                                     f'{favicon_html}'
-                                    f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; '
-                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"]}</span>'
+                                    f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
+                                    f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; '
+                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"].upper()}</span>'
                                     f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
                                     '</div>',
                                     unsafe_allow_html=True,
@@ -6648,9 +6650,9 @@ def render_portfolio():
                                 # bleef zichtbaar).
                                 # Ook gewrapt in st.container(key=...) -- een betrouwbare,
                                 # bevestigd-werkende manier om deze specifieke knop te
-                                # stylen, i.p.v. de eerdere, nooit-bevestigde 'stPopover'-
-                                # testid-gok (die de grootte-mismatch met de prullenbak-
-                                # knop verklaarde: de CSS raakte 'm gewoon nooit).
+                                # stylen: nu volledig plat (geen achtergrond/rand meer),
+                                # alleen een zachte hover-opacity, i.p.v. een omlijnd
+                                # vierkantje.
                                 bell_wrap_key = f"watchlist_bell_wrap_{w['id']}"
                                 try:
                                     bell_wrap_ctx = st.container(key=bell_wrap_key)
@@ -6664,7 +6666,12 @@ def render_portfolio():
                                         f'min-width: 0 !important; min-height: 0 !important; '
                                         f'display: flex !important; align-items: center !important; '
                                         f'justify-content: center !important; gap: 0.2rem !important; '
-                                        f'white-space: nowrap !important; }}</style>',
+                                        f'white-space: nowrap !important; '
+                                        f'background:transparent !important; border:none !important; '
+                                        f'box-shadow:none !important; opacity:0.75 !important; '
+                                        f'transition:opacity 0.15s ease !important; }} '
+                                        f'.st-key-{bell_wrap_key} button:hover {{ opacity:1 !important; '
+                                        f'background:transparent !important; }}</style>',
                                         unsafe_allow_html=True,
                                     )
                                 with bell_wrap_ctx:
@@ -6702,10 +6709,26 @@ def render_portfolio():
                                                 database.clear_watchlist_alert(w["id"], user_email)
                                                 st.rerun()
                             with w_row_col3:
-                                if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
-                                            help="Remove from watchlist"):
-                                    database.delete_holding(w["id"], user_email)
-                                    st.rerun()
+                                # Zelfde platte, borderloze behandeling als de
+                                # bel-knop hierboven -- via een eigen
+                                # container-key, want een kale st.button() zonder
+                                # scope zou anders Streamlit's standaard,
+                                # omlijnde knop-chrome behouden.
+                                delete_wrap_key = f"watchlist_delete_wrap_{w['id']}"
+                                st.markdown(
+                                    f'<style>.st-key-{delete_wrap_key} button {{ '
+                                    f'background:transparent !important; border:none !important; '
+                                    f'box-shadow:none !important; color:#8992A3 !important; '
+                                    f'opacity:0.75 !important; transition:opacity 0.15s ease !important; }} '
+                                    f'.st-key-{delete_wrap_key} button:hover {{ opacity:1 !important; '
+                                    f'background:transparent !important; }}</style>',
+                                    unsafe_allow_html=True,
+                                )
+                                with st.container(key=delete_wrap_key):
+                                    if st.button("", icon=":material/delete:", key=f"watchlist_delete_{w['id']}",
+                                                help="Remove from watchlist"):
+                                        database.delete_holding(w["id"], user_email)
+                                        st.rerun()
 
                     half = (len(watchlist_items) + 1) // 2
                     left_items = watchlist_items[:half]
@@ -6713,43 +6736,65 @@ def render_portfolio():
                     watchlist_outer_left, watchlist_outer_right = st.columns(2)
                     for row_idx in range(half):
                         with watchlist_outer_left:
-                            _render_watchlist_row(left_items[row_idx], row_idx)
+                            _render_watchlist_row(left_items[row_idx], row_idx, row_idx == half - 1)
                         if row_idx < len(right_items):
                             with watchlist_outer_right:
-                                _render_watchlist_row(right_items[row_idx], row_idx)
+                                _render_watchlist_row(right_items[row_idx], row_idx, row_idx == len(right_items) - 1)
                 else:
                     st.caption("Your watchlist is empty.")
 
                 st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
                 st.markdown("**Add to watchlist**")
-                watchlist_search = st.text_input(
-                    "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+                # Zelfde flinterdunne, zachte rand + subtiele focus-state als
+                # de invoervelden bij Log Transaction -- geen zware omlijning
+                # meer op het zoekveld en de match-dropdown.
+                _watchlist_search_key = "watchlist_search_wrap"
+                st.markdown(
+                    f'<style>'
+                    f'.st-key-{_watchlist_search_key} div[data-baseweb="input"], '
+                    f'.st-key-{_watchlist_search_key} div[data-baseweb="select"] > div {{ '
+                    f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+                    f'box-shadow:none !important; }} '
+                    f'.st-key-{_watchlist_search_key} div[data-baseweb="input"]:focus-within, '
+                    f'.st-key-{_watchlist_search_key} div[data-baseweb="select"] > div:focus-within {{ '
+                    f'border-color:rgba(31,174,150,0.45) !important; }} '
+                    f'.st-key-{_watchlist_search_key} button {{ '
+                    f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
+                    f'color:#1FAE96 !important; font-weight:600 !important; padding:0.3rem 0.9rem !important; '
+                    f'border-radius:6px !important; }} '
+                    f'.st-key-{_watchlist_search_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
                 )
-                w_selected_symbol = None
-                w_selected_name = None
-                if watchlist_search:
-                    try:
-                        w_search_results = yf.Search(watchlist_search, max_results=8).quotes
-                    except Exception as exc:
-                        w_search_results = []
-                        st.caption(f"Search failed: {exc}")
-                    if w_search_results:
-                        w_options = {}
-                        for r in w_search_results:
-                            name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                            label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                            w_options[label] = r
-                        w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
-                        w_chosen = w_options[w_chosen_label]
-                        w_selected_symbol = w_chosen.get("symbol")
-                        w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
-                    else:
-                        st.caption("No results found for this search -- try a different name.")
+                with st.container(key=_watchlist_search_key):
+                    watchlist_search = st.text_input(
+                        "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+                    )
+                    w_selected_symbol = None
+                    w_selected_name = None
+                    if watchlist_search:
+                        try:
+                            w_search_results = yf.Search(watchlist_search, max_results=8).quotes
+                        except Exception as exc:
+                            w_search_results = []
+                            st.caption(f"Search failed: {exc}")
+                        if w_search_results:
+                            w_options = {}
+                            for r in w_search_results:
+                                name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                                label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                                w_options[label] = r
+                            w_chosen_label = st.selectbox("Choose the right match", list(w_options.keys()), key="watchlist_match")
+                            w_chosen = w_options[w_chosen_label]
+                            w_selected_symbol = w_chosen.get("symbol")
+                            w_selected_name = w_chosen.get("shortname") or w_chosen.get("longname") or w_selected_symbol
+                        else:
+                            st.caption("No results found for this search -- try a different name.")
 
-                if w_selected_symbol and st.button("Add to watchlist", type="primary"):
-                    database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
-                    st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
-                    st.rerun()
+                    if w_selected_symbol and st.button("Add to watchlist"):
+                        database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
+                        st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
+                        st.rerun()
 
     st.markdown(
         '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
