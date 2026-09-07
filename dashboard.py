@@ -1886,30 +1886,26 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
 
 def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False) -> str:
     """
-    HET ene, universele sectiekop-patroon voor Today en My Portfolio (Wet 1
-    van de mobile/structuur-doorlichting) -- vervangt de eerdere twee,
-    onderling verschillende varianten (_flowing_section_header_html's
-    grotere witte titel, _bold_section_divider_html's nog grotere ALL-CAPS-
-    titel) door 1 consistente opbouw: compact icoontje + kleine, gedempte
-    ALL-CAPS-titel (text-xs, tracking-wider, slate-400), met een flinter-
-    dunne scheidingslijn + royale witruimte (my-8) erboven. Weggelaten bij
-    de EERSTE sectie op een pagina (geen vorig blok om van te scheiden).
+    HET ene, universele sectiekop-patroon voor Today en My Portfolio --
+    exact de krachtige, groene stijl van de oorspronkelijke 'Portfolio'-
+    kop (groen icoontje + bold, lichte titel op leesformaat), NIET de
+    kleine gedempte grijze variant van een eerdere, te subtiele poging.
+    De scheidingslijn zit nu ONDER de kop (mt-2 mb-6) -- de universele
+    scheiding tussen kop en de feitelijke sectie-inhoud -- i.p.v. erboven.
+    Bovenmarge op de kop zelf zorgt voor lucht t.o.v. de VORIGE sectie;
+    weggelaten bij de EERSTE sectie op een pagina.
 
-    Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijlen
-    (_flowing_section_header_html) -- deze wet is voorlopig alleen voor
-    Today en My Portfolio, zoals gevraagd.
+    Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijl
+    (_flowing_section_header_html) -- deze pas ik hier niet aan, dat was
+    niet gevraagd.
     """
-    divider_html = (
-        "" if is_first else
-        '<hr style="border:none; border-top:1px solid rgba(30,41,59,0.6); margin:2rem 0;">'
-    )
+    top_margin = "0" if is_first else "2rem"
     return (
-        f'{divider_html}'
-        f'<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:1rem;">'
-        f'{_icon_span(icon_name, size_px=15, color="#94A3B8")}'
-        f'<span style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; '
-        f'color:#94A3B8; font-family:\'Inter\', sans-serif !important;">{title}</span>'
+        f'<div style="display:flex; align-items:center; gap:0.55rem; margin-top:{top_margin};">'
+        f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
+        f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span>'
         f'</div>'
+        f'<hr style="border:none; border-top:1px solid rgba(30,41,59,0.6); margin:0.5rem 0 1.5rem 0;">'
     )
 
 
@@ -5111,7 +5107,7 @@ def render_portfolio():
     # ============================================================
     if holdings:
         st.markdown(
-            _flowing_section_header_html("Portfolio", "account_balance_wallet", is_first=True),
+            _uniform_section_header_html("Portfolio", "account_balance_wallet", is_first=True),
             unsafe_allow_html=True,
         )
         # --- Header: totale portfoliowaarde + toggles -- GEEN omlijnd
@@ -5172,10 +5168,13 @@ def render_portfolio():
                     )
                 label_suffix_html = f'<span style="font-size:0.9rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
                 st.markdown(
+                    f'<div style="display:flex; align-items:baseline; gap:0.9rem; flex-wrap:wrap;">'
                     f'<div style="font-size:2.75rem; font-weight:800; color:#EAEDF1; font-family:\'Inter\', sans-serif !important; '
                     f'font-variant-numeric: tabular-nums; line-height:1.1;">{shown_symbol}{total_value:,.0f}{label_suffix_html}</div>'
-                    f'<div style="font-size:0.85rem; color:#8992A3; margin-top:6px; font-family:\'Inter\', sans-serif !important;">'
+                    f'<div style="font-size:0.9rem; color:#94A3B8; font-weight:500; '
+                    f'font-family:\'Inter\', sans-serif !important; white-space:nowrap;">'
                     f'Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
+                    f'</div>'
                     f'{total_day_change_html}',
                     unsafe_allow_html=True,
                 )
@@ -5229,13 +5228,9 @@ def render_portfolio():
         # --- Positietabel: geen dikke omlijning meer, maar WEL een hele
         # zachte, egale achtergrond (bg-slate-950/40) + royale padding --
         # zodat de tabel een duidelijk, rustig 'eiland' vormt t.o.v. de
-        # Rebalancing-sectie eronder, zonder terug te vallen op een harde
-        # rand. Prominente 'POSITIONS'-titel erboven maakt de sectiegrens
-        # nu ook tekstueel duidelijk.
-        st.markdown(
-            _uniform_section_header_html("Positions", "table_chart", is_first=True),
-            unsafe_allow_html=True,
-        )
+        # Rebalancing-sectie eronder. GEEN eigen 'Positions'-kop meer --
+        # de groene 'Portfolio'-kop bovenaan (met de lijn eronder) is de
+        # officiele start van deze sectie, de tabel begint er direct onder.
         _pf_table_card_key = "portfolio_table_card"
         st.markdown(
             f'<style>.st-key-{_pf_table_card_key} {{ background:rgba(2,6,23,0.4) !important; '
