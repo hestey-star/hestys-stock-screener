@@ -7250,11 +7250,29 @@ def render_discover():
     _discover_default_label = _discover_subview_reverse.get(
         st.query_params.get("subview", "discover"), "Discover",
     )
-    _discover_selected_label = st.segmented_control(
-        "Discover section", options=list(_discover_subview_map.keys()),
-        selection_mode="single", default=_discover_default_label,
-        key="discover_subnav", label_visibility="collapsed",
+    # Op mobiel MAG deze rij nooit over 2 regels breken -- forceer 1
+    # horizontale lijn die desnoods opzij scrollt (swipe), i.p.v. dat de
+    # 3e tab-optie naar een lelijke 2e regel valt.
+    _subnav_key = "discover_subnav_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] {{ '
+        f'display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; '
+        f'overflow-x:auto !important; overflow-y:hidden !important; width:100% !important; '
+        f'justify-content:flex-start !important; scrollbar-width:none !important; }} '
+        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"]::-webkit-scrollbar {{ display:none !important; }} '
+        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] button, '
+        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] label {{ '
+        f'white-space:nowrap !important; flex-shrink:0 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
     )
+    with st.container(key=_subnav_key):
+        _discover_selected_label = st.segmented_control(
+            "Discover section", options=list(_discover_subview_map.keys()),
+            selection_mode="single", default=_discover_default_label,
+            key="discover_subnav", label_visibility="collapsed",
+        )
     if _discover_selected_label is None:
         _discover_selected_label = "Discover"
     current_discover_subview = _discover_subview_map[_discover_selected_label]
@@ -7380,7 +7398,7 @@ def render_discover():
         # hierboven. Apart van de officiële GICS-sectoren gehouden (anders
         # zou een bedrijf dubbel meetellen). ---
         st.markdown(
-            _flowing_section_header_html("Themes", "lightbulb", is_first=False),
+            _uniform_section_header_html("Themes", "lightbulb", is_first=False),
             unsafe_allow_html=True,
         )
         st.caption("How popular investing themes are doing right now (1-month trailing).")
@@ -7465,19 +7483,19 @@ def render_discover():
     else:
         st.markdown(
             f"""
-            <div id="signals" style="scroll-margin-top: 80px; background: rgba(15,23,42,0.4);
-                        border-radius: 14px;
+            <div id="signals" style="scroll-margin-top: 80px; background: rgba(2,6,23,0.4);
+                        border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
                         padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
                     Hesty's Signature Signals
                 </div>
-                <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
+                <div style="color:#94A3B8; font-size:0.78rem; font-weight:500; margin-top:4px; margin-bottom:14px;">
                     3 specially-built signals, each with its own investing style. This is the core of Hesty's.
                 </div>
-                <div style="color:#8992A3; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; margin-top:12px; line-height:1.8;">
-                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Momentocrats</b>: identifies high-quality stocks trading bullish today<br>
-                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Snowballers</b>: finds premium, compounding assets at an attractive discount<br>
-                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Rocket List</b>: spots accelerating revenue growth for high-conviction bets
+                <div style="font-size:0.85rem; line-height:2;">
+                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Momentocrats</b><span style="color:#CBD5E1; font-weight:500;">: identifies high-quality stocks trading bullish today</span><br>
+                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Snowballers</b><span style="color:#CBD5E1; font-weight:500;">: finds premium, compounding assets at an attractive discount</span><br>
+                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Rocket List</b><span style="color:#CBD5E1; font-weight:500;">: spots accelerating revenue growth for high-conviction bets</span>
                 </div>
             </div>
             """,
