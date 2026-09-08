@@ -7007,8 +7007,8 @@ def _render_discover_signup_form() -> None:
     import database as _database_for_optin
 
     st.markdown(
-        '<div id="activate-signals" style="scroll-margin-top:80px; text-align:center; '
-        'padding:1.5rem 1rem 0.75rem 1rem; max-width:640px; margin:0 auto;">'
+        '<div id="activate-signals" style="scroll-margin-top:80px; text-align:left; '
+        'padding:1.5rem 0 0.75rem 0; max-width:640px; margin:0;">'
         '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; letter-spacing:0.04em; '
         'text-transform:uppercase; line-height:1.6;">'
         '&#128235; Activate free signals: get the full list of fresh flips and premium '
@@ -7020,7 +7020,7 @@ def _render_discover_signup_form() -> None:
     form_key = "discover_signup_form_wrap"
     st.markdown(
         f'<style>'
-        f'.st-key-{form_key} {{ max-width:640px !important; margin:0 auto !important; }} '
+        f'.st-key-{form_key} {{ max-width:640px !important; margin:0 !important; }} '
         f'.st-key-{form_key} div[data-baseweb="input"], '
         f'.st-key-{form_key} div[data-baseweb="select"] > div {{ '
         f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
@@ -7405,7 +7405,7 @@ def render_discover():
                 _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
                 if _remaining_momentocrats > 0:
                     st.markdown(
-                        f'<div style="text-align:center; margin-top:0.75rem;">'
+                        f'<div style="text-align:left; margin-top:0.75rem;">'
                         f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
                         f'&#128274; Unlock {_remaining_momentocrats} more fresh flips and alerts &rarr;</a>'
                         f'</div>',
@@ -7467,7 +7467,7 @@ def render_discover():
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
                         st.markdown(
-                            f'<div style="text-align:center; margin-top:0.75rem;">'
+                            f'<div style="text-align:left; margin-top:0.75rem;">'
                             f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
                             f'&#128274; Unlock {_remaining_snowballers} more long-term value ideas &rarr;</a>'
                             f'</div>',
