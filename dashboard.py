@@ -1850,7 +1850,7 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
         f'<div style="height:100%; box-sizing:border-box; {background}'
         f'border:{border_style}; {box_shadow}border-radius:10px; padding:0.65rem 0.75rem; '
         f'display:flex; flex-direction:column;">'
-        f'<div style="font-size:0.88rem; font-weight:800; color:#EAEDF1;">{ticker}{star_badge}</div>'
+        f'<div style="font-size:0.88rem; font-weight:800; color:#EAEDF1;">{str(ticker).upper()}{star_badge}</div>'
         f'<div style="font-size:1.2rem; font-weight:800; color:{color}; margin-top:3px; white-space:nowrap;">{primary_value}</div>'
         f'<div style="font-size:0.6rem; color:#8992A3; margin-top:1px;">{primary_label}</div>'
         f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:4px 8px; margin-top:auto; padding-top:6px; '
@@ -6969,138 +6969,122 @@ def render_portfolio():
 
 
 
-def render_discover():
-    # --- Niet-ingelogde dagelijkse e-mail-opt-in -- BOVENAAN de pagina,
-    #     nog VOOR de hero-sectie, zodat het e-mailveld op mobiel ZONDER
-    #     scrollen zichtbaar is (aanleiding: 137 unieke bezoekers, 0
-    #     opt-ins). ALLEEN voor niet-ingelogde bezoekers -- een
-    #     ingelogde gebruiker beheert z'n e-mail-voorkeuren al via
-    #     Settings.
-    #
-    #     BELANGRIJKE LES: een eerdere versie toonde de regio-keuze pas
-    #     NA het invullen van een e-mailadres (progressieve onthulling).
-    #     Dat gaf een layout-verschuiving zodra je begon te typen, en
-    #     Streamlit behandelt een knop die van positie/context
-    #     verandert tussen 2 renders als een NIEUWE widget -- de eerste
-    #     klik op 'Activate' (die de regio liet verschijnen) telde
-    #     daardoor niet mee als indiening, en je moest een 2e keer
-    #     klikken. FIX: regio + knop staan nu in 1 vaste layout die
-    #     nooit verschuift, dus 1 klik volstaat altijd.
-    #
-    #     max-width toegevoegd -- zonder eigen breedte-begrenzing rekte
-    #     deze sectie op desktop over de volle, brede paginabreedte uit
-    #     (enorm gestrekt oogde), terwijl 't op mobiel al goed paste.
-    if not current_user.is_logged_in:
-        import database as _database_for_optin
+def _render_discover_email_lock(context_key: str) -> None:
+    """
+    Het nieuwe, minimalistische e-mail-activatieblok -- verschijnt ONDER
+    de eerste screener-kaarten (Momentocrats/Snowballers) voor NIET-
+    ingelogde bezoekers, op de plek waar voorheen alleen een grijze
+    'Upgrade to Premium'-tekst stond (die voor een anonieme bezoeker
+    sowieso niet relevant is -- die heeft nog geen account om te
+    upgraden). De kaarten hierboven zijn de bewijslast; dit is de
+    natuurlijke volgende stap.
 
-        st.markdown(
-            f"""
-            <div id="signup" style="scroll-margin-top: 80px; max-width: 480px; margin: 0.5rem auto 1rem auto;
-                        background: linear-gradient(135deg, rgba(31,174,150,0.20), rgba(31,174,150,0.03));
-                        border: 1.5px solid rgba(31,174,150,0.55); border-radius: 12px;
-                        box-shadow: 0 0 24px rgba(31,174,150,0.12);
-                        padding: 1.1rem 1.25rem;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.78rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    {_icon_span("mail", size_px=14, color="#1FAE96")} Free daily signals
-                </div>
-                <div style="color:#EAEDF1; font-size:1.1rem; font-weight:700; margin-top:6px; line-height:1.3;">
-                    Quality stocks turning bullish today &mdash; free, every weekday morning &#9749;
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    Regio-keuze bewust BEHOUDEN (niet weggelaten voor extra
+    minimalisme) -- die bepaalt in welke tijdzone de dagelijkse e-mail
+    aankomt, een functionele noodzaak, geen decoratie. Wel zo compact
+    mogelijk gehouden (klein, naast het e-mailveld i.p.v. een aparte
+    rij) zodat het niet met de hoofd-CTA concurreert.
 
-        optin_form_wrap_key = "optin_form_wrapper"
-        try:
-            optin_form_ctx = st.container(key=optin_form_wrap_key)
-            st.markdown(
-                f'<style>.st-key-{optin_form_wrap_key} {{ max-width: 480px !important; '
-                f'margin: 0 auto !important; }}</style>',
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            optin_form_ctx = st.container()
-        with optin_form_ctx:
-            optin_email = st.text_input(
+    'context_key' maakt de widget-keys uniek per plek (Momentocrats vs.
+    Snowballers) -- Streamlit staat geen dubbele keys op 1 pagina toe.
+    """
+    import database as _database_for_optin
+
+    st.markdown(
+        '<div style="text-align:center; padding:1.25rem 1rem 0.5rem 1rem; max-width:560px; margin:0 auto;">'
+        '<div style="color:#CBD5E1; font-size:0.8rem; font-weight:600; letter-spacing:0.04em; '
+        'text-transform:uppercase; line-height:1.5;">'
+        '&#128235; Activate free signals: get the full list of fresh flips and premium '
+        'long-term ideas in your inbox every weekday morning.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    lock_wrap_key = f"discover_email_lock_{context_key}"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{lock_wrap_key} {{ max-width:480px !important; margin:0 auto !important; }} '
+        f'.st-key-{lock_wrap_key} div[data-baseweb="input"], '
+        f'.st-key-{lock_wrap_key} div[data-baseweb="select"] > div {{ '
+        f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+        f'box-shadow:none !important; }} '
+        f'.st-key-{lock_wrap_key} div[data-baseweb="input"]:focus-within, '
+        f'.st-key-{lock_wrap_key} div[data-baseweb="select"] > div:focus-within {{ '
+        f'border-color:rgba(31,174,150,0.45) !important; }} '
+        f'.st-key-{lock_wrap_key} button {{ '
+        f'background:#1FAE96 !important; color:#0B1210 !important; font-weight:700 !important; '
+        f'border:none !important; border-radius:8px !important; }} '
+        f'.st-key-{lock_wrap_key} button:hover {{ background:#24C7AB !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    try:
+        lock_ctx = st.container(key=lock_wrap_key)
+    except Exception:
+        lock_ctx = st.container()
+    with lock_ctx:
+        email_col, region_col = st.columns([3, 2])
+        with email_col:
+            lock_email = st.text_input(
                 "Email address", placeholder="you@example.com",
-                key="discover_optin_email", label_visibility="collapsed",
+                key=f"discover_lock_email_{context_key}", label_visibility="collapsed",
             )
-            # Regio-dropdown bewust klein en ONDER het e-mailveld -- stond
-            # eerst naast de Activate-knop, wat 'm evenveel visueel gewicht
-            # gaf als de belangrijkste actie (inschrijven) zelf. Ook geen
-            # automatische 'EU'-selectie meer -- 'Choose time' staat nu als
-            # niet-gekozen default vooraan, zodat een bezoeker een bewuste
-            # keuze moet maken i.p.v. per ongeluk de verkeerde regio te
-            # laten staan.
-            optin_region_narrow_col = st.columns([2, 3])[0]
-            with optin_region_narrow_col:
-                optin_region_raw = st.selectbox(
-                    "Region", ["Choose timezone", "EU", "US_East", "US_West"],
-                    format_func=lambda x: x.replace("_", " "),
-                    key="discover_optin_region", label_visibility="collapsed",
-                )
-            optin_submitted = st.button("Activate", key="discover_optin_submit", type="primary", width="stretch")
-
-        if optin_submitted:
-            if not optin_email or "@" not in optin_email:
-                st.error("Please enter a valid email address.")
-            elif optin_region_raw == "Choose timezone":
-                st.error("Please choose your timezone.")
-            else:
-                confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(optin_email, optin_region_raw)
-                send_subscription_confirmation_email(optin_email, confirmation_token, unsubscribe_token)
-                st.success("Almost there! Check your inbox to confirm your subscription.")
-
-    if not current_user.is_logged_in:
-        # --- Hero-sectie: 1 gerichte, heldere binnenkomer voor nieuwe
-        # bezoekers, vóór alle navigatie/content -- i.p.v. meteen met
-        # tabbladen te beginnen. Zelfde HTML-op-1-regel-aanpak als de
-        # thema-tegels (voorkomt dat Markdown het als code-blok
-        # interpreteert door voorloop-spaties/newlines). ---
-        hero_points = [
-            ("search", "Discover new ideas", "signals, themes, trends"),
-            ("bar_chart", "Analyze your own portfolio", "performance, risk, allocation"),
-            ("mail", "Tailored daily & weekly updates", "matched to your investing style"),
-            ("trending_up", "Expanding every week", "new signals, always improving"),
-        ]
-        # 2x2-grid i.p.v. flex-wrap (dat gaf op brede schermen 4 platte,
-        # dunne vakjes op 1 rij -- saai). Een icoon-badge (gekleurde
-        # cirkel) met dezelfde Material Symbol-lijniconen als de zijbalk
-        # (i.p.v. losse emoji, die te speels oogden en niet aansloten
-        # bij de rest van de site) geeft meer visueel gewicht.
-        hero_points_html = "".join(
-            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
-            f'border-radius:12px; padding:1rem 1.1rem;">'
-            f'<div style="width:36px; height:36px; border-radius:50%; background:rgba(31,174,150,0.18); '
-            f'display:flex; align-items:center; justify-content:center;">{_icon_span(icon_name, size_px=18, color="#1FAE96")}</div>'
-            f'<div style="color:#EAEDF1; font-size:0.88rem; font-weight:700; margin-top:9px; line-height:1.3;">{title}</div>'
-            f'<div style="color:#8992A3; font-size:0.75rem; margin-top:3px; line-height:1.35;">{sub}</div>'
-            f'</div>'
-            for icon_name, title, sub in hero_points
+        with region_col:
+            lock_region_raw = st.selectbox(
+                "Region", ["Choose timezone", "EU", "US_East", "US_West"],
+                format_func=lambda x: x.replace("_", " "),
+                key=f"discover_lock_region_{context_key}", label_visibility="collapsed",
+            )
+        lock_submitted = st.button(
+            "Activate Free Signals", key=f"discover_lock_submit_{context_key}", width="stretch",
         )
+
+    if lock_submitted:
+        if not lock_email or "@" not in lock_email:
+            st.error("Please enter a valid email address.")
+        elif lock_region_raw == "Choose timezone":
+            st.error("Please choose your timezone.")
+        else:
+            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(lock_email, lock_region_raw)
+            send_subscription_confirmation_email(lock_email, confirmation_token, unsubscribe_token)
+            st.success("Almost there! Check your inbox to confirm your subscription.")
+
+
+def render_discover():
+    # --- Nieuwe, strakke 'Value First'-opening: geen megabox e-mailformulier
+    # meer bovenaan (die zat er tussen de bezoeker en de daadwerkelijke,
+    # bewijzende data in -- 137 unieke bezoekers, 0 opt-ins). De pagina
+    # opent nu direct met de universele groene sectiekop + een compacte
+    # marketing-titel en 2 knoppen; het e-mail-activatieblok verhuist naar
+    # ONDER de eerste screener-kaarten (zie _render_discover_email_lock()
+    # verderop), waar de daadwerkelijke, live data al bewezen heeft dat het
+    # de moeite waard is. ---
+    st.markdown(
+        _uniform_section_header_html("Discover", "search", is_first=True),
+        unsafe_allow_html=True,
+    )
+    if not current_user.is_logged_in:
         st.markdown(
-            '<div style="text-align:center; padding: 1.5rem 0.5rem 1rem 0.5rem;">'
-            '<div style="display:inline-block; background:rgba(31,174,150,0.12); border:1px solid rgba(31,174,150,0.4); '
-            'border-radius:20px; padding:5px 14px; color:#1FAE96; font-size:0.8rem; font-weight:600;">'
-            'Free &mdash; no credit card needed</div>'
-            '<h1 class="hero-headline" style="font-size:2.2rem; margin:0.9rem 0 0 0; line-height:1.25; color:#EAEDF1;">'
-            'Your Investing Edge,<br/><span style="color:#1FAE96;">Built Around You</span></h1>'
-            '<div style="max-width:520px; margin:0 auto;">'
-            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.7rem; margin-top:1.5rem;">{hero_points_html}</div>'
-            '</div>'
-            '<div style="margin-top:1.75rem; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">'
-            '<a href="#signup" style="background:#1FAE96; color:#0B1210; font-weight:700; font-size:0.95rem; '
-            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block;">Start free, in seconds &rarr;</a>'
-            '<a href="#signals" style="background:transparent; color:#EAEDF1; font-weight:600; font-size:0.95rem; '
-            'padding:0.75rem 1.5rem; border-radius:10px; text-decoration:none; display:inline-block; '
+            '<div id="signup" style="scroll-margin-top: 80px; text-align:center; padding:0 0.5rem 0.5rem 0.5rem;">'
+            '<div style="color:#EAEDF1; font-size:1.4rem; font-weight:800; text-transform:uppercase; '
+            'letter-spacing:0.02em; line-height:1.35;">Your Investing Edge,<br>'
+            '<span style="color:#1FAE96;">Built Around You.</span></div>'
+            '<div style="margin-top:1rem; display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">'
+            '<a href="#signup" target="_self" style="background:#1FAE96; color:#0B1210; font-weight:700; '
+            'font-size:0.8rem; padding:0.5rem 1.1rem; border-radius:8px; text-decoration:none; '
+            'display:inline-block;">Start free, in seconds &rarr;</a>'
+            '<a href="#signals" target="_self" style="background:transparent; color:#EAEDF1; font-weight:600; '
+            'font-size:0.8rem; padding:0.5rem 1.1rem; border-radius:8px; text-decoration:none; display:inline-block; '
             'border:1px solid rgba(234,237,241,0.3);">Browse today\'s signals</a>'
             '</div>'
             '</div>',
             unsafe_allow_html=True,
         )
 
-    st.markdown("### Discover")
+    _discover_subview_map = {
+        "Discover": "discover", "Sectors & Themes": "sectors_themes",
+        "Earnings Surprises": "earnings_surprises",
+    }
 
     _discover_subview_map = {
         "Discover": "discover", "Sectors & Themes": "sectors_themes",
@@ -7326,7 +7310,7 @@ def render_discover():
 
         # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
         st.markdown(
-            _flowing_section_header_html("Momentocrats", "sensors", is_first=False),
+            _uniform_section_header_html("Momentocrats", "sensors", is_first=False),
             unsafe_allow_html=True,
         )
         st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
@@ -7395,13 +7379,16 @@ def render_discover():
                 ))
             _render_signal_cards(cards_html)
             st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
-            if not _is_premium_discover and total_matching > _signal_display_limit:
-                st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                        f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
+            if total_matching > _signal_display_limit:
+                if not current_user.is_logged_in:
+                    _render_discover_email_lock("momentocrats")
+                elif not _is_premium_discover:
+                    st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                            f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
         # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
         st.markdown(
-            _flowing_section_header_html("Snowballers", "savings", is_first=False),
+            _uniform_section_header_html("Snowballers", "savings", is_first=False),
             unsafe_allow_html=True,
         )
         st.caption("Quality companies trading below fair value, with low volatility. For the "
@@ -7446,9 +7433,12 @@ def render_discover():
                     ))
                 _render_signal_cards(cards_html)
                 st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
-                if not _is_premium_discover and total_snowball > _signal_display_limit:
-                    st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                            f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
+                if total_snowball > _signal_display_limit:
+                    if not current_user.is_logged_in:
+                        _render_discover_email_lock("snowballers")
+                    elif not _is_premium_discover:
+                        st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                                f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
             else:
                 st.caption("No stocks currently meet the Snowballers criteria.")
         else:
