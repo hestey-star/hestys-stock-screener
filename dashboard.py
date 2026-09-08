@@ -2019,7 +2019,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'</div>'
         f'{action_html}'
         f'</div>'
-        f'<div style="width:100%; height:1px; background-color:#334155; margin-top:6px; margin-bottom:0; padding:0;"></div>'
+        f'<div style="width:100%; height:1px; background-color:#334155; margin-top:6px; margin-bottom:18px; padding:0;"></div>'
         f'</div>'
         f'</div>'
     )
