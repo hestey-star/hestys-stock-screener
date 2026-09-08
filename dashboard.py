@@ -1774,42 +1774,36 @@ _STANDOUT_DISPLAY_CAP = 10
 
 def _rotation_tile_html(rank, name, return_pct):
     r, g, b = _rotation_gradient_color(return_pct)
-    accent_rgb = f"{r},{g},{b}"
-    text_color = f"rgb({accent_rgb})"
-    trend_arrow = "↗" if return_pct >= 0 else "↘"
+    text_color = f"rgb({r},{g},{b})"
+    trend_arrow = "&#8599;" if return_pct >= 0 else "&#8600;"
+    rocket_span = " &#128640;" if return_pct >= ROTATION_ROCKET_THRESHOLD_PCT else ""
 
-    # Inline i.p.v. absoluut gepositioneerd (voorkomt dat 'ie over de
-    # naam heen kan vallen als die naar een 2e regel wrapt), en geen
-    # omlijning/achtergrond -- gewoon het kale icoontje naast het
-    # rangnummer.
-    rocket_span = " 🚀" if return_pct >= ROTATION_ROCKET_THRESHOLD_PCT else ""
-
-    # BELANGRIJK: geen voorloop-spaties/newlines binnen deze HTML-string
-    # -- Markdown interpreteert 4+ spaties inspringing aan het begin van
-    # een regel als een CODE-BLOK, niet als HTML, wat tegels als rauwe
-    # HTML-tekst zou tonen i.p.v. gerenderd.
-    #
-    # height:100% + flex-column: laat de tegel uitrekken tot de hoogte
-    # van de langste tegel IN DEZELFDE RIJ -- lost op dat een 2-regelige
-    # naam de rij-hoogte laat verschillen t.o.v. een 1-regelige naam
-    # ernaast. white-space:nowrap op het percentage-blok voorkomt dat de
-    # pijl en het percentage naar een 2e regel wrappen.
+    # Dunne, flinterdunne horizontale strip -- exact dezelfde designtaal
+    # als de Rebalancing/Watchlist-kaarten (dunne border-slate-800/40,
+    # py-2 px-3-achtige padding, geen zware achtergrondkleur/gloed meer)
+    # i.p.v. de eerdere, zwaardere tegel met gradient-achtergrond en
+    # gekleurde gloeiende rand.
     return (
-        f'<div style="height:100%; box-sizing:border-box; display:flex; flex-direction:column; '
-        f'background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.02)); '
-        f'border: 1px solid rgba({accent_rgb},0.45); border-radius: 12px; padding: 0.9rem 1rem;">'
-        f'<div style="font-size:0.65rem; color:#5B6472; font-weight:700;">#{rank}{rocket_span}</div>'
-        f'<div style="font-size:0.78rem; color:#8992A3; font-weight:600; line-height:1.3; min-height:2.2em; margin-top:2px;">{name}</div>'
-        f'<div style="font-size:1.5rem; font-weight:800; color:{text_color}; margin-top:auto; padding-top:6px; white-space:nowrap;">{trend_arrow} {return_pct:+.1f}%</div>'
+        f'<div style="border:1px solid rgba(30,41,59,0.4); border-radius:10px; '
+        f'padding:0.5rem 0.75rem; box-sizing:border-box; display:flex; align-items:center; '
+        f'justify-content:space-between; gap:0.6rem; width:100%; max-width:100%; overflow:hidden;">'
+        f'<div style="display:flex; align-items:baseline; gap:0.5rem; min-width:0; overflow:hidden;">'
+        f'<span style="font-size:0.65rem; color:#5B6472; font-weight:700; flex-shrink:0;">#{rank}</span>'
+        f'<span style="font-size:0.82rem; color:#EAEDF1; font-weight:600; overflow:hidden; '
+        f'text-overflow:ellipsis; white-space:nowrap;">{name}{rocket_span}</span>'
+        f'</div>'
+        f'<span style="font-size:0.9rem; font-weight:700; color:{text_color}; white-space:nowrap; '
+        f'flex-shrink:0;">{trend_arrow} {return_pct:+.1f}%</span>'
         f'</div>'
     )
 
 
 def _render_rotation_tiles(items: list, name_key: str) -> None:
     """
-    Rendert een responsieve tegel-grid voor rotatie-data (Sectors of
-    Themes) -- 1 gedeelde renderer i.p.v. losse implementaties, zodat
-    beide secties er altijd exact hetzelfde uitzien.
+    Rendert een responsief 2-koloms grid van dunne strips voor rotatie-
+    data (Sectors of Themes) -- 1 gedeelde renderer i.p.v. losse
+    implementaties, zodat beide secties er altijd exact hetzelfde
+    uitzien (nu ook in dezelfde stijl als Rebalancing/Watchlist).
 
     items: lijst met dicts, elk met minstens 'return_pct' en name_key
     (bv. 'sector' of 'theme'). Verwacht al gesorteerd te zijn (bepaalt
@@ -1818,29 +1812,35 @@ def _render_rotation_tiles(items: list, name_key: str) -> None:
     tiles_html = "".join(
         _rotation_tile_html(i + 1, item[name_key], item["return_pct"]) for i, item in enumerate(items)
     )
-    # CSS-grid met auto-fill/minmax i.p.v. st.columns() -- dat laatste
-    # houdt altijd hetzelfde aantal kolommen aan (wordt alleen smaller op
-    # mobiel, niet minder kolommen), terwijl auto-fill echt herschikt naar
-    # minder kolommen op een smal scherm -- de kern van 'mobiel-vriendelijk'.
     st.markdown(
-        f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
-        f'gap:0.6rem; margin: 0.5rem 0 1rem 0;">{tiles_html}</div>',
+        '<style>'
+        '.hesty-rotation-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem; '
+        'width:100%; max-width:100%; overflow-x:hidden; box-sizing:border-box; margin:0.5rem 0 1rem 0; } '
+        '@media (max-width:768px) { .hesty-rotation-grid { grid-template-columns:1fr; } } '
+        '</style>'
+        f'<div class="hesty-rotation-grid">{tiles_html}</div>',
         unsafe_allow_html=True,
     )
 
 
-def _signal_card_html(ticker: str, primary_label: str, primary_value: str, primary_positive, secondary_stats: list, standout: bool = False) -> str:
+def _signal_card_html(ticker: str, primary_label: str, primary_value: str, primary_positive, secondary_stats: list, standout: bool = False, neutral_border: bool = False) -> str:
     """
-    Bouwt 1 signaal-kaart (Momentocrats/Snowballers/Rocket List) -- i.p.v.
-    een brede st.dataframe met 13+ kolommen, die op mobiel dubbel-scrollen
-    afdwingt (verticaal EN horizontaal). Toont de KERN-metric groot en
-    gekleurd, en een paar secundaire stats compact eronder.
+    Bouwt 1 signaal-kaart (Momentocrats/Snowballers/Rocket List/Earnings
+    surprises) -- i.p.v. een brede st.dataframe met 13+ kolommen, die op
+    mobiel dubbel-scrollen afdwingt (verticaal EN horizontaal). Toont de
+    KERN-metric groot en gekleurd, en een paar secundaire stats compact
+    eronder.
 
     primary_positive: True (groen), False (rood), of None (neutraal wit)
     secondary_stats: lijst van (label, al-geformatteerde waarde)-tuples
     standout: True voor een extra visueel accent (sterkere rand + gloed +
     ⭐-badge) bij écht opvallende signalen (bv. Momentocrats-score >= 8) --
     precies de handvol die de moeite waard zijn om verder te bekijken.
+    neutral_border: True voor een reguliere, dunne border-slate-800/60
+    i.p.v. de gekleurde accent-rand -- gebruikt bij Earnings surprises,
+    waar elke kaart een gelijkwaardig datapunt is (geen 'opvallendere'
+    signalen zoals bij de screeners), dus een felle gekleurde rand op elke
+    kaart oogde onterecht zwaar/opdringerig.
     """
     # Normaliseer naar een NATIVE Python True/False/None -- een waarde die
     # rechtstreeks uit een pandas-vergelijking komt (bv. row['x'] < 0, of
@@ -1884,7 +1884,11 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     # meer visuele 'pop', consistent met de rest van de app (opt-in-banner,
     # rotatie-tegels). Standout-kaarten krijgen een STERKERE versie van
     # DEZELFDE kleur (niet altijd jade, ook bij een negatieve standout).
-    if standout:
+    if neutral_border:
+        border_style = "1px solid rgba(51,65,85,0.6)"
+        box_shadow = ""
+        background = f"background: linear-gradient(135deg, rgba({accent_rgb},0.12), rgba({accent_rgb},0.02)); "
+    elif standout:
         border_style = f"1.5px solid rgba({accent_rgb},0.6)"
         box_shadow = f"box-shadow:0 0 16px rgba({accent_rgb},0.2); "
         background = f"background: linear-gradient(135deg, rgba({accent_rgb},0.20), rgba({accent_rgb},0.03)); "
@@ -1908,9 +1912,31 @@ def _signal_card_html(ticker: str, primary_label: str, primary_value: str, prima
     )
 
 
-def _render_signal_cards(cards_html: list) -> None:
-    """Rendert een responsieve grid van signaal-kaarten (zelfde auto-fill/minmax-aanpak als rotatie-tegels)."""
-    combined = "".join(cards_html)
+def _render_signal_cards(cards_html: list, blur_from_index: int = None) -> None:
+    """
+    Rendert een responsieve grid van signaal-kaarten (zelfde auto-fill/
+    minmax-aanpak als rotatie-tegels). 'blur_from_index' (optioneel) --
+    voor niet-ingelogde bezoekers bij Snowballers/Rocket List: kaarten
+    VANAF die index krijgen een blur + slotje-overlay (bewijst dat er
+    meer is, zonder de data zelf weg te geven) i.p.v. volledig te
+    verbergen zoals eerder.
+    """
+    if blur_from_index is not None:
+        wrapped = []
+        for i, card in enumerate(cards_html):
+            if i >= blur_from_index:
+                wrapped.append(
+                    f'<div style="position:relative;">'
+                    f'<div style="filter:blur(4px); pointer-events:none; opacity:0.4;">{card}</div>'
+                    f'<div style="position:absolute; inset:0; display:flex; align-items:center; '
+                    f'justify-content:center;">{_icon_span("lock", size_px=22, color="#CBD5E1")}</div>'
+                    f'</div>'
+                )
+            else:
+                wrapped.append(card)
+        combined = "".join(wrapped)
+    else:
+        combined = "".join(cards_html)
     st.markdown(
         f'<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); '
         f'gap:0.5rem; margin: 0.5rem 0 1rem 0;">{combined}</div>',
@@ -7041,8 +7067,8 @@ def _render_discover_signup_form() -> None:
         'box-sizing:border-box; overflow-x:hidden;">'
         '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; letter-spacing:0.04em; '
         'text-transform:uppercase; line-height:1.6;">'
-        '&#128235; Activate free signals: get the full list of fresh flips and premium '
-        'long-term ideas in your inbox every weekday morning.</div>'
+        '&#128235; Activate daily Momentocrats alerts: get the full list of fresh bullish '
+        'flips in your inbox every weekday morning.</div>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -7110,42 +7136,6 @@ def render_discover():
     # Momentocrats/Snowballers staat alleen nog een subtiele teaser-link
     # ernaartoe, waar de daadwerkelijke, live data al bewezen heeft dat
     # het de moeite waard is. ---
-    if not current_user.is_logged_in:
-        st.markdown(
-            '<style>'
-            '.discover-hero { text-align:left; padding:0.5rem 0 0; width:100%; '
-            'max-width:100%; box-sizing:border-box; overflow-x:hidden; margin-bottom:2rem; }'
-            '.discover-hero-buttons { margin-top:1.5rem; display:flex; flex-direction:row; '
-            'gap:1rem; justify-content:flex-start; align-items:center; width:100%; '
-            'box-sizing:border-box; }'
-            '.discover-hero-btn { font-weight:600 !important; font-size:0.875rem !important; '
-            'padding:0.625rem 1.5rem !important; border-radius:10px !important; '
-            'text-decoration:none !important; box-sizing:border-box !important; text-align:center !important; '
-            'line-height:1.2 !important; white-space:nowrap !important; display:inline-block !important; }'
-            '.discover-hero-btn-primary, .discover-hero-btn-primary:link, .discover-hero-btn-primary:visited {'
-            'background:#1FAE96 !important; color:#0B111E !important; border:none !important; }'
-            '.discover-hero-btn-secondary, .discover-hero-btn-secondary:link, .discover-hero-btn-secondary:visited {'
-            'background:transparent !important; color:#EAEDF1 !important; '
-            'border:1px solid rgba(148,163,184,0.35) !important; }'
-            '@media (max-width:768px) { '
-            '.discover-hero-buttons { flex-direction:column; align-items:stretch; width:100%; '
-            'gap:0.75rem; padding:0 1rem; } '
-            '.discover-hero-btn { width:100%; white-space:normal; } '
-            '} '
-            '</style>'
-            '<div id="hero-top" class="discover-hero">'
-            '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
-            'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
-            '<span style="color:#1FAE96;">Built Around You.</span></div>'
-            '<div class="discover-hero-buttons">'
-            '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
-            'Start free, in seconds &rarr;</a>'
-            '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
-            'Browse today\'s signals</a>'
-            '</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
 
     _discover_subview_map = {
         "Discover": "discover", "Sectors & Themes": "sectors_themes",
@@ -7164,13 +7154,52 @@ def render_discover():
         _discover_selected_label = "Discover"
     current_discover_subview = _discover_subview_map[_discover_selected_label]
 
+    if current_discover_subview == "discover":
+        if not current_user.is_logged_in:
+            st.markdown(
+                '<style>'
+                '.discover-hero { text-align:left; padding:0.5rem 0 0; width:100%; '
+                'max-width:100%; box-sizing:border-box; overflow-x:hidden; margin-bottom:2rem; }'
+                '.discover-hero-buttons { margin-top:1.5rem; display:flex; flex-direction:row; '
+                'gap:1rem; justify-content:flex-start; align-items:center; width:100%; '
+                'box-sizing:border-box; }'
+                '.discover-hero-btn { font-weight:600 !important; font-size:0.875rem !important; '
+                'padding:0.625rem 1.5rem !important; border-radius:10px !important; '
+                'text-decoration:none !important; box-sizing:border-box !important; text-align:center !important; '
+                'line-height:1.2 !important; white-space:nowrap !important; display:inline-block !important; }'
+                '.discover-hero-btn-primary, .discover-hero-btn-primary:link, .discover-hero-btn-primary:visited {'
+                'background:#1FAE96 !important; color:#0B111E !important; border:none !important; }'
+                '.discover-hero-btn-secondary, .discover-hero-btn-secondary:link, .discover-hero-btn-secondary:visited {'
+                'background:transparent !important; color:#EAEDF1 !important; '
+                'border:1px solid rgba(148,163,184,0.35) !important; }'
+                '@media (max-width:768px) { '
+                '.discover-hero-buttons { flex-direction:column; align-items:stretch; width:100%; '
+                'gap:0.75rem; padding:0 1rem; } '
+                '.discover-hero-btn { width:100%; white-space:normal; } '
+                '} '
+                '</style>'
+                '<div id="hero-top" class="discover-hero">'
+                '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
+                'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
+                '<span style="color:#1FAE96;">Built Around You.</span></div>'
+                '<div class="discover-hero-buttons">'
+                '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
+                'Start free, in seconds &rarr;</a>'
+                '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
+                'Browse today\'s signals</a>'
+                '</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+
     if current_discover_subview == "sectors_themes":
         # --- Sector rotation -- geen expander meer: content staat gewoon
         # altijd zichtbaar op de pagina (scrollend), zoals moderne sites
         # dit doen -- een accordion voegde hier geen overzicht toe, het
         # verstopte 'm juist onnodig achter een klik.
         st.markdown(
-            _flowing_section_header_html("Sector rotation", "sync", is_first=True),
+            _uniform_section_header_html("Sector rotation", "sync", is_first=True),
             unsafe_allow_html=True,
         )
         st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
@@ -7187,7 +7216,11 @@ def render_discover():
         else:
             st.caption("No sector data available right now.")
 
-        st.markdown("**Trend**")
+        st.markdown(
+            '<div style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+            'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Trend</div>',
+            unsafe_allow_html=True,
+        )
         st.caption("A line crossing zero is a rotation signal.")
         with st.spinner("Building trend chart..."):
             rotation_trend = build_sector_rotation_trend(region=region)
@@ -7198,8 +7231,14 @@ def render_discover():
             default_sectors = sorted(
                 all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
             )[:5]
+            st.markdown(
+                '<div style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+                'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Sectors to compare</div>',
+                unsafe_allow_html=True,
+            )
             selected_sectors = st.multiselect(
                 "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
+                label_visibility="collapsed",
             )
             if selected_sectors:
                 trend_fig = go.Figure()
@@ -7296,7 +7335,7 @@ def render_discover():
 
     elif current_discover_subview == "earnings_surprises":
         st.markdown(
-            _flowing_section_header_html("Earnings surprises", "payments", is_first=True),
+            _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
             unsafe_allow_html=True,
         )
         st.caption("Notable earnings beats/misses among today's and this week's signals -- "
@@ -7307,7 +7346,7 @@ def render_discover():
                 _signal_card_html(
                     s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
                     s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
-                    standout=abs(s["earnings_surprise_pct"]) >= 15.0,
+                    standout=abs(s["earnings_surprise_pct"]) >= 15.0, neutral_border=True,
                 )
                 for s in surprises
             ]
@@ -7521,13 +7560,13 @@ def render_discover():
                         row["afwijking_fair_value_pct"] < 0, secondary,
                         standout=row["afwijking_fair_value_pct"] <= -20.0,
                     ))
-                _render_signal_cards(cards_html)
+                _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
                 if not current_user.is_logged_in:
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
                         st.markdown(
                             '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            'Activate daily alerts &rarr;</a>',
+                            '&#128274; Unlock all premium weekly signals with a free account &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
@@ -7577,13 +7616,13 @@ def render_discover():
                         row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
                         standout=row["groei_pct"] >= 25.0,
                     ))
-                _render_signal_cards(cards_html)
+                _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
                 if not current_user.is_logged_in:
                     _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
                     if _remaining_rocket > 0:
                         st.markdown(
                             '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            'Activate daily alerts &rarr;</a>',
+                            '&#128274; Unlock all premium weekly signals with a free account &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
