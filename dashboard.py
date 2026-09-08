@@ -7257,49 +7257,79 @@ def render_discover():
     current_discover_subview = st.session_state.get(
         "discover_subview_active", st.query_params.get("subview", "discover"),
     )
+    # JS-gebaseerde aanpak i.p.v. pure CSS -- na 3 mislukte CSS-only
+    # pogingen (Streamlit's eigen widget-layout bleef de flex-row-regels
+    # ergens intern overschrijven) stap ik over op dezelfde, al bewezen
+    # betrouwbare techniek als de footer-accordeon eerder: een
+    # ONZICHTBARE, ECHTE Streamlit-knop regelt de daadwerkelijke state-
+    # wissel (dus een normale, correcte rerun -- geen page-reload), en
+    # een volledig ZELF gebouwde HTML-rij is het zichtbare, klikbare
+    # element (100% eigen controle over de layout, niets dat Streamlit
+    # zelf nog kan overschrijven). JS koppelt een klik op de zichtbare
+    # rij aan een programmatische .click() op de bijbehorende, verborgen
+    # native knop.
     _subnav_key = "discover_subnav_wrap"
-    _active_btn_key = f"discover_tab_{current_discover_subview}"
-    # Directe-kind-selector (>) i.p.v. een brede afstammeling-selector --
-    # de vorige poging raakte vermoedelijk OOK geneste vertical-blocks
-    # binnen de knoppen zelf (elke st.container(key=...) is zelf ook een
-    # vertical-block), waardoor de flex-row-regel ergens dieper werd
-    # overschreven/verstoord. Nu ALLEEN de EERSTE, directe vertical-block
-    # onder de scope naar flex-row gedwongen, en elk element-container
-    # DAARBINNEN (dus 1 laag dieper) hard op content-breedte gezet.
+    _hidden_btns_key = "discover_subnav_hidden_buttons"
+
     st.markdown(
-        f'<style>'
-        f'.st-key-{_subnav_key} {{ '
-        f'border-bottom:1px solid rgba(15,23,42,0.9) !important; padding-bottom:0.75rem !important; '
-        f'margin-bottom:2rem !important; padding-left:0.25rem !important; padding-right:0.25rem !important; '
-        f'width:100% !important; box-sizing:border-box !important; }} '
-        f'.st-key-{_subnav_key} > div {{ '
-        f'display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; '
-        f'width:100% !important; justify-content:flex-start !important; align-items:center !important; '
-        f'gap:0.35rem !important; }} '
-        f'.st-key-{_subnav_key} > div > div {{ '
-        f'flex:0 0 auto !important; flex-basis:auto !important; width:auto !important; '
-        f'min-width:0 !important; margin:0 !important; }} '
-        f'.st-key-{_subnav_key} [data-testid="element-container"] {{ '
-        f'flex:0 0 auto !important; width:auto !important; margin:0 !important; }} '
-        f'.st-key-{_subnav_key} button {{ '
-        f'white-space:nowrap !important; flex-shrink:0 !important; background:transparent !important; '
-        f'border:none !important; color:#8992A3 !important; font-weight:700 !important; '
-        f'text-transform:uppercase !important; letter-spacing:0.05em !important; '
-        f'font-size:0.625rem !important; padding:0.25rem 0.6rem !important; border-radius:8px !important; }} '
-        f'.st-key-{_subnav_key} .st-key-{_active_btn_key} button {{ '
-        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
-        f'@media (min-width: 768px) {{ '
-        f'.st-key-{_subnav_key} button {{ font-size:0.85rem !important; padding:0.4rem 1rem !important; }} '
-        f'}} '
-        f'</style>',
+        f'<style>.st-key-{_hidden_btns_key} {{ display:none !important; }}</style>',
         unsafe_allow_html=True,
     )
-    with st.container(key=_subnav_key):
+    with st.container(key=_hidden_btns_key):
         for _subview_key, _subview_label in _discover_subview_options:
-            with st.container(key=f"discover_tab_{_subview_key}"):
-                if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
-                    st.session_state["discover_subview_active"] = _subview_key
-                    st.rerun()
+            if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
+                st.session_state["discover_subview_active"] = _subview_key
+                st.rerun()
+
+    _tabs_html = "".join(
+        f'<div class="discover-tab-visible{" discover-tab-active" if _k == current_discover_subview else ""}" '
+        f'data-target-label="{_label}">{_label}</div>'
+        for _k, _label in _discover_subview_options
+    )
+    st.markdown(
+        f'<style>'
+        f'.discover-tabs-row {{ display:flex; flex-direction:row; flex-wrap:nowrap; width:100%; '
+        f'align-items:center; gap:0.35rem; border-bottom:1px solid rgba(15,23,42,0.9); '
+        f'padding:0 0.25rem 0.75rem 0.25rem; margin-bottom:2rem; box-sizing:border-box; }} '
+        f'.discover-tab-visible {{ flex-shrink:0; white-space:nowrap; cursor:pointer; '
+        f'background:transparent; color:#8992A3; font-weight:700; text-transform:uppercase; '
+        f'letter-spacing:0.05em; font-size:0.625rem; padding:0.25rem 0.6rem; border-radius:8px; '
+        f'font-family:\'Inter\', sans-serif !important; user-select:none; -webkit-user-select:none; }} '
+        f'.discover-tab-active {{ background:rgba(31,174,150,0.15); color:#1FAE96; }} '
+        f'@media (min-width: 768px) {{ '
+        f'.discover-tab-visible {{ font-size:0.85rem; padding:0.4rem 1rem; }} '
+        f'}} '
+        f'</style>'
+        f'<div class="discover-tabs-row">{_tabs_html}</div>',
+        unsafe_allow_html=True,
+    )
+    components.html(
+        f"""
+        <script>
+        function hestyBindDiscoverTabs() {{
+            var doc = window.parent.document;
+            if (doc.body.__hestyDiscoverTabsBound) {{ return; }}
+            doc.body.__hestyDiscoverTabsBound = true;
+            doc.body.addEventListener('click', function(e) {{
+                var tab = e.target.closest('.discover-tab-visible');
+                if (!tab) {{ return; }}
+                var label = tab.getAttribute('data-target-label');
+                var hiddenContainer = doc.querySelector('.st-key-{_hidden_btns_key}');
+                if (!hiddenContainer) {{ return; }}
+                var buttons = hiddenContainer.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) {{
+                    if (buttons[i].textContent.trim() === label) {{
+                        buttons[i].click();
+                        break;
+                    }}
+                }}
+            }});
+        }}
+        hestyBindDiscoverTabs();
+        </script>
+        """,
+        height=0,
+    )
 
     if current_discover_subview == "discover":
         if not current_user.is_logged_in:
