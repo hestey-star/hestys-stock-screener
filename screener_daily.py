@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 import yfinance as yf
 
-from macro_events import get_todays_macro_events
+from macro_events import get_todays_macro_events, get_market_holiday
 
 from indicators import supertrend, ema, volume_ratio
 from screener import (
@@ -63,6 +63,13 @@ EARNINGS_RELEVANCE_DAYS = 45       # hoe recent winstcijfers moeten zijn (i.p.v.
 # vangnetrun het automatisch opnieuw probeert (de dedup-check in
 # daily.yml kijkt naar de laatste COMMIT-datum van de CSV, die dan
 # terecht nog niet van vandaag is).
+#
+# TWEEDE, LOSSTAANDE OORZAAK (gevonden na een reeks identieke '606 van
+# de 608'-fouten die ook bij herhaalde pogingen, uren later, niet
+# opklaarden): fetch_daily()'s versheidscheck hield alleen rekening met
+# WEEKENDEN, niet met Amerikaanse BEURSFEESTDAGEN (bv. Labor Day) op de
+# dag(en) vlak voor de scan. Zie fetch_daily() zelf voor de fix (nu
+# feestdag-bewust via macro_events.get_market_holiday()).
 _stale_data_skip_count = 0
 
 
@@ -113,21 +120,39 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
         if getattr(last_date, "tz", None) is not None:
             last_date = last_date.tz_localize(None)
         today = pd.Timestamp.now().normalize()
-        weekday = today.dayofweek  # maandag=0 ... zondag=6
-        # BEWUST geen ruime buffer op doordeweekse dagen (dinsdag-vrijdag) --
-        # een 1-dags-speling zou precies de waargenomen bug (2 handelsdagen
-        # achterstand) ook goedkeuren, en 'm dus onzichtbaar maken. Alleen
-        # rond maandag iets meer ruimte (voor een mogelijke vrijdag-
-        # feestdag) -- die 3-daagse weekend-sprong is al normaal, dus 1
-        # dag extra dekt een incidentele feestdag zonder de vaste
-        # weekend-sprong zelf te flaggen.
-        if weekday == 0:      # maandag
-            max_days_back = 4
-        elif weekday == 6:    # zondag (draait normaal niet, voor de zekerheid)
-            max_days_back = 3
-        else:                  # dinsdag t/m vrijdag
-            max_days_back = 1
-        oldest_acceptable_date = today - pd.Timedelta(days=max_days_back)
+
+        # BUG GEVONDEN EN GEFIXT: de eerdere versie gaf alleen een vaste
+        # buffer op basis van de WEEKDAG van vandaag (maandag 4 dagen
+        # speling, dinsdag-vrijdag maar 1) -- maar hield geen rekening met
+        # een Amerikaanse BEURSFEESTDAG op de dag(en) vlak voor de scan.
+        # Concreet: maandag 7 september 2026 was Labor Day (beurs dicht).
+        # Bij een dinsdag-scan was de laatste geldige slotkoers dan
+        # vrijdag 4 september -- 4 kalenderdagen terug, terwijl de oude
+        # check op een dinsdag maar 1 dag toestond. Gevolg: vrijwel ALLE
+        # tickers werden afgewezen als 'te oud', bij elke herhaalde poging
+        # exact hetzelfde (er was niets aan het 'bijtrekken', de data was
+        # al die tijd al correct -- het was geen yfinance-vertraging).
+        #
+        # Fix: reken de VERWACHTE meest recente handelsdag dynamisch uit
+        # door terug te lopen vanaf vandaag, weekend-dagen EN bekende
+        # NYSE-feestdagen overslaand -- i.p.v. een starre, feestdag-blinde
+        # weekday-heuristiek. Hergebruikt dezelfde, al bestaande
+        # US_MARKET_HOLIDAYS_2026-kalender uit macro_events.py (die al
+        # voor de Week-Agenda gebouwd is), zodat er maar 1 bron van
+        # waarheid is voor 'welke dagen is de Amerikaanse beurs dicht'.
+        expected_trading_day = today - pd.Timedelta(days=1)
+        while (
+            expected_trading_day.dayofweek >= 5  # zaterdag=5, zondag=6
+            or get_market_holiday(expected_trading_day.strftime("%Y-%m-%d")) is not None
+        ):
+            expected_trading_day -= pd.Timedelta(days=1)
+
+        # 1 dag speling bovenop de verwachte handelsdag, voor yfinance's
+        # eigen, normale verwerkingsvertraging na sluiting (geen extra
+        # dag zou precies de eerder waargenomen 'yfinance loopt 1+
+        # handelsdag achter'-bug ook goedkeuren, en 'm dus onzichtbaar
+        # maken -- zie de module-docstring hierboven).
+        oldest_acceptable_date = expected_trading_day - pd.Timedelta(days=1)
 
         if last_date < oldest_acceptable_date:
             days_stale = (today - last_date).days
