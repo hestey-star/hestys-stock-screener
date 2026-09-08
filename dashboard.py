@@ -7051,30 +7051,26 @@ def _render_discover_email_lock(context_key: str) -> None:
 
 
 def render_discover():
-    # --- Nieuwe, strakke 'Value First'-opening: geen megabox e-mailformulier
-    # meer bovenaan (die zat er tussen de bezoeker en de daadwerkelijke,
-    # bewijzende data in -- 137 unieke bezoekers, 0 opt-ins). De pagina
-    # opent nu direct met de universele groene sectiekop + een compacte
-    # marketing-titel en 2 knoppen; het e-mail-activatieblok verhuist naar
-    # ONDER de eerste screener-kaarten (zie _render_discover_email_lock()
-    # verderop), waar de daadwerkelijke, live data al bewezen heeft dat het
-    # de moeite waard is. ---
-    st.markdown(
-        _uniform_section_header_html("Discover", "search", is_first=True),
-        unsafe_allow_html=True,
-    )
+    # --- Marketing-first opening: GEEN 'Discover'-sectiekop meer bovenaan --
+    # de grote titel hieronder ("Your Investing Edge, Built Around You.")
+    # IS zelf al de sterkste binnenkomer, een aparte kop erboven voegde
+    # alleen droge, overbodige ruis toe. Verhuisd van de standaard groene
+    # sectiekop-stijl naar 1 gecentreerd, marketing-achtig blok. Het
+    # e-mail-activatieblok verhuist naar ONDER de eerste screener-kaarten
+    # (zie _render_discover_email_lock() verderop), waar de daadwerkelijke,
+    # live data al bewezen heeft dat het de moeite waard is. ---
     if not current_user.is_logged_in:
         st.markdown(
-            '<div id="signup" style="scroll-margin-top: 80px; text-align:center; padding:0 0.5rem 0.5rem 0.5rem;">'
-            '<div style="color:#EAEDF1; font-size:1.4rem; font-weight:800; text-transform:uppercase; '
-            'letter-spacing:0.02em; line-height:1.35;">Your Investing Edge,<br>'
+            '<div id="signup" style="scroll-margin-top: 80px; text-align:center; padding:0.5rem 0.5rem 0.5rem 0.5rem;">'
+            '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
+            'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
             '<span style="color:#1FAE96;">Built Around You.</span></div>'
-            '<div style="margin-top:1rem; display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">'
+            '<div style="margin-top:1.1rem; display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">'
             '<a href="#signup" target="_self" style="background:#1FAE96; color:#0B1210; font-weight:700; '
-            'font-size:0.8rem; padding:0.5rem 1.1rem; border-radius:8px; text-decoration:none; '
+            'font-size:0.85rem; padding:0.55rem 1.2rem; border-radius:8px; text-decoration:none; '
             'display:inline-block;">Start free, in seconds &rarr;</a>'
             '<a href="#signals" target="_self" style="background:transparent; color:#EAEDF1; font-weight:600; '
-            'font-size:0.8rem; padding:0.5rem 1.1rem; border-radius:8px; text-decoration:none; display:inline-block; '
+            'font-size:0.85rem; padding:0.55rem 1.2rem; border-radius:8px; text-decoration:none; display:inline-block; '
             'border:1px solid rgba(234,237,241,0.3);">Browse today\'s signals</a>'
             '</div>'
             '</div>',
@@ -7378,11 +7374,18 @@ def render_discover():
                     standout=row["score"] >= 8.0,
                 ))
             _render_signal_cards(cards_html)
-            st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
-            if _signal_display_limit is not None and total_matching > _signal_display_limit:
-                if not current_user.is_logged_in:
-                    _render_discover_email_lock("momentocrats")
-                elif not _is_premium_discover:
+            # Voor niet-ingelogde bezoekers vervangt de e-mail-opt-in de
+            # grijze meta-tekst VOLLEDIG (niet alleen conditioneel bij een
+            # 'er is meer verborgen'-situatie) -- de opt-in is de logische
+            # volgende stap voor een anonieme bezoeker, ongeacht of er nog
+            # extra matches achter een limiet zitten. Ingelogde gebruikers
+            # zien nog gewoon de originele meta-tekst + (indien relevant)
+            # de Premium-upsell.
+            if not current_user.is_logged_in:
+                _render_discover_email_lock("momentocrats")
+            else:
+                st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
+                if _signal_display_limit is not None and total_matching > _signal_display_limit and not _is_premium_discover:
                     st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                             f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
 
@@ -7432,11 +7435,11 @@ def render_discover():
                         standout=row["afwijking_fair_value_pct"] <= -20.0,
                     ))
                 _render_signal_cards(cards_html)
-                st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
-                if _signal_display_limit is not None and total_snowball > _signal_display_limit:
-                    if not current_user.is_logged_in:
-                        _render_discover_email_lock("snowballers")
-                    elif not _is_premium_discover:
+                if not current_user.is_logged_in:
+                    _render_discover_email_lock("snowballers")
+                else:
+                    st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
+                    if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
                         st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                                 f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
             else:
