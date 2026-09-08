@@ -92,13 +92,21 @@ html {
    i.p.v. per aanroep opnieuw als losse <style>-tag geinjecteerd (dat gaf
    op pagina's met meerdere secties na elkaar, zoals de 3 Discover-
    screeners, inconsistent gedrag onder Streamlit's React-rendering).
-   mt-8 op desktop (md:), mt-6 op mobiel -- garandeert dat de witruimte
+   mt-10 op desktop (md:), mt-8 op mobiel -- garandeert dat de witruimte
    tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
    gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
    gedefinieerd. */
-.hesty-section-gap { margin-top: 1.5rem; }
+.hesty-section-gap { margin-top: 2rem; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 2rem; }
+    .hesty-section-gap { margin-top: 2.5rem; }
+}
+
+/* Responsieve titelgrootte voor _uniform_section_header_html()'s <h2>
+   (text-base mobiel, text-lg desktop) -- inline style kan geen
+   breakpoints, vandaar een eigen klasse. */
+.hesty-section-title { font-size: 1rem; }
+@media (min-width: 768px) {
+    .hesty-section-title { font-size: 1.125rem; }
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
@@ -1966,46 +1974,43 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
 
 def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False, action_html: str = "") -> str:
     """
-    HET ene, universele sectiekop-patroon voor Today en My Portfolio --
-    exact de krachtige, groene stijl van de oorspronkelijke 'Portfolio'-
-    kop (groen icoontje + bold, lichte titel op leesformaat). De
-    scheidingslijn zit ONDER de kop (mt-2 mb-6) -- de universele scheiding
-    tussen kop en de feitelijke sectie-inhoud.
+    HET ene, universele sectiekop-patroon voor Today, My Portfolio en
+    Discover -- groene, ALL-CAPS titel + een flinterdunne lijn die STRAK
+    tegen de tekst aansluit.
 
-    Royale bovenmarge op de kop zelf (mt-16 desktop / mt-10 mobiel, via
-    de EENMALIG, globaal gedefinieerde .hesty-section-gap-klasse in de
-    hoofd-stylesheet -- NIET meer per aanroep opnieuw als losse
-    <style>-tag geinjecteerd. Dat laatste gaf op de Discover-pagina
-    (3x dezelfde klasse via 3 aparte st.markdown()-calls) inconsistent
-    gedrag onder Streamlit's React-rendering -- 1 centrale bron van
-    waarheid sluit dat nu volledig uit) zorgt voor een duidelijke,
-    luchtige afstand t.o.v. het EINDE van de vorige sectie; weggelaten
-    bij de EERSTE sectie op een pagina (geen vorig blok om van te
-    scheiden).
+    STRUCTUREEL HERBOUWD: titel en lijn zitten nu samen in 1 GEISOLEERDE
+    container (eigen <div>), los van de rest van de sectie-inhoud. De
+    titel is een <h2> met harde margin:0/padding:0 (voorkwam eerder een
+    onverklaard gat tussen tekst en lijn -- vermoedelijk browser-default
+    <h2>-marges die nooit expliciet gereset waren). De lijn zelf is nu
+    een gewone <div style="border-bottom:...">, GEEN <hr>-tag meer --
+    Streamlit blijkt eigen basisstyling op <hr>-elementen te hebben die
+    zelfs met !important bleef doorschemeren; een <div> heeft dat
+    probleem niet, want Streamlit's theme raakt die niet aan.
+
+    Royale bovenmarge op de HELE container (mt-10 desktop / mt-8 mobiel,
+    via de EENMALIG, globaal gedefinieerde .hesty-section-gap-klasse in
+    de hoofd-stylesheet) zorgt voor een duidelijke afstand t.o.v. het
+    EINDE van de vorige sectie; weggelaten bij de EERSTE sectie op een
+    pagina.
 
     'action_html' (optioneel) is een stukje kant-en-klare HTML (meestal
     1 subtiele <a class="inline-link">-link) dat rechtsboven verschijnt,
-    op DEZELFDE hoogte als de titel -- voor sectie-navigatielinks
-    ('Explore all signals on Discover', 'Adjust target allocations in My
-    Portfolio') die functioneel nuttig blijven maar niet meer in de
-    data-kolommen zelf hoeven te staan.
-
-    Analyze/Discover gebruiken bewust nog hun eigen bestaande kop-stijl
-    (_flowing_section_header_html) -- deze pas ik hier niet aan, dat was
-    niet gevraagd.
+    op dezelfde hoogte als de titel.
     """
     gap_class = "" if is_first else ' class="hesty-section-gap"'
     return (
-        f'<div{gap_class} style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap;">'
-        f'<div style="display:flex; align-items:center; gap:0.55rem;">'
-        f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
-        f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span>'
-        f'</div>'
+        f'<div{gap_class} style="margin-bottom:0;">'
+        f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
+        f'<h2 class="hesty-section-title" style="color:#1FAE96; font-weight:700; display:flex; align-items:center; '
+        f'gap:0.5rem; margin:0; padding:0; text-transform:uppercase; letter-spacing:0.01em;">'
+        f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}{title}'
+        f'</h2>'
         f'{action_html}'
         f'</div>'
-        f'<hr style="border:none !important; border-top:1px solid rgba(30,41,59,0.6) !important; '
-        f'margin:0.25rem 0 1rem 0 !important; display:block !important; width:100% !important; '
-        f'opacity:1 !important;">'
+        f'<div style="width:100%; border-bottom:1px solid rgba(30,41,59,0.6) !important; '
+        f'margin:0.25rem 0 1rem 0 !important; padding:0 !important; box-sizing:border-box;"></div>'
+        f'</div>'
     )
 
 
