@@ -314,6 +314,27 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     background-repeat: no-repeat;
     background-position: 16px center;
     padding-left: 42px !important;
+    /* Minimalistisch, gecentreerd -- geen volle-breedte-knop met harde
+       rand meer, maar dezelfde subtiele, zachte stijl als de rest van
+       het platform. */
+    background-color: rgba(15,23,42,0.4) !important;
+    border: 1px solid rgba(51,65,85,0.6) !important;
+    color: #EAEDF1 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    display: block !important;
+    margin: 0 auto !important;
+    width: fit-content !important;
+    min-width: 240px !important;
+}
+.st-key-login_page_google button:hover {
+    background-color: rgba(30,41,59,0.6) !important;
+    border-color: rgba(71,85,105,0.7) !important;
+}
+.st-key-login_page_google {
+    display: flex !important;
+    justify-content: center !important;
+    width: 100% !important;
 }
 
 .button-link, .button-link:visited {
@@ -7063,6 +7084,40 @@ def render_portfolio():
 
 
 
+def _render_unlock_premium_button(context_key: str) -> None:
+    """
+    'Unlock all premium weekly signals' -- st.button() + st.switch_page()
+    i.p.v. een kale <a href="/login">-tag. Een rauwe <a>-tag wordt door de
+    browser als een VOLLEDIGE paginaherlading behandeld (wit scherm,
+    traag) omdat Streamlit's eigen frontend die niet onderschept -- een
+    'echte' Streamlit-widget zoals deze GEBRUIKT Streamlit's bestaande
+    websocket-verbinding, dus geen page-reload, geen flikkering.
+    st.switch_page() heeft als bonus t.o.v. st.page_link() dat we EERST
+    st.session_state kunnen zetten (welke tab -- Sign In/Sign Up -- de
+    inlogpagina straks moet tonen) voordat de navigatie plaatsvindt --
+    dat kan met st.page_link() niet, die ondersteunt geen query-params
+    of on_click.
+    """
+    btn_key = f"unlock_premium_btn_{context_key}"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{btn_key} button {{ '
+        f'display:inline-block !important; color:#34D399 !important; font-size:0.72rem !important; '
+        f'font-weight:600 !important; letter-spacing:0.05em !important; text-transform:uppercase !important; '
+        f'background:transparent !important; border:1px solid rgba(51,65,85,0.7) !important; '
+        f'border-radius:8px !important; padding:0.4rem 1rem !important; width:auto !important; '
+        f'box-shadow:none !important; }} '
+        f'.st-key-{btn_key} button:hover {{ '
+        f'border-color:rgba(52,211,153,0.5) !important; background:transparent !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=btn_key):
+        if st.button("Unlock all premium weekly signals \u2192", key=f"unlock_premium_{context_key}"):
+            st.session_state["login_prefill_mode"] = "Sign Up"
+            st.switch_page(login_page)
+
+
 def _render_discover_signup_form() -> None:
     """
     HET ene, centrale e-mail-activatieblok -- staat nu 1x, als grote
@@ -7607,11 +7662,7 @@ def render_discover():
                 if not current_user.is_logged_in:
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
-                        st.markdown(
-                            '<a href="/login" target="_self" class="discover-teaser-link">'
-                            'Unlock all premium weekly signals &rarr;</a>',
-                            unsafe_allow_html=True,
-                        )
+                        _render_unlock_premium_button("snowballers")
                 else:
                     st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
                     if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
@@ -7663,11 +7714,7 @@ def render_discover():
                 if not current_user.is_logged_in:
                     _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
                     if _remaining_rocket > 0:
-                        st.markdown(
-                            '<a href="/login" target="_self" class="discover-teaser-link">'
-                            'Unlock all premium weekly signals &rarr;</a>',
-                            unsafe_allow_html=True,
-                        )
+                        _render_unlock_premium_button("rocket_list")
                 else:
                     st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
                                f"Next update: {_next_weekly_scan_time()}.")
@@ -8523,22 +8570,40 @@ def render_login():
                 st.session_state.pop("show_forgot_password", None)
                 st.rerun()
     else:
-        st.markdown(
-            '<div style="max-width:420px; margin:2rem auto 0 auto; text-align:center;">'
-            '<h2 class="hero-headline" style="margin-bottom:0.3rem;">Welcome back</h2>'
-            '<p style="color:#8992A3; margin-bottom:1.5rem;">Sign in or create an account with email</p>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        # Prefill welke tab actief moet zijn -- gezet door
+        # _render_unlock_premium_button() op Discover (via st.session_state
+        # + st.switch_page(), zie daar) voor bezoekers die specifiek op
+        # 'Unlock premium' klikten en dus een NIEUW account willen maken,
+        # niet inloggen op een bestaand account. .pop() zodat dit maar 1x
+        # geldt -- een latere, gewone bezoek aan /login (bv. via de
+        # zijbalk) valt terug op de normale 'Sign In'-default.
+        _login_prefill_mode = st.session_state.pop("login_prefill_mode", "Sign In")
 
         login_col_l, login_col_mid, login_col_r = st.columns([1, 2, 1])
         with login_col_mid:
             login_mode = st.segmented_control(
                 "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
-                default="Sign In", key="login_mode_toggle", label_visibility="collapsed",
+                default=_login_prefill_mode, key="login_mode_toggle", label_visibility="collapsed",
             )
             if login_mode is None:
                 login_mode = "Sign In"
+
+            # Titel + subtekst reageren live op de actieve tab -- 'Welcome
+            # back' is verwarrend voor iemand die net op 'Unlock premium'
+            # klikte om een NIEUW account aan te maken, niet om terug te
+            # keren naar een bestaand account.
+            if login_mode == "Sign Up":
+                _login_title = "Create your free account"
+            else:
+                _login_title = "Welcome back"
+            st.markdown(
+                f'<div style="max-width:420px; margin:2rem auto 1.5rem auto; text-align:center;">'
+                f'<h2 class="hero-headline" style="margin-bottom:0.3rem;">{_login_title}</h2>'
+                f'<p style="color:#8992A3; font-size:0.75rem; font-weight:600; letter-spacing:0.04em; '
+                f'text-transform:uppercase;">Sign in or create an account in seconds.</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             if login_mode == "Sign In":
                 login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
@@ -8595,7 +8660,7 @@ def render_login():
                 '</div>',
                 unsafe_allow_html=True,
             )
-            st.button("Continue with Google", on_click=st.login, key="login_page_google", width="stretch")
+            st.button("Continue with Google", on_click=st.login, key="login_page_google")
 
 
 def render_support():
