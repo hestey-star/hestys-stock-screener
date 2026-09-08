@@ -87,6 +87,19 @@ html {
     scroll-behavior: smooth;
 }
 
+/* HET ene, globale bovenmarge-patroon voor _uniform_section_header_html()
+   (Today, My Portfolio, Discover-screeners) -- EENMALIG hier gedefinieerd
+   i.p.v. per aanroep opnieuw als losse <style>-tag geinjecteerd (dat gaf
+   op pagina's met meerdere secties na elkaar, zoals de 3 Discover-
+   screeners, inconsistent gedrag onder Streamlit's React-rendering).
+   mt-16 op desktop, mt-10 op mobiel -- garandeert dat de witruimte tussen
+   ELK paar opeenvolgende secties die deze klasse gebruiken exact gelijk
+   is, want er is nu maar 1 plek waar deze waarde kan worden gedefinieerd. */
+.hesty-section-gap { margin-top: 4rem; }
+@media (max-width: 768px) {
+    .hesty-section-gap { margin-top: 2.5rem; }
+}
+
 .discover-teaser-link, .discover-teaser-link:visited {
     color: #34D399;
     font-size: 0.8rem;
@@ -1920,11 +1933,16 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     scheidingslijn zit ONDER de kop (mt-2 mb-6) -- de universele scheiding
     tussen kop en de feitelijke sectie-inhoud.
 
-    Royale bovenmarge op de kop zelf (5rem desktop / 3rem mobiel, via een
-    gedeelde CSS-klasse + media query -- inline style kan geen
-    breakpoints) zorgt voor een duidelijke, luchtige afstand t.o.v. het
-    EINDE van de vorige sectie; weggelaten bij de EERSTE sectie op een
-    pagina (geen vorig blok om van te scheiden).
+    Royale bovenmarge op de kop zelf (mt-16 desktop / mt-10 mobiel, via
+    de EENMALIG, globaal gedefinieerde .hesty-section-gap-klasse in de
+    hoofd-stylesheet -- NIET meer per aanroep opnieuw als losse
+    <style>-tag geinjecteerd. Dat laatste gaf op de Discover-pagina
+    (3x dezelfde klasse via 3 aparte st.markdown()-calls) inconsistent
+    gedrag onder Streamlit's React-rendering -- 1 centrale bron van
+    waarheid sluit dat nu volledig uit) zorgt voor een duidelijke,
+    luchtige afstand t.o.v. het EINDE van de vorige sectie; weggelaten
+    bij de EERSTE sectie op een pagina (geen vorig blok om van te
+    scheiden).
 
     'action_html' (optioneel) is een stukje kant-en-klare HTML (meestal
     1 subtiele <a class="inline-link">-link) dat rechtsboven verschijnt,
@@ -1937,17 +1955,8 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     (_flowing_section_header_html) -- deze pas ik hier niet aan, dat was
     niet gevraagd.
     """
-    if is_first:
-        style_block = ""
-        gap_class = ""
-    else:
-        style_block = (
-            '<style>.hesty-section-gap { margin-top:5rem; } '
-            '@media (max-width:768px) { .hesty-section-gap { margin-top:3rem; } }</style>'
-        )
-        gap_class = ' class="hesty-section-gap"'
+    gap_class = "" if is_first else ' class="hesty-section-gap"'
     return (
-        f'{style_block}'
         f'<div{gap_class} style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap;">'
         f'<div style="display:flex; align-items:center; gap:0.55rem;">'
         f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}'
