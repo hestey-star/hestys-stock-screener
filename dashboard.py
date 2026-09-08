@@ -96,9 +96,9 @@ html {
    tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
    gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
    gedefinieerd. */
-.hesty-section-gap { margin-top: 2rem !important; }
+.hesty-section-gap { margin-top: 1.5rem !important; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 2.5rem !important; }
+    .hesty-section-gap { margin-top: 2rem !important; }
 }
 /* mb-4 op de HELE titel+lijn-container (niet op de lijn zelf) -- geeft
    de ruimte tussen de lijn en de content eronder (omschrijving/toggles). */
@@ -2021,8 +2021,9 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'</h2>'
         f'{action_html}'
         f'</div>'
-        f'<div style="width:100%; height:1px; border-bottom:1px solid rgba(51,65,85,0.6) !important; '
-        f'margin:0.25rem 0 0 0 !important; padding:0 !important; box-sizing:border-box; overflow:hidden;"></div>'
+        f'<div style="width:100%; height:1px; min-height:1px; max-height:1px; '
+        f'background-color:#334155 !important; display:block !important; '
+        f'margin:0.25rem 0 0 0 !important; padding:0 !important; box-sizing:border-box;"></div>'
         f'</div>'
     )
 
