@@ -7506,7 +7506,7 @@ def render_discover():
 
         # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
         st.markdown(
-            _flowing_section_header_html("Rocket List", "rocket_launch", is_first=False),
+            _uniform_section_header_html("Rocket List", "rocket_launch", is_first=False),
             unsafe_allow_html=True,
         )
         st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
@@ -7542,11 +7542,20 @@ def render_discover():
                         standout=row["groei_pct"] >= 25.0,
                     ))
                 _render_signal_cards(cards_html)
-                st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
-                           f"Next update: {_next_weekly_scan_time()}.")
-                if not _is_premium_discover and total_rocket > _signal_display_limit:
-                    st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                            f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
+                if not current_user.is_logged_in:
+                    _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
+                    if _remaining_rocket > 0:
+                        st.markdown(
+                            f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                            f'&#128274; Unlock {_remaining_rocket} more breakout candidates &rarr;</a>',
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
+                               f"Next update: {_next_weekly_scan_time()}.")
+                    if _signal_display_limit is not None and total_rocket > _signal_display_limit and not _is_premium_discover:
+                        st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                                f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
             else:
                 st.caption("No stocks currently meet the Rocket List criteria.")
         else:
