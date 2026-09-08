@@ -6674,7 +6674,8 @@ def render_portfolio():
                                 f'background:rgba(15,23,42,0.3) !important; '
                                 f'border:1px solid rgba(30,41,59,0.4) !important; '
                                 f'border-radius:10px !important; '
-                                f'padding:0.6rem 0.85rem !important; margin:0 0 0.75rem 0 !important; '
+                                f'padding:0.5rem 0.75rem !important; margin:0 0 0.5rem 0 !important; '
+                                f'min-height:3.25rem !important; '
                                 f'display:flex !important; align-items:center !important; '
                                 f'justify-content:space-between !important; '
                                 f'width:100% !important; max-width:100% !important; '
@@ -6773,13 +6774,14 @@ def render_portfolio():
                                 # breder duwde dan het scherm.
                                 st.markdown(
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0; '
-                                    f'width:100%; overflow:hidden;" title="{w["naam"]} ({w["ticker"]})">'
+                                    f'width:100%;" title="{w["naam"]} ({w["ticker"]})">'
                                     f'{logo_html}'
-                                    f'<div style="min-width:0; overflow:hidden; flex:1 1 auto;">'
+                                    f'<div style="display:flex; flex-direction:column; justify-content:center; '
+                                    f'min-width:0; flex:1 1 0%;">'
                                     f'<div style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
-                                    f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; '
+                                    f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; line-height:1.3; '
                                     f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"].upper()}</div>'
-                                    f'<div style="color:#8992A3; font-size:0.68rem; '
+                                    f'<div style="color:#8992A3; font-size:0.68rem; line-height:1.3; margin-top:1px; '
                                     f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["ticker"]}</div>'
                                     f'</div>'
                                     '</div>',
