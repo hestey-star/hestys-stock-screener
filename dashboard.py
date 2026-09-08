@@ -81,6 +81,24 @@ div[data-testid="stStatusWidget"] {visibility: hidden; height: 0%;}
    info-boxjes) gebruiken de neutrale grijsblauwe kleuren, zodat jade
    opvalt wanneer het verschijnt i.p.v. overal tegelijk te 'wassen'. ---
 */
+html {
+    /* Smooth scroll voor anchor-links (bv. de teaser-links onder Momentocrats/
+       Snowballers naar #activate-signals) -- pure CSS, geen JS nodig. */
+    scroll-behavior: smooth;
+}
+
+.discover-teaser-link, .discover-teaser-link:visited {
+    color: #34D399;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-decoration: none;
+    cursor: pointer;
+}
+.discover-teaser-link:hover {
+    text-decoration: underline;
+}
+
 :root {
     --color-jade: #1FAE96;
     --color-jade-soft: rgba(31, 174, 150, 0.12);
@@ -6969,84 +6987,85 @@ def render_portfolio():
 
 
 
-def _render_discover_email_lock(context_key: str) -> None:
+def _render_discover_signup_form() -> None:
     """
-    Het nieuwe, minimalistische e-mail-activatieblok -- verschijnt ONDER
-    de eerste screener-kaarten (Momentocrats/Snowballers) voor NIET-
-    ingelogde bezoekers, op de plek waar voorheen alleen een grijze
-    'Upgrade to Premium'-tekst stond (die voor een anonieme bezoeker
-    sowieso niet relevant is -- die heeft nog geen account om te
-    upgraden). De kaarten hierboven zijn de bewijslast; dit is de
-    natuurlijke volgende stap.
+    HET ene, centrale e-mail-activatieblok -- staat nu 1x, als grote
+    afsluiter helemaal onderaan de Discover-pagina (na Rocket List),
+    i.p.v. verspreid onder elke screener (2 volledige formulieren zo
+    kort na elkaar oogde druk/rommelig). Onder Momentocrats/Snowballers
+    staat nu alleen nog een subtiele teaser-link die hier met een
+    smooth-scroll naartoe verwijst (zie 'html { scroll-behavior:smooth }'
+    in de globale stylesheet + de '#activate-signals'-anchor hieronder).
 
-    Regio-keuze bewust BEHOUDEN (niet weggelaten voor extra
-    minimalisme) -- die bepaalt in welke tijdzone de dagelijkse e-mail
-    aankomt, een functionele noodzaak, geen decoratie. Wel zo compact
-    mogelijk gehouden (klein, naast het e-mailveld i.p.v. een aparte
-    rij) zodat het niet met de hoofd-CTA concurreert.
+    3-op-1-rij (e-mail, tijdzone, knop) op desktop via st.columns() --
+    Streamlit's eigen kolommen stapelen dit al automatisch netjes onder
+    elkaar op mobiel, geen aparte media-query nodig.
 
-    'context_key' maakt de widget-keys uniek per plek (Momentocrats vs.
-    Snowballers) -- Streamlit staat geen dubbele keys op 1 pagina toe.
+    Regio-keuze bewust BEHOUDEN -- die bepaalt in welke tijdzone de
+    dagelijkse e-mail aankomt, een functionele noodzaak, geen decoratie.
     """
     import database as _database_for_optin
 
     st.markdown(
-        '<div style="text-align:center; padding:1.25rem 1rem 0.5rem 1rem; max-width:560px; margin:0 auto;">'
-        '<div style="color:#CBD5E1; font-size:0.8rem; font-weight:600; letter-spacing:0.04em; '
-        'text-transform:uppercase; line-height:1.5;">'
+        '<div id="activate-signals" style="scroll-margin-top:80px; text-align:center; '
+        'padding:1.5rem 1rem 0.75rem 1rem; max-width:640px; margin:0 auto;">'
+        '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; letter-spacing:0.04em; '
+        'text-transform:uppercase; line-height:1.6;">'
         '&#128235; Activate free signals: get the full list of fresh flips and premium '
         'long-term ideas in your inbox every weekday morning.</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    lock_wrap_key = f"discover_email_lock_{context_key}"
+    form_key = "discover_signup_form_wrap"
     st.markdown(
         f'<style>'
-        f'.st-key-{lock_wrap_key} {{ max-width:480px !important; margin:0 auto !important; }} '
-        f'.st-key-{lock_wrap_key} div[data-baseweb="input"], '
-        f'.st-key-{lock_wrap_key} div[data-baseweb="select"] > div {{ '
+        f'.st-key-{form_key} {{ max-width:640px !important; margin:0 auto !important; }} '
+        f'.st-key-{form_key} div[data-baseweb="input"], '
+        f'.st-key-{form_key} div[data-baseweb="select"] > div {{ '
         f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
         f'box-shadow:none !important; }} '
-        f'.st-key-{lock_wrap_key} div[data-baseweb="input"]:focus-within, '
-        f'.st-key-{lock_wrap_key} div[data-baseweb="select"] > div:focus-within {{ '
+        f'.st-key-{form_key} div[data-baseweb="input"]:focus-within, '
+        f'.st-key-{form_key} div[data-baseweb="select"] > div:focus-within {{ '
         f'border-color:rgba(31,174,150,0.45) !important; }} '
-        f'.st-key-{lock_wrap_key} button {{ '
+        f'.st-key-{form_key} button {{ '
         f'background:#1FAE96 !important; color:#0B1210 !important; font-weight:700 !important; '
         f'border:none !important; border-radius:8px !important; }} '
-        f'.st-key-{lock_wrap_key} button:hover {{ background:#24C7AB !important; }} '
+        f'.st-key-{form_key} button:hover {{ background:#24C7AB !important; }} '
+        f'.st-key-{form_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
     try:
-        lock_ctx = st.container(key=lock_wrap_key)
+        form_ctx = st.container(key=form_key)
     except Exception:
-        lock_ctx = st.container()
-    with lock_ctx:
-        email_col, region_col = st.columns([3, 2])
+        form_ctx = st.container()
+    with form_ctx:
+        email_col, region_col, button_col = st.columns([2.5, 1.5, 1.5], gap="small")
         with email_col:
-            lock_email = st.text_input(
+            form_email = st.text_input(
                 "Email address", placeholder="you@example.com",
-                key=f"discover_lock_email_{context_key}", label_visibility="collapsed",
+                key="discover_signup_email", label_visibility="collapsed",
             )
         with region_col:
-            lock_region_raw = st.selectbox(
+            form_region_raw = st.selectbox(
                 "Region", ["Choose timezone", "EU", "US_East", "US_West"],
                 format_func=lambda x: x.replace("_", " "),
-                key=f"discover_lock_region_{context_key}", label_visibility="collapsed",
+                key="discover_signup_region", label_visibility="collapsed",
             )
-        lock_submitted = st.button(
-            "Activate Free Signals", key=f"discover_lock_submit_{context_key}", width="stretch",
-        )
+        with button_col:
+            form_submitted = st.button(
+                "Activate Free Signals", key="discover_signup_submit", width="stretch",
+            )
 
-    if lock_submitted:
-        if not lock_email or "@" not in lock_email:
+    if form_submitted:
+        if not form_email or "@" not in form_email:
             st.error("Please enter a valid email address.")
-        elif lock_region_raw == "Choose timezone":
+        elif form_region_raw == "Choose timezone":
             st.error("Please choose your timezone.")
         else:
-            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(lock_email, lock_region_raw)
-            send_subscription_confirmation_email(lock_email, confirmation_token, unsubscribe_token)
+            confirmation_token, unsubscribe_token = _database_for_optin.add_email_subscriber(form_email, form_region_raw)
+            send_subscription_confirmation_email(form_email, confirmation_token, unsubscribe_token)
             st.success("Almost there! Check your inbox to confirm your subscription.")
 
 
@@ -7055,10 +7074,12 @@ def render_discover():
     # de grote titel hieronder ("Your Investing Edge, Built Around You.")
     # IS zelf al de sterkste binnenkomer, een aparte kop erboven voegde
     # alleen droge, overbodige ruis toe. Verhuisd van de standaard groene
-    # sectiekop-stijl naar 1 gecentreerd, marketing-achtig blok. Het
-    # e-mail-activatieblok verhuist naar ONDER de eerste screener-kaarten
-    # (zie _render_discover_email_lock() verderop), waar de daadwerkelijke,
-    # live data al bewezen heeft dat het de moeite waard is. ---
+    # sectiekop-stijl naar 1 gecentreerd, marketing-achtig blok. HET ene,
+    # centrale e-mail-activatieblok staat nu helemaal onderaan de pagina
+    # (zie _render_discover_signup_form(), na Rocket List) -- onder
+    # Momentocrats/Snowballers staat alleen nog een subtiele teaser-link
+    # ernaartoe, waar de daadwerkelijke, live data al bewezen heeft dat
+    # het de moeite waard is. ---
     if not current_user.is_logged_in:
         st.markdown(
             '<div id="signup" style="scroll-margin-top: 80px; text-align:center; padding:0.5rem 0.5rem 0.5rem 0.5rem;">'
@@ -7374,15 +7395,22 @@ def render_discover():
                     standout=row["score"] >= 8.0,
                 ))
             _render_signal_cards(cards_html)
-            # Voor niet-ingelogde bezoekers vervangt de e-mail-opt-in de
-            # grijze meta-tekst VOLLEDIG (niet alleen conditioneel bij een
-            # 'er is meer verborgen'-situatie) -- de opt-in is de logische
-            # volgende stap voor een anonieme bezoeker, ongeacht of er nog
-            # extra matches achter een limiet zitten. Ingelogde gebruikers
-            # zien nog gewoon de originele meta-tekst + (indien relevant)
-            # de Premium-upsell.
+            # Voor niet-ingelogde bezoekers: een subtiele teaser-link i.p.v.
+            # een compleet 2e formulier hier (2 volledige e-mailformulieren
+            # zo kort na elkaar oogde druk) -- verwijst naar het ENE, grote
+            # centrale formulier onderaan de pagina (zie
+            # _render_discover_signup_form(), na Rocket List). Alleen
+            # getoond als er daadwerkelijk meer te unlocken valt.
             if not current_user.is_logged_in:
-                _render_discover_email_lock("momentocrats")
+                _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
+                if _remaining_momentocrats > 0:
+                    st.markdown(
+                        f'<div style="text-align:center; margin-top:0.75rem;">'
+                        f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                        f'&#128274; Unlock {_remaining_momentocrats} more fresh flips and alerts &rarr;</a>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
             else:
                 st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
                 if _signal_display_limit is not None and total_matching > _signal_display_limit and not _is_premium_discover:
@@ -7436,7 +7464,15 @@ def render_discover():
                     ))
                 _render_signal_cards(cards_html)
                 if not current_user.is_logged_in:
-                    _render_discover_email_lock("snowballers")
+                    _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
+                    if _remaining_snowballers > 0:
+                        st.markdown(
+                            f'<div style="text-align:center; margin-top:0.75rem;">'
+                            f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                            f'&#128274; Unlock {_remaining_snowballers} more long-term value ideas &rarr;</a>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
                 else:
                     st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
                     if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
@@ -7494,6 +7530,13 @@ def render_discover():
                 st.caption("No stocks currently meet the Rocket List criteria.")
         else:
             st.caption("No data yet -- this updates once a week via the scheduled scan.")
+
+        # --- HET ene, centrale e-mail-activatieblok -- de grote afsluiter
+        # van de Discover-pagina voor niet-ingelogde bezoekers, na alle 3
+        # de screeners. De teaser-links onder Momentocrats/Snowballers
+        # scrollen hier met een smooth-scroll naartoe. ---
+        if not current_user.is_logged_in:
+            _render_discover_signup_form()
 
         st.divider()
         _email_pref_link("Want this weekly by email?")
