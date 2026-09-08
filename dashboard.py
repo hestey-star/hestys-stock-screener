@@ -106,14 +106,14 @@ html {
    grootte (~1.5em), wat eerder precies de 'veel te grote, lompe letters'
    verklaarde. Kleur/gewicht hier ook in de klasse i.p.v. inline, om
    dezelfde reden. */
-.hesty-section-title {
+.hesty-section-title-text {
     font-size: 1rem !important;
     font-weight: 700 !important;
     color: #1FAE96 !important;
     line-height: 1.3 !important;
 }
 @media (min-width: 768px) {
-    .hesty-section-title { font-size: 1.125rem !important; }
+    .hesty-section-title-text { font-size: 1.125rem !important; }
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
@@ -1985,15 +1985,16 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     Discover -- groene, ALL-CAPS titel + een flinterdunne lijn die STRAK
     tegen de tekst aansluit.
 
-    STRUCTUREEL HERBOUWD: titel en lijn zitten nu samen in 1 GEISOLEERDE
-    container (eigen <div>), los van de rest van de sectie-inhoud. De
-    titel is een <h2> met harde margin:0/padding:0 (voorkwam eerder een
-    onverklaard gat tussen tekst en lijn -- vermoedelijk browser-default
-    <h2>-marges die nooit expliciet gereset waren). De lijn zelf is nu
-    een gewone <div style="border-bottom:...">, GEEN <hr>-tag meer --
-    Streamlit blijkt eigen basisstyling op <hr>-elementen te hebben die
-    zelfs met !important bleef doorschemeren; een <div> heeft dat
-    probleem niet, want Streamlit's theme raakt die niet aan.
+    UITSLUITEND <div>/<span>-tags -- GEEN <h2> en GEEN <hr> meer. Door de
+    hele rest van deze app heen is ELK stukje tekst/lijn dat met een
+    <div> of <span> werd gestyled altijd probleemloos gegaan; ELK stukje
+    dat een semantische tag gebruikte (<h2>, <hr>) gaf herhaaldelijk
+    onverklaarbare afwijkingen (verkeerde marges, een verdwijnende lijn),
+    zelfs met !important. Dat patroon is te consistent om toeval te zijn
+    -- vermoedelijk heeft Streamlit's eigen thema specifieke, moeilijk te
+    overschrijven basisstyling op dat soort semantische tags. Nu volledig
+    vermeden: titel en icoon zijn platte <span>-elementen, de lijn is een
+    platte <div>.
 
     Royale bovenmarge op de HELE container (mt-10 desktop / mt-8 mobiel,
     via de EENMALIG, globaal gedefinieerde .hesty-section-gap-klasse in
@@ -2007,30 +2008,18 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     """
     gap_class = "hesty-section-gap" if not is_first else ""
     outer_class = f' class="{gap_class}"' if gap_class else ""
-    # Icoon krijgt een EXPLICIETE margin-right, niet uitsluitend flex-
-    # gap -- 'gap' bleek op deze <h2> eerder onbetrouwbaar (zelfde patroon
-    # als de lijn/kleur-issues hiervoor), dus nu dubbel geborgd: gap EN
-    # een harde margin op het icoon zelf, wat hoe dan ook ademruimte
-    # tussen icoon en tekst afdwingt.
-    icon_html = (
-        f'<span style="display:inline-flex; margin-right:0.5rem !important;">'
-        f'{_icon_span(icon_name, size_px=18, color="#1FAE96")}</span>'
-    )
     return (
         f'<div{outer_class}>'
-        f'<div style="width:100%; margin-bottom:0.75rem;">'
+        f'<div style="width:100%; margin:0; padding:0;">'
         f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
-        f'<h2 class="hesty-section-title" style="display:flex; align-items:center; '
-        f'gap:0.5rem; margin:0 !important; padding:0 !important; text-transform:uppercase !important; '
-        f'letter-spacing:0.05em !important;">'
-        f'{icon_html}<span>{title}</span>'
-        f'</h2>'
+        f'<div style="display:flex; align-items:center; margin:0; padding:0;">'
+        f'<span style="font-size:18px; color:#1FAE96; margin-right:0.5rem;" class="material-symbols-outlined">{icon_name}</span>'
+        f'<span style="font-weight:700; color:#1FAE96; text-transform:uppercase; letter-spacing:0.05em; '
+        f'font-size:1rem;" class="hesty-section-title-text">{title}</span>'
+        f'</div>'
         f'{action_html}'
         f'</div>'
-        f'<hr style="width:100% !important; border:none !important; height:1px !important; '
-        f'min-height:1px !important; max-height:1px !important; background-color:#334155 !important; '
-        f'display:block !important; margin:0.375rem 0 0 0 !important; padding:0 !important; '
-        f'box-sizing:border-box !important; opacity:1 !important;">'
+        f'<div style="width:100%; height:1px; background-color:#334155; margin-top:6px; margin-bottom:0; padding:0;"></div>'
         f'</div>'
         f'</div>'
     )
