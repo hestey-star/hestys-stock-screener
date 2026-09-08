@@ -96,14 +96,10 @@ html {
    tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
    gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
    gedefinieerd. */
-.hesty-section-gap { margin-top: 1.5rem !important; }
+.hesty-section-gap { margin-top: 2rem !important; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 2rem !important; }
+    .hesty-section-gap { margin-top: 2.5rem !important; }
 }
-/* mb-4 op de HELE titel+lijn-container (niet op de lijn zelf) -- geeft
-   de ruimte tussen de lijn en de content eronder (omschrijving/toggles). */
-.mb-4-block { margin-bottom: 1rem !important; }
-
 /* Responsieve, COMPACTE titelgrootte voor _uniform_section_header_html()'s
    <h2> (text-base mobiel, text-lg desktop) -- !important overal, want een
    kale <h2>-tag heeft anders een fors grotere browser/Streamlit-standaard-
@@ -2010,7 +2006,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     op dezelfde hoogte als de titel.
     """
     gap_class = "hesty-section-gap" if not is_first else ""
-    outer_class = f' class="{gap_class} mb-4-block"' if gap_class else ' class="mb-4-block"'
+    outer_class = f' class="{gap_class}"' if gap_class else ""
     return (
         f'<div{outer_class}>'
         f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
@@ -2021,9 +2017,10 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'</h2>'
         f'{action_html}'
         f'</div>'
-        f'<div style="width:100%; height:1px; min-height:1px; max-height:1px; '
-        f'background-color:#334155 !important; display:block !important; '
-        f'margin:0.25rem 0 0 0 !important; padding:0 !important; box-sizing:border-box;"></div>'
+        f'<hr style="width:100% !important; border:none !important; height:1px !important; '
+        f'min-height:1px !important; max-height:1px !important; background-color:#334155 !important; '
+        f'display:block !important; margin:0.25rem 0 1rem 0 !important; padding:0 !important; '
+        f'box-sizing:border-box !important; opacity:1 !important;">'
         f'</div>'
     )
 
