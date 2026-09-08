@@ -92,13 +92,13 @@ html {
    i.p.v. per aanroep opnieuw als losse <style>-tag geinjecteerd (dat gaf
    op pagina's met meerdere secties na elkaar, zoals de 3 Discover-
    screeners, inconsistent gedrag onder Streamlit's React-rendering).
-   mt-12 op desktop (md:), mt-10 op mobiel -- garandeert dat de witruimte
+   mt-8 op desktop (md:), mt-6 op mobiel -- garandeert dat de witruimte
    tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
    gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
    gedefinieerd. */
-.hesty-section-gap { margin-top: 2.5rem; }
+.hesty-section-gap { margin-top: 1.5rem; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 3rem; }
+    .hesty-section-gap { margin-top: 2rem; }
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
@@ -2004,7 +2004,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'{action_html}'
         f'</div>'
         f'<hr style="border:none !important; border-top:1px solid rgba(30,41,59,0.6) !important; '
-        f'margin:0.375rem 0 1rem 0 !important; display:block !important; width:100% !important; '
+        f'margin:0.25rem 0 1rem 0 !important; display:block !important; width:100% !important; '
         f'opacity:1 !important;">'
     )
 
