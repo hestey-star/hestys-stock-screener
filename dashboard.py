@@ -7107,9 +7107,13 @@ def _render_discover_signup_form() -> None:
         f'border-color:rgba(31,174,150,0.45) !important; }} '
         f'.st-key-{form_key} button {{ '
         f'background:#1FAE96 !important; color:#0B1210 !important; font-weight:700 !important; '
-        f'border:none !important; border-radius:8px !important; }} '
+        f'border:none !important; border-radius:8px !important; padding:0.5rem 1.25rem !important; '
+        f'width:auto !important; white-space:nowrap !important; }} '
         f'.st-key-{form_key} button:hover {{ background:#24C7AB !important; }} '
-        f'.st-key-{form_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
+        f'.st-key-{form_key} [data-testid="stHorizontalBlock"] {{ '
+        f'align-items:center !important; gap:1rem !important; }} '
+        f'.st-key-{form_key} [data-testid="column"]:last-child {{ '
+        f'flex:0 0 auto !important; width:auto !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -7118,7 +7122,7 @@ def _render_discover_signup_form() -> None:
     except Exception:
         form_ctx = st.container()
     with form_ctx:
-        email_col, region_col, button_col = st.columns([2.5, 1.5, 1.5], gap="small")
+        email_col, region_col, button_col = st.columns([2.5, 1.5, 1.5], gap="medium")
         with email_col:
             form_email = st.text_input(
                 "Email address", placeholder="you@example.com",
@@ -7132,7 +7136,7 @@ def _render_discover_signup_form() -> None:
             )
         with button_col:
             form_submitted = st.button(
-                "Activate Free Signals", key="discover_signup_submit", width="stretch",
+                "Activate Free Signals", key="discover_signup_submit",
             )
 
     if form_submitted:
@@ -7663,9 +7667,13 @@ def render_discover():
         # scrollen hier met een smooth-scroll naartoe. ---
         if not current_user.is_logged_in:
             _render_discover_signup_form()
-
-        st.divider()
-        _email_pref_link("Want this weekly by email?")
+        else:
+            # 'Manage in: Settings' is alleen zinvol voor een ingelogde
+            # gebruiker (die HEEFT immers toegang tot Settings) -- voor een
+            # niet-ingelogde bezoeker is dit een verwarrende, dode link naar
+            # een pagina die 'ie nog niet kan bereiken.
+            st.divider()
+            _email_pref_link("Want this weekly by email?")
 
 
 
