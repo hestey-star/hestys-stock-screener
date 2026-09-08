@@ -92,11 +92,12 @@ html {
    i.p.v. per aanroep opnieuw als losse <style>-tag geinjecteerd (dat gaf
    op pagina's met meerdere secties na elkaar, zoals de 3 Discover-
    screeners, inconsistent gedrag onder Streamlit's React-rendering).
-   mt-16 op desktop, mt-10 op mobiel -- garandeert dat de witruimte tussen
-   ELK paar opeenvolgende secties die deze klasse gebruiken exact gelijk
-   is, want er is nu maar 1 plek waar deze waarde kan worden gedefinieerd. */
-.hesty-section-gap { margin-top: 4rem; }
-@media (max-width: 768px) {
+   mt-12 op desktop (md:), mt-10 op mobiel -- garandeert dat de witruimte
+   tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
+   gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
+   gedefinieerd. */
+.hesty-section-gap { margin-top: 2.5rem; }
+@media (min-width: 768px) {
     .hesty-section-gap { margin-top: 3rem; }
 }
 
@@ -108,26 +109,30 @@ html {
        breedte innemen zoals een tekstlink deed. margin-top(-only, geen
        bottom) zorgt dat de onderkant van de screener nog steeds GEEN
        eigen marge heeft -- de afstand naar de volgende sectie komt nog
-       steeds uitsluitend van diens .hesty-section-gap-bovenmarge. */
-    display: inline-block;
-    color: #34D399;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    text-decoration: none;
-    cursor: pointer;
-    background: transparent;
-    border: 1px solid rgba(51,65,85,0.7);
-    border-radius: 8px;
-    padding: 0.4rem 1rem;
-    margin: 0.75rem 0 0 0;
-    box-sizing: border-box;
-    max-width: 100%;
+       steeds uitsluitend van diens .hesty-section-gap-bovenmarge.
+       !important overal -- Streamlit's eigen basis-linkstijl (kleur +
+       underline) bleek eerder al vaker voorrang te krijgen boven een
+       gewone class-selector (zelfde reden als bij de marketingknoppen
+       en de <hr>-lijnen). */
+    display: inline-block !important;
+    color: #34D399 !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: 1px solid rgba(51,65,85,0.7) !important;
+    border-radius: 8px !important;
+    padding: 0.4rem 1rem !important;
+    margin: 0.75rem 0 0 0 !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
 }
 .discover-teaser-link:hover {
-    border-color: rgba(52,211,153,0.5);
-    text-decoration: none;
+    border-color: rgba(52,211,153,0.5) !important;
+    text-decoration: none !important;
 }
 
 :root {
@@ -1999,7 +2004,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'{action_html}'
         f'</div>'
         f'<hr style="border:none !important; border-top:1px solid rgba(30,41,59,0.6) !important; '
-        f'margin:0.5rem 0 1rem 0 !important; display:block !important; width:100% !important; '
+        f'margin:0.375rem 0 1rem 0 !important; display:block !important; width:100% !important; '
         f'opacity:1 !important;">'
     )
 
@@ -7565,8 +7570,8 @@ def render_discover():
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
                         st.markdown(
-                            '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            '&#128274; Unlock all premium weekly signals with a free account &rarr;</a>',
+                            '<a href="/login" target="_self" class="discover-teaser-link">'
+                            'Unlock all premium weekly signals &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
@@ -7621,8 +7626,8 @@ def render_discover():
                     _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
                     if _remaining_rocket > 0:
                         st.markdown(
-                            '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            '&#128274; Unlock all premium weekly signals with a free account &rarr;</a>',
+                            '<a href="/login" target="_self" class="discover-teaser-link">'
+                            'Unlock all premium weekly signals &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
