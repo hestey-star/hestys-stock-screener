@@ -94,6 +94,16 @@ html {
     letter-spacing: 0.03em;
     text-decoration: none;
     cursor: pointer;
+    /* display:block + volle breedte + royale padding (py-3) -- garandeert
+       zichtbaarheid en een comfortabel duim-tikbaar oppervlak op mobiel,
+       i.p.v. te vertrouwen op de intrinsieke grootte van een inline-
+       element (die op smalle schermen soms onvoorspelbaar samenklapt). */
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem 0;
+    text-align: left;
 }
 .discover-teaser-link:hover {
     text-decoration: underline;
@@ -7008,7 +7018,8 @@ def _render_discover_signup_form() -> None:
 
     st.markdown(
         '<div id="activate-signals" style="scroll-margin-top:80px; text-align:left; '
-        'padding:1.5rem 0 0.75rem 0; max-width:640px; margin:0;">'
+        'padding:1.5rem 0 0.75rem 0; max-width:640px; width:100%; margin:0; '
+        'box-sizing:border-box; overflow-x:hidden;">'
         '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; letter-spacing:0.04em; '
         'text-transform:uppercase; line-height:1.6;">'
         '&#128235; Activate free signals: get the full list of fresh flips and premium '
@@ -7082,26 +7093,35 @@ def render_discover():
     # het de moeite waard is. ---
     if not current_user.is_logged_in:
         st.markdown(
-            '<div id="signup" style="scroll-margin-top: 80px; text-align:center; padding:0.5rem 0.5rem 0.5rem 0.5rem;">'
+            '<style>'
+            '.discover-hero { text-align:center; padding:0.5rem 0 0.5rem 0; width:100%; '
+            'max-width:100%; box-sizing:border-box; overflow-x:hidden; }'
+            '.discover-hero-buttons { margin-top:1.1rem; display:flex; gap:0.6rem; '
+            'justify-content:center; flex-wrap:wrap; width:100%; box-sizing:border-box; }'
+            '.discover-hero-btn { font-weight:700; font-size:0.85rem; padding:0.6rem 1.2rem; '
+            'border-radius:8px; text-decoration:none; display:inline-block; box-sizing:border-box; '
+            'text-align:center; }'
+            '.discover-hero-btn-primary { background:#1FAE96; color:#0B1210; }'
+            '.discover-hero-btn-secondary { background:transparent; color:#EAEDF1; '
+            'border:1px solid rgba(234,237,241,0.3); }'
+            '@media (max-width:768px) { '
+            '.discover-hero-buttons { flex-direction:column; width:100%; } '
+            '.discover-hero-btn { width:100%; } '
+            '} '
+            '</style>'
+            '<div id="hero-top" class="discover-hero">'
             '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
             'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
             '<span style="color:#1FAE96;">Built Around You.</span></div>'
-            '<div style="margin-top:1.1rem; display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap;">'
-            '<a href="#signup" target="_self" style="background:#1FAE96; color:#0B1210; font-weight:700; '
-            'font-size:0.85rem; padding:0.55rem 1.2rem; border-radius:8px; text-decoration:none; '
-            'display:inline-block;">Start free, in seconds &rarr;</a>'
-            '<a href="#signals" target="_self" style="background:transparent; color:#EAEDF1; font-weight:600; '
-            'font-size:0.85rem; padding:0.55rem 1.2rem; border-radius:8px; text-decoration:none; display:inline-block; '
-            'border:1px solid rgba(234,237,241,0.3);">Browse today\'s signals</a>'
+            '<div class="discover-hero-buttons">'
+            '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
+            'Start free, in seconds &rarr;</a>'
+            '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
+            'Browse today\'s signals</a>'
             '</div>'
             '</div>',
             unsafe_allow_html=True,
         )
-
-    _discover_subview_map = {
-        "Discover": "discover", "Sectors & Themes": "sectors_themes",
-        "Earnings Surprises": "earnings_surprises",
-    }
 
     _discover_subview_map = {
         "Discover": "discover", "Sectors & Themes": "sectors_themes",
@@ -7405,10 +7425,8 @@ def render_discover():
                 _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
                 if _remaining_momentocrats > 0:
                     st.markdown(
-                        f'<div style="text-align:left; margin-top:0.75rem;">'
                         f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                        f'&#128274; Unlock {_remaining_momentocrats} more fresh flips and alerts &rarr;</a>'
-                        f'</div>',
+                        f'&#128274; Unlock {_remaining_momentocrats} more fresh flips and alerts &rarr;</a>',
                         unsafe_allow_html=True,
                     )
             else:
@@ -7467,10 +7485,8 @@ def render_discover():
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
                         st.markdown(
-                            f'<div style="text-align:left; margin-top:0.75rem;">'
                             f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            f'&#128274; Unlock {_remaining_snowballers} more long-term value ideas &rarr;</a>'
-                            f'</div>',
+                            f'&#128274; Unlock {_remaining_snowballers} more long-term value ideas &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
