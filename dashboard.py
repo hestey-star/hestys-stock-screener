@@ -97,7 +97,7 @@ html {
    is, want er is nu maar 1 plek waar deze waarde kan worden gedefinieerd. */
 .hesty-section-gap { margin-top: 4rem; }
 @media (max-width: 768px) {
-    .hesty-section-gap { margin-top: 2.5rem; }
+    .hesty-section-gap { margin-top: 3rem; }
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
@@ -107,15 +107,19 @@ html {
     letter-spacing: 0.03em;
     text-decoration: none;
     cursor: pointer;
-    /* display:block + volle breedte + royale padding (py-3) -- garandeert
-       zichtbaarheid en een comfortabel duim-tikbaar oppervlak op mobiel,
-       i.p.v. te vertrouwen op de intrinsieke grootte van een inline-
-       element (die op smalle schermen soms onvoorspelbaar samenklapt). */
+    /* display:block + volle breedte + royale padding-top (py-3, alleen
+       boven) -- garandeert zichtbaarheid en een comfortabel duim-tikbaar
+       oppervlak op mobiel. GEEN padding/margin-bottom meer -- de
+       onderkant van een screener heeft nu bewust GEEN eigen marge, de
+       afstand naar de volgende screener komt uitsluitend van diens
+       .hesty-section-gap-bovenmarge (voorkomt dat 2 marges elkaar
+       optellen tot een ongelijk, willekeurig gat). */
     display: block;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 0.75rem 0;
+    padding: 0.75rem 0 0 0;
+    margin: 0;
     text-align: left;
 }
 .discover-teaser-link:hover {
@@ -1964,7 +1968,9 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'</div>'
         f'{action_html}'
         f'</div>'
-        f'<hr style="border:none; border-top:1px solid rgba(30,41,59,0.6); margin:0.5rem 0 1.5rem 0;">'
+        f'<hr style="border:none !important; border-top:1px solid rgba(30,41,59,0.6) !important; '
+        f'margin:0.5rem 0 1.5rem 0 !important; display:block !important; width:100% !important; '
+        f'opacity:1 !important;">'
     )
 
 
@@ -7311,9 +7317,9 @@ def render_discover():
     else:
         st.markdown(
             f"""
-            <div id="signals" style="scroll-margin-top: 80px; background: rgba(137,146,163,0.05);
-                        border: 1px solid rgba(137,146,163,0.2); border-radius: 10px;
-                        padding: 1rem 1.25rem; margin: 0.5rem 0 0.75rem 0;">
+            <div id="signals" style="scroll-margin-top: 80px; background: #151f32;
+                        border-radius: 14px;
+                        padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
                     Hesty's Signature Signals
                 </div>
