@@ -1973,7 +1973,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'{action_html}'
         f'</div>'
         f'<hr style="border:none !important; border-top:1px solid rgba(30,41,59,0.6) !important; '
-        f'margin:0.5rem 0 1.5rem 0 !important; display:block !important; width:100% !important; '
+        f'margin:0.5rem 0 1rem 0 !important; display:block !important; width:100% !important; '
         f'opacity:1 !important;">'
     )
 
@@ -7380,13 +7380,30 @@ def render_discover():
         # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
         # <a href="?...">), waardoor de expander steeds weer dichtklapte.
         # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
-        # (geen page-reload), dus de expander-status blijft nu intact --
-        # en ziet er nog steeds modern/pill-achtig uit, geen oldschool
-        # radio-bolletjes.
-        current_timeframe = st.segmented_control(
-            "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
-            default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
+        # (geen page-reload), dus de expander-status blijft nu intact.
+        # Vlakke, minimalistische stijl -- zelfde patroon als de sub-tabs
+        # bovenaan de pagina en de Daily/All-time-toggle op Portfolio --
+        # i.p.v. de eerdere felle groene omlijning.
+        _momentum_tf_key = "momentocrats_timeframe_wrap"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] {{ '
+            f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button, '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label {{ '
+            f'border:none !important; outline:none !important; box-shadow:none !important; '
+            f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+            f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
         )
+        with st.container(key=_momentum_tf_key):
+            current_timeframe = st.segmented_control(
+                "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
+                default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
+            )
         if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
             current_timeframe = "Daily"
         csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
@@ -7450,7 +7467,7 @@ def render_discover():
                 if _remaining_momentocrats > 0:
                     st.markdown(
                         '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                        'Explore full Momentocrats list &rarr;</a>',
+                        'Activate daily alerts &rarr;</a>',
                         unsafe_allow_html=True,
                     )
             else:
@@ -7510,7 +7527,7 @@ def render_discover():
                     if _remaining_snowballers > 0:
                         st.markdown(
                             '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            'Explore full Snowballers list &rarr;</a>',
+                            'Activate daily alerts &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
@@ -7566,7 +7583,7 @@ def render_discover():
                     if _remaining_rocket > 0:
                         st.markdown(
                             '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            'Explore full Rocket List &rarr;</a>',
+                            'Activate daily alerts &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
