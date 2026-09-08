@@ -96,17 +96,28 @@ html {
    tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
    gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
    gedefinieerd. */
-.hesty-section-gap { margin-top: 2rem; }
+.hesty-section-gap { margin-top: 2rem !important; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 2.5rem; }
+    .hesty-section-gap { margin-top: 2.5rem !important; }
 }
+/* mb-4 op de HELE titel+lijn-container (niet op de lijn zelf) -- geeft
+   de ruimte tussen de lijn en de content eronder (omschrijving/toggles). */
+.mb-4-block { margin-bottom: 1rem !important; }
 
-/* Responsieve titelgrootte voor _uniform_section_header_html()'s <h2>
-   (text-base mobiel, text-lg desktop) -- inline style kan geen
-   breakpoints, vandaar een eigen klasse. */
-.hesty-section-title { font-size: 1rem; }
+/* Responsieve, COMPACTE titelgrootte voor _uniform_section_header_html()'s
+   <h2> (text-base mobiel, text-lg desktop) -- !important overal, want een
+   kale <h2>-tag heeft anders een fors grotere browser/Streamlit-standaard-
+   grootte (~1.5em), wat eerder precies de 'veel te grote, lompe letters'
+   verklaarde. Kleur/gewicht hier ook in de klasse i.p.v. inline, om
+   dezelfde reden. */
+.hesty-section-title {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: #1FAE96 !important;
+    line-height: 1.3 !important;
+}
 @media (min-width: 768px) {
-    .hesty-section-title { font-size: 1.125rem; }
+    .hesty-section-title { font-size: 1.125rem !important; }
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
@@ -1998,18 +2009,20 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     1 subtiele <a class="inline-link">-link) dat rechtsboven verschijnt,
     op dezelfde hoogte als de titel.
     """
-    gap_class = "" if is_first else ' class="hesty-section-gap"'
+    gap_class = "hesty-section-gap" if not is_first else ""
+    outer_class = f' class="{gap_class} mb-4-block"' if gap_class else ' class="mb-4-block"'
     return (
-        f'<div{gap_class} style="margin-bottom:0;">'
+        f'<div{outer_class}>'
         f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
-        f'<h2 class="hesty-section-title" style="color:#1FAE96; font-weight:700; display:flex; align-items:center; '
-        f'gap:0.5rem; margin:0; padding:0; text-transform:uppercase; letter-spacing:0.01em;">'
-        f'{_icon_span(icon_name, size_px=19, color="#1FAE96")}{title}'
+        f'<h2 class="hesty-section-title" style="display:flex; align-items:center; '
+        f'gap:0.5rem; margin:0 !important; padding:0 !important; text-transform:uppercase !important; '
+        f'letter-spacing:0.05em !important;">'
+        f'{_icon_span(icon_name, size_px=18, color="#1FAE96")}{title}'
         f'</h2>'
         f'{action_html}'
         f'</div>'
-        f'<div style="width:100%; border-bottom:1px solid rgba(30,41,59,0.6) !important; '
-        f'margin:0.25rem 0 1rem 0 !important; padding:0 !important; box-sizing:border-box;"></div>'
+        f'<div style="width:100%; height:1px; border-bottom:1px solid rgba(51,65,85,0.6) !important; '
+        f'margin:0.25rem 0 0 0 !important; padding:0 !important; box-sizing:border-box; overflow:hidden;"></div>'
         f'</div>'
     )
 
