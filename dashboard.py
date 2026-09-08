@@ -7098,18 +7098,36 @@ def _render_discover_signup_form() -> None:
     st.markdown(
         f'<style>'
         f'.st-key-{form_key} {{ max-width:640px !important; margin:0 !important; }} '
+        # Volledig, breed resetten van ALLES binnen de select/input-
+        # wrapper -- de vorige selector (alleen '> div', 1 niveau) raakte
+        # een verkeerd, te diep genest binnen-element van BaseWeb's
+        # select-component (vandaar het losse groene blokje om alleen de
+        # pijltjes-chevron, met de tekst 'Choose timezone' kaal ernaast).
+        # Nu ELK niveau binnen de select hard getransparant + van dezelfde
+        # buitenrand voorzien, zodat de HELE box er als 1 samenhangend
+        # geheel uitziet, ongeacht hoeveel binnenlagen BaseWeb gebruikt.
+        f'.st-key-{form_key} div[data-baseweb="input"], '
+        f'.st-key-{form_key} div[data-baseweb="select"], '
+        f'.st-key-{form_key} div[data-baseweb="select"] > div, '
+        f'.st-key-{form_key} div[data-baseweb="select"] div {{ '
+        f'background:transparent !important; box-shadow:none !important; border:none !important; }} '
         f'.st-key-{form_key} div[data-baseweb="input"], '
         f'.st-key-{form_key} div[data-baseweb="select"] > div {{ '
-        f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
-        f'box-shadow:none !important; }} '
+        f'border:1px solid rgba(148,163,184,0.25) !important; border-radius:8px !important; }} '
         f'.st-key-{form_key} div[data-baseweb="input"]:focus-within, '
         f'.st-key-{form_key} div[data-baseweb="select"] > div:focus-within {{ '
-        f'border-color:rgba(31,174,150,0.45) !important; }} '
+        f'border-color:rgba(31,174,150,0.6) !important; }} '
+        f'.st-key-{form_key} div[data-baseweb="select"] span {{ color:#EAEDF1 !important; }} '
+        # Premium knop: solide teal-vulling, geen harde rand, zachte
+        # hover, subtiele schaduw voor wat 'diepte' -- consistent met de
+        # andere primaire actieknoppen op het platform.
         f'.st-key-{form_key} button {{ '
         f'background:#1FAE96 !important; color:#0B1210 !important; font-weight:700 !important; '
-        f'border:none !important; border-radius:8px !important; padding:0.5rem 1.25rem !important; '
-        f'width:auto !important; white-space:nowrap !important; }} '
+        f'font-size:0.9rem !important; border:none !important; border-radius:8px !important; '
+        f'padding:0.55rem 1.4rem !important; width:auto !important; white-space:nowrap !important; '
+        f'box-shadow:0 1px 3px rgba(0,0,0,0.3) !important; transition:background 0.15s ease !important; }} '
         f'.st-key-{form_key} button:hover {{ background:#24C7AB !important; }} '
+        f'.st-key-{form_key} button:active {{ background:#189E88 !important; }} '
         f'.st-key-{form_key} [data-testid="stHorizontalBlock"] {{ '
         f'align-items:center !important; gap:1rem !important; }} '
         f'.st-key-{form_key} [data-testid="column"]:last-child {{ '
