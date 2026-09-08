@@ -7259,30 +7259,38 @@ def render_discover():
     )
     _subnav_key = "discover_subnav_wrap"
     _active_btn_key = f"discover_tab_{current_discover_subview}"
-    # GEEN st.columns() meer -- die bleek, net als eerder bij de
-    # Watchlist, een eigen hardnekkig mobiel stack-gedrag te hebben dat
-    # zelfs flex-direction:row !important negeerde (vandaar dat de 3 tabs
-    # alsnog onder elkaar vielen op mobiel EN te ver uit elkaar stonden op
-    # desktop -- de kolommen kregen daar gewoon nooit de content-breedte
-    # die de CSS probeerde af te dwingen). In plaats daarvan nu de
-    # BUITENSTE stVerticalBlock zelf hard naar een horizontale flex-rij
-    # gedwongen -- 1 niveau hoger, waar Streamlit geen eigen concurrerend
-    # mobiel-gedrag op toepast.
+    # Directe-kind-selector (>) i.p.v. een brede afstammeling-selector --
+    # de vorige poging raakte vermoedelijk OOK geneste vertical-blocks
+    # binnen de knoppen zelf (elke st.container(key=...) is zelf ook een
+    # vertical-block), waardoor de flex-row-regel ergens dieper werd
+    # overschreven/verstoord. Nu ALLEEN de EERSTE, directe vertical-block
+    # onder de scope naar flex-row gedwongen, en elk element-container
+    # DAARBINNEN (dus 1 laag dieper) hard op content-breedte gezet.
     st.markdown(
         f'<style>'
-        f'.st-key-{_subnav_key} [data-testid="stVerticalBlock"] {{ '
-        f'display:flex !important; flex-direction:row !important; flex-wrap:wrap !important; '
+        f'.st-key-{_subnav_key} {{ '
+        f'border-bottom:1px solid rgba(15,23,42,0.9) !important; padding-bottom:0.75rem !important; '
+        f'margin-bottom:2rem !important; padding-left:0.25rem !important; padding-right:0.25rem !important; '
+        f'width:100% !important; box-sizing:border-box !important; }} '
+        f'.st-key-{_subnav_key} > div {{ '
+        f'display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; '
         f'width:100% !important; justify-content:flex-start !important; align-items:center !important; '
-        f'row-gap:0.4rem !important; column-gap:0.35rem !important; }} '
-        f'.st-key-{_subnav_key} [data-testid="stVerticalBlock"] [data-testid="stVerticalBlockBorderWrapper"], '
+        f'gap:0.35rem !important; }} '
+        f'.st-key-{_subnav_key} > div > div {{ '
+        f'flex:0 0 auto !important; flex-basis:auto !important; width:auto !important; '
+        f'min-width:0 !important; margin:0 !important; }} '
         f'.st-key-{_subnav_key} [data-testid="element-container"] {{ '
         f'flex:0 0 auto !important; width:auto !important; margin:0 !important; }} '
         f'.st-key-{_subnav_key} button {{ '
         f'white-space:nowrap !important; flex-shrink:0 !important; background:transparent !important; '
-        f'border:none !important; color:#8992A3 !important; font-weight:600 !important; '
-        f'font-size:0.72rem !important; padding:0.35rem 0.6rem !important; border-radius:8px !important; }} '
+        f'border:none !important; color:#8992A3 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.05em !important; '
+        f'font-size:0.625rem !important; padding:0.25rem 0.6rem !important; border-radius:8px !important; }} '
         f'.st-key-{_subnav_key} .st-key-{_active_btn_key} button {{ '
         f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
+        f'@media (min-width: 768px) {{ '
+        f'.st-key-{_subnav_key} button {{ font-size:0.85rem !important; padding:0.4rem 1rem !important; }} '
+        f'}} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -7499,20 +7507,25 @@ def render_discover():
     else:
         st.markdown(
             f"""
+            <style>
+            .signature-signals-line {{ font-size: 0.72rem; }}
+            @media (min-width: 768px) {{ .signature-signals-line {{ font-size: 0.85rem !important; }} }}
+            </style>
             <div id="signals" style="scroll-margin-top: 80px; background: rgba(2,6,23,0.4);
                         border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
                         padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
-                <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    HESTY'S SIGNATURE SIGNALS
-                </div>
-                <div style="color:#64748B; font-size:0.75rem; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; margin-top:4px; margin-bottom:14px;">
-                    3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
-                </div>
-                <div style="font-size:0.85rem; line-height:2; text-transform:uppercase; letter-spacing:0.02em;">
-                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Momentocrats:</b> <span style="color:#94A3B8; font-weight:500;">identifies high-quality stocks trading bullish today</span><br>
-                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Snowballers:</b> <span style="color:#94A3B8; font-weight:500;">finds premium, compounding assets at an attractive discount</span><br>
-                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Rocket List:</b> <span style="color:#94A3B8; font-weight:500;">spots accelerating revenue growth for high-conviction bets</span>
-                </div>
+                <span style="color:#64748B; font-size:0.68rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:1rem; display:block;">
+                    HESTY'S SIGNATURE SIGNALS &mdash; 3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
+                </span>
+                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128225; MOMENTOCRATS:</span> IDENTIFIES HIGH-QUALITY STOCKS TRADING BULLISH TODAY.
+                </p>
+                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#127811; SNOWBALLERS:</span> FINDS PREMIUM, COMPOUNDING ASSETS AT AN ATTRACTIVE DISCOUNT.
+                </p>
+                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128640; ROCKET LIST:</span> SPOTS ACCELERATING REVENUE GROWTH FOR HIGH-CONVICTION BETS.
+                </p>
             </div>
             """,
             unsafe_allow_html=True,
