@@ -101,29 +101,33 @@ html {
 }
 
 .discover-teaser-link, .discover-teaser-link:visited {
+    /* Minimalistische 'Pro'-knop i.p.v. een platte tekstlink -- geen
+       achtergrondvulling, een flinterdunne rand, slanke padding. Blijft
+       een <a>-tag (geen widget), dus display:inline-block i.p.v. block:
+       de knop moet zich naar z'n eigen tekst voegen, niet de volle
+       breedte innemen zoals een tekstlink deed. margin-top(-only, geen
+       bottom) zorgt dat de onderkant van de screener nog steeds GEEN
+       eigen marge heeft -- de afstand naar de volgende sectie komt nog
+       steeds uitsluitend van diens .hesty-section-gap-bovenmarge. */
+    display: inline-block;
     color: #34D399;
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.03em;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
     text-decoration: none;
     cursor: pointer;
-    /* display:block + volle breedte + royale padding-top (py-3, alleen
-       boven) -- garandeert zichtbaarheid en een comfortabel duim-tikbaar
-       oppervlak op mobiel. GEEN padding/margin-bottom meer -- de
-       onderkant van een screener heeft nu bewust GEEN eigen marge, de
-       afstand naar de volgende screener komt uitsluitend van diens
-       .hesty-section-gap-bovenmarge (voorkomt dat 2 marges elkaar
-       optellen tot een ongelijk, willekeurig gat). */
-    display: block;
-    width: 100%;
-    max-width: 100%;
+    background: transparent;
+    border: 1px solid rgba(51,65,85,0.7);
+    border-radius: 8px;
+    padding: 0.4rem 1rem;
+    margin: 0.75rem 0 0 0;
     box-sizing: border-box;
-    padding: 0.75rem 0 0 0;
-    margin: 0;
-    text-align: left;
+    max-width: 100%;
 }
 .discover-teaser-link:hover {
-    text-decoration: underline;
+    border-color: rgba(52,211,153,0.5);
+    text-decoration: none;
 }
 
 :root {
@@ -7317,7 +7321,7 @@ def render_discover():
     else:
         st.markdown(
             f"""
-            <div id="signals" style="scroll-margin-top: 80px; background: #151f32;
+            <div id="signals" style="scroll-margin-top: 80px; background: rgba(15,23,42,0.4);
                         border-radius: 14px;
                         padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
@@ -7326,10 +7330,10 @@ def render_discover():
                 <div style="color:#EAEDF1; font-size:1.05rem; font-weight:600; margin-top:3px;">
                     3 specially-built signals, each with its own investing style. This is the core of Hesty's.
                 </div>
-                <div style="color:#8992A3; font-size:0.85rem; margin-top:10px; line-height:1.6;">
-                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Momentocrats</b>: momentum + quality, for swing trades (days-weeks)<br>
-                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Snowballers</b>: quality at a good price, for the long-term investor<br>
-                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Rocket List</b>: accelerating growth, for higher risk/reward
+                <div style="color:#8992A3; font-size:0.78rem; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; margin-top:12px; line-height:1.8;">
+                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Momentocrats</b>: identifies high-quality stocks trading bullish today<br>
+                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Snowballers</b>: finds premium, compounding assets at an attractive discount<br>
+                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#EAEDF1;">Rocket List</b>: spots accelerating revenue growth for high-conviction bets
                 </div>
             </div>
             """,
@@ -7445,8 +7449,8 @@ def render_discover():
                 _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
                 if _remaining_momentocrats > 0:
                     st.markdown(
-                        f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                        f'&#128274; Unlock {_remaining_momentocrats} more fresh flips and alerts &rarr;</a>',
+                        '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                        'Explore full Momentocrats list &rarr;</a>',
                         unsafe_allow_html=True,
                     )
             else:
@@ -7505,8 +7509,8 @@ def render_discover():
                     _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
                     if _remaining_snowballers > 0:
                         st.markdown(
-                            f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            f'&#128274; Unlock {_remaining_snowballers} more long-term value ideas &rarr;</a>',
+                            '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                            'Explore full Snowballers list &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
@@ -7561,8 +7565,8 @@ def render_discover():
                     _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
                     if _remaining_rocket > 0:
                         st.markdown(
-                            f'<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                            f'&#128274; Unlock {_remaining_rocket} more breakout candidates &rarr;</a>',
+                            '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                            'Explore full Rocket List &rarr;</a>',
                             unsafe_allow_html=True,
                         )
                 else:
