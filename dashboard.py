@@ -7242,40 +7242,49 @@ def render_discover():
     # ernaartoe, waar de daadwerkelijke, live data al bewezen heeft dat
     # het de moeite waard is. ---
 
-    _discover_subview_map = {
-        "Discover": "discover", "Sectors & Themes": "sectors_themes",
-        "Earnings Surprises": "earnings_surprises",
-    }
-    _discover_subview_reverse = {v: k for k, v in _discover_subview_map.items()}
-    _discover_default_label = _discover_subview_reverse.get(
-        st.query_params.get("subview", "discover"), "Discover",
+    _discover_subview_options = [
+        ("discover", "DISCOVER"),
+        ("sectors_themes", "SECTORS & THEMES"),
+        ("earnings_surprises", "EARNINGS SURPRISES"),
+    ]
+    # st.segmented_control() bleek CSS-resistent op precies dezelfde manier
+    # als eerder bij de Watchlist -- daar loste losse st.button()-widgets
+    # het wel op. Zelfde aanpak hier: 3 losse knoppen, hard in 1 rij
+    # gedwongen (flex-direction:row, flex-wrap:nowrap, overflow-x:auto),
+    # met ELKE kolom op flex:0 0 auto (content-breedte i.p.v. Streamlit's
+    # standaard 1/3-1/3-1/3-verdeling) zodat de RIJ als geheel kan
+    # scrollen i.p.v. dat de tekst BINNEN een te smalle kolom breekt.
+    current_discover_subview = st.session_state.get(
+        "discover_subview_active", st.query_params.get("subview", "discover"),
     )
-    # Op mobiel MAG deze rij nooit over 2 regels breken -- forceer 1
-    # horizontale lijn die desnoods opzij scrollt (swipe), i.p.v. dat de
-    # 3e tab-optie naar een lelijke 2e regel valt.
     _subnav_key = "discover_subnav_wrap"
+    _active_btn_key = f"discover_tab_{current_discover_subview}"
     st.markdown(
         f'<style>'
-        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] {{ '
+        f'.st-key-{_subnav_key} [data-testid="stHorizontalBlock"] {{ '
         f'display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; '
         f'overflow-x:auto !important; overflow-y:hidden !important; width:100% !important; '
-        f'justify-content:flex-start !important; scrollbar-width:none !important; }} '
-        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"]::-webkit-scrollbar {{ display:none !important; }} '
-        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] button, '
-        f'.st-key-{_subnav_key} div[data-testid="stSegmentedControl"] label {{ '
-        f'white-space:nowrap !important; flex-shrink:0 !important; }} '
+        f'justify-content:flex-start !important; scrollbar-width:none !important; gap:0.4rem !important; }} '
+        f'.st-key-{_subnav_key} [data-testid="stHorizontalBlock"]::-webkit-scrollbar {{ display:none !important; }} '
+        f'.st-key-{_subnav_key} [data-testid="column"] {{ '
+        f'flex:0 0 auto !important; width:auto !important; min-width:0 !important; }} '
+        f'.st-key-{_subnav_key} button {{ '
+        f'white-space:nowrap !important; flex-shrink:0 !important; background:transparent !important; '
+        f'border:none !important; color:#8992A3 !important; font-weight:600 !important; '
+        f'font-size:0.82rem !important; padding:0.4rem 0.8rem !important; border-radius:8px !important; }} '
+        f'.st-key-{_subnav_key} .st-key-{_active_btn_key} button {{ '
+        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
     with st.container(key=_subnav_key):
-        _discover_selected_label = st.segmented_control(
-            "Discover section", options=list(_discover_subview_map.keys()),
-            selection_mode="single", default=_discover_default_label,
-            key="discover_subnav", label_visibility="collapsed",
-        )
-    if _discover_selected_label is None:
-        _discover_selected_label = "Discover"
-    current_discover_subview = _discover_subview_map[_discover_selected_label]
+        _subnav_cols = st.columns(len(_discover_subview_options), gap="small")
+        for _col, (_subview_key, _subview_label) in zip(_subnav_cols, _discover_subview_options):
+            with _col:
+                with st.container(key=f"discover_tab_{_subview_key}"):
+                    if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
+                        st.session_state["discover_subview_active"] = _subview_key
+                        st.rerun()
 
     if current_discover_subview == "discover":
         if not current_user.is_logged_in:
@@ -7487,15 +7496,15 @@ def render_discover():
                         border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
                         padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
                 <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    Hesty's Signature Signals
+                    HESTY'S SIGNATURE SIGNALS
                 </div>
-                <div style="color:#94A3B8; font-size:0.78rem; font-weight:500; margin-top:4px; margin-bottom:14px;">
-                    3 specially-built signals, each with its own investing style. This is the core of Hesty's.
+                <div style="color:#64748B; font-size:0.75rem; font-weight:500; text-transform:uppercase; letter-spacing:0.03em; margin-top:4px; margin-bottom:14px;">
+                    3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
                 </div>
-                <div style="font-size:0.85rem; line-height:2;">
-                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Momentocrats</b><span style="color:#CBD5E1; font-weight:500;">: identifies high-quality stocks trading bullish today</span><br>
-                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Snowballers</b><span style="color:#CBD5E1; font-weight:500;">: finds premium, compounding assets at an attractive discount</span><br>
-                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#34D399; font-weight:700;">Rocket List</b><span style="color:#CBD5E1; font-weight:500;">: spots accelerating revenue growth for high-conviction bets</span>
+                <div style="font-size:0.85rem; line-height:2; text-transform:uppercase; letter-spacing:0.02em;">
+                    {_icon_span("sensors", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Momentocrats:</b> <span style="color:#94A3B8; font-weight:500;">identifies high-quality stocks trading bullish today</span><br>
+                    {_icon_span("savings", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Snowballers:</b> <span style="color:#94A3B8; font-weight:500;">finds premium, compounding assets at an attractive discount</span><br>
+                    {_icon_span("rocket_launch", size_px=14, color="#8992A3")} <b style="color:#F1F5F9; font-weight:700;">Rocket List:</b> <span style="color:#94A3B8; font-weight:500;">spots accelerating revenue growth for high-conviction bets</span>
                 </div>
             </div>
             """,
