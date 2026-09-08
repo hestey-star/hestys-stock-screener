@@ -5785,23 +5785,28 @@ def render_portfolio():
 
                     rebalance_cards_html.append(
                         f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-                        f'border-radius:10px; padding:0.45rem 0.85rem;">'
-                        # Naam (links) en Buy/Sell-data (rechts) nu op 1 en
-                        # dezelfde regel, verticaal gecentreerd -- i.p.v. 2
-                        # losse, gestapelde rijen. Dat scheelt een hele regel
-                        # hoogte t.o.v. de vorige versie, precies wat een
-                        # 'flinterdunne strip' nodig heeft. min-width:0 +
-                        # overflow:hidden op de naam zodat een lange naam
-                        # afkapt i.p.v. de Buy/Sell-data van het scherm te
-                        # duwen; white-space:nowrap + flex-shrink:0 rechts
-                        # houdt die kant altijd volledig zichtbaar.
-                        f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem;">'
-                        f'<div style="min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; '
+                        f'border-radius:10px; padding:0.45rem 0.85rem; width:100%; max-width:100%; '
+                        f'box-sizing:border-box; overflow:hidden;">'
+                        # Driedelige flex-rij, ALTIJD horizontaal (nooit
+                        # flex-col op mobiel): midden (naam+ticker) MOET
+                        # kunnen krimpen (flex:1 + min-width:0 + truncate),
+                        # rechts (Buy/Sell-data) blijft hard vast (flex-
+                        # shrink:0) en altijd volledig zichtbaar tegen de
+                        # rechterrand. Zonder min-width:0 weigert een
+                        # flex-item van nature te krimpen onder z'n eigen
+                        # inhoud (hier: de volledige, niet-afgebroken naam),
+                        # wat de kaart -- en daarmee de hele pagina -- breder
+                        # duwde dan het scherm op mobiel.
+                        f'<div style="display:flex; flex-direction:row; align-items:center; '
+                        f'justify-content:space-between; width:100%; gap:0.6rem;">'
+                        f'<div style="flex:1 1 0%; min-width:0; overflow:hidden; white-space:nowrap; '
+                        f'text-overflow:ellipsis; '
                         f'color:#EAEDF1; font-size:0.8rem; font-weight:600; text-transform:uppercase; '
                         f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important;">'
                         f'{sugg["naam"].upper()} <span style="color:#8992A3; font-weight:400; '
                         f'text-transform:none;">({sugg["ticker"]})</span></div>'
-                        f'<div style="display:flex; align-items:baseline; gap:0.3rem; flex-shrink:0; white-space:nowrap;">'
+                        f'<div style="display:flex; align-items:baseline; gap:0.3rem; flex-shrink:0; '
+                        f'white-space:nowrap; text-align:right;">'
                         f'<span style="color:{action_color}; font-weight:600; font-size:0.8rem; '
                         f'font-family:\'Inter\', sans-serif !important;">{action_word}</span>'
                         f'<span style="color:#F1F5F9; font-weight:700; font-size:0.85rem; '
@@ -5812,7 +5817,10 @@ def render_portfolio():
                         # Percentages/doel: nog kleiner en gedempter (bijna
                         # text-[10px], slate-500) -- puur ondersteunende info,
                         # samen met de balk de enige 2e regel van de kaart.
+                        # white-space:nowrap + overflow:hidden zodat ook deze
+                        # regel nooit breder kan worden dan de kaart zelf.
                         f'<div style="color:#64748B; font-size:0.65rem; margin-top:0.15rem; '
+                        f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
                         f'font-family:\'Inter\', sans-serif !important;">'
                         f'{sugg["current_pct"]:.1f}% now &#8594; {sugg["target_pct"]:.1f}% target</div>'
                         f'{bar_html}'
@@ -5820,7 +5828,8 @@ def render_portfolio():
                     )
                 st.markdown(
                     '<style>'
-                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.75rem; } '
+                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.75rem; '
+                    'width:100%; max-width:100%; overflow-x:hidden; box-sizing:border-box; } '
                     '@media (max-width:768px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
                     '</style>'
                     f'<div class="hesty-rebalance-grid">{"".join(rebalance_cards_html)}</div>',
