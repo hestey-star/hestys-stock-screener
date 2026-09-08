@@ -109,7 +109,7 @@ html {
 .hesty-section-title-text {
     font-size: 1rem !important;
     font-weight: 700 !important;
-    color: #1FAE96 !important;
+    color: #F1F5F9 !important;
     line-height: 1.3 !important;
 }
 @media (min-width: 768px) {
@@ -2035,7 +2035,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
         f'<div style="display:flex; align-items:center; margin:0; padding:0;">'
         f'<span style="font-size:18px; color:#1FAE96; margin-right:0.5rem;" class="material-symbols-outlined">{icon_name}</span>'
-        f'<span style="font-weight:700; color:#1FAE96; text-transform:uppercase; letter-spacing:0.05em; '
+        f'<span style="font-weight:700; color:#F1F5F9; text-transform:uppercase; letter-spacing:0.05em; '
         f'font-size:1rem;" class="hesty-section-title-text">{title}</span>'
         f'</div>'
         f'{action_html}'
@@ -7173,20 +7173,27 @@ def _render_discover_signup_form() -> None:
         f'.st-key-{form_key} div[data-baseweb="select"] > div:focus-within {{ '
         f'border-color:rgba(31,174,150,0.6) !important; }} '
         f'.st-key-{form_key} div[data-baseweb="select"] span {{ color:#EAEDF1 !important; }} '
+        # Regio-dropdown krijgt een gegarandeerde minimumbreedte -- de
+        # tekst 'Choose timezone' werd anders afgekapt tot 'Choose time'
+        # zodra de kolom smaller werd dan de tekst zelf nodig had.
+        f'.st-key-{form_key} [data-testid="column"]:nth-child(2) {{ '
+        f'min-width:220px !important; flex:0 0 auto !important; }} '
         # Premium knop: solide teal-vulling, geen harde rand, zachte
         # hover, subtiele schaduw voor wat 'diepte' -- consistent met de
-        # andere primaire actieknoppen op het platform.
+        # andere primaire actieknoppen op het platform. Padding nu exact
+        # gelijk aan de rest van het platform (py-2 px-5).
         f'.st-key-{form_key} button {{ '
         f'background:#1FAE96 !important; color:#0B1210 !important; font-weight:700 !important; '
         f'font-size:0.9rem !important; border:none !important; border-radius:8px !important; '
-        f'padding:0.55rem 1.4rem !important; width:auto !important; white-space:nowrap !important; '
+        f'padding:0.5rem 1.25rem !important; width:auto !important; white-space:nowrap !important; '
         f'box-shadow:0 1px 3px rgba(0,0,0,0.3) !important; transition:background 0.15s ease !important; }} '
         f'.st-key-{form_key} button:hover {{ background:#24C7AB !important; }} '
         f'.st-key-{form_key} button:active {{ background:#189E88 !important; }} '
         f'.st-key-{form_key} [data-testid="stHorizontalBlock"] {{ '
-        f'align-items:center !important; gap:1rem !important; }} '
-        f'.st-key-{form_key} [data-testid="column"]:last-child {{ '
-        f'flex:0 0 auto !important; width:auto !important; }} '
+        f'align-items:center !important; gap:1.25rem !important; flex-wrap:wrap !important; }} '
+        f'.st-key-{form_key} [data-testid="column"]:last-child, '
+        f'.st-key-{form_key} [data-testid="column"]:nth-child(3) {{ '
+        f'flex:0 0 auto !important; width:auto !important; min-width:0 !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -7195,7 +7202,7 @@ def _render_discover_signup_form() -> None:
     except Exception:
         form_ctx = st.container()
     with form_ctx:
-        email_col, region_col, button_col = st.columns([2.5, 1.5, 1.5], gap="medium")
+        email_col, region_col, button_col = st.columns([2.2, 2, 1.3], gap="medium")
         with email_col:
             form_email = st.text_input(
                 "Email address", placeholder="you@example.com",
