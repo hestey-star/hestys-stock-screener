@@ -2007,20 +2007,31 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     """
     gap_class = "hesty-section-gap" if not is_first else ""
     outer_class = f' class="{gap_class}"' if gap_class else ""
+    # Icoon krijgt een EXPLICIETE margin-right, niet uitsluitend flex-
+    # gap -- 'gap' bleek op deze <h2> eerder onbetrouwbaar (zelfde patroon
+    # als de lijn/kleur-issues hiervoor), dus nu dubbel geborgd: gap EN
+    # een harde margin op het icoon zelf, wat hoe dan ook ademruimte
+    # tussen icoon en tekst afdwingt.
+    icon_html = (
+        f'<span style="display:inline-flex; margin-right:0.5rem !important;">'
+        f'{_icon_span(icon_name, size_px=18, color="#1FAE96")}</span>'
+    )
     return (
         f'<div{outer_class}>'
+        f'<div style="width:100%; margin-bottom:0.75rem;">'
         f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; margin:0; padding:0;">'
         f'<h2 class="hesty-section-title" style="display:flex; align-items:center; '
         f'gap:0.5rem; margin:0 !important; padding:0 !important; text-transform:uppercase !important; '
         f'letter-spacing:0.05em !important;">'
-        f'{_icon_span(icon_name, size_px=18, color="#1FAE96")}{title}'
+        f'{icon_html}<span>{title}</span>'
         f'</h2>'
         f'{action_html}'
         f'</div>'
         f'<hr style="width:100% !important; border:none !important; height:1px !important; '
         f'min-height:1px !important; max-height:1px !important; background-color:#334155 !important; '
-        f'display:block !important; margin:0.25rem 0 1rem 0 !important; padding:0 !important; '
+        f'display:block !important; margin:0.375rem 0 0 0 !important; padding:0 !important; '
         f'box-sizing:border-box !important; opacity:1 !important;">'
+        f'</div>'
         f'</div>'
     )
 
