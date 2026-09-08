@@ -7259,20 +7259,24 @@ def render_discover():
     )
     _subnav_key = "discover_subnav_wrap"
     _active_btn_key = f"discover_tab_{current_discover_subview}"
+    # GEEN st.columns() meer -- die bleek, net als eerder bij de
+    # Watchlist, een eigen hardnekkig mobiel stack-gedrag te hebben dat
+    # zelfs flex-direction:row !important negeerde (vandaar dat de 3 tabs
+    # alsnog onder elkaar vielen op mobiel EN te ver uit elkaar stonden op
+    # desktop -- de kolommen kregen daar gewoon nooit de content-breedte
+    # die de CSS probeerde af te dwingen). In plaats daarvan nu de
+    # BUITENSTE stVerticalBlock zelf hard naar een horizontale flex-rij
+    # gedwongen -- 1 niveau hoger, waar Streamlit geen eigen concurrerend
+    # mobiel-gedrag op toepast.
     st.markdown(
         f'<style>'
-        # Geen horizontale scroll meer -- flex-wrap:wrap i.p.v. nowrap,
-        # zodat de 3 tabs op de meeste schermen gewoon op 1 regel staan
-        # en op de allersmalste telefoons NETJES (uitgelijnd, consistente
-        # gap) naar een 2e regel wrappen i.p.v. een rommelige overflow.
-        # Compactere padding/font-size dan de vorige poging -- vergroot
-        # de kans dat alle 3 sowieso op 1 regel passen.
-        f'.st-key-{_subnav_key} [data-testid="stHorizontalBlock"] {{ '
+        f'.st-key-{_subnav_key} [data-testid="stVerticalBlock"] {{ '
         f'display:flex !important; flex-direction:row !important; flex-wrap:wrap !important; '
-        f'width:100% !important; justify-content:flex-start !important; row-gap:0.4rem !important; '
-        f'column-gap:0.35rem !important; }} '
-        f'.st-key-{_subnav_key} [data-testid="column"] {{ '
-        f'flex:0 0 auto !important; width:auto !important; min-width:0 !important; }} '
+        f'width:100% !important; justify-content:flex-start !important; align-items:center !important; '
+        f'row-gap:0.4rem !important; column-gap:0.35rem !important; }} '
+        f'.st-key-{_subnav_key} [data-testid="stVerticalBlock"] [data-testid="stVerticalBlockBorderWrapper"], '
+        f'.st-key-{_subnav_key} [data-testid="element-container"] {{ '
+        f'flex:0 0 auto !important; width:auto !important; margin:0 !important; }} '
         f'.st-key-{_subnav_key} button {{ '
         f'white-space:nowrap !important; flex-shrink:0 !important; background:transparent !important; '
         f'border:none !important; color:#8992A3 !important; font-weight:600 !important; '
@@ -7283,13 +7287,11 @@ def render_discover():
         unsafe_allow_html=True,
     )
     with st.container(key=_subnav_key):
-        _subnav_cols = st.columns(len(_discover_subview_options), gap="small")
-        for _col, (_subview_key, _subview_label) in zip(_subnav_cols, _discover_subview_options):
-            with _col:
-                with st.container(key=f"discover_tab_{_subview_key}"):
-                    if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
-                        st.session_state["discover_subview_active"] = _subview_key
-                        st.rerun()
+        for _subview_key, _subview_label in _discover_subview_options:
+            with st.container(key=f"discover_tab_{_subview_key}"):
+                if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
+                    st.session_state["discover_subview_active"] = _subview_key
+                    st.rerun()
 
     if current_discover_subview == "discover":
         if not current_user.is_logged_in:
