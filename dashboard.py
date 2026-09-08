@@ -6649,7 +6649,7 @@ def render_portfolio():
                     watchlist_tickers = [w["ticker"] for w in watchlist_items]
                     watchlist_market_data = database.get_market_data_for_tickers(watchlist_tickers)
 
-                    def _render_watchlist_row(w, row_idx, is_last_in_col):
+                    def _render_watchlist_row(w, row_idx):
                         # st.container(key=...) geeft een betrouwbare
                         # .st-key-{key}-klasse (bevestigd, al eerder gebruikt
                         # voor de prullenbak-knop), met een veilige fallback
@@ -6662,24 +6662,21 @@ def render_portfolio():
                             row_ctx = st.container()
                             row_key = None
                         if row_key:
-                            border_css = "" if is_last_in_col else "border-bottom:1px solid rgba(148,163,184,0.1);"
-                            # Padding op py-2 (0.5rem) -- slank maar met net
-                            # genoeg lucht. Daarnaast worden ALLE Streamlit-
-                            # eigen wrapper-elementen binnen deze rij
-                            # (horizontale blok, kolommen, widget-containers)
-                            # hard gedwongen tot een horizontale flex-rij --
-                            # dit is de daadwerkelijke fix voor de 'lompe
-                            # blokken' op mobiel: Streamlit's EIGEN, ingebouwde
-                            # mobiele CSS zet st.columns() standaard om naar
-                            # flex-direction:column onder een bepaalde
-                            # schermbreedte (vandaar dat logo/naam/knoppen
-                            # onder elkaar zakten) -- die override forceren we
-                            # hier terug naar row, altijd, ongeacht schermgrootte.
+                            # Zelfde kaart-styling als Rebalancing hierboven --
+                            # dunne rand, zachte egale achtergrond, afgeronde
+                            # hoeken, py-2.5-padding -- i.p.v. de eerdere
+                            # platte lijst met alleen een border-bottom.
+                            # margin-bottom geeft de ademruimte tussen kaarten
+                            # die de border-bottom-scheiding voorheen deed.
                             st.markdown(
                                 f'<style>'
-                                f'.st-key-{row_key} {{ {border_css} '
-                                f'padding:0.5rem 0.2rem !important; margin:0 !important; display:flex !important; '
-                                f'align-items:center !important; justify-content:space-between !important; '
+                                f'.st-key-{row_key} {{ '
+                                f'background:rgba(15,23,42,0.3) !important; '
+                                f'border:1px solid rgba(30,41,59,0.4) !important; '
+                                f'border-radius:10px !important; '
+                                f'padding:0.6rem 0.85rem !important; margin:0 0 0.75rem 0 !important; '
+                                f'display:flex !important; align-items:center !important; '
+                                f'justify-content:space-between !important; '
                                 f'width:100% !important; max-width:100% !important; '
                                 f'overflow-x:hidden !important; box-sizing:border-box !important; '
                                 f'cursor:default !important; touch-action:pan-y !important; }} '
@@ -6778,11 +6775,13 @@ def render_portfolio():
                                     f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0; '
                                     f'width:100%; overflow:hidden;" title="{w["naam"]} ({w["ticker"]})">'
                                     f'{logo_html}'
-                                    f'<span style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
+                                    f'<div style="min-width:0; overflow:hidden; flex:1 1 auto;">'
+                                    f'<div style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
                                     f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; '
-                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto;">'
-                                    f'{w["naam"].upper()}</span>'
-                                    f'<span style="color:#8992A3; font-size:0.72rem; flex-shrink:0;">{w["ticker"]}</span>'
+                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["naam"].upper()}</div>'
+                                    f'<div style="color:#8992A3; font-size:0.68rem; '
+                                    f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{w["ticker"]}</div>'
+                                    f'</div>'
                                     '</div>',
                                     unsafe_allow_html=True,
                                 )
@@ -6884,10 +6883,10 @@ def render_portfolio():
                     watchlist_outer_left, watchlist_outer_right = st.columns(2)
                     for row_idx in range(half):
                         with watchlist_outer_left:
-                            _render_watchlist_row(left_items[row_idx], row_idx, row_idx == half - 1)
+                            _render_watchlist_row(left_items[row_idx], row_idx)
                         if row_idx < len(right_items):
                             with watchlist_outer_right:
-                                _render_watchlist_row(right_items[row_idx], row_idx, row_idx == len(right_items) - 1)
+                                _render_watchlist_row(right_items[row_idx], row_idx)
                 else:
                     st.caption("Your watchlist is empty.")
 
