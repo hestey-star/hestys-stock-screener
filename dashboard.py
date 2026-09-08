@@ -5828,7 +5828,7 @@ def render_portfolio():
                     )
                 st.markdown(
                     '<style>'
-                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.75rem; '
+                    '.hesty-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem; '
                     'width:100%; max-width:100%; overflow-x:hidden; box-sizing:border-box; } '
                     '@media (max-width:768px) { .hesty-rebalance-grid { grid-template-columns:1fr; } } '
                     '</style>'
@@ -6674,7 +6674,7 @@ def render_portfolio():
                                 f'background:rgba(15,23,42,0.3) !important; '
                                 f'border:1px solid rgba(30,41,59,0.4) !important; '
                                 f'border-radius:10px !important; '
-                                f'padding:0.5rem 0.75rem !important; margin:0 0 0.5rem 0 !important; '
+                                f'padding:0.5rem 0.75rem !important; margin:0 !important; '
                                 f'min-height:3.25rem !important; '
                                 f'display:flex !important; align-items:center !important; '
                                 f'justify-content:space-between !important; '
@@ -6882,13 +6882,26 @@ def render_portfolio():
                     half = (len(watchlist_items) + 1) // 2
                     left_items = watchlist_items[:half]
                     right_items = watchlist_items[half:]
-                    watchlist_outer_left, watchlist_outer_right = st.columns(2)
-                    for row_idx in range(half):
-                        with watchlist_outer_left:
-                            _render_watchlist_row(left_items[row_idx], row_idx)
-                        if row_idx < len(right_items):
-                            with watchlist_outer_right:
-                                _render_watchlist_row(right_items[row_idx], row_idx)
+                    # Streamlit voegt standaard ZELF al een verticale gap
+                    # (~1rem) toe tussen gestapelde elementen binnen een
+                    # kolom -- dat kwam bovenop de kaart-eigen margin-bottom,
+                    # vandaar de te grote gaten. Deze wrapper-key dwingt die
+                    # eigen Streamlit-gap hard naar 0.5rem (gap-y-2), exact
+                    # gelijk aan de Rebalancing-grid hieronder aangepast.
+                    _watchlist_grid_key = "watchlist_grid_wrap"
+                    st.markdown(
+                        f'<style>.st-key-{_watchlist_grid_key} [data-testid="stVerticalBlock"] {{ '
+                        f'gap:0.5rem !important; }}</style>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.container(key=_watchlist_grid_key):
+                        watchlist_outer_left, watchlist_outer_right = st.columns(2)
+                        for row_idx in range(half):
+                            with watchlist_outer_left:
+                                _render_watchlist_row(left_items[row_idx], row_idx)
+                            if row_idx < len(right_items):
+                                with watchlist_outer_right:
+                                    _render_watchlist_row(right_items[row_idx], row_idx)
                 else:
                     st.caption("Your watchlist is empty.")
 
