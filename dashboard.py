@@ -7379,7 +7379,7 @@ def render_discover():
                 ))
             _render_signal_cards(cards_html)
             st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
-            if total_matching > _signal_display_limit:
+            if _signal_display_limit is not None and total_matching > _signal_display_limit:
                 if not current_user.is_logged_in:
                     _render_discover_email_lock("momentocrats")
                 elif not _is_premium_discover:
@@ -7433,7 +7433,7 @@ def render_discover():
                     ))
                 _render_signal_cards(cards_html)
                 st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
-                if total_snowball > _signal_display_limit:
+                if _signal_display_limit is not None and total_snowball > _signal_display_limit:
                     if not current_user.is_logged_in:
                         _render_discover_email_lock("snowballers")
                     elif not _is_premium_discover:
