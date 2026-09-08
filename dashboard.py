@@ -1819,16 +1819,16 @@ def _rotation_tile_html(rank, name, return_pct):
     trend_arrow = "&#8599;" if return_pct >= 0 else "&#8600;"
     rocket_span = " &#128640;" if return_pct >= ROTATION_ROCKET_THRESHOLD_PCT else ""
 
-    # Dunne, flinterdunne horizontale strip -- exact dezelfde designtaal
-    # als de Rebalancing/Watchlist-kaarten (dunne border-slate-800/40,
-    # py-2 px-3-achtige padding, geen zware achtergrondkleur/gloed meer)
-    # i.p.v. de eerdere, zwaardere tegel met gradient-achtergrond en
-    # gekleurde gloeiende rand.
+    # Dunne, flinterdunne horizontale strip met een zachte, egale
+    # achtergrondvulling (bg-slate-950/40) -- exact dezelfde designtaal
+    # als de Rebalancing/Watchlist-kaarten, nu ook met wat 'textuur'
+    # i.p.v. volledig transparant tegen de kale paginaeachtergrond.
     return (
-        f'<div style="border:1px solid rgba(30,41,59,0.4); border-radius:10px; '
-        f'padding:0.5rem 0.75rem; box-sizing:border-box; display:flex; align-items:center; '
-        f'justify-content:space-between; gap:0.6rem; width:100%; max-width:100%; overflow:hidden;">'
-        f'<div style="display:flex; align-items:baseline; gap:0.5rem; min-width:0; overflow:hidden;">'
+        f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
+        f'border-radius:10px; padding:0.5rem 0.875rem; box-sizing:border-box; display:flex; '
+        f'align-items:center; justify-content:space-between; gap:0.6rem; width:100%; max-width:100%; '
+        f'overflow:hidden;">'
+        f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0; overflow:hidden;">'
         f'<span style="font-size:0.65rem; color:#5B6472; font-weight:700; flex-shrink:0;">#{rank}</span>'
         f'<span style="font-size:0.82rem; color:#EAEDF1; font-weight:600; overflow:hidden; '
         f'text-overflow:ellipsis; white-space:nowrap;">{name}{rocket_span}</span>'
