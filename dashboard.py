@@ -7261,17 +7261,22 @@ def render_discover():
     _active_btn_key = f"discover_tab_{current_discover_subview}"
     st.markdown(
         f'<style>'
+        # Geen horizontale scroll meer -- flex-wrap:wrap i.p.v. nowrap,
+        # zodat de 3 tabs op de meeste schermen gewoon op 1 regel staan
+        # en op de allersmalste telefoons NETJES (uitgelijnd, consistente
+        # gap) naar een 2e regel wrappen i.p.v. een rommelige overflow.
+        # Compactere padding/font-size dan de vorige poging -- vergroot
+        # de kans dat alle 3 sowieso op 1 regel passen.
         f'.st-key-{_subnav_key} [data-testid="stHorizontalBlock"] {{ '
-        f'display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; '
-        f'overflow-x:auto !important; overflow-y:hidden !important; width:100% !important; '
-        f'justify-content:flex-start !important; scrollbar-width:none !important; gap:0.4rem !important; }} '
-        f'.st-key-{_subnav_key} [data-testid="stHorizontalBlock"]::-webkit-scrollbar {{ display:none !important; }} '
+        f'display:flex !important; flex-direction:row !important; flex-wrap:wrap !important; '
+        f'width:100% !important; justify-content:flex-start !important; row-gap:0.4rem !important; '
+        f'column-gap:0.35rem !important; }} '
         f'.st-key-{_subnav_key} [data-testid="column"] {{ '
         f'flex:0 0 auto !important; width:auto !important; min-width:0 !important; }} '
         f'.st-key-{_subnav_key} button {{ '
         f'white-space:nowrap !important; flex-shrink:0 !important; background:transparent !important; '
         f'border:none !important; color:#8992A3 !important; font-weight:600 !important; '
-        f'font-size:0.82rem !important; padding:0.4rem 0.8rem !important; border-radius:8px !important; }} '
+        f'font-size:0.72rem !important; padding:0.35rem 0.6rem !important; border-radius:8px !important; }} '
         f'.st-key-{_subnav_key} .st-key-{_active_btn_key} button {{ '
         f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; }} '
         f'</style>',
