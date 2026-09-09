@@ -7084,7 +7084,7 @@ def render_portfolio():
 
 
 
-def _render_unlock_premium_button(context_key: str) -> None:
+def _render_unlock_premium_button(context_key: str, label: str = "Unlock all premium weekly signals \u2192") -> None:
     """
     'Unlock all premium weekly signals' -- st.button() + st.switch_page()
     i.p.v. een kale <a href="/login">-tag. Een rauwe <a>-tag wordt door de
@@ -7096,7 +7096,8 @@ def _render_unlock_premium_button(context_key: str) -> None:
     st.session_state kunnen zetten (welke tab -- Sign In/Sign Up -- de
     inlogpagina straks moet tonen) voordat de navigatie plaatsvindt --
     dat kan met st.page_link() niet, die ondersteunt geen query-params
-    of on_click.
+    of on_click. 'label' is per-context aanpasbaar (bv. een andere tekst
+    onder Earnings Surprises dan onder Snowballers/Rocket List).
     """
     btn_key = f"unlock_premium_btn_{context_key}"
     st.markdown(
@@ -7113,7 +7114,7 @@ def _render_unlock_premium_button(context_key: str) -> None:
         unsafe_allow_html=True,
     )
     with st.container(key=btn_key):
-        if st.button("Unlock all premium weekly signals \u2192", key=f"unlock_premium_{context_key}"):
+        if st.button(label, key=f"unlock_premium_{context_key}"):
             st.session_state["login_prefill_mode"] = "Sign Up"
             st.switch_page(login_page)
 
@@ -7230,599 +7231,521 @@ def _render_discover_signup_form() -> None:
             st.success("Almost there! Check your inbox to confirm your subscription.")
 
 
-def render_discover():
+def render_discover_signals():
     # --- Marketing-first opening: GEEN 'Discover'-sectiekop meer bovenaan --
     # de grote titel hieronder ("Your Investing Edge, Built Around You.")
-    # IS zelf al de sterkste binnenkomer, een aparte kop erboven voegde
-    # alleen droge, overbodige ruis toe. Verhuisd van de standaard groene
-    # sectiekop-stijl naar 1 gecentreerd, marketing-achtig blok. HET ene,
-    # centrale e-mail-activatieblok staat nu helemaal onderaan de pagina
-    # (zie _render_discover_signup_form(), na Rocket List) -- onder
-    # Momentocrats/Snowballers staat alleen nog een subtiele teaser-link
-    # ernaartoe, waar de daadwerkelijke, live data al bewezen heeft dat
-    # het de moeite waard is. ---
+    # IS zelf al de sterkste binnenkomer. HET ene, centrale e-mail-
+    # activatieblok staat helemaal onderaan de pagina (zie
+    # _render_discover_signup_form(), na Rocket List) -- onder
+    # Momentocrats/Snowballers/Rocket List staat alleen nog een subtiele
+    # teaser-link/knop ernaartoe. De sub-navigatie (Sectors & Themes,
+    # Earnings Surprises) is verhuisd naar de zijbalk als eigen pagina's
+    # -- geen in-page tab-rij meer die uitgelogde bezoekers afleidde van
+    # de daadwerkelijke, bewijzende data.
+    if not current_user.is_logged_in:
+        st.markdown(
+            '<style>'
+            '.discover-hero { text-align:left; padding:0.5rem 0 0; width:100%; '
+            'max-width:100%; box-sizing:border-box; overflow-x:hidden; margin-bottom:2rem; }'
+            '.discover-hero-buttons { margin-top:1.5rem; display:flex; flex-direction:row; '
+            'gap:1rem; justify-content:flex-start; align-items:center; width:100%; '
+            'box-sizing:border-box; }'
+            '.discover-hero-btn { font-weight:600 !important; font-size:0.875rem !important; '
+            'padding:0.625rem 1.5rem !important; border-radius:10px !important; '
+            'text-decoration:none !important; box-sizing:border-box !important; text-align:center !important; '
+            'line-height:1.2 !important; white-space:nowrap !important; display:inline-block !important; }'
+            '.discover-hero-btn-primary, .discover-hero-btn-primary:link, .discover-hero-btn-primary:visited {'
+            'background:#1FAE96 !important; color:#0B111E !important; border:none !important; }'
+            '.discover-hero-btn-secondary, .discover-hero-btn-secondary:link, .discover-hero-btn-secondary:visited {'
+            'background:transparent !important; color:#EAEDF1 !important; '
+            'border:1px solid rgba(148,163,184,0.35) !important; }'
+            '@media (max-width:768px) { '
+            '.discover-hero-buttons { flex-direction:column; align-items:stretch; width:100%; '
+            'gap:0.75rem; padding:0 1rem; } '
+            '.discover-hero-btn { width:100%; white-space:normal; } '
+            '} '
+            '</style>'
+            '<div id="hero-top" class="discover-hero">'
+            '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
+            'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
+            '<span style="color:#1FAE96;">Built Around You.</span></div>'
+            '<div class="discover-hero-buttons">'
+            '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
+            'Start free, in seconds &rarr;</a>'
+            '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
+            'Browse today\'s signals</a>'
+            '</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    _discover_subview_options = [
-        ("discover", "DISCOVER"),
-        ("sectors_themes", "SECTORS & THEMES"),
-        ("earnings_surprises", "EARNINGS SURPRISES"),
-    ]
-    # st.segmented_control() bleek CSS-resistent op precies dezelfde manier
-    # als eerder bij de Watchlist -- daar loste losse st.button()-widgets
-    # het wel op. Zelfde aanpak hier: 3 losse knoppen, hard in 1 rij
-    # gedwongen (flex-direction:row, flex-wrap:nowrap, overflow-x:auto),
-    # met ELKE kolom op flex:0 0 auto (content-breedte i.p.v. Streamlit's
-    # standaard 1/3-1/3-1/3-verdeling) zodat de RIJ als geheel kan
-    # scrollen i.p.v. dat de tekst BINNEN een te smalle kolom breekt.
-    current_discover_subview = st.session_state.get(
-        "discover_subview_active", st.query_params.get("subview", "discover"),
-    )
-    # JS-gebaseerde aanpak i.p.v. pure CSS -- na 3 mislukte CSS-only
-    # pogingen (Streamlit's eigen widget-layout bleef de flex-row-regels
-    # ergens intern overschrijven) stap ik over op dezelfde, al bewezen
-    # betrouwbare techniek als de footer-accordeon eerder: een
-    # ONZICHTBARE, ECHTE Streamlit-knop regelt de daadwerkelijke state-
-    # wissel (dus een normale, correcte rerun -- geen page-reload), en
-    # een volledig ZELF gebouwde HTML-rij is het zichtbare, klikbare
-    # element (100% eigen controle over de layout, niets dat Streamlit
-    # zelf nog kan overschrijven). JS koppelt een klik op de zichtbare
-    # rij aan een programmatische .click() op de bijbehorende, verborgen
-    # native knop.
-    _subnav_key = "discover_subnav_wrap"
-    _hidden_btns_key = "discover_subnav_hidden_buttons"
 
     st.markdown(
-        f'<style>.st-key-{_hidden_btns_key} {{ display:none !important; }}</style>',
+        f"""
+        <style>
+        .signature-signals-line {{ font-size: 0.72rem; }}
+        @media (min-width: 768px) {{ .signature-signals-line {{ font-size: 0.85rem !important; }} }}
+        </style>
+        <div id="signals" style="scroll-margin-top: 80px; background: rgba(2,6,23,0.4);
+                    border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
+                    padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
+            <span style="color:#64748B; font-size:0.68rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:1rem; display:block;">
+                HESTY'S SIGNATURE SIGNALS &mdash; 3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
+            </span>
+            <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128225; MOMENTOCRATS:</span> IDENTIFIES HIGH-QUALITY STOCKS TRADING BULLISH TODAY.
+            </p>
+            <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#127811; SNOWBALLERS:</span> FINDS PREMIUM, COMPOUNDING ASSETS AT AN ATTRACTIVE DISCOUNT.
+            </p>
+            <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128640; ROCKET LIST:</span> SPOTS ACCELERATING REVENUE GROWTH FOR HIGH-CONVICTION BETS.
+            </p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    with st.container(key=_hidden_btns_key):
-        for _subview_key, _subview_label in _discover_subview_options:
-            if st.button(_subview_label, key=f"discover_tab_btn_{_subview_key}"):
-                st.session_state["discover_subview_active"] = _subview_key
-                st.rerun()
 
-    _tabs_html = "".join(
-        f'<div class="discover-tab-visible{" discover-tab-active" if _k == current_discover_subview else ""}" '
-        f'data-target-label="{_label}">{_label}</div>'
-        for _k, _label in _discover_subview_options
+    def _email_pref_link(label: str):
+        """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
+        st.caption(f"{label} Manage in:")
+        st.page_link(settings_page, label="Settings")
+
+    def _next_weekly_scan_time() -> str:
+        """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
+        now = datetime.now(timezone.utc)
+        days_ahead = (5 - now.weekday()) % 7  # maandag=0 ... zaterdag=5
+        if days_ahead == 0 and now.hour >= 7:
+            days_ahead = 7  # het is al zaterdag na 07:00 UTC -> volgende week
+        next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
+        return next_date.strftime("%Y-%m-%d %H:%M UTC")
+
+    if current_user.is_logged_in:
+        import database
+        _current_prefs = database.get_user_preferences(current_user.email)
+        _is_premium_discover = database.is_premium_user(current_user.email)
+    else:
+        _current_prefs = {}
+        # Discover vereist bewust geen login -- maar tijdens de 'iedereen
+        # premium'-testfase moet dat OOK voor niet-ingelogde bezoekers
+        # gelden, niet alleen voor wie toevallig al is ingelogd.
+        try:
+            _is_premium_discover = st.secrets.get("app", {}).get("premium_free_for_all", False)
+        except Exception:
+            _is_premium_discover = False
+    _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
+
+    # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
+    st.markdown(
+        _uniform_section_header_html("Momentocrats", "sensors", is_first=False),
+        unsafe_allow_html=True,
     )
+    st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
+
+    # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
+    # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
+    # <a href="?...">), waardoor de expander steeds weer dichtklapte.
+    # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
+    # (geen page-reload), dus de expander-status blijft nu intact.
+    # Vlakke, minimalistische stijl -- zelfde patroon als de sub-tabs
+    # bovenaan de pagina en de Daily/All-time-toggle op Portfolio --
+    # i.p.v. de eerdere felle groene omlijning.
+    _momentum_tf_key = "momentocrats_timeframe_wrap"
     st.markdown(
         f'<style>'
-        f'.discover-tabs-row {{ display:flex; flex-direction:row; flex-wrap:nowrap; width:100%; '
-        f'align-items:center; gap:0.35rem; border-bottom:1px solid rgba(15,23,42,0.9); '
-        f'padding:0 0.25rem 0.75rem 0.25rem; margin-bottom:2rem; box-sizing:border-box; }} '
-        f'.discover-tab-visible {{ flex-shrink:0; white-space:nowrap; cursor:pointer; '
-        f'background:transparent; color:#8992A3; font-weight:700; text-transform:uppercase; '
-        f'letter-spacing:0.05em; font-size:0.625rem; padding:0.25rem 0.6rem; border-radius:8px; '
-        f'font-family:\'Inter\', sans-serif !important; user-select:none; -webkit-user-select:none; }} '
-        f'.discover-tab-active {{ background:rgba(31,174,150,0.15); color:#1FAE96; }} '
-        f'@media (min-width: 768px) {{ '
-        f'.discover-tab-visible {{ font-size:0.85rem; padding:0.4rem 1rem; }} '
-        f'}} '
-        f'</style>'
-        f'<div class="discover-tabs-row">{_tabs_html}</div>',
+        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] {{ '
+        f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button, '
+        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label {{ '
+        f'border:none !important; outline:none !important; box-shadow:none !important; '
+        f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
+        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
+        f'</style>',
         unsafe_allow_html=True,
     )
-    components.html(
-        f"""
-        <script>
-        function hestyBindDiscoverTabs() {{
-            var doc = window.parent.document;
-            if (doc.body.__hestyDiscoverTabsBound) {{ return; }}
-            doc.body.__hestyDiscoverTabsBound = true;
-            doc.body.addEventListener('click', function(e) {{
-                var tab = e.target.closest('.discover-tab-visible');
-                if (!tab) {{ return; }}
-                var label = tab.getAttribute('data-target-label');
-                var hiddenContainer = doc.querySelector('.st-key-{_hidden_btns_key}');
-                if (!hiddenContainer) {{ return; }}
-                var buttons = hiddenContainer.querySelectorAll('button');
-                for (var i = 0; i < buttons.length; i++) {{
-                    if (buttons[i].textContent.trim() === label) {{
-                        buttons[i].click();
-                        break;
-                    }}
-                }}
-            }});
-        }}
-        hestyBindDiscoverTabs();
-        </script>
-        """,
-        height=0,
-    )
-
-    if current_discover_subview == "discover":
-        if not current_user.is_logged_in:
-            st.markdown(
-                '<style>'
-                '.discover-hero { text-align:left; padding:0.5rem 0 0; width:100%; '
-                'max-width:100%; box-sizing:border-box; overflow-x:hidden; margin-bottom:2rem; }'
-                '.discover-hero-buttons { margin-top:1.5rem; display:flex; flex-direction:row; '
-                'gap:1rem; justify-content:flex-start; align-items:center; width:100%; '
-                'box-sizing:border-box; }'
-                '.discover-hero-btn { font-weight:600 !important; font-size:0.875rem !important; '
-                'padding:0.625rem 1.5rem !important; border-radius:10px !important; '
-                'text-decoration:none !important; box-sizing:border-box !important; text-align:center !important; '
-                'line-height:1.2 !important; white-space:nowrap !important; display:inline-block !important; }'
-                '.discover-hero-btn-primary, .discover-hero-btn-primary:link, .discover-hero-btn-primary:visited {'
-                'background:#1FAE96 !important; color:#0B111E !important; border:none !important; }'
-                '.discover-hero-btn-secondary, .discover-hero-btn-secondary:link, .discover-hero-btn-secondary:visited {'
-                'background:transparent !important; color:#EAEDF1 !important; '
-                'border:1px solid rgba(148,163,184,0.35) !important; }'
-                '@media (max-width:768px) { '
-                '.discover-hero-buttons { flex-direction:column; align-items:stretch; width:100%; '
-                'gap:0.75rem; padding:0 1rem; } '
-                '.discover-hero-btn { width:100%; white-space:normal; } '
-                '} '
-                '</style>'
-                '<div id="hero-top" class="discover-hero">'
-                '<div style="color:#F8FAFC; font-size:1.75rem; font-weight:800; text-transform:uppercase; '
-                'letter-spacing:0.01em; line-height:1.3;">Your Investing Edge,<br>'
-                '<span style="color:#1FAE96;">Built Around You.</span></div>'
-                '<div class="discover-hero-buttons">'
-                '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
-                'Start free, in seconds &rarr;</a>'
-                '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
-                'Browse today\'s signals</a>'
-                '</div>'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-
-
-    if current_discover_subview == "sectors_themes":
-        # --- Sector rotation -- geen expander meer: content staat gewoon
-        # altijd zichtbaar op de pagina (scrollend), zoals moderne sites
-        # dit doen -- een accordion voegde hier geen overzicht toe, het
-        # verstopte 'm juist onnodig achter een klik.
-        st.markdown(
-            _uniform_section_header_html("Sector rotation", "sync", is_first=True),
-            unsafe_allow_html=True,
+    with st.container(key=_momentum_tf_key):
+        current_timeframe = st.segmented_control(
+            "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
+            default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
         )
-        st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
-        region = st.segmented_control(
-            "Region", options=["US", "EU"], selection_mode="single",
-            default="US", key="sector_region", label_visibility="collapsed",
-        )
-        if region is None:
-            region = "US"
-        with st.spinner("Checking sector performance..."):
-            rotation = build_sector_rotation(region=region)
-        if rotation:
-            _render_rotation_tiles(rotation, "sector")
+    if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
+        current_timeframe = "Daily"
+    csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
+
+    df_screener = load_screener_data(csv_file)
+    if df_screener is None or df_screener.empty:
+        st.info("No results yet -- check back after the next scheduled scan.")
+    else:
+        df_screener = df_screener.sort_values("score", ascending=False)
+
+        # Weergave-drempel op 7.5 (i.p.v. 8.0) -- op verzoek ook de
+        # 'net iets minder dan 8, maar nog steeds sterk'-signalen
+        # tonen. De ⭐-ster (verderop, bij standout=row["score"]>=8.0)
+        # blijft WEL op 8.0 staan -- die markeert specifiek de écht
+        # uitzonderlijke signalen, 7.5-7.9 wordt dus wel getoond maar
+        # zonder ster. Een max-cap (_STANDOUT_DISPLAY_CAP) blijft als
+        # vangnet voor het (zeldzame) geval dat er heel veel
+        # kwalificerende signalen in 1 week zijn.
+        standouts = df_screener[df_screener["score"] >= 7.5]
+        total_matching = len(df_screener)
+        if not standouts.empty:
+            filtered = standouts.head(_STANDOUT_DISPLAY_CAP)
+            caption_intro = f"{len(filtered)} standout signal(s) (score 7.5+) of {total_matching} total matches"
         else:
-            st.caption("No sector data available right now.")
+            # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
+            # de sectie helemaal leeg te laten ogen.
+            filtered = df_screener.head(3)
+            caption_intro = f"No score-7.5+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
 
+        # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
+        # dat dwingt op mobiel dubbel scrollen af, verticaal EN
+        # horizontaal). 'Weeks ago'/'Days ago' verschilt per
+        # tijdvenster (weekly.csv heeft weken_geleden, daily.csv
+        # heeft dagen_geleden) -- beide velden afgehandeld.
+        cards_html = []
+        for _, row in filtered.iterrows():
+            secondary = []
+            if "dagen_geleden" in row.index and pd.notna(row.get("dagen_geleden")):
+                secondary.append(("Flipped", f"{int(row['dagen_geleden'])}d ago"))
+            elif "weken_geleden" in row.index and pd.notna(row.get("weken_geleden")):
+                secondary.append(("Flipped", f"{int(row['weken_geleden'])}w ago"))
+            if pd.notna(row.get("sinds_omslag_pct")):
+                secondary.append(("Since flip", f"{row['sinds_omslag_pct']:+.1f}%"))
+            if pd.notna(row.get("roic_pct")):
+                secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+            if pd.notna(row.get("relatieve_sterkte")):
+                secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+            cards_html.append(_signal_card_html(
+                row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
+                standout=row["score"] >= 8.0,
+            ))
+        _render_signal_cards(cards_html)
+        # Voor niet-ingelogde bezoekers: een subtiele teaser-link i.p.v.
+        # een compleet 2e formulier hier (2 volledige e-mailformulieren
+        # zo kort na elkaar oogde druk) -- verwijst naar het ENE, grote
+        # centrale formulier onderaan de pagina (zie
+        # _render_discover_signup_form(), na Rocket List). Alleen
+        # getoond als er daadwerkelijk meer te unlocken valt.
+        if not current_user.is_logged_in:
+            _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
+            if _remaining_momentocrats > 0:
+                st.markdown(
+                    '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
+                    'Activate daily alerts &rarr;</a>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
+            if _signal_display_limit is not None and total_matching > _signal_display_limit and not _is_premium_discover:
+                st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
+                        f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
+
+    # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
+    st.markdown(
+        _uniform_section_header_html("Snowballers", "savings", is_first=False),
+        unsafe_allow_html=True,
+    )
+    st.caption("Quality companies trading below fair value, with low volatility. For the "
+               "long-term investor -- no fresh trend flip required.")
+    if os.path.exists("snowball_signals.csv"):
+        df_snowball = pd.read_csv("snowball_signals.csv")
+        if not df_snowball.empty:
+            df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
+            total_snowball = len(df_snowball)
+
+            # Alleen de STANDOUT-resultaten (20%+ onder fair value)
+            # standaard tonen i.p.v. simpelweg de top-N -- zelfde reden
+            # als bij Momentocrats: voorkomt een eindeloze muur kaarten
+            # bij veel wekelijkse matches.
+            snowball_standouts = df_snowball[df_snowball["afwijking_fair_value_pct"] <= -20.0]
+            if not snowball_standouts.empty:
+                df_snowball = snowball_standouts.head(_STANDOUT_DISPLAY_CAP)
+                snowball_caption_intro = f"{len(df_snowball)} standout(s) (20%+ below fair value) of {total_snowball} total matches"
+            else:
+                df_snowball = df_snowball.head(3)
+                snowball_caption_intro = f"No 20%+ standouts right now -- showing the top {len(df_snowball)} of {total_snowball} matches"
+
+            # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
+            # gebruikelijke +/- logica: een NEGATIEVE afwijking van
+            # fair value betekent 'goedkoper dan terecht' -- precies
+            # wat je wil bij dit signaaltype, dus GROEN, niet rood.
+            # Standout (ster) bij 20%+ onder fair value -- de écht
+            # opvallende koopjes.
+            cards_html = []
+            for _, row in df_snowball.iterrows():
+                secondary = []
+                if pd.notna(row.get("roic_pct")):
+                    secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
+                if pd.notna(row.get("volatiliteit_pct")):
+                    secondary.append(("Volatility", f"{row['volatiliteit_pct']:.1f}%"))
+                if pd.notna(row.get("prijs_nu")):
+                    secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                cards_html.append(_signal_card_html(
+                    row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
+                    row["afwijking_fair_value_pct"] < 0, secondary,
+                    standout=row["afwijking_fair_value_pct"] <= -20.0,
+                ))
+            _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
+            if not current_user.is_logged_in:
+                _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
+                if _remaining_snowballers > 0:
+                    _render_unlock_premium_button("snowballers")
+            else:
+                st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
+                if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
+                    st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
+                            f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
+        else:
+            st.caption("No stocks currently meet the Snowballers criteria.")
+    else:
+        st.caption("No data yet -- this updates once a week via the scheduled scan.")
+
+    # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
+    st.markdown(
+        _uniform_section_header_html("Rocket List", "rocket_launch", is_first=False),
+        unsafe_allow_html=True,
+    )
+    st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
+               "with more risk in exchange for growth potential.")
+    if os.path.exists("rocket_list_signals.csv"):
+        df_rocket = pd.read_csv("rocket_list_signals.csv")
+        if not df_rocket.empty:
+            df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
+            total_rocket = len(df_rocket)
+
+            # Alleen de STANDOUT-resultaten (25%+ groei) standaard tonen
+            # i.p.v. simpelweg de top-N -- exact het gemelde probleem
+            # (soms 50-60+ matches, een eindeloze muur op mobiel).
+            rocket_standouts = df_rocket[df_rocket["groei_pct"] >= 25.0]
+            if not rocket_standouts.empty:
+                df_rocket = rocket_standouts.head(_STANDOUT_DISPLAY_CAP)
+                rocket_caption_intro = f"{len(df_rocket)} standout(s) (25%+ growth) of {total_rocket} total matches"
+            else:
+                df_rocket = df_rocket.head(3)
+                rocket_caption_intro = f"No 25%+ standouts right now -- showing the top {len(df_rocket)} of {total_rocket} matches"
+
+            # Standout (ster) bij 25%+ groei -- de écht opvallende
+            # versnellers.
+            cards_html = []
+            for _, row in df_rocket.iterrows():
+                secondary = []
+                if pd.notna(row.get("relatieve_sterkte")):
+                    secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
+                if pd.notna(row.get("prijs_nu")):
+                    secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
+                cards_html.append(_signal_card_html(
+                    row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
+                    standout=row["groei_pct"] >= 25.0,
+                ))
+            _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
+            if not current_user.is_logged_in:
+                _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
+                if _remaining_rocket > 0:
+                    _render_unlock_premium_button("rocket_list")
+            else:
+                st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
+                           f"Next update: {_next_weekly_scan_time()}.")
+                if _signal_display_limit is not None and total_rocket > _signal_display_limit and not _is_premium_discover:
+                    st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
+                            f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
+        else:
+            st.caption("No stocks currently meet the Rocket List criteria.")
+    else:
+        st.caption("No data yet -- this updates once a week via the scheduled scan.")
+
+    # --- HET ene, centrale e-mail-activatieblok -- de grote afsluiter
+    # van de Discover-pagina voor niet-ingelogde bezoekers, na alle 3
+    # de screeners. De teaser-links onder Momentocrats/Snowballers
+    # scrollen hier met een smooth-scroll naartoe. ---
+    if not current_user.is_logged_in:
+        _render_discover_signup_form()
+    else:
+        # 'Manage in: Settings' is alleen zinvol voor een ingelogde
+        # gebruiker (die HEEFT immers toegang tot Settings) -- voor een
+        # niet-ingelogde bezoeker is dit een verwarrende, dode link naar
+        # een pagina die 'ie nog niet kan bereiken.
+        st.divider()
+        _email_pref_link("Want this weekly by email?")
+
+
+
+def render_discover_sectors_themes():
+    # --- Sector rotation -- geen expander meer: content staat gewoon
+    # altijd zichtbaar op de pagina (scrollend), zoals moderne sites
+    # dit doen -- een accordion voegde hier geen overzicht toe, het
+    # verstopte 'm juist onnodig achter een klik.
+    st.markdown(
+        _uniform_section_header_html("Sector rotation", "sync", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
+    region = st.segmented_control(
+        "Region", options=["US", "EU"], selection_mode="single",
+        default="US", key="sector_region", label_visibility="collapsed",
+    )
+    if region is None:
+        region = "US"
+    with st.spinner("Checking sector performance..."):
+        rotation = build_sector_rotation(region=region)
+    if rotation:
+        _render_rotation_tiles(rotation, "sector")
+    else:
+        st.caption("No sector data available right now.")
+
+    st.markdown(
+        '<div style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+        'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Trend</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("A line crossing zero is a rotation signal.")
+    with st.spinner("Building trend chart..."):
+        rotation_trend = build_sector_rotation_trend(region=region)
+    if rotation_trend:
+        all_trend_sectors = list(rotation_trend.keys())
+        # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
+        # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
+        default_sectors = sorted(
+            all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
+        )[:5]
         st.markdown(
             '<div style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
-            'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Trend</div>',
+            'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Sectors to compare</div>',
             unsafe_allow_html=True,
         )
-        st.caption("A line crossing zero is a rotation signal.")
-        with st.spinner("Building trend chart..."):
-            rotation_trend = build_sector_rotation_trend(region=region)
-        if rotation_trend:
-            all_trend_sectors = list(rotation_trend.keys())
-            # Standaard: de top-5 op basis van het HUIDIGE (laatste) rendement --
-            # voorkomt dat de grafiek meteen met alle 11 lijnen chaotisch oogt.
-            default_sectors = sorted(
-                all_trend_sectors, key=lambda s: rotation_trend[s]["values"][-1], reverse=True
-            )[:5]
-            st.markdown(
-                '<div style="font-size:0.72rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
-                'color:#94A3B8; margin-top:1.5rem; margin-bottom:0.5rem;">Sectors to compare</div>',
-                unsafe_allow_html=True,
-            )
-            selected_sectors = st.multiselect(
-                "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
-                label_visibility="collapsed",
-            )
-            if selected_sectors:
-                trend_fig = go.Figure()
-                trend_palette = [
-                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
-                ]
-                for i, sector in enumerate(selected_sectors):
-                    series = rotation_trend[sector]
-                    trend_fig.add_trace(go.Scatter(
-                        x=series["dates"], y=series["values"], mode="lines", name=sector,
-                        line=dict(color=trend_palette[i % len(trend_palette)], width=2),
-                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
-                    ))
-                trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                trend_fig.update_layout(
-                    yaxis_title="Trailing 1-month return (%)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    height=420,
-                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                )
-                st.plotly_chart(trend_fig, width="stretch")
-            else:
-                st.caption("Select at least 1 sector above to see the trend chart.")
-        else:
-            st.caption("No trend data available right now.")
-
-        # --- Themes -- geen expander meer, zelfde reden als Sector rotation
-        # hierboven. Apart van de officiële GICS-sectoren gehouden (anders
-        # zou een bedrijf dubbel meetellen). ---
-        st.markdown(
-            _uniform_section_header_html("Themes", "lightbulb", is_first=False),
-            unsafe_allow_html=True,
+        selected_sectors = st.multiselect(
+            "Sectors to compare", all_trend_sectors, default=default_sectors, key="sector_trend_selection",
+            label_visibility="collapsed",
         )
-        st.caption("How popular investing themes are doing right now (1-month trailing).")
-        with st.spinner("Checking theme performance..."):
-            theme_rotation = build_theme_rotation()
-        if theme_rotation:
-            _render_rotation_tiles(theme_rotation, "theme")
-        else:
-            st.caption("No theme data available right now.")
-
-        st.markdown("**Trend**")
-        st.caption("A line crossing zero is a rotation signal.")
-        with st.spinner("Building trend chart..."):
-            theme_trend = build_theme_rotation_trend()
-        if theme_trend:
-            all_trend_themes = list(theme_trend.keys())
-            # Nu er 11 thema's zijn (was 5), standaard de top-5 op basis
-            # van het HUIDIGE (laatste) rendement tonen -- zelfde aanpak
-            # als bij Sectors, voorkomt dat de grafiek meteen met 11
-            # lijnen chaotisch oogt.
-            default_themes = sorted(
-                all_trend_themes, key=lambda t: theme_trend[t]["values"][-1], reverse=True
-            )[:5]
-            selected_themes = st.multiselect(
-                "Themes to compare", all_trend_themes, default=default_themes, key="theme_trend_selection",
-            )
-            if selected_themes:
-                theme_fig = go.Figure()
-                theme_palette = [
-                    "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
-                    "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
-                ]
-                for i, theme in enumerate(selected_themes):
-                    series = theme_trend[theme]
-                    theme_fig.add_trace(go.Scatter(
-                        x=series["dates"], y=series["values"], mode="lines", name=theme,
-                        line=dict(color=theme_palette[i % len(theme_palette)], width=2),
-                        hovertemplate="%{x}: %{y:+.1f}%<extra>" + theme + "</extra>",
-                    ))
-                theme_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
-                theme_fig.update_layout(
-                    yaxis_title="Trailing 1-month return (%)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                    legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    height=420,
-                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                )
-                st.plotly_chart(theme_fig, width="stretch")
-            else:
-                st.caption("Select at least 1 theme above to see the trend chart.")
-        else:
-            st.caption("No trend data available right now.")
-
-    elif current_discover_subview == "earnings_surprises":
-        st.markdown(
-            _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
-            unsafe_allow_html=True,
-        )
-        st.caption("Notable earnings beats/misses among today's and this week's signals -- "
-                   "only shown during earnings season (last 60 days).")
-        surprises = get_earnings_surprises_from_signals(max_items=5)
-        if surprises:
-            cards_html = [
-                _signal_card_html(
-                    s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
-                    s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
-                    standout=abs(s["earnings_surprise_pct"]) >= 15.0, neutral_border=True,
-                )
-                for s in surprises
+        if selected_sectors:
+            trend_fig = go.Figure()
+            trend_palette = [
+                "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
             ]
-            _render_signal_cards(cards_html)
+            for i, sector in enumerate(selected_sectors):
+                series = rotation_trend[sector]
+                trend_fig.add_trace(go.Scatter(
+                    x=series["dates"], y=series["values"], mode="lines", name=sector,
+                    line=dict(color=trend_palette[i % len(trend_palette)], width=2),
+                    hovertemplate="%{x}: %{y:+.1f}%<extra>" + sector + "</extra>",
+                ))
+            trend_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+            trend_fig.update_layout(
+                yaxis_title="Trailing 1-month return (%)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=420,
+                xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+            )
+            st.plotly_chart(trend_fig, width="stretch")
+        else:
+            st.caption("Select at least 1 sector above to see the trend chart.")
+    else:
+        st.caption("No trend data available right now.")
+
+    # --- Themes -- geen expander meer, zelfde reden als Sector rotation
+    # hierboven. Apart van de officiële GICS-sectoren gehouden (anders
+    # zou een bedrijf dubbel meetellen). ---
+    st.markdown(
+        _uniform_section_header_html("Themes", "lightbulb", is_first=False),
+        unsafe_allow_html=True,
+    )
+    st.caption("How popular investing themes are doing right now (1-month trailing).")
+    with st.spinner("Checking theme performance..."):
+        theme_rotation = build_theme_rotation()
+    if theme_rotation:
+        _render_rotation_tiles(theme_rotation, "theme")
+    else:
+        st.caption("No theme data available right now.")
+
+    st.markdown("**Trend**")
+    st.caption("A line crossing zero is a rotation signal.")
+    with st.spinner("Building trend chart..."):
+        theme_trend = build_theme_rotation_trend()
+    if theme_trend:
+        all_trend_themes = list(theme_trend.keys())
+        # Nu er 11 thema's zijn (was 5), standaard de top-5 op basis
+        # van het HUIDIGE (laatste) rendement tonen -- zelfde aanpak
+        # als bij Sectors, voorkomt dat de grafiek meteen met 11
+        # lijnen chaotisch oogt.
+        default_themes = sorted(
+            all_trend_themes, key=lambda t: theme_trend[t]["values"][-1], reverse=True
+        )[:5]
+        selected_themes = st.multiselect(
+            "Themes to compare", all_trend_themes, default=default_themes, key="theme_trend_selection",
+        )
+        if selected_themes:
+            theme_fig = go.Figure()
+            theme_palette = [
+                "#1FAE96", "#E8A93C", "#E5484D", "#3ED9C4", "#8992A3",
+                "#5AC8B0", "#F5C518", "#C77DFF", "#4DA6FF", "#FF8A5C", "#B0E0D8",
+            ]
+            for i, theme in enumerate(selected_themes):
+                series = theme_trend[theme]
+                theme_fig.add_trace(go.Scatter(
+                    x=series["dates"], y=series["values"], mode="lines", name=theme,
+                    line=dict(color=theme_palette[i % len(theme_palette)], width=2),
+                    hovertemplate="%{x}: %{y:+.1f}%<extra>" + theme + "</extra>",
+                ))
+            theme_fig.add_hline(y=0, line_dash="dash", line_color="#8992A3", line_width=1)
+            theme_fig.update_layout(
+                yaxis_title="Trailing 1-month return (%)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, font=dict(size=10)),
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=420,
+                xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+                yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
+            )
+            st.plotly_chart(theme_fig, width="stretch")
+        else:
+            st.caption("Select at least 1 theme above to see the trend chart.")
+    else:
+        st.caption("No trend data available right now.")
+
+
+
+def render_discover_earnings_surprises():
+    st.markdown(
+        _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.caption("Notable earnings beats/misses among today's and this week's signals -- "
+               "only shown during earnings season (last 60 days).")
+    surprises = get_earnings_surprises_from_signals(max_items=5)
+    if surprises:
+        cards_html = [
+            _signal_card_html(
+                s["ticker"], "Earnings surprise", f"{s['earnings_surprise_pct']:+.1f}%",
+                s["earnings_beat"], [("Reported", str(s["earnings_date"])[:10])],
+                standout=abs(s["earnings_surprise_pct"]) >= 15.0, neutral_border=True,
+            )
+            for s in surprises
+        ]
+        # Zelfde soft-lock als Snowballers/Rocket List: eerste 3 kaarten
+        # (de bewijslast) volledig zichtbaar, alles vanaf kaart 4 geblurd
+        # met een slotje-overlay voor niet-ingelogde bezoekers.
+        _render_signal_cards(cards_html, blur_from_index=(3 if not current_user.is_logged_in else None))
+        if not current_user.is_logged_in:
+            if len(surprises) > 3:
+                _render_unlock_premium_button(
+                    "earnings_surprises",
+                    label="Unlock all earnings catalysts with a free account \u2192",
+                )
+        else:
             st.caption(f"Updated {file_last_modified('supertrend_signals_daily.csv')} (daily), "
                        f"{file_last_modified('supertrend_signals.csv')} (weekly). "
                        "⭐ = 15%+ surprise, in either direction.")
-        else:
-            st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
-
     else:
-        st.markdown(
-            f"""
-            <style>
-            .signature-signals-line {{ font-size: 0.72rem; }}
-            @media (min-width: 768px) {{ .signature-signals-line {{ font-size: 0.85rem !important; }} }}
-            </style>
-            <div id="signals" style="scroll-margin-top: 80px; background: rgba(2,6,23,0.4);
-                        border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
-                        padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
-                <span style="color:#64748B; font-size:0.68rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:1rem; display:block;">
-                    HESTY'S SIGNATURE SIGNALS &mdash; 3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
-                </span>
-                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128225; MOMENTOCRATS:</span> IDENTIFIES HIGH-QUALITY STOCKS TRADING BULLISH TODAY.
-                </p>
-                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#127811; SNOWBALLERS:</span> FINDS PREMIUM, COMPOUNDING ASSETS AT AN ATTRACTIVE DISCOUNT.
-                </p>
-                <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                    <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128640; ROCKET LIST:</span> SPOTS ACCELERATING REVENUE GROWTH FOR HIGH-CONVICTION BETS.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        def _email_pref_link(label: str):
-            """Simpele verwijzing naar Settings om deze e-mail-voorkeur te beheren (i.p.v. een losse toggle hier)."""
-            st.caption(f"{label} Manage in:")
-            st.page_link(settings_page, label="Settings")
-
-        def _next_weekly_scan_time() -> str:
-            """Berekent het volgende geplande wekelijkse-scan-moment (zaterdag 07:00 UTC)."""
-            now = datetime.now(timezone.utc)
-            days_ahead = (5 - now.weekday()) % 7  # maandag=0 ... zaterdag=5
-            if days_ahead == 0 and now.hour >= 7:
-                days_ahead = 7  # het is al zaterdag na 07:00 UTC -> volgende week
-            next_date = (now + timedelta(days=days_ahead)).replace(hour=7, minute=0, second=0, microsecond=0)
-            return next_date.strftime("%Y-%m-%d %H:%M UTC")
-
-        if current_user.is_logged_in:
-            import database
-            _current_prefs = database.get_user_preferences(current_user.email)
-            _is_premium_discover = database.is_premium_user(current_user.email)
-        else:
-            _current_prefs = {}
-            # Discover vereist bewust geen login -- maar tijdens de 'iedereen
-            # premium'-testfase moet dat OOK voor niet-ingelogde bezoekers
-            # gelden, niet alleen voor wie toevallig al is ingelogd.
-            try:
-                _is_premium_discover = st.secrets.get("app", {}).get("premium_free_for_all", False)
-            except Exception:
-                _is_premium_discover = False
-        _signal_display_limit = None if _is_premium_discover else 3  # None = pandas .head(None) geeft alles terug
-
-        # --- Momentocrats (bestaande, ongewijzigde signaal-logica) ---
-        st.markdown(
-            _uniform_section_header_html("Momentocrats", "sensors", is_first=False),
-            unsafe_allow_html=True,
-        )
-        st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
-
-        # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
-        # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
-        # <a href="?...">), waardoor de expander steeds weer dichtklapte.
-        # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
-        # (geen page-reload), dus de expander-status blijft nu intact.
-        # Vlakke, minimalistische stijl -- zelfde patroon als de sub-tabs
-        # bovenaan de pagina en de Daily/All-time-toggle op Portfolio --
-        # i.p.v. de eerdere felle groene omlijning.
-        _momentum_tf_key = "momentocrats_timeframe_wrap"
-        st.markdown(
-            f'<style>'
-            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] {{ '
-            f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
-            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button, '
-            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label {{ '
-            f'border:none !important; outline:none !important; box-shadow:none !important; '
-            f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
-            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
-            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
-            f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
-            f'</style>',
-            unsafe_allow_html=True,
-        )
-        with st.container(key=_momentum_tf_key):
-            current_timeframe = st.segmented_control(
-                "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
-                default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
-            )
-        if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
-            current_timeframe = "Daily"
-        csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
-
-        df_screener = load_screener_data(csv_file)
-        if df_screener is None or df_screener.empty:
-            st.info("No results yet -- check back after the next scheduled scan.")
-        else:
-            df_screener = df_screener.sort_values("score", ascending=False)
-
-            # Weergave-drempel op 7.5 (i.p.v. 8.0) -- op verzoek ook de
-            # 'net iets minder dan 8, maar nog steeds sterk'-signalen
-            # tonen. De ⭐-ster (verderop, bij standout=row["score"]>=8.0)
-            # blijft WEL op 8.0 staan -- die markeert specifiek de écht
-            # uitzonderlijke signalen, 7.5-7.9 wordt dus wel getoond maar
-            # zonder ster. Een max-cap (_STANDOUT_DISPLAY_CAP) blijft als
-            # vangnet voor het (zeldzame) geval dat er heel veel
-            # kwalificerende signalen in 1 week zijn.
-            standouts = df_screener[df_screener["score"] >= 7.5]
-            total_matching = len(df_screener)
-            if not standouts.empty:
-                filtered = standouts.head(_STANDOUT_DISPLAY_CAP)
-                caption_intro = f"{len(filtered)} standout signal(s) (score 7.5+) of {total_matching} total matches"
-            else:
-                # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
-                # de sectie helemaal leeg te laten ogen.
-                filtered = df_screener.head(3)
-                caption_intro = f"No score-7.5+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
-
-            # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
-            # dat dwingt op mobiel dubbel scrollen af, verticaal EN
-            # horizontaal). 'Weeks ago'/'Days ago' verschilt per
-            # tijdvenster (weekly.csv heeft weken_geleden, daily.csv
-            # heeft dagen_geleden) -- beide velden afgehandeld.
-            cards_html = []
-            for _, row in filtered.iterrows():
-                secondary = []
-                if "dagen_geleden" in row.index and pd.notna(row.get("dagen_geleden")):
-                    secondary.append(("Flipped", f"{int(row['dagen_geleden'])}d ago"))
-                elif "weken_geleden" in row.index and pd.notna(row.get("weken_geleden")):
-                    secondary.append(("Flipped", f"{int(row['weken_geleden'])}w ago"))
-                if pd.notna(row.get("sinds_omslag_pct")):
-                    secondary.append(("Since flip", f"{row['sinds_omslag_pct']:+.1f}%"))
-                if pd.notna(row.get("roic_pct")):
-                    secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
-                if pd.notna(row.get("relatieve_sterkte")):
-                    secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
-                cards_html.append(_signal_card_html(
-                    row["ticker"], "Score (out of 10)", f"{row['score']:.1f}", True, secondary,
-                    standout=row["score"] >= 8.0,
-                ))
-            _render_signal_cards(cards_html)
-            # Voor niet-ingelogde bezoekers: een subtiele teaser-link i.p.v.
-            # een compleet 2e formulier hier (2 volledige e-mailformulieren
-            # zo kort na elkaar oogde druk) -- verwijst naar het ENE, grote
-            # centrale formulier onderaan de pagina (zie
-            # _render_discover_signup_form(), na Rocket List). Alleen
-            # getoond als er daadwerkelijk meer te unlocken valt.
-            if not current_user.is_logged_in:
-                _remaining_momentocrats = max(total_matching - (_signal_display_limit or 0), 0)
-                if _remaining_momentocrats > 0:
-                    st.markdown(
-                        '<a href="#activate-signals" target="_self" class="discover-teaser-link">'
-                        'Activate daily alerts &rarr;</a>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
-                if _signal_display_limit is not None and total_matching > _signal_display_limit and not _is_premium_discover:
-                    st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
-                            f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
-
-        # --- Snowball Signal (nieuw, wekelijks-only: kwaliteit + goede prijs) ---
-        st.markdown(
-            _uniform_section_header_html("Snowballers", "savings", is_first=False),
-            unsafe_allow_html=True,
-        )
-        st.caption("Quality companies trading below fair value, with low volatility. For the "
-                   "long-term investor -- no fresh trend flip required.")
-        if os.path.exists("snowball_signals.csv"):
-            df_snowball = pd.read_csv("snowball_signals.csv")
-            if not df_snowball.empty:
-                df_snowball = df_snowball.sort_values("afwijking_fair_value_pct", ascending=True)
-                total_snowball = len(df_snowball)
-
-                # Alleen de STANDOUT-resultaten (20%+ onder fair value)
-                # standaard tonen i.p.v. simpelweg de top-N -- zelfde reden
-                # als bij Momentocrats: voorkomt een eindeloze muur kaarten
-                # bij veel wekelijkse matches.
-                snowball_standouts = df_snowball[df_snowball["afwijking_fair_value_pct"] <= -20.0]
-                if not snowball_standouts.empty:
-                    df_snowball = snowball_standouts.head(_STANDOUT_DISPLAY_CAP)
-                    snowball_caption_intro = f"{len(df_snowball)} standout(s) (20%+ below fair value) of {total_snowball} total matches"
-                else:
-                    df_snowball = df_snowball.head(3)
-                    snowball_caption_intro = f"No 20%+ standouts right now -- showing the top {len(df_snowball)} of {total_snowball} matches"
-
-                # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
-                # gebruikelijke +/- logica: een NEGATIEVE afwijking van
-                # fair value betekent 'goedkoper dan terecht' -- precies
-                # wat je wil bij dit signaaltype, dus GROEN, niet rood.
-                # Standout (ster) bij 20%+ onder fair value -- de écht
-                # opvallende koopjes.
-                cards_html = []
-                for _, row in df_snowball.iterrows():
-                    secondary = []
-                    if pd.notna(row.get("roic_pct")):
-                        secondary.append(("ROIC", f"{row['roic_pct']:+.1f}%"))
-                    if pd.notna(row.get("volatiliteit_pct")):
-                        secondary.append(("Volatility", f"{row['volatiliteit_pct']:.1f}%"))
-                    if pd.notna(row.get("prijs_nu")):
-                        secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
-                    cards_html.append(_signal_card_html(
-                        row["ticker"], "Vs fair value", f"{row['afwijking_fair_value_pct']:+.1f}%",
-                        row["afwijking_fair_value_pct"] < 0, secondary,
-                        standout=row["afwijking_fair_value_pct"] <= -20.0,
-                    ))
-                _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
-                if not current_user.is_logged_in:
-                    _remaining_snowballers = max(total_snowball - (_signal_display_limit or 0), 0)
-                    if _remaining_snowballers > 0:
-                        _render_unlock_premium_button("snowballers")
-                else:
-                    st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
-                    if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
-                        st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
-                                f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
-            else:
-                st.caption("No stocks currently meet the Snowballers criteria.")
-        else:
-            st.caption("No data yet -- this updates once a week via the scheduled scan.")
-
-        # --- Rocket List (nieuw, wekelijks-only: versnellende groei + momentum) ---
-        st.markdown(
-            _uniform_section_header_html("Rocket List", "rocket_launch", is_first=False),
-            unsafe_allow_html=True,
-        )
-        st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
-                   "with more risk in exchange for growth potential.")
-        if os.path.exists("rocket_list_signals.csv"):
-            df_rocket = pd.read_csv("rocket_list_signals.csv")
-            if not df_rocket.empty:
-                df_rocket = df_rocket.sort_values("groei_pct", ascending=False)
-                total_rocket = len(df_rocket)
-
-                # Alleen de STANDOUT-resultaten (25%+ groei) standaard tonen
-                # i.p.v. simpelweg de top-N -- exact het gemelde probleem
-                # (soms 50-60+ matches, een eindeloze muur op mobiel).
-                rocket_standouts = df_rocket[df_rocket["groei_pct"] >= 25.0]
-                if not rocket_standouts.empty:
-                    df_rocket = rocket_standouts.head(_STANDOUT_DISPLAY_CAP)
-                    rocket_caption_intro = f"{len(df_rocket)} standout(s) (25%+ growth) of {total_rocket} total matches"
-                else:
-                    df_rocket = df_rocket.head(3)
-                    rocket_caption_intro = f"No 25%+ standouts right now -- showing the top {len(df_rocket)} of {total_rocket} matches"
-
-                # Standout (ster) bij 25%+ groei -- de écht opvallende
-                # versnellers.
-                cards_html = []
-                for _, row in df_rocket.iterrows():
-                    secondary = []
-                    if pd.notna(row.get("relatieve_sterkte")):
-                        secondary.append(("Rel. strength", f"{row['relatieve_sterkte']:+.1f}%"))
-                    if pd.notna(row.get("prijs_nu")):
-                        secondary.append(("Price", f"{row['prijs_nu']:.2f}"))
-                    cards_html.append(_signal_card_html(
-                        row["ticker"], "Growth", f"{row['groei_pct']:+.1f}%", True, secondary,
-                        standout=row["groei_pct"] >= 25.0,
-                    ))
-                _render_signal_cards(cards_html, blur_from_index=(1 if not current_user.is_logged_in else None))
-                if not current_user.is_logged_in:
-                    _remaining_rocket = max(total_rocket - (_signal_display_limit or 0), 0)
-                    if _remaining_rocket > 0:
-                        _render_unlock_premium_button("rocket_list")
-                else:
-                    st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
-                               f"Next update: {_next_weekly_scan_time()}.")
-                    if _signal_display_limit is not None and total_rocket > _signal_display_limit and not _is_premium_discover:
-                        st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
-                                f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
-            else:
-                st.caption("No stocks currently meet the Rocket List criteria.")
-        else:
-            st.caption("No data yet -- this updates once a week via the scheduled scan.")
-
-        # --- HET ene, centrale e-mail-activatieblok -- de grote afsluiter
-        # van de Discover-pagina voor niet-ingelogde bezoekers, na alle 3
-        # de screeners. De teaser-links onder Momentocrats/Snowballers
-        # scrollen hier met een smooth-scroll naartoe. ---
-        if not current_user.is_logged_in:
-            _render_discover_signup_form()
-        else:
-            # 'Manage in: Settings' is alleen zinvol voor een ingelogde
-            # gebruiker (die HEEFT immers toegang tot Settings) -- voor een
-            # niet-ingelogde bezoeker is dit een verwarrende, dode link naar
-            # een pagina die 'ie nog niet kan bereiken.
-            st.divider()
-            _email_pref_link("Want this weekly by email?")
+        st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
 
 
 
@@ -8204,10 +8127,10 @@ def render_today():
                 portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
                 _render_sector_heatmap(
                     heatmap_rotation, heatmap_weights, portfolio_sectors,
-                    "/discover?subview=sectors_themes",
+                    "/discover/sectors-themes",
                 )
                 st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
-                st.page_link(discover_page, label="Explore sectors & themes on Discover")
+                st.page_link(discover_sectors_themes_page, label="Explore sectors & themes on Discover")
             else:
                 st.caption("No sector data available right now.")
 
@@ -8905,7 +8828,13 @@ def render_privacy():
 # als pagina's geregistreerd.
 # ============================================================
 today_page = st.Page(render_today, title="Today", url_path="today", default=current_user.is_logged_in)
-discover_page = st.Page(render_discover, title="Discover", url_path="discover", default=not current_user.is_logged_in)
+discover_page = st.Page(render_discover_signals, title="Discover", url_path="discover", default=not current_user.is_logged_in)
+discover_sectors_themes_page = st.Page(
+    render_discover_sectors_themes, title="Sectors & Themes", url_path="discover/sectors-themes",
+)
+discover_earnings_surprises_page = st.Page(
+    render_discover_earnings_surprises, title="Earnings Surprises", url_path="discover/earnings-surprises",
+)
 portfolio_page = st.Page(render_portfolio, title="My Portfolio", url_path="portfolio")
 analyze_page = st.Page(render_analyze, title="Analyze", url_path="analyze")
 settings_page = st.Page(render_settings, title="Settings", url_path="settings")
@@ -8917,7 +8846,8 @@ confirm_page = st.Page(render_confirm, title="Confirm", url_path="confirm")
 unsubscribe_page = st.Page(render_unsubscribe, title="Unsubscribe", url_path="unsubscribe")
 
 all_pages = [
-    today_page, discover_page, portfolio_page, analyze_page, settings_page,
+    today_page, discover_page, discover_sectors_themes_page, discover_earnings_surprises_page,
+    portfolio_page, analyze_page, settings_page,
     premium_page, support_page, privacy_page, login_page, confirm_page, unsubscribe_page,
 ]
 pg = st.navigation(all_pages, position="hidden")
@@ -8992,6 +8922,24 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
+    /* Discover-subpagina's: SECTORS & THEMES en EARNINGS SURPRISES --
+       strak, minimaal, ALL-CAPS, met een subtiele inspringing (padding-
+       left) t.o.v. de hoofdcategorie 'Discover' erboven, zodat de
+       hierarchie in 1 oogopslag duidelijk is. */
+    [data-testid="stSidebar"] a[href$="/discover/sectors-themes"],
+    [data-testid="stSidebar"] a[href$="/discover/earnings-surprises"] {
+        display: flex; align-items: center; gap: 0.6rem;
+        font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 0.45rem 0.9rem 0.45rem 1.75rem; border-radius: 8px;
+        text-decoration: none !important; color: #64748B !important;
+        margin-bottom: 2px; margin-top: -1px;
+    }
+    [data-testid="stSidebar"] a[href$="/discover/sectors-themes"]:hover,
+    [data-testid="stSidebar"] a[href$="/discover/earnings-surprises"]:hover {
+        background: rgba(255,255,255,0.04);
+        color: #94A3B8 !important;
+    }
     """]
     if _active_url_path:
         _nav_css_parts.append(f"""
@@ -9010,6 +8958,12 @@ with st.sidebar:
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
     st.page_link(discover_page, label="Discover", icon=":material/search:")
+    # Sub-navigatie -- verhuisd vanaf de in-page tab-rij bovenaan de oude
+    # Discover-pagina (die leidde uitgelogde bezoekers af van de
+    # daadwerkelijke, bewijzende data). Nu 2 echte, eigen pagina's,
+    # subtiel ingesprongen onder de hoofdcategorie.
+    st.page_link(discover_sectors_themes_page, label="Sectors & Themes", icon=":material/sync:")
+    st.page_link(discover_earnings_surprises_page, label="Earnings Surprises", icon=":material/payments:")
     st.page_link(today_page, label="Today", icon=":material/calendar_today:")
     st.page_link(portfolio_page, label="My Portfolio", icon=":material/work:")
     st.page_link(analyze_page, label="Analyze", icon=":material/bar_chart:")
