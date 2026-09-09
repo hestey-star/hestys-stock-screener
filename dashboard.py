@@ -8127,7 +8127,7 @@ def render_today():
                 portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
                 _render_sector_heatmap(
                     heatmap_rotation, heatmap_weights, portfolio_sectors,
-                    "/discover/sectors-themes",
+                    "/discover-sectors-themes",
                 )
                 st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
                 st.page_link(discover_sectors_themes_page, label="Explore sectors & themes on Discover")
@@ -8830,10 +8830,10 @@ def render_privacy():
 today_page = st.Page(render_today, title="Today", url_path="today", default=current_user.is_logged_in)
 discover_page = st.Page(render_discover_signals, title="Discover", url_path="discover", default=not current_user.is_logged_in)
 discover_sectors_themes_page = st.Page(
-    render_discover_sectors_themes, title="Sectors & Themes", url_path="discover/sectors-themes",
+    render_discover_sectors_themes, title="Sectors & Themes", url_path="discover-sectors-themes",
 )
 discover_earnings_surprises_page = st.Page(
-    render_discover_earnings_surprises, title="Earnings Surprises", url_path="discover/earnings-surprises",
+    render_discover_earnings_surprises, title="Earnings Surprises", url_path="discover-earnings-surprises",
 )
 portfolio_page = st.Page(render_portfolio, title="My Portfolio", url_path="portfolio")
 analyze_page = st.Page(render_analyze, title="Analyze", url_path="analyze")
@@ -8926,8 +8926,8 @@ with st.sidebar:
        strak, minimaal, ALL-CAPS, met een subtiele inspringing (padding-
        left) t.o.v. de hoofdcategorie 'Discover' erboven, zodat de
        hierarchie in 1 oogopslag duidelijk is. */
-    [data-testid="stSidebar"] a[href$="/discover/sectors-themes"],
-    [data-testid="stSidebar"] a[href$="/discover/earnings-surprises"] {
+    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
         display: flex; align-items: center; gap: 0.6rem;
         font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 600;
         text-transform: uppercase; letter-spacing: 0.04em;
@@ -8935,8 +8935,8 @@ with st.sidebar:
         text-decoration: none !important; color: #64748B !important;
         margin-bottom: 2px; margin-top: -1px;
     }
-    [data-testid="stSidebar"] a[href$="/discover/sectors-themes"]:hover,
-    [data-testid="stSidebar"] a[href$="/discover/earnings-surprises"]:hover {
+    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:hover,
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:hover {
         background: rgba(255,255,255,0.04);
         color: #94A3B8 !important;
     }
