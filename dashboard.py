@@ -8933,7 +8933,10 @@ with st.sidebar:
         font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.04em;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem;
-        color: #64748B;
+        color: #EAEDF1;
+    }
+    .hesty-sidebar-category * {
+        color: inherit !important;
     }
     /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
        EARNINGS SURPRISES -- alle 3 IDENTIEK gestyled: harde inspringing
@@ -9023,9 +9026,15 @@ with st.sidebar:
     # De tekst zelf al hoofdletters geven is de enige garantie die altijd
     # werkt, ongeacht wat Streamlit intern doet. Nu consistent op ALLE
     # navigatie-items toegepast, niet alleen de 3 Discover-subpagina's.
-    st.page_link(discover_page, label="SIGNATURE SIGNALS", icon=":material/sensors:")
-    st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES", icon=":material/sync:")
-    st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES", icon=":material/payments:")
+    # Inspringing nu ook LETTERLIJK in de labeltekst zelf afgedwongen
+    # (non-breaking spaces) i.p.v. uitsluitend op CSS padding-left te
+    # vertrouwen -- dezelfde reden als bij ALL-CAPS hierboven: Streamlit's
+    # eigen interne opmaak op st.page_link() bleek de CSS padding stelsel-
+    # matig te negeren. Letterlijke spaties in de tekst zijn de enige
+    # garantie die altijd werkt.
+    st.page_link(discover_page, label="\u00A0\u00A0\u00A0\u00A0SIGNATURE SIGNALS", icon=":material/sensors:")
+    st.page_link(discover_sectors_themes_page, label="\u00A0\u00A0\u00A0\u00A0SECTORS & THEMES", icon=":material/sync:")
+    st.page_link(discover_earnings_surprises_page, label="\u00A0\u00A0\u00A0\u00A0EARNINGS SURPRISES", icon=":material/payments:")
     st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
     st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
     st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
