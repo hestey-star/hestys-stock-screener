@@ -7281,6 +7281,10 @@ def render_discover_signals():
 
 
     st.markdown(
+        _uniform_section_header_html("Signature Signals", "sensors", is_first=False),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
         f"""
         <style>
         .signature-signals-line {{ font-size: 0.72rem; }}
@@ -7577,7 +7581,7 @@ def render_discover_sectors_themes():
     # dit doen -- een accordion voegde hier geen overzicht toe, het
     # verstopte 'm juist onnodig achter een klik.
     st.markdown(
-        _uniform_section_header_html("Sector rotation", "sync", is_first=True),
+        _uniform_section_header_html("Sectors & Themes", "sync", is_first=True),
         unsafe_allow_html=True,
     )
     st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
@@ -8902,7 +8906,6 @@ with st.sidebar:
     [data-testid="stSidebar"] {
         border-right: 1px solid rgba(148,163,184,0.15) !important;
     }
-    [data-testid="stSidebar"] a[href$="/discover"],
     [data-testid="stSidebar"] a[href$="/today"],
     [data-testid="stSidebar"] a[href$="/portfolio"],
     [data-testid="stSidebar"] a[href$="/analyze"],
@@ -8914,7 +8917,6 @@ with st.sidebar:
         text-decoration: none !important; color: #8992A3 !important;
         margin-bottom: 3px;
     }
-    [data-testid="stSidebar"] a[href$="/discover"]:hover,
     [data-testid="stSidebar"] a[href$="/today"]:hover,
     [data-testid="stSidebar"] a[href$="/portfolio"]:hover,
     [data-testid="stSidebar"] a[href$="/analyze"]:hover,
@@ -8922,19 +8924,31 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
-    /* Discover-subpagina's: SECTORS & THEMES en EARNINGS SURPRISES --
-       strak, minimaal, ALL-CAPS, met een subtiele inspringing (padding-
-       left) t.o.v. de hoofdcategorie 'Discover' erboven, zodat de
-       hierarchie in 1 oogopslag duidelijk is. */
+    /* 'Discover' is nu een pure, niet-klikbare categorie-hoofdmap (geen
+       <a>-tag meer) -- de 3 subpagina's eronder zijn de daadwerkelijke,
+       navigeerbare items. */
+    .hesty-sidebar-category {
+        display: flex; align-items: center; gap: 0.75rem;
+        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
+        padding: 0.6rem 0.9rem 0.6rem 0.75rem;
+        color: #8992A3;
+    }
+    /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
+       EARNINGS SURPRISES -- alle 3 IDENTIEK gestyled: harde inspringing
+       (pl-6/ml-5), ALL-CAPS, text-xs, gedempte kleur (slate-400/80) als
+       ze niet actief zijn -- visueel duidelijk ondergeschikt aan de
+       hoofdpagina's (Discover, Today, My Portfolio) erboven/eronder. */
+    [data-testid="stSidebar"] a[href$="/discover"],
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
         display: flex; align-items: center; gap: 0.6rem;
-        font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.04em;
-        padding: 0.45rem 0.9rem 0.45rem 1.75rem; border-radius: 8px;
-        text-decoration: none !important; color: #64748B !important;
-        margin-bottom: 2px; margin-top: -1px;
+        font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 0.45rem 0.9rem 0.45rem 1.5rem; border-radius: 8px;
+        text-decoration: none !important; color: rgba(148,163,184,0.8) !important;
+        margin-bottom: 2px;
     }
+    [data-testid="stSidebar"] a[href$="/discover"]:hover,
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:hover,
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:hover {
         background: rgba(255,255,255,0.04);
@@ -8957,11 +8971,15 @@ with st.sidebar:
     # ondersteunde Material Symbols (via icon=":material/xxx:"), die een
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
-    st.page_link(discover_page, label="Discover", icon=":material/search:")
-    # Sub-navigatie -- verhuisd vanaf de in-page tab-rij bovenaan de oude
-    # Discover-pagina (die leidde uitgelogde bezoekers af van de
-    # daadwerkelijke, bewijzende data). Nu 2 echte, eigen pagina's,
-    # subtiel ingesprongen onder de hoofdcategorie.
+    #
+    # 'Discover' is nu ZUIVER een categorie-hoofdmap (platte tekst, geen
+    # st.page_link meer) -- de 3 subpagina's eronder zijn de daadwerkelijke
+    # navigatie-items, allemaal even zwaar ingesprongen en gestyled.
+    st.markdown(
+        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=18, color="#8992A3")}Discover</div>',
+        unsafe_allow_html=True,
+    )
+    st.page_link(discover_page, label="Signature Signals", icon=":material/sensors:")
     st.page_link(discover_sectors_themes_page, label="Sectors & Themes", icon=":material/sync:")
     st.page_link(discover_earnings_surprises_page, label="Earnings Surprises", icon=":material/payments:")
     st.page_link(today_page, label="Today", icon=":material/calendar_today:")
