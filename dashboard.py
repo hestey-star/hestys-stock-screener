@@ -8933,18 +8933,26 @@ with st.sidebar:
        CONTAINER zelf (niet op de losse <a>-tags) -- een simpele
        padding-left op een gewone <div> wint altijd, i.p.v. te vechten
        tegen Streamlit's eigen interne padding op elke st.page_link()
-       afzonderlijk. GEEN icoontjes, klein/gedempt tekst-only, ALL-CAPS. */
+       afzonderlijk. GEEN icoontjes, klein/gedempt tekst-only, ALL-CAPS.
+       gap:0.15rem op de eigen stVerticalBlock hieronder is de ECHTE
+       sleutel voor de compactheid -- elk van de 3 sub-items zit in z'n
+       EIGEN st.container(), en Streamlit's standaard tussenruimte tussen
+       zulke gestapelde containers (~1rem) was de daadwerkelijke bron van
+       de 'losse ruimte', niet de margin op de <a>-tags zelf. */
     .st-key-discover_subnav_group {
         padding-left: 2.25rem !important;
         box-sizing: border-box !important;
+    }
+    .st-key-discover_subnav_group [data-testid="stVerticalBlock"] {
+        gap: 0.15rem !important;
     }
     .st-key-discover_subnav_group a {
         display: inline-flex !important; align-items: center !important;
         font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 600 !important;
         text-transform: uppercase !important; letter-spacing: 0.06em !important;
-        padding: 0.35rem 0.6rem !important; border-radius: 8px !important;
+        padding: 0.3rem 0.6rem !important; border-radius: 8px !important;
         text-decoration: none !important; color: #64748B !important;
-        margin-bottom: 1px !important; width: auto !important;
+        margin: 0 !important; width: auto !important;
     }
     .st-key-discover_subnav_group a * {
         text-transform: uppercase !important;
@@ -8956,6 +8964,21 @@ with st.sidebar:
     .st-key-discover_subnav_group a:hover {
         background: rgba(255,255,255,0.04) !important;
         color: #94A3B8 !important;
+    }
+    /* Mobiel (<768px): iets minder inspringing (pl-7) en een messcherpe,
+       kleinere letter (text-[10px]) -- garandeert dat de langste tekst
+       (EARNINGS SURPRISES) nooit van de smalle mobiele sidebar afloopt. */
+    @media (max-width: 767px) {
+        .st-key-discover_subnav_group {
+            padding-left: 1.75rem !important;
+        }
+        .st-key-discover_subnav_group a {
+            font-size: 10px !important;
+            padding: 0.3rem 0.4rem !important;
+        }
+        .st-key-discover_subnav_group a * {
+            font-size: 10px !important;
+        }
     }
     """]
     # Container-key -> url_path-mapping, voor de actieve-status-highlight.
