@@ -5200,11 +5200,49 @@ def render_analyze():
 
 def render_portfolio():
     if not current_user.is_logged_in:
+        # --- Niet-ingelogde My Portfolio-landing: zelfde 'Hestys-standaard'
+        # als Discover/Today -- groene hoofdsectiekop + dunne lijn, dan een
+        # GEBLURDE preview van hoe de positietabel eruitziet (skeleton-
+        # balkjes, GEEN nagemaakte tickers/bedragen -- dat zou op zichzelf
+        # al kunnen worden aangezien voor echte data, ook als het geblurd
+        # is) met een centrale CTA erover. Vervangt de vorige combinatie
+        # van een losse 'Private'-badge + een felblauwe st.info()-balk. ---
         st.markdown(
-            '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
+            _uniform_section_header_html("My Portfolio", "work", is_first=True),
             unsafe_allow_html=True,
         )
-        st.info("Log in via the menu to track your own positions. No one else can see what you add.")
+        _skeleton_row_html = (
+            '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0;">'
+            '<div style="width:28px; height:28px; border-radius:50%; background:rgba(137,146,163,0.15); flex-shrink:0;"></div>'
+            '<div style="height:10px; width:35%; background:rgba(137,146,163,0.18); border-radius:4px;"></div>'
+            '<div style="height:10px; width:15%; background:rgba(137,146,163,0.12); border-radius:4px; margin-left:auto;"></div>'
+            '<div style="height:10px; width:12%; background:rgba(137,146,163,0.12); border-radius:4px;"></div>'
+            '</div>'
+        )
+        st.markdown(
+            f'<div style="filter:blur(4px); opacity:0.25; pointer-events:none; user-select:none; '
+            f'-webkit-user-select:none; background:rgba(15,23,42,0.4); border-radius:14px; '
+            f'padding:1rem 1.25rem;">{_skeleton_row_html * 5}</div>',
+            unsafe_allow_html=True,
+        )
+        _portfolio_cta_key = "portfolio_signup_cta"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_portfolio_cta_key} {{ '
+            f'margin-top:-6.5rem !important; display:flex !important; justify-content:center !important; }} '
+            f'.st-key-{_portfolio_cta_key} button {{ '
+            f'background:#101825 !important; color:#EAEDF1 !important; font-weight:700 !important; '
+            f'border:1px solid rgba(148,163,184,0.3) !important; border-radius:8px !important; '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; box-shadow:0 4px 16px rgba(0,0,0,0.4) !important; }} '
+            f'.st-key-{_portfolio_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+            f'color:#1FAE96 !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_portfolio_cta_key):
+            if st.button("CONNECT PORTFOLIO TO VIEW POSITIONS \u2192", key="portfolio_signup_cta_btn"):
+                st.session_state["login_prefill_mode"] = "Sign Up"
+                st.switch_page(login_page)
         st.stop()
 
     import database
@@ -7755,54 +7793,41 @@ def render_discover_earnings_surprises():
 
 def render_today():
     if not current_user.is_logged_in:
+        # --- Niet-ingelogde Today-landing: zelfde 'Hestys-standaard' als
+        # Discover -- een groene hoofdsectiekop + dunne lijn + 1 duidelijke,
+        # minimalistische CTA-box, i.p.v. de eerdere combinatie van een
+        # hero-box, een tegel-grid EN een felblauwe st.info()-balk
+        # onderaan (voelde zwaar/inconsistent met de rest van de site). ---
         st.markdown(
-            """
-            <div style="background: linear-gradient(135deg, rgba(31,174,150,0.16), rgba(31,174,150,0.02));
-                        border: 1px solid rgba(31,174,150,0.4); border-radius: 12px;
-                        padding: 1.5rem 1.75rem; margin: 0.5rem 0 1.25rem 0;">
-                <div style="color:#1FAE96; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    What you're missing
-                </div>
-                <div style="color:#EAEDF1; font-size:1.4rem; font-weight:700; margin-top:6px; line-height:1.35;">
-                    Your own, personalized morning briefing.
-                </div>
-                <div style="color:#8992A3; font-size:0.95rem; margin-top:10px; line-height:1.6; max-width: 560px;">
-                    Log in and add your positions to get a Today page built around YOUR portfolio:
-                </div>
-            </div>
-            """,
+            _uniform_section_header_html("Your Portfolio Today", "calendar_today", is_first=True),
             unsafe_allow_html=True,
         )
-        # Tegels i.p.v. een bullet-lijst -- die voelde op mobiel al snel
-        # 'supervol' aan met 6 losse regels + icoontjes. Zelfde stijl als
-        # de hero-tegels (icoon-badge + titel + subtekst), en het overzicht
-        # is meteen ook completer/actueler dan de oude lijst (mistte
-        # 'nieuwe, persoonlijke signalen' -- een van de kernfeatures).
-        today_points = [
-            ("bar_chart", "Your daily performance", "best/worst positions, vs. yesterday"),
-            ("event", "Earnings & dividends ahead", "for your actual holdings"),
-            ("balance", "Risk & concentration alerts", "when a position outgrows your target"),
-            ("candlestick_chart", "52-week highs & lows", "the moment they happen"),
-            ("search", "New signals, personalized", "matched to what you hold or watch"),
-            ("newspaper", "News, filtered to your tickers", "no noise"),
-        ]
-        today_points_html = "".join(
-            f'<div style="background:rgba(31,174,150,0.08); border:1px solid rgba(31,174,150,0.25); '
-            f'border-radius:12px; padding:0.85rem 1rem;">'
-            f'<div style="width:32px; height:32px; border-radius:50%; background:rgba(31,174,150,0.18); '
-            f'display:flex; align-items:center; justify-content:center;">{_icon_span(icon_name, size_px=16, color="#1FAE96")}</div>'
-            f'<div style="color:#EAEDF1; font-size:0.85rem; font-weight:700; margin-top:8px; line-height:1.3;">{title}</div>'
-            f'<div style="color:#8992A3; font-size:0.73rem; margin-top:2px; line-height:1.3;">{sub}</div>'
-            f'</div>'
-            for icon_name, title, sub in today_points
-        )
         st.markdown(
-            f'<div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.6rem; margin-bottom:1rem;">{today_points_html}</div>',
+            '<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            'border-radius:14px; padding:1.5rem;">'
+            '<div style="color:#94A3B8; font-size:0.85rem; font-weight:600; text-transform:uppercase; '
+            'letter-spacing:0.03em; line-height:1.6;">'
+            '&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. CONNECT YOUR PORTFOLIO OR WATCHLIST '
+            'TO ACTIVATE THIS COCKPIT.</div>'
+            '</div>',
             unsafe_allow_html=True,
         )
-        st.page_link(discover_page, label="See what Hesty's can do (no login)")
-        st.info("Log in via the menu once you're ready, then add positions under My Portfolio or "
-                "your Watchlist to unlock this.")
+        _today_cta_key = "today_signup_cta"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_today_cta_key} {{ margin-top:1rem; }} '
+            f'.st-key-{_today_cta_key} button {{ '
+            f'background:#1FAE96 !important; color:#0B111E !important; font-weight:700 !important; '
+            f'border:none !important; border-radius:8px !important; padding:0.6rem 1.5rem !important; '
+            f'width:auto !important; box-shadow:none !important; }} '
+            f'.st-key-{_today_cta_key} button:hover {{ background:#24C7AB !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_today_cta_key):
+            if st.button("Get Started Free", key="today_signup_cta_btn"):
+                st.session_state["login_prefill_mode"] = "Sign Up"
+                st.switch_page(login_page)
     else:
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
