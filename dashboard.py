@@ -8943,11 +8943,24 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
         display: flex; align-items: center; gap: 0.6rem;
-        font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.05em;
+        font-family: 'Inter', sans-serif; font-size: 0.75rem !important; font-weight: 600 !important;
+        text-transform: uppercase !important; letter-spacing: 0.05em !important;
         padding: 0.45rem 0.9rem 0.45rem 1.5rem; border-radius: 8px;
         text-decoration: none !important; color: rgba(148,163,184,0.8) !important;
         margin-bottom: 2px;
+    }
+    /* Streamlit's st.page_link() rendert het label in een geneste <span>/
+       <p> binnen de <a> -- die erven text-transform NIET automatisch van
+       de ouder over als Streamlit daar zelf ook al een font-regel op zet,
+       vandaar expliciet ook hier, met !important, dwingen. */
+    [data-testid="stSidebar"] a[href$="/discover"] *,
+    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"] *,
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] * {
+        text-transform: uppercase !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.05em !important;
+        color: inherit !important;
     }
     [data-testid="stSidebar"] a[href$="/discover"]:hover,
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:hover,
