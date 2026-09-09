@@ -8929,27 +8929,34 @@ with st.sidebar:
        navigatie en gaf onrust). De 3 subpagina's staan er ALTIJD, vast en
        ingesprongen, direct onder. */
     .hesty-sidebar-category {
-        display: flex; align-items: center; gap: 0.75rem;
-        font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 700;
+        display: flex; align-items: center; gap: 0.6rem;
+        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.04em;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem;
         color: #EAEDF1;
     }
     .hesty-sidebar-category * {
         color: inherit !important;
+        font-size: 18px !important;
     }
     /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
        EARNINGS SURPRISES -- alle 3 IDENTIEK gestyled: harde inspringing
        (pl-6/ml-5), ALL-CAPS, text-xs, gedempte kleur (slate-400/80) als
        ze niet actief zijn, iets compacter/matter dan de hoofdmenu-items. */
     [data-testid="stSidebar"] a[href$="/discover"],
+    [data-testid="stSidebar"] a[href$="/discover"]:link,
+    [data-testid="stSidebar"] a[href$="/discover"]:visited,
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
+    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:link,
+    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:visited,
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"],
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:link,
+    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:visited {
         display: flex; align-items: center; gap: 0.6rem;
         font-family: 'Inter', sans-serif; font-size: 0.72rem !important; font-weight: 600 !important;
         text-transform: uppercase !important; letter-spacing: 0.05em !important;
         padding: 0.45rem 0.9rem 0.45rem 2.5rem; border-radius: 8px;
-        text-decoration: none !important; color: rgba(100,116,139,0.75) !important;
+        text-decoration: none !important; color: #5B6472 !important;
         margin-bottom: 2px;
     }
     /* Streamlit's st.page_link() rendert het label in een geneste <span>/
@@ -9016,7 +9023,7 @@ with st.sidebar:
     # tekst, geen st.page_link, geen klik-logica) -- de 3 subpagina's
     # eronder zijn ALTIJD zichtbaar, echte native st.page_link()-widgets.
     st.markdown(
-        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=16, color="#EAEDF1")}DISCOVER</div>',
+        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=18, color="#EAEDF1")}DISCOVER</div>',
         unsafe_allow_html=True,
     )
     # Labels nu LETTERLIJK in hoofdletters meegegeven i.p.v. te vertrouwen
