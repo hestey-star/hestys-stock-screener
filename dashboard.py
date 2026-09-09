@@ -5219,30 +5219,45 @@ def render_portfolio():
             '<div style="height:10px; width:12%; background:rgba(137,146,163,0.12); border-radius:4px;"></div>'
             '</div>'
         )
-        st.markdown(
-            f'<div style="filter:blur(4px); opacity:0.25; pointer-events:none; user-select:none; '
-            f'-webkit-user-select:none; background:rgba(15,23,42,0.4); border-radius:14px; '
-            f'padding:1rem 1.25rem;">{_skeleton_row_html * 5}</div>',
-            unsafe_allow_html=True,
-        )
+        # Echte position:relative/absolute-overlay i.p.v. de eerdere
+        # negatieve-margin-truc -- die dreef nog te ver naar links/onder
+        # weg. Tabel EN knop zitten nu samen in 1 gedeelde
+        # st.container(key=...) (position:relative), zodat de knop
+        # (position:absolute; top/left:50%; transform:translate(-50%,-50%))
+        # gegarandeerd kaarsrecht t.o.v. DIE container centreert, niet
+        # t.o.v. de hele pagina.
+        _preview_wrap_key = "portfolio_preview_wrap"
         _portfolio_cta_key = "portfolio_signup_cta"
         st.markdown(
             f'<style>'
+            f'.st-key-{_preview_wrap_key} {{ position:relative !important; width:100% !important; '
+            f'min-height:300px !important; }} '
             f'.st-key-{_portfolio_cta_key} {{ '
-            f'margin-top:-6.5rem !important; display:flex !important; justify-content:center !important; }} '
+            f'position:absolute !important; top:50% !important; left:50% !important; '
+            f'transform:translate(-50%, -50%) !important; z-index:10 !important; width:auto !important; }} '
             f'.st-key-{_portfolio_cta_key} button {{ '
-            f'background:#101825 !important; color:#EAEDF1 !important; font-weight:700 !important; '
-            f'border:1px solid rgba(148,163,184,0.3) !important; border-radius:8px !important; '
-            f'padding:0.6rem 1.5rem !important; width:auto !important; box-shadow:0 4px 16px rgba(0,0,0,0.4) !important; }} '
+            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+            f'text-transform:uppercase !important; letter-spacing:0.04em !important; '
+            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
             f'.st-key-{_portfolio_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
             f'color:#1FAE96 !important; }} '
             f'</style>',
             unsafe_allow_html=True,
         )
-        with st.container(key=_portfolio_cta_key):
-            if st.button("CONNECT PORTFOLIO TO VIEW POSITIONS \u2192", key="portfolio_signup_cta_btn"):
-                st.session_state["login_prefill_mode"] = "Sign Up"
-                st.switch_page(login_page)
+        with st.container(key=_preview_wrap_key):
+            st.markdown(
+                f'<div style="filter:blur(4px); opacity:0.25; pointer-events:none; user-select:none; '
+                f'-webkit-user-select:none; background:rgba(15,23,42,0.4); border-radius:14px; '
+                f'padding:1rem 1.25rem;">{_skeleton_row_html * 5}</div>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_portfolio_cta_key):
+                if st.button("CONNECT PORTFOLIO TO VIEW POSITIONS \u2192", key="portfolio_signup_cta_btn"):
+                    st.session_state["login_prefill_mode"] = "Sign Up"
+                    st.switch_page(login_page)
         st.stop()
 
     import database
