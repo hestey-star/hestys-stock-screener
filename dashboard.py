@@ -7817,29 +7817,43 @@ def render_today():
             _uniform_section_header_html("Your Portfolio Today", "calendar_today", is_first=True),
             unsafe_allow_html=True,
         )
-        st.markdown(
-            '<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-            'border-radius:14px; padding:1.5rem;">'
-            '<div style="color:#94A3B8; font-size:0.85rem; font-weight:600; text-transform:uppercase; '
-            'letter-spacing:0.03em; line-height:1.6;">'
-            '&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. CONNECT YOUR PORTFOLIO OR WATCHLIST '
-            'TO ACTIVATE THIS COCKPIT.</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        _today_cta_key = "today_signup_cta"
+        # --- 1 gedeelde tegel voor tekst + knop samen (st.container(key=...))
+        # i.p.v. 2 losse elementen -- dat liet de knop eerder LOS onder de
+        # tegel hangen, buiten de rand, want de <div> van de tekst-box
+        # sloot zichzelf al af voordat de knop (een apart element) werd
+        # gerenderd. ---
+        _today_cta_key = "today_signup_cta_tile"
         st.markdown(
             f'<style>'
-            f'.st-key-{_today_cta_key} {{ margin-top:1rem; }} '
+            f'.st-key-{_today_cta_key} {{ '
+            f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+            f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
+            f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
+            f'align-items:center !important; justify-content:center !important; text-align:center !important; }} '
+            f'@media (min-width:768px) {{ .st-key-{_today_cta_key} {{ padding:2rem !important; }} }} '
+            f'.hesty-today-cta-text {{ '
+            f'max-width:42rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+            f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+            f'@media (min-width:768px) {{ .hesty-today-cta-text {{ font-size:0.9rem !important; }} }} '
+            f'.st-key-{_today_cta_key} [data-testid="stButton"] {{ '
+            f'margin-top:1rem !important; }} '
+            f'@media (min-width:768px) {{ '
+            f'.st-key-{_today_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+            f'}} '
             f'.st-key-{_today_cta_key} button {{ '
             f'background:#1FAE96 !important; color:#0B111E !important; font-weight:700 !important; '
-            f'border:none !important; border-radius:8px !important; padding:0.6rem 1.5rem !important; '
+            f'border:none !important; border-radius:8px !important; padding:0.5rem 1.25rem !important; '
             f'width:auto !important; box-shadow:none !important; }} '
             f'.st-key-{_today_cta_key} button:hover {{ background:#24C7AB !important; }} '
             f'</style>',
             unsafe_allow_html=True,
         )
         with st.container(key=_today_cta_key):
+            st.markdown(
+                '<div class="hesty-today-cta-text">&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. '
+                'CONNECT YOUR PORTFOLIO OR WATCHLIST TO ACTIVATE THIS COCKPIT.</div>',
+                unsafe_allow_html=True,
+            )
             if st.button("Get Started Free", key="today_signup_cta_btn"):
                 st.session_state["login_prefill_mode"] = "Sign Up"
                 st.switch_page(login_page)
