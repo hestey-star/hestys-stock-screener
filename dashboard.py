@@ -8985,12 +8985,12 @@ with st.sidebar:
         _discover_subpaths = {"discover", "discover-sectors-themes", "discover-earnings-surprises"}
         if _active_url_path in _discover_subpaths:
             # Discover-subpagina's krijgen een EIGEN, subtielere actieve-
-            # status (helderwit + een zachte, donkere vulling) i.p.v. de
-            # felle teal-highlight van de hoofdmenu-items -- past bij hun
-            # kleinere, ondergeschikte formaat.
+            # status (zachtgrijs i.p.v. helderwit + een zachte, donkere
+            # vulling) i.p.v. de felle teal-highlight van de hoofdmenu-
+            # items -- past bij hun kleinere, ondergeschikte formaat.
             _nav_css_parts.append(f"""
     [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
-        color: #F1F5F9 !important;
+        color: #CBD5E1 !important;
         background: rgba(15,23,42,0.4) !important;
         border-radius: 8px !important;
     }}
