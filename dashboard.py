@@ -9016,9 +9016,15 @@ with st.sidebar:
         f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=16, color="#64748B")}Discover</div>',
         unsafe_allow_html=True,
     )
-    st.page_link(discover_page, label="Signature Signals", icon=":material/sensors:")
-    st.page_link(discover_sectors_themes_page, label="Sectors & Themes", icon=":material/sync:")
-    st.page_link(discover_earnings_surprises_page, label="Earnings Surprises", icon=":material/payments:")
+    # Labels nu LETTERLIJK in hoofdletters meegegeven i.p.v. te vertrouwen
+    # op CSS text-transform:uppercase -- die bleek stelselmatig te
+    # verliezen van Streamlit's eigen, interne styling op de geneste
+    # tekst-elementen binnen st.page_link(), zelfs met !important overal.
+    # De tekst zelf al hoofdletters geven is de enige garantie die altijd
+    # werkt, ongeacht wat Streamlit intern doet.
+    st.page_link(discover_page, label="SIGNATURE SIGNALS", icon=":material/sensors:")
+    st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES", icon=":material/sync:")
+    st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES", icon=":material/payments:")
     st.page_link(today_page, label="Today", icon=":material/calendar_today:")
     st.page_link(portfolio_page, label="My Portfolio", icon=":material/work:")
     st.page_link(analyze_page, label="Analyze", icon=":material/bar_chart:")
