@@ -8924,25 +8924,30 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
-    /* 'Discover' is nu een vaste, niet-klikbare categorie-hoofdkop (geen
-       dropdown/accordeon meer -- dat interactieve klik-mechanisme brak de
-       navigatie en gaf onrust). De 3 subpagina's staan er ALTIJD, vast en
-       ingesprongen, direct onder. */
-    .hesty-sidebar-category {
-        display: flex; align-items: center; gap: 0.6rem;
-        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.04em;
-        padding: 0.6rem 0.9rem 0.6rem 0.75rem;
-        color: #EAEDF1;
+    /* 'Discover' is nu een ECHTE, klikbare knop (st.button + st.switch_page)
+       i.p.v. platte tekst -- dezelfde exacte typografie/uitlijning als
+       Today/My Portfolio (zelfde font-size, gewicht, padding, icoon-
+       mechanisme) zodat alle hoofd-icoontjes kaarsrecht op 1 lijn staan.
+       Actief (op een Discover-subpagina) = helderwit, net als de andere
+       hoofdmenu-items in hun actieve status. */
+    .st-key-discover_main_btn button {
+        display: flex !important; align-items: center !important; justify-content: flex-start !important;
+        gap: 0.75rem !important; width: 100% !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
+        padding: 0.6rem 0.9rem 0.6rem 0.75rem !important; border-radius: 8px !important;
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        color: #8992A3 !important; margin-bottom: 3px !important;
     }
-    .hesty-sidebar-category * {
-        color: inherit !important;
-        font-size: 18px !important;
+    .st-key-discover_main_btn button:hover {
+        background: rgba(255,255,255,0.04) !important;
     }
     /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
-       EARNINGS SURPRISES -- alle 3 IDENTIEK gestyled: harde inspringing
-       (pl-6/ml-5), ALL-CAPS, text-xs, gedempte kleur (slate-400/80) als
-       ze niet actief zijn, iets compacter/matter dan de hoofdmenu-items. */
+       EARNINGS SURPRISES -- GEEN icoontjes meer, puur tekst. Stevige
+       inspringing (pl-7/pl-8) zodat de letters ter hoogte van de TEKST
+       van de hoofdmenu-items beginnen (niet ter hoogte van hun iconen).
+       Compact en gedempt (text-[11px] slate-500) als ze niet actief
+       zijn; helderwit + bold + een zachte, afgeronde achtergrondvulling
+       zodra ze wel actief zijn. */
     [data-testid="stSidebar"] a[href$="/discover"],
     [data-testid="stSidebar"] a[href$="/discover"]:link,
     [data-testid="stSidebar"] a[href$="/discover"]:visited,
@@ -8952,24 +8957,24 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"],
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:link,
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:visited {
-        display: flex; align-items: center; gap: 0.6rem;
-        font-family: 'Inter', sans-serif; font-size: 0.72rem !important; font-weight: 600 !important;
-        text-transform: uppercase !important; letter-spacing: 0.05em !important;
-        padding: 0.45rem 0.9rem 0.45rem 2.5rem; border-radius: 8px;
-        text-decoration: none !important; color: #5B6472 !important;
-        margin-bottom: 2px;
+        display: flex !important; align-items: center !important;
+        font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 500 !important;
+        text-transform: uppercase !important; letter-spacing: 0.06em !important;
+        padding: 0.4rem 0.9rem 0.4rem 2.25rem !important; border-radius: 8px;
+        text-decoration: none !important; color: #64748B !important;
+        margin-bottom: 1px;
     }
     /* Streamlit's st.page_link() rendert het label in een geneste <span>/
-       <p> binnen de <a> -- die erven text-transform NIET automatisch van
+       <p> binnen de <a> -- die erven kleur/grootte NIET automatisch van
        de ouder over als Streamlit daar zelf ook al een font-regel op zet,
        vandaar expliciet ook hier, met !important, dwingen. */
     [data-testid="stSidebar"] a[href$="/discover"] *,
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"] *,
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] * {
         text-transform: uppercase !important;
-        font-size: 0.72rem !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.05em !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.06em !important;
         color: inherit !important;
     }
     [data-testid="stSidebar"] a[href$="/discover"]:hover,
@@ -8990,16 +8995,29 @@ with st.sidebar:
     """]
     if _active_url_path:
         _discover_subpaths = {"discover", "discover-sectors-themes", "discover-earnings-surprises"}
-        if _active_url_path in _discover_subpaths:
+        _on_discover_subpage = _active_url_path in _discover_subpaths
+        if _on_discover_subpage:
             # Discover-subpagina's krijgen een EIGEN, subtielere actieve-
-            # status (zachtgrijs i.p.v. helderwit + een zachte, donkere
+            # status (helderwit + bold + een zachte, afgeronde donkere
             # vulling) i.p.v. de felle teal-highlight van de hoofdmenu-
-            # items -- past bij hun kleinere, ondergeschikte formaat.
+            # items -- past bij hun kleinere, ondergeschikte formaat. De
+            # 'Discover'-hoofdknop zelf licht ook op (zelfde witte kleur
+            # als Today/My Portfolio in actieve staat) zodra je op 1 van
+            # z'n 3 subpagina's zit.
             _nav_css_parts.append(f"""
     [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
-        color: #CBD5E1 !important;
+        color: #F1F5F9 !important;
+        font-weight: 700 !important;
         background: rgba(15,23,42,0.4) !important;
         border-radius: 8px !important;
+        padding-top: 0.4rem !important;
+        padding-bottom: 0.4rem !important;
+    }}
+    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] * {{
+        font-weight: 700 !important;
+    }}
+    .st-key-discover_main_btn button {{
+        color: #EAEDF1 !important;
     }}
     """)
         else:
@@ -9019,13 +9037,15 @@ with st.sidebar:
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
     #
-    # 'Discover' is nu ZUIVER een statische categorie-hoofdkop (platte
-    # tekst, geen st.page_link, geen klik-logica) -- de 3 subpagina's
-    # eronder zijn ALTIJD zichtbaar, echte native st.page_link()-widgets.
-    st.markdown(
-        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=18, color="#EAEDF1")}DISCOVER</div>',
-        unsafe_allow_html=True,
-    )
+    # 'Discover' is nu een ECHTE, klikbare native knop (st.button +
+    # st.switch_page) i.p.v. platte, dode tekst -- klikken laadt direct
+    # de eerste subpagina (Signature Signals). Zelfde icoon-mechanisme
+    # (icon=":material/xxx:") als Today/My Portfolio/etc., dus alle
+    # hoofd-icoontjes staan nu gegarandeerd kaarsrecht op 1 lijn -- geen
+    # apart, net-iets-anders-uitlijnend custom HTML-blokje meer.
+    with st.container(key="discover_main_btn"):
+        if st.button("DISCOVER", icon=":material/search:", key="discover_main_btn_inner"):
+            st.switch_page(discover_page)
     # Labels nu LETTERLIJK in hoofdletters meegegeven i.p.v. te vertrouwen
     # op CSS text-transform:uppercase -- die bleek stelselmatig te
     # verliezen van Streamlit's eigen, interne styling op de geneste
@@ -9038,10 +9058,11 @@ with st.sidebar:
     # vertrouwen -- dezelfde reden als bij ALL-CAPS hierboven: Streamlit's
     # eigen interne opmaak op st.page_link() bleek de CSS padding stelsel-
     # matig te negeren. Letterlijke spaties in de tekst zijn de enige
-    # garantie die altijd werkt.
-    st.page_link(discover_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SIGNATURE SIGNALS", icon=":material/sensors:")
-    st.page_link(discover_sectors_themes_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SECTORS & THEMES", icon=":material/sync:")
-    st.page_link(discover_earnings_surprises_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0EARNINGS SURPRISES", icon=":material/payments:")
+    # garantie die altijd werkt. GEEN icoon-parameter meer op deze 3 --
+    # volledig icoonvrij, puur ingesprongen tekst.
+    st.page_link(discover_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SIGNATURE SIGNALS")
+    st.page_link(discover_sectors_themes_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SECTORS & THEMES")
+    st.page_link(discover_earnings_surprises_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0EARNINGS SURPRISES")
     st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
     st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
     st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
