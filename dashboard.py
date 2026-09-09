@@ -8943,10 +8943,10 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
         display: flex; align-items: center; gap: 0.6rem;
-        font-family: 'Inter', sans-serif; font-size: 0.75rem !important; font-weight: 600 !important;
+        font-family: 'Inter', sans-serif; font-size: 0.72rem !important; font-weight: 600 !important;
         text-transform: uppercase !important; letter-spacing: 0.05em !important;
-        padding: 0.45rem 0.9rem 0.45rem 1.5rem; border-radius: 8px;
-        text-decoration: none !important; color: rgba(148,163,184,0.8) !important;
+        padding: 0.45rem 0.9rem 0.45rem 2.5rem; border-radius: 8px;
+        text-decoration: none !important; color: rgba(100,116,139,0.75) !important;
         margin-bottom: 2px;
     }
     /* Streamlit's st.page_link() rendert het label in een geneste <span>/
@@ -8957,7 +8957,7 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"] *,
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] * {
         text-transform: uppercase !important;
-        font-size: 0.75rem !important;
+        font-size: 0.72rem !important;
         font-weight: 600 !important;
         letter-spacing: 0.05em !important;
         color: inherit !important;
@@ -9013,7 +9013,7 @@ with st.sidebar:
     # tekst, geen st.page_link, geen klik-logica) -- de 3 subpagina's
     # eronder zijn ALTIJD zichtbaar, echte native st.page_link()-widgets.
     st.markdown(
-        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=16, color="#64748B")}Discover</div>',
+        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=16, color="#EAEDF1")}DISCOVER</div>',
         unsafe_allow_html=True,
     )
     # Labels nu LETTERLIJK in hoofdletters meegegeven i.p.v. te vertrouwen
@@ -9021,15 +9021,16 @@ with st.sidebar:
     # verliezen van Streamlit's eigen, interne styling op de geneste
     # tekst-elementen binnen st.page_link(), zelfs met !important overal.
     # De tekst zelf al hoofdletters geven is de enige garantie die altijd
-    # werkt, ongeacht wat Streamlit intern doet.
+    # werkt, ongeacht wat Streamlit intern doet. Nu consistent op ALLE
+    # navigatie-items toegepast, niet alleen de 3 Discover-subpagina's.
     st.page_link(discover_page, label="SIGNATURE SIGNALS", icon=":material/sensors:")
     st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES", icon=":material/sync:")
     st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES", icon=":material/payments:")
-    st.page_link(today_page, label="Today", icon=":material/calendar_today:")
-    st.page_link(portfolio_page, label="My Portfolio", icon=":material/work:")
-    st.page_link(analyze_page, label="Analyze", icon=":material/bar_chart:")
-    st.page_link(support_page, label="Support", icon=":material/support_agent:")
-    st.page_link(premium_page, label="Premium", icon=":material/star:")
+    st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
+    st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
+    st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
+    st.page_link(support_page, label="SUPPORT", icon=":material/support_agent:")
+    st.page_link(premium_page, label="PREMIUM", icon=":material/star:")
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
@@ -9037,7 +9038,7 @@ with st.sidebar:
         st.page_link(settings_page, label=current_user.name, icon=":material/settings:")
         if st.user.is_logged_in:
             # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
-            st.button("Log out", on_click=st.logout, key="header_logout")
+            st.button("LOG OUT", on_click=st.logout, key="header_logout")
         else:
             # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
             # (st.logout() is specifiek voor Google, raakt deze sessie niet).
@@ -9052,9 +9053,9 @@ with st.sidebar:
                     _cookie_controller.remove("hestys_session_token")
                 st.session_state.pop("password_auth_email", None)
                 st.session_state.pop("password_auth_name", None)
-            st.button("Log out", on_click=_password_logout, key="header_logout_password")
+            st.button("LOG OUT", on_click=_password_logout, key="header_logout_password")
     else:
-        st.page_link(login_page, label="Log in")
+        st.page_link(login_page, label="LOG IN")
 
 
 pg.run()
