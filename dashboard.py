@@ -5234,16 +5234,27 @@ def render_portfolio():
             f'min-height:300px !important; }} '
             f'.st-key-{_portfolio_cta_key} {{ '
             f'position:absolute !important; top:50% !important; left:50% !important; '
-            f'transform:translate(-50%, -50%) !important; z-index:10 !important; width:auto !important; }} '
+            f'transform:translate(-50%, -50%) !important; z-index:10 !important; '
+            f'width:auto !important; max-width:90% !important; }} '
             f'.st-key-{_portfolio_cta_key} button {{ '
             f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
             f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
             f'text-transform:uppercase !important; letter-spacing:0.04em !important; '
             f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
-            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
-            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; max-width:100% !important; '
+            f'white-space:nowrap !important; box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
             f'.st-key-{_portfolio_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
             f'color:#1FAE96 !important; }} '
+            # Op mobiel is de tekst met white-space:nowrap breder dan het
+            # scherm, waardoor 'ie symmetrisch links/rechts afloopt i.p.v.
+            # netjes te passen (lijkt dan 'niet gecentreerd'). Nu op smalle
+            # schermen: kleinere tekst + WEL laten omklappen, zodat de knop
+            # altijd binnen het scherm blijft en écht in het midden zit.
+            f'@media (max-width:480px) {{ '
+            f'.st-key-{_portfolio_cta_key} button {{ '
+            f'white-space:normal !important; font-size:0.78rem !important; '
+            f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; text-align:center !important; }} '
+            f'}} '
             f'</style>',
             unsafe_allow_html=True,
         )
@@ -7841,10 +7852,14 @@ def render_today():
             f'.st-key-{_today_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
             f'}} '
             f'.st-key-{_today_cta_key} button {{ '
-            f'background:#1FAE96 !important; color:#0B111E !important; font-weight:700 !important; '
-            f'border:none !important; border-radius:8px !important; padding:0.5rem 1.25rem !important; '
-            f'width:auto !important; box-shadow:none !important; }} '
-            f'.st-key-{_today_cta_key} button:hover {{ background:#24C7AB !important; }} '
+            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+            f'text-transform:uppercase !important; letter-spacing:0.04em !important; '
+            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+            f'.st-key-{_today_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+            f'color:#1FAE96 !important; }} '
             f'</style>',
             unsafe_allow_html=True,
         )
