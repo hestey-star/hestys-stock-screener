@@ -8893,6 +8893,12 @@ with st.sidebar:
     # de 'background'-shorthand gebruikt, die anders alsnog had kunnen
     # doorschemeren ondanks een background-color-override).
     _active_url_path = getattr(pg, "url_path", "")
+    # 'Discover' en 'Signature Signals' wijzen naar DEZELFDE url (/discover)
+    # -- een CSS-regel op basis van de href alleen kan ze dus NOOIT uit
+    # elkaar houden (dat verklaarde de rare uitlijning/'snijdende balk').
+    # Vanaf nu wordt ELK item gescoped via z'n EIGEN st.container(key=...),
+    # niet via de href -- 100% ondubbelzinnig, ongeacht welke 2 items
+    # toevallig naar dezelfde pagina linken.
     _nav_css_parts = ["""
     <style>
     [data-testid="stSidebarNav"] { display: none; }
@@ -8906,126 +8912,91 @@ with st.sidebar:
     [data-testid="stSidebar"] {
         border-right: 1px solid rgba(148,163,184,0.15) !important;
     }
-    [data-testid="stSidebar"] a[href$="/today"],
-    [data-testid="stSidebar"] a[href$="/portfolio"],
-    [data-testid="stSidebar"] a[href$="/analyze"],
-    [data-testid="stSidebar"] a[href$="/support"],
-    [data-testid="stSidebar"] a[href$="/premium"] {
-        display: flex; align-items: center; gap: 0.75rem;
-        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
-        padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
-        text-decoration: none !important; color: #8992A3 !important;
-        margin-bottom: 3px;
-    }
-    [data-testid="stSidebar"] a[href$="/today"]:hover,
-    [data-testid="stSidebar"] a[href$="/portfolio"]:hover,
-    [data-testid="stSidebar"] a[href$="/analyze"]:hover,
-    [data-testid="stSidebar"] a[href$="/support"]:hover,
-    [data-testid="stSidebar"] a[href$="/premium"]:hover {
-        background: rgba(255,255,255,0.04);
-    }
-    /* 'Discover' is nu een ECHTE, klikbare knop (st.button + st.switch_page)
-       i.p.v. platte tekst -- dezelfde exacte typografie/uitlijning als
-       Today/My Portfolio (zelfde font-size, gewicht, padding, icoon-
-       mechanisme) zodat alle hoofd-icoontjes kaarsrecht op 1 lijn staan.
-       Actief (op een Discover-subpagina) = helderwit, net als de andere
-       hoofdmenu-items in hun actieve status. */
-    .st-key-discover_main_btn button {
-        display: flex !important; align-items: center !important; justify-content: flex-start !important;
-        gap: 0.75rem !important; width: 100% !important;
+    /* Hoofdmenu-items (Discover, Today, My Portfolio, Analyze, Support,
+       Premium) -- ALLEMAAL exact dezelfde opbouw: st.page_link() met
+       icon=, elk gescoped via z'n eigen container-key i.p.v. href, dus
+       gegarandeerd identieke uitlijning voor alle 6. */
+    .st-key-nav_discover a, .st-key-nav_today a, .st-key-nav_portfolio a,
+    .st-key-nav_analyze a, .st-key-nav_support a, .st-key-nav_premium a {
+        display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
         padding: 0.6rem 0.9rem 0.6rem 0.75rem !important; border-radius: 8px !important;
-        background: transparent !important; border: none !important; box-shadow: none !important;
-        color: #8992A3 !important; margin-bottom: 3px !important;
+        text-decoration: none !important; color: #8992A3 !important;
+        margin-bottom: 3px !important;
     }
-    .st-key-discover_main_btn button:hover {
+    .st-key-nav_discover a:hover, .st-key-nav_today a:hover, .st-key-nav_portfolio a:hover,
+    .st-key-nav_analyze a:hover, .st-key-nav_support a:hover, .st-key-nav_premium a:hover {
         background: rgba(255,255,255,0.04) !important;
     }
-    /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
-       EARNINGS SURPRISES -- GEEN icoontjes meer, puur tekst. Stevige
-       inspringing (pl-7/pl-8) zodat de letters ter hoogte van de TEKST
-       van de hoofdmenu-items beginnen (niet ter hoogte van hun iconen).
-       Compact en gedempt (text-[11px] slate-500) als ze niet actief
-       zijn; helderwit + bold + een zachte, afgeronde achtergrondvulling
-       zodra ze wel actief zijn. */
-    [data-testid="stSidebar"] a[href$="/discover"],
-    [data-testid="stSidebar"] a[href$="/discover"]:link,
-    [data-testid="stSidebar"] a[href$="/discover"]:visited,
-    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
-    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:link,
-    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:visited,
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"],
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:link,
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:visited {
-        display: flex !important; align-items: center !important;
-        font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 500 !important;
-        text-transform: uppercase !important; letter-spacing: 0.06em !important;
-        padding: 0.4rem 0.9rem 0.4rem 2.25rem !important; border-radius: 8px;
-        text-decoration: none !important; color: #64748B !important;
-        margin-bottom: 1px;
+    /* Discover-subpagina's -- eigen, gezamenlijke groep-container
+       (.st-key-discover_subnav_group) met de inspringing op de
+       CONTAINER zelf (niet op de losse <a>-tags) -- een simpele
+       padding-left op een gewone <div> wint altijd, i.p.v. te vechten
+       tegen Streamlit's eigen interne padding op elke st.page_link()
+       afzonderlijk. GEEN icoontjes, klein/gedempt tekst-only, ALL-CAPS. */
+    .st-key-discover_subnav_group {
+        padding-left: 2.25rem !important;
+        box-sizing: border-box !important;
     }
-    /* Streamlit's st.page_link() rendert het label in een geneste <span>/
-       <p> binnen de <a> -- die erven kleur/grootte NIET automatisch van
-       de ouder over als Streamlit daar zelf ook al een font-regel op zet,
-       vandaar expliciet ook hier, met !important, dwingen. */
-    [data-testid="stSidebar"] a[href$="/discover"] *,
-    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"] *,
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] * {
+    .st-key-discover_subnav_group a {
+        display: inline-flex !important; align-items: center !important;
+        font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 600 !important;
+        text-transform: uppercase !important; letter-spacing: 0.06em !important;
+        padding: 0.35rem 0.6rem !important; border-radius: 8px !important;
+        text-decoration: none !important; color: #64748B !important;
+        margin-bottom: 1px !important; width: auto !important;
+    }
+    .st-key-discover_subnav_group a * {
         text-transform: uppercase !important;
         font-size: 11px !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
         letter-spacing: 0.06em !important;
         color: inherit !important;
     }
-    [data-testid="stSidebar"] a[href$="/discover"]:hover,
-    [data-testid="stSidebar"] a[href$="/discover-sectors-themes"]:hover,
-    [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"]:hover {
-        background: rgba(255,255,255,0.04);
+    .st-key-discover_subnav_group a:hover {
+        background: rgba(255,255,255,0.04) !important;
         color: #94A3B8 !important;
     }
-    /* Sidebar op mobiel volledig verborgen (geen hamburger-toegankelijke
-       sidebar meer op smalle schermen) -- bereidt de weg voor voor een
-       toekomstige, aparte mobiele bottom-bar. LET OP: zolang die bottom-
-       bar er nog niet is, heeft een mobiele bezoeker hierdoor TIJDELIJK
-       geen enkele navigatie meer. */
-    @media (max-width: 767px) {
-        [data-testid="stSidebar"] { display: none !important; }
-        [data-testid="collapsedControl"] { display: none !important; }
-    }
     """]
-    if _active_url_path:
-        _discover_subpaths = {"discover", "discover-sectors-themes", "discover-earnings-surprises"}
-        _on_discover_subpage = _active_url_path in _discover_subpaths
-        if _on_discover_subpage:
-            # Discover-subpagina's krijgen een EIGEN, subtielere actieve-
-            # status (helderwit + bold + een zachte, afgeronde donkere
-            # vulling) i.p.v. de felle teal-highlight van de hoofdmenu-
-            # items -- past bij hun kleinere, ondergeschikte formaat. De
-            # 'Discover'-hoofdknop zelf licht ook op (zelfde witte kleur
-            # als Today/My Portfolio in actieve staat) zodra je op 1 van
-            # z'n 3 subpagina's zit.
-            _nav_css_parts.append(f"""
-    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
-        color: #F1F5F9 !important;
-        font-weight: 700 !important;
-        background: rgba(15,23,42,0.4) !important;
-        border-radius: 8px !important;
-        padding-top: 0.4rem !important;
-        padding-bottom: 0.4rem !important;
-    }}
-    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] * {{
-        font-weight: 700 !important;
-    }}
-    .st-key-discover_main_btn button {{
-        color: #EAEDF1 !important;
-    }}
-    """)
-        else:
-            _nav_css_parts.append(f"""
-    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
+    # Container-key -> url_path-mapping, voor de actieve-status-highlight.
+    # 'nav_discover' licht op zodra je op ÉÉN van de 3 Discover-subpagina's
+    # zit (niet alleen exact /discover) -- de subpagina's hebben elk hun
+    # EIGEN, aparte key (discover_sub_signals/sectors/earnings), dus geen
+    # enkele overlap/verwarring meer met de hoofdknop.
+    _main_key_by_path = {
+        "today": "nav_today", "portfolio": "nav_portfolio", "analyze": "nav_analyze",
+        "support": "nav_support", "premium": "nav_premium",
+    }
+    _discover_subpaths = {
+        "discover": "discover_sub_signals",
+        "discover-sectors-themes": "discover_sub_sectors",
+        "discover-earnings-surprises": "discover_sub_earnings",
+    }
+    if _active_url_path in _main_key_by_path:
+        _nav_css_parts.append(f"""
+    .st-key-{_main_key_by_path[_active_url_path]} a {{
         color: #1FAE96 !important;
         background: rgba(31,174,150,0.15) !important;
         border-radius: 8px !important;
+    }}
+    """)
+    elif _active_url_path in _discover_subpaths:
+        # 'Discover' zelf licht mee op (subtiel, geen achtergrond -- puur
+        # de tekstkleur) zodra je ergens onder Discover zit.
+        _nav_css_parts.append("""
+    .st-key-nav_discover a {
+        color: #EAEDF1 !important;
+    }
+    """)
+        _active_sub_key = _discover_subpaths[_active_url_path]
+        _nav_css_parts.append(f"""
+    .st-key-{_active_sub_key} a {{
+        color: #F1F5F9 !important;
+        font-weight: 700 !important;
+        background: rgba(15,23,42,0.4) !important;
+    }}
+    .st-key-{_active_sub_key} a * {{
+        font-weight: 700 !important;
     }}
     """)
     _nav_css_parts.append("</style>")
@@ -9037,37 +9008,37 @@ with st.sidebar:
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
     #
-    # 'Discover' is nu een ECHTE, klikbare native knop (st.button +
-    # st.switch_page) i.p.v. platte, dode tekst -- klikken laadt direct
-    # de eerste subpagina (Signature Signals). Zelfde icoon-mechanisme
-    # (icon=":material/xxx:") als Today/My Portfolio/etc., dus alle
-    # hoofd-icoontjes staan nu gegarandeerd kaarsrecht op 1 lijn -- geen
-    # apart, net-iets-anders-uitlijnend custom HTML-blokje meer.
-    with st.container(key="discover_main_btn"):
-        if st.button("DISCOVER", icon=":material/search:", key="discover_main_btn_inner"):
-            st.switch_page(discover_page)
-    # Labels nu LETTERLIJK in hoofdletters meegegeven i.p.v. te vertrouwen
-    # op CSS text-transform:uppercase -- die bleek stelselmatig te
-    # verliezen van Streamlit's eigen, interne styling op de geneste
-    # tekst-elementen binnen st.page_link(), zelfs met !important overal.
-    # De tekst zelf al hoofdletters geven is de enige garantie die altijd
-    # werkt, ongeacht wat Streamlit intern doet. Nu consistent op ALLE
-    # navigatie-items toegepast, niet alleen de 3 Discover-subpagina's.
-    # Inspringing nu ook LETTERLIJK in de labeltekst zelf afgedwongen
-    # (non-breaking spaces) i.p.v. uitsluitend op CSS padding-left te
-    # vertrouwen -- dezelfde reden als bij ALL-CAPS hierboven: Streamlit's
-    # eigen interne opmaak op st.page_link() bleek de CSS padding stelsel-
-    # matig te negeren. Letterlijke spaties in de tekst zijn de enige
-    # garantie die altijd werkt. GEEN icoon-parameter meer op deze 3 --
-    # volledig icoonvrij, puur ingesprongen tekst.
-    st.page_link(discover_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SIGNATURE SIGNALS")
-    st.page_link(discover_sectors_themes_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0SECTORS & THEMES")
-    st.page_link(discover_earnings_surprises_page, label="\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0EARNINGS SURPRISES")
-    st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
-    st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
-    st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
-    st.page_link(support_page, label="SUPPORT", icon=":material/support_agent:")
-    st.page_link(premium_page, label="PREMIUM", icon=":material/star:")
+    # 'Discover' is nu een st.page_link() naar dezelfde pagina als
+    # 'Signature Signals' (beide /discover) -- GEEN apart st.button() meer,
+    # want een <button> rendert Streamlit intern altijd net anders dan een
+    # <a> (andere padding/icoon-uitlijning), wat de eerdere scheve
+    # uitlijning verklaarde. Nu 100% hetzelfde widget-type als Today/My
+    # Portfolio/etc., dus gegarandeerd identieke opbouw. Elk item zit in
+    # een EIGEN container-key (i.p.v. CSS op de href te baseren, want
+    # Discover en Signature Signals delen toevallig dezelfde url).
+    with st.container(key="nav_discover"):
+        st.page_link(discover_page, label="DISCOVER", icon=":material/search:")
+    # Subpagina's: eigen groep-container voor de gedeelde inspringing
+    # (padding-left op de CONTAINER, niet op de losse links -- zie CSS
+    # hierboven), en ELK item ALSNOG een eigen key eromheen voor de
+    # actieve-status-highlight. GEEN icoon-parameter -- volledig icoonvrij.
+    with st.container(key="discover_subnav_group"):
+        with st.container(key="discover_sub_signals"):
+            st.page_link(discover_page, label="SIGNATURE SIGNALS")
+        with st.container(key="discover_sub_sectors"):
+            st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES")
+        with st.container(key="discover_sub_earnings"):
+            st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES")
+    with st.container(key="nav_today"):
+        st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
+    with st.container(key="nav_portfolio"):
+        st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
+    with st.container(key="nav_analyze"):
+        st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
+    with st.container(key="nav_support"):
+        st.page_link(support_page, label="SUPPORT", icon=":material/support_agent:")
+    with st.container(key="nav_premium"):
+        st.page_link(premium_page, label="PREMIUM", icon=":material/star:")
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
