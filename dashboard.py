@@ -8924,36 +8924,21 @@ with st.sidebar:
     [data-testid="stSidebar"] a[href$="/premium"]:hover {
         background: rgba(255,255,255,0.04);
     }
-    /* 'Discover' is nu een klikbare accordeon-kop (geen navigatie-<a>-tag
-       -- puur een open/dicht-toggle) i.p.v. een pure, statische categorie-
-       hoofdmap. De 3 subpagina's eronder zitten in een inklapbare
-       container (.st-key-discover_subnav_collapse) die standaard ALLEEN
-       openstaat als je al op 1 van de 3 Discover-subpagina's zit (zodat
-       je meteen ziet waar je bent), en anders dichtgeklapt begint. */
-    .hesty-sidebar-category-toggle {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 0.75rem; cursor: pointer; user-select: none; -webkit-user-select: none;
-        font-family: 'Inter', sans-serif; font-size: 0.92rem; font-weight: 600;
-        padding: 0.6rem 0.9rem 0.6rem 0.75rem; border-radius: 8px;
-        color: #8992A3;
-    }
-    .hesty-sidebar-category-toggle:hover {
-        background: rgba(255,255,255,0.04);
-    }
-    .hesty-discover-chevron {
-        transition: transform 0.2s ease;
-        font-size: 0.7rem;
-        flex-shrink: 0;
-    }
-    .st-key-discover_subnav_collapse {
-        overflow: hidden !important;
-        transition: max-height 0.25s ease !important;
+    /* 'Discover' is nu een vaste, niet-klikbare categorie-hoofdkop (geen
+       dropdown/accordeon meer -- dat interactieve klik-mechanisme brak de
+       navigatie en gaf onrust). De 3 subpagina's staan er ALTIJD, vast en
+       ingesprongen, direct onder. */
+    .hesty-sidebar-category {
+        display: flex; align-items: center; gap: 0.75rem;
+        font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 0.6rem 0.9rem 0.6rem 0.75rem;
+        color: #64748B;
     }
     /* Discover-subpagina's: SIGNATURE SIGNALS, SECTORS & THEMES en
        EARNINGS SURPRISES -- alle 3 IDENTIEK gestyled: harde inspringing
        (pl-6/ml-5), ALL-CAPS, text-xs, gedempte kleur (slate-400/80) als
-       ze niet actief zijn -- visueel duidelijk ondergeschikt aan de
-       hoofdpagina's (Discover, Today, My Portfolio) erboven/eronder. */
+       ze niet actief zijn, iets compacter/matter dan de hoofdmenu-items. */
     [data-testid="stSidebar"] a[href$="/discover"],
     [data-testid="stSidebar"] a[href$="/discover-sectors-themes"],
     [data-testid="stSidebar"] a[href$="/discover-earnings-surprises"] {
@@ -8970,24 +8955,37 @@ with st.sidebar:
         background: rgba(255,255,255,0.04);
         color: #94A3B8 !important;
     }
+    /* Sidebar op mobiel volledig verborgen (geen hamburger-toegankelijke
+       sidebar meer op smalle schermen) -- bereidt de weg voor voor een
+       toekomstige, aparte mobiele bottom-bar. LET OP: zolang die bottom-
+       bar er nog niet is, heeft een mobiele bezoeker hierdoor TIJDELIJK
+       geen enkele navigatie meer. */
+    @media (max-width: 767px) {
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+    }
     """]
     if _active_url_path:
-        _nav_css_parts.append(f"""
+        _discover_subpaths = {"discover", "discover-sectors-themes", "discover-earnings-surprises"}
+        if _active_url_path in _discover_subpaths:
+            # Discover-subpagina's krijgen een EIGEN, subtielere actieve-
+            # status (helderwit + een zachte, donkere vulling) i.p.v. de
+            # felle teal-highlight van de hoofdmenu-items -- past bij hun
+            # kleinere, ondergeschikte formaat.
+            _nav_css_parts.append(f"""
+    [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
+        color: #F1F5F9 !important;
+        background: rgba(15,23,42,0.4) !important;
+        border-radius: 8px !important;
+    }}
+    """)
+        else:
+            _nav_css_parts.append(f"""
     [data-testid="stSidebar"] a[href$="/{_active_url_path}"] {{
         color: #1FAE96 !important;
         background: rgba(31,174,150,0.15) !important;
         border-radius: 8px !important;
     }}
-    """)
-    # Standaard open/dicht: openstaand als je al op een Discover-
-    # subpagina zit, anders dichtgeklapt -- puur via inline max-height,
-    # geen JS nodig voor de INITIELE staat (alleen voor de klik-toggle
-    # daarna).
-    _discover_subpages = {"discover", "discover-sectors-themes", "discover-earnings-surprises"}
-    _discover_open = _active_url_path in _discover_subpages
-    _nav_css_parts.append(f"""
-    .st-key-discover_subnav_collapse {{ max-height: {"500px" if _discover_open else "0px"} !important; }}
-    .hesty-discover-chevron {{ transform: rotate({"180deg" if _discover_open else "0deg"}); }}
     """)
     _nav_css_parts.append("</style>")
     st.markdown("".join(_nav_css_parts), unsafe_allow_html=True)
@@ -8998,50 +8996,16 @@ with st.sidebar:
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
     #
-    # 'Discover' is nu een klikbare accordeon-toggle (platte tekst + JS-
-    # click-handler, GEEN st.page_link) -- de 3 subpagina's eronder zitten
-    # in een st.container(key=...) die op klik open/dicht klapt. Zelfde,
-    # al bewezen betrouwbare JS-techniek als de footer-accordeon eerder:
-    # event delegation op window.parent.document.body (overleeft
-    # Streamlit-reruns).
+    # 'Discover' is nu ZUIVER een statische categorie-hoofdkop (platte
+    # tekst, geen st.page_link, geen klik-logica) -- de 3 subpagina's
+    # eronder zijn ALTIJD zichtbaar, echte native st.page_link()-widgets.
     st.markdown(
-        f'<div class="hesty-sidebar-category-toggle" data-target="discover_subnav_collapse">'
-        f'<div style="display:flex; align-items:center; gap:0.75rem;">'
-        f'{_icon_span("search", size_px=18, color="#8992A3")}Discover</div>'
-        f'<span class="hesty-discover-chevron">&#9662;</span>'
-        f'</div>',
+        f'<div class="hesty-sidebar-category">{_icon_span("search", size_px=16, color="#64748B")}Discover</div>',
         unsafe_allow_html=True,
     )
-    with st.container(key="discover_subnav_collapse"):
-        st.page_link(discover_page, label="Signature Signals", icon=":material/sensors:")
-        st.page_link(discover_sectors_themes_page, label="Sectors & Themes", icon=":material/sync:")
-        st.page_link(discover_earnings_surprises_page, label="Earnings Surprises", icon=":material/payments:")
-    components.html(
-        """
-        <script>
-        function hestyBindDiscoverAccordion() {
-            var doc = window.parent.document;
-            if (doc.body.__hestyDiscoverAccBound) { return; }
-            doc.body.__hestyDiscoverAccBound = true;
-            doc.body.addEventListener('click', function(e) {
-                var header = e.target.closest('.hesty-sidebar-category-toggle');
-                if (!header) { return; }
-                var targetKey = header.getAttribute('data-target');
-                var wrapper = doc.querySelector('.st-key-' + targetKey);
-                var chevron = header.querySelector('.hesty-discover-chevron');
-                if (!wrapper) { return; }
-                var isOpen = wrapper.style.maxHeight && wrapper.style.maxHeight !== '0px';
-                wrapper.style.maxHeight = isOpen ? '0px' : '500px';
-                if (chevron) {
-                    chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
-                }
-            });
-        }
-        hestyBindDiscoverAccordion();
-        </script>
-        """,
-        height=0,
-    )
+    st.page_link(discover_page, label="Signature Signals", icon=":material/sensors:")
+    st.page_link(discover_sectors_themes_page, label="Sectors & Themes", icon=":material/sync:")
+    st.page_link(discover_earnings_surprises_page, label="Earnings Surprises", icon=":material/payments:")
     st.page_link(today_page, label="Today", icon=":material/calendar_today:")
     st.page_link(portfolio_page, label="My Portfolio", icon=":material/work:")
     st.page_link(analyze_page, label="Analyze", icon=":material/bar_chart:")
