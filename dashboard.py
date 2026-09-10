@@ -8365,19 +8365,47 @@ def render_premium():
         f'</style>',
         unsafe_allow_html=True,
     )
+    def _premium_feature_line(text: str, paren: str = None, icon: str = "&#10003;",
+                               icon_color: str = "rgba(16,185,129,0.8)", text_color: str = "#CBD5E1") -> str:
+        """
+        1 feature-regel als eigen <div> (i.p.v. alles met <br> aaneen te
+        rijgen in 1 platte tekstmuur) -- geeft elke regel z'n eigen
+        padding voor luchtige, scanbare ademruimte, en houdt de tekst
+        tussen haakjes als een LOS, gedempt element i.p.v. dezelfde
+        felwitte opmaak als de hoofdtekst.
+        """
+        paren_html = (
+            f' <span style="color:#64748B; font-size:0.68rem; font-weight:500; '
+            f'letter-spacing:0.03em; text-transform:uppercase;">({paren})</span>'
+            if paren else ""
+        )
+        return (
+            f'<div style="padding:0.4rem 0;">'
+            f'<span style="color:{icon_color}; font-weight:700; margin-right:0.5rem;">{icon}</span>'
+            f'<span style="color:{text_color}; font-weight:600; text-transform:uppercase; '
+            f'letter-spacing:0.02em; font-size:0.85rem;">{text}</span>{paren_html}'
+            f'</div>'
+        )
+
     with pcol1:
         with st.container(key=_early_card_key):
+            _early_features = "".join([
+                _premium_feature_line("Unlimited asset tracking", "launch special"),
+                _premium_feature_line("Full access to all Signature Signals", "no blurs"),
+                _premium_feature_line("Deep portfolio risk &amp; concentration metrics"),
+                _premium_feature_line("Includes access to all future premium features"),
+                _premium_feature_line("Your daily personalized radar"),
+                _premium_feature_line("Portfolio rebalancing tips"),
+                _premium_feature_line("Establish your own deepdives"),
+            ])
             st.markdown(
                 '<div class="hesty-premium-title-early">Early Adopter (Free Now)</div>'
-                '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; line-height:2; '
+                f'<div>{_early_features}</div>'
+                # De afsluitregel krijgt bewust EXTRA bovenruimte (mt-2) +
+                # een eigen, iets grotere/witte stijl -- dit is de grote
+                # 'closer' van het pakket, geen gewone feature-regel.
+                '<div style="margin-top:0.5rem; color:#EAEDF1; font-weight:700; font-size:0.85rem; '
                 'text-transform:uppercase; letter-spacing:0.02em;">'
-                '&#10003; Unlimited asset tracking (launch special)<br>'
-                '&#10003; Full access to all Signature Signals (no blurs)<br>'
-                '&#10003; Deep portfolio risk &amp; concentration metrics<br>'
-                '&#10003; Includes access to all future premium features<br>'
-                '&#10003; Your daily personalized radar<br>'
-                '&#10003; Portfolio rebalancing tips<br>'
-                '&#10003; Establish your own deepdives<br>'
                 '&#127873; Lifetime PRO status: join now and stay free forever.'
                 '</div>',
                 unsafe_allow_html=True,
@@ -8401,17 +8429,23 @@ def render_premium():
                         st.switch_page(login_page)
     with pcol2:
         with st.container(key="premium_future_card"):
+            _future_features = "".join([
+                _premium_feature_line("Limited to max 10 assets", icon="&#10003;",
+                                       icon_color="#475569", text_color="#64748B"),
+                _premium_feature_line("Blurred signals &amp; screener results", icon="&#10003;",
+                                       icon_color="#475569", text_color="#64748B"),
+                _premium_feature_line("Future Pro upgrade will cost $7 / month", icon="&#10003;",
+                                       icon_color="#475569", text_color="#64748B"),
+                _premium_feature_line("Daily personalized radar", "limited version", icon="&#8722;",
+                                       icon_color="#475569", text_color="#64748B"),
+                _premium_feature_line("Portfolio rebalancing tips", "limited version", icon="&#8722;",
+                                       icon_color="#475569", text_color="#64748B"),
+                _premium_feature_line("Establish your own deepdives", "limited version", icon="&#8722;",
+                                       icon_color="#475569", text_color="#64748B"),
+            ])
             st.markdown(
                 '<div class="hesty-premium-title-future">Future Free Plan (Post-Launch)</div>'
-                '<div style="color:#64748B; font-size:0.85rem; font-weight:500; line-height:2; '
-                'text-transform:uppercase; letter-spacing:0.02em;">'
-                '&#10003; Limited to max 10 assets<br>'
-                '&#10003; Blurred signals &amp; screener results<br>'
-                '&#10003; Future Pro upgrade will cost $7 / month<br>'
-                '&ndash; Daily personalized radar (limited version)<br>'
-                '&ndash; Portfolio rebalancing tips (limited version)<br>'
-                '&ndash; Establish your own deepdives (limited version)'
-                '</div>',
+                f'<div>{_future_features}</div>',
                 unsafe_allow_html=True,
             )
             st.button("Coming Soon", key="premium_future_coming_soon", disabled=True)
