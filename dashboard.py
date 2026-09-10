@@ -8334,24 +8334,35 @@ def render_premium():
         f'border:1px solid rgba(31,174,150,0.5) !important; border-radius:8px !important; '
         f'padding:0.6rem 1.25rem !important; width:100% !important; box-shadow:none !important; }} '
         f'.st-key-{_early_btn_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+        # 'inactief' t.o.v. de linkerkaart komt nu ALLEEN nog van de
+        # gedempte kleuren zelf (rand/achtergrond/tekst) -- GEEN
+        # container-brede opacity meer. Die verdubbelde eerder met de
+        # toch al gedempte tekstkleuren (#8992A3/#64748B op 0.4 opacity
+        # = vrijwel onleesbaar), i.p.v. gewoon leesbaar-maar-gedempt.
         f'.st-key-premium_future_card {{ '
         f'background:rgba(15,23,42,0.2) !important; border:1px solid rgba(30,41,59,0.4) !important; '
         f'border-radius:14px !important; padding:1.5rem !important; box-sizing:border-box !important; '
-        f'opacity:0.4 !important; pointer-events:none !important; user-select:none !important; }} '
+        f'pointer-events:none !important; user-select:none !important; }} '
         f'.st-key-premium_future_card button {{ '
-        f'background:transparent !important; color:#8992A3 !important; font-weight:700 !important; '
+        f'background:transparent !important; color:#64748B !important; font-weight:700 !important; '
         f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
-        f'border:1px solid rgba(137,146,163,0.3) !important; border-radius:8px !important; '
+        f'border:1px solid rgba(100,116,139,0.35) !important; border-radius:8px !important; '
         f'padding:0.6rem 1.25rem !important; width:100% !important; box-shadow:none !important; '
         f'margin-top:1.25rem !important; cursor:default !important; }} '
+        f'.hesty-premium-title-early {{ '
+        f'color:#34D399; font-weight:800; font-size:1rem; text-transform:uppercase; '
+        f'letter-spacing:0.04em; margin-bottom:1rem; }} '
+        f'@media (min-width:768px) {{ .hesty-premium-title-early {{ font-size:1.125rem !important; }} }} '
+        f'.hesty-premium-title-future {{ '
+        f'color:#CBD5E1; font-weight:700; font-size:0.95rem; text-transform:uppercase; '
+        f'letter-spacing:0.04em; margin-bottom:1rem; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
     with pcol1:
         with st.container(key=_early_card_key):
             st.markdown(
-                '<div style="color:#F1F5F9; font-weight:800; font-size:1.05rem; text-transform:uppercase; '
-                'letter-spacing:0.03em; margin-bottom:1rem;">Early Adopter (Free Now)</div>'
+                '<div class="hesty-premium-title-early">Early Adopter (Free Now)</div>'
                 '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; line-height:2; '
                 'text-transform:uppercase; letter-spacing:0.02em;">'
                 '&#10003; Unlimited asset tracking (launch special)<br>'
@@ -8369,9 +8380,8 @@ def render_premium():
     with pcol2:
         with st.container(key="premium_future_card"):
             st.markdown(
-                '<div style="color:#8992A3; font-weight:800; font-size:1.05rem; text-transform:uppercase; '
-                'letter-spacing:0.03em; margin-bottom:1rem;">Future Free Plan (Post-Launch)</div>'
-                '<div style="color:#64748B; font-size:0.85rem; font-weight:600; line-height:2; '
+                '<div class="hesty-premium-title-future">Future Free Plan (Post-Launch)</div>'
+                '<div style="color:#64748B; font-size:0.85rem; font-weight:500; line-height:2; '
                 'text-transform:uppercase; letter-spacing:0.02em;">'
                 '&#10003; Limited to max 10 assets<br>'
                 '&#10003; Blurred signals &amp; screener results<br>'
