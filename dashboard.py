@@ -8308,7 +8308,7 @@ def render_premium():
     st.markdown(
         '<div style="color:#64748B; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
         'letter-spacing:0.03em; margin-bottom:1.25rem;">'
-        'BUILT FOR SERIOUS INVESTORS -- BE AN EARLY ADOPTER AND LOCK IN YOUR ACCESS FOR LIFE.'
+        'BUILT FOR SERIOUS INVESTORS | BE AN EARLY ADOPTER AND LOCK IN YOUR ACCESS FOR LIFE.'
         '</div>',
         unsafe_allow_html=True,
     )
