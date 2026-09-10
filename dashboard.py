@@ -8305,11 +8305,17 @@ def render_premium():
         _uniform_section_header_html("Hestys Premium", "workspace_premium", is_first=True),
         unsafe_allow_html=True,
     )
+    # Subtekst reageert op inlogstatus -- een bezoeker die de deal nog
+    # moet claimen krijgt de wervende pitch, een gebruiker die 'm al heeft
+    # geclaimd krijgt een bevestiging i.p.v. dezelfde 'kom erbij'-tekst
+    # nogmaals te zien (voelt overbodig/onprofessioneel als je 'm al hebt).
+    if current_user.is_logged_in:
+        _premium_subtext = "WELCOME TO THE INNER CIRCLE | YOUR LIFETIME FREE PRO ACCESS IS LOCKED IN."
+    else:
+        _premium_subtext = "BUILT FOR SERIOUS INVESTORS | BE AN EARLY ADOPTER AND LOCK IN YOUR ACCESS FOR LIFE."
     st.markdown(
-        '<div style="color:#64748B; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
-        'letter-spacing:0.03em; margin-bottom:1.25rem;">'
-        'BUILT FOR SERIOUS INVESTORS | BE AN EARLY ADOPTER AND LOCK IN YOUR ACCESS FOR LIFE.'
-        '</div>',
+        f'<div style="color:#64748B; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
+        f'letter-spacing:0.03em; margin-bottom:1.25rem;">{_premium_subtext}</div>',
         unsafe_allow_html=True,
     )
 
@@ -8369,14 +8375,30 @@ def render_premium():
                 '&#10003; Full access to all Signature Signals (no blurs)<br>'
                 '&#10003; Deep portfolio risk &amp; concentration metrics<br>'
                 '&#10003; Includes access to all future premium features<br>'
+                '&#10003; Your daily personalized radar<br>'
+                '&#10003; Portfolio rebalancing tips<br>'
+                '&#10003; Establish your own deepdives<br>'
                 '&#127873; Lifetime PRO status: join now and stay free forever.'
                 '</div>',
                 unsafe_allow_html=True,
             )
-            with st.container(key=_early_btn_key):
-                if st.button("Claim Free Pro Access \u2192", key="premium_early_adopter_claim"):
-                    st.session_state["login_prefill_mode"] = "Sign Up"
-                    st.switch_page(login_page)
+            if current_user.is_logged_in:
+                # Geen 'Claim'-knop meer als je 'm al hebt geclaimd -- een
+                # niet-klikbare, oplichtende status-badge bevestigt dat je
+                # actief bent i.p.v. dezelfde actieknop nogmaals te tonen.
+                st.markdown(
+                    '<div style="background:rgba(6,78,59,0.4); color:#34D399; '
+                    'border:1px solid rgba(16,185,129,0.3); font-size:0.72rem; font-weight:700; '
+                    'letter-spacing:0.08em; text-transform:uppercase; padding:0.65rem 1.25rem; '
+                    'border-radius:10px; text-align:center; width:100%; box-sizing:border-box; '
+                    'margin-top:1.25rem;">&#10003; Your early adopter status is active</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                with st.container(key=_early_btn_key):
+                    if st.button("Claim Free Pro Access \u2192", key="premium_early_adopter_claim"):
+                        st.session_state["login_prefill_mode"] = "Sign Up"
+                        st.switch_page(login_page)
     with pcol2:
         with st.container(key="premium_future_card"):
             st.markdown(
@@ -8385,7 +8407,10 @@ def render_premium():
                 'text-transform:uppercase; letter-spacing:0.02em;">'
                 '&#10003; Limited to max 10 assets<br>'
                 '&#10003; Blurred signals &amp; screener results<br>'
-                '&#10003; Future Pro upgrade will cost $7 / month'
+                '&#10003; Future Pro upgrade will cost $7 / month<br>'
+                '&ndash; Daily personalized radar (limited version)<br>'
+                '&ndash; Portfolio rebalancing tips (limited version)<br>'
+                '&ndash; Establish your own deepdives (limited version)'
                 '</div>',
                 unsafe_allow_html=True,
             )
