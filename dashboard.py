@@ -314,16 +314,15 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     background-repeat: no-repeat;
     background-position: 16px center;
     padding-left: 42px !important;
-    /* Minimalistisch, gecentreerd -- geen volle-breedte-knop met harde
-       rand meer, maar dezelfde subtiele, zachte stijl als de rest van
-       het platform. */
     background-color: rgba(15,23,42,0.4) !important;
     border: 1px solid rgba(51,65,85,0.6) !important;
     color: #EAEDF1 !important;
     font-weight: 600 !important;
     box-shadow: none !important;
+    /* Links uitgelijnd i.p.v. gecentreerd (margin:0 auto -> margin:0),
+       consistent met de rest van de site. */
     display: block !important;
-    margin: 0 auto !important;
+    margin: 0 !important;
     width: fit-content !important;
     min-width: 240px !important;
 }
@@ -332,8 +331,7 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
     border-color: rgba(71,85,105,0.7) !important;
 }
 .st-key-login_page_google {
-    display: flex !important;
-    justify-content: center !important;
+    display: block !important;
     width: 100% !important;
 }
 
@@ -8678,8 +8676,54 @@ def render_login():
         # zijbalk) valt terug op de normale 'Sign In'-default.
         _login_prefill_mode = st.session_state.pop("login_prefill_mode", "Sign In")
 
-        login_col_l, login_col_mid, login_col_r = st.columns([1, 2, 1])
-        with login_col_mid:
+        # Complete formulier nu STRAK LINKS uitgelijnd (was gecentreerd via
+        # lege zij-kolommen) -- gescoped via 1 gedeelde container-key met
+        # een max-width (max-w-md), i.p.v. de oude 3-koloms-truc die alles
+        # naar het midden van het scherm duwde. Dat brak de links-
+        # uitgelijnde standaard van de rest van de site.
+        _form_wrap_key = "login_form_wrap"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_form_wrap_key} {{ '
+            f'max-width:28rem !important; width:100% !important; margin:0 !important; '
+            f'padding:0 0.25rem !important; box-sizing:border-box !important; }} '
+            # Toggle: exact dezelfde platte, zacht-afgeronde stijl als de
+            # Daily/All-time-schakelaar elders op het platform -- geen
+            # harde, scherpe omlijningen meer.
+            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] {{ '
+            f'display:inline-flex !important; background:rgba(2,6,23,0.6) !important; '
+            f'border:1px solid rgba(15,23,42,0.9) !important; border-radius:8px !important; '
+            f'padding:2px !important; gap:2px !important; max-width:200px !important; '
+            f'margin-bottom:1.5rem !important; }} '
+            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] button, '
+            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] label {{ '
+            f'border:none !important; outline:none !important; box-shadow:none !important; '
+            f'background:transparent !important; color:#64748B !important; font-weight:500 !important; '
+            f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; '
+            f'padding:0.3rem 1rem !important; border-radius:6px !important; }} '
+            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+            f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
+            # Input-labels: kleine, gedempte ALL-CAPS metadata i.p.v. de
+            # Streamlit-standaard labelgrootte.
+            f'.hesty-login-label {{ '
+            f'font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
+            f'text-transform:uppercase; margin-bottom:0.35rem; display:block; }} '
+            # 'Create account'/'Sign In'-knop: vol, breed, solide.
+            f'.st-key-{_form_wrap_key} div[data-testid="stButton"]:has(button[kind="primary"]) {{ '
+            f'margin-top:1rem !important; }} '
+            f'.st-key-{_form_wrap_key} button[kind="primary"] {{ '
+            f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
+            f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
+            f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+            f'.st-key-{_form_wrap_key} button[kind="primary"]:hover {{ background:#059669 !important; }} '
+            # Google-knop: gat naar de knop erboven fors verkleind, blijft
+            # links uitgelijnd binnen dezelfde max-w-md-breedte.
+            f'.st-key-{_form_wrap_key} .st-key-login_page_google {{ margin-top:0 !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_form_wrap_key):
             login_mode = st.segmented_control(
                 "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
                 default=_login_prefill_mode, key="login_mode_toggle", label_visibility="collapsed",
@@ -8713,7 +8757,7 @@ def render_login():
                     'text-transform:uppercase;'
                 )
             st.markdown(
-                f'<div style="max-width:420px; margin:2rem auto 1.5rem auto; text-align:center;">'
+                f'<div style="max-width:28rem; margin:0 0 1.5rem 0; text-align:left;">'
                 f'<h2 class="hero-headline" style="margin-bottom:0.3rem;">{_login_title}</h2>'
                 f'<p style="{_login_subtext_style}">{_login_subtext}</p>'
                 f'</div>',
@@ -8721,8 +8765,12 @@ def render_login():
             )
 
             if login_mode == "Sign In":
-                login_email = st.text_input("Email", placeholder="you@example.com", key="login_email")
-                login_password = st.text_input("Password", type="password", key="login_password")
+                st.markdown('<span class="hesty-login-label">Email</span>', unsafe_allow_html=True)
+                login_email = st.text_input("Email", placeholder="you@example.com", key="login_email",
+                                             label_visibility="collapsed")
+                st.markdown('<span class="hesty-login-label">Password</span>', unsafe_allow_html=True)
+                login_password = st.text_input("Password", type="password", key="login_password",
+                                                label_visibility="collapsed")
                 if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
                     st.session_state["show_forgot_password"] = True
                     st.rerun()
@@ -8741,11 +8789,18 @@ def render_login():
                         else:
                             st.error(result)
             else:
-                signup_name = st.text_input("Name", placeholder="Your name", key="signup_name")
-                signup_email = st.text_input("Email", placeholder="you@example.com", key="signup_email")
+                st.markdown('<span class="hesty-login-label">Name</span>', unsafe_allow_html=True)
+                signup_name = st.text_input("Name", placeholder="Your name", key="signup_name",
+                                             label_visibility="collapsed")
+                st.markdown('<span class="hesty-login-label">Email</span>', unsafe_allow_html=True)
+                signup_email = st.text_input("Email", placeholder="you@example.com", key="signup_email",
+                                              label_visibility="collapsed")
+                st.markdown('<span class="hesty-login-label">Password</span>', unsafe_allow_html=True)
                 signup_password = st.text_input("Password", type="password", key="signup_password",
-                                                 help="At least 8 characters.")
-                signup_password_confirm = st.text_input("Confirm password", type="password", key="signup_password_confirm")
+                                                 help="At least 8 characters.", label_visibility="collapsed")
+                st.markdown('<span class="hesty-login-label">Confirm password</span>', unsafe_allow_html=True)
+                signup_password_confirm = st.text_input("Confirm password", type="password",
+                                                          key="signup_password_confirm", label_visibility="collapsed")
                 if st.button("Create account", type="primary", key="signup_submit"):
                     if not signup_name or not signup_email or not signup_password:
                         st.error("Fill in all fields.")
@@ -8768,7 +8823,7 @@ def render_login():
                             st.error(message)
 
             st.markdown(
-                '<div style="display:flex; align-items:center; gap:0.75rem; margin:1.5rem 0 1rem 0;">'
+                '<div style="display:flex; align-items:center; gap:0.75rem; margin:1rem 0 1rem 0;">'
                 '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
                 '<span style="color:#8992A3; font-size:0.8rem;">OR</span>'
                 '<div style="flex:1; height:1px; background:rgba(137,146,163,0.25);"></div>'
