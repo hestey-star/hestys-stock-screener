@@ -8301,9 +8301,17 @@ def render_today():
 
 
 def render_premium():
-    import database
-
-    st.markdown("### Premium")
+    st.markdown(
+        _uniform_section_header_html("Hestys Premium", "workspace_premium", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="color:#64748B; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
+        'letter-spacing:0.03em; margin-bottom:1.25rem;">'
+        'BUILT FOR SERIOUS INVESTORS -- BE AN EARLY ADOPTER AND LOCK IN YOUR ACCESS FOR LIFE.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     # --- 2-koloms 'Early Access Lifetime'-opzet i.p.v. de oude
     # vergelijkingstabel + losse Smart DCA Assistant-container (die tunen
@@ -8372,57 +8380,6 @@ def render_premium():
                 unsafe_allow_html=True,
             )
             st.button("Coming Soon", key="premium_future_coming_soon", disabled=True)
-
-    with st.container(border=True):
-        st.markdown("##### Subscription")
-
-        # --- Terugkeer van Stripe: verifieer de sessie en zet premium aan ---
-        returned_session_id = st.query_params.get("session_id")
-        if returned_session_id:
-            with st.spinner("Confirming your payment..."):
-                success, paid_email = verify_and_activate_premium(returned_session_id)
-            if success:
-                st.success(f"Payment confirmed! Premium is now active for {paid_email}.", icon=":material/celebration:")
-            else:
-                st.warning(
-                    "We couldn't confirm this payment yet. If you just completed checkout, "
-                    "please wait a few seconds and refresh this page."
-                )
-
-        if not current_user.is_logged_in:
-            st.info("Log in via the menu first so we know which account to upgrade.")
-        elif database.is_premium_user(current_user.email):
-            st.success("You're already on Premium. Thank you!")
-            customer_id = database.get_stripe_customer_id(current_user.email)
-            if customer_id:
-                if st.button("Manage subscription"):
-                    with st.spinner("Preparing your subscription portal..."):
-                        portal_session = create_billing_portal_session(customer_id)
-                    st.link_button("Open subscription portal →", portal_session.url, type="primary")
-                st.caption("Cancel anytime -- you'll keep Premium access until the end of your current billing period.")
-            else:
-                st.caption("Manage your subscription by contacting support -- see below.")
-        else:
-            st.write("Choose a plan:")
-            pcol1, pcol2 = st.columns(2)
-            with pcol1:
-                st.markdown("**Monthly -- €7.99/mo** *(~$8.99)*")
-                if st.button("Subscribe monthly", key="sub_monthly"):
-                    with st.spinner("Preparing checkout..."):
-                        session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_monthly"], current_user.email,
-                        )
-                    st.link_button("Continue to payment →", session.url, type="primary")
-            with pcol2:
-                st.markdown("**Yearly -- €75/yr** *(~$85)*")
-                if st.button("Subscribe yearly", key="sub_yearly"):
-                    with st.spinner("Preparing checkout..."):
-                        session = create_checkout_session(
-                            st.secrets["stripe"]["price_id_yearly"], current_user.email,
-                        )
-                    st.link_button("Continue to payment →", session.url, type="primary")
-            st.caption("Payments are processed securely by Stripe -- we never see or store your card details. "
-                       "USD amounts shown are approximate (current EUR/USD rate) -- you're charged in EUR.")
 
 
 def render_settings():
