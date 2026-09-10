@@ -2000,6 +2000,114 @@ def _icon_span(name: str, size_px: int = 18, color: str = "currentColor") -> str
     )
 
 
+def _landing_table_skeleton_html(rows: int = 5) -> str:
+    """
+    Geblurde preview van een generieke tabel (Today/My Portfolio) -- puur
+    neutrale skeleton-balkjes, GEEN nagemaakte tickers/bedragen. Zelfs
+    geblurd zou nagemaakte data op zichzelf al kunnen worden aangezien
+    voor echte cijfers.
+    """
+    row_html = (
+        '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0;">'
+        '<div style="width:28px; height:28px; border-radius:50%; background:rgba(137,146,163,0.15); flex-shrink:0;"></div>'
+        '<div style="height:10px; width:35%; background:rgba(137,146,163,0.18); border-radius:4px;"></div>'
+        '<div style="height:10px; width:15%; background:rgba(137,146,163,0.12); border-radius:4px; margin-left:auto;"></div>'
+        '<div style="height:10px; width:12%; background:rgba(137,146,163,0.12); border-radius:4px;"></div>'
+        '</div>'
+    )
+    return (
+        f'<div style="filter:blur(4px); opacity:0.2; pointer-events:none; user-select:none; '
+        f'-webkit-user-select:none;">{row_html * rows}</div>'
+    )
+
+
+def _landing_chart_skeleton_html() -> str:
+    """
+    Geblurde preview van een generiek staafdiagram (Analyze) -- zelfde
+    'neutrale contouren, geen nagemaakte cijfers'-principe als de tabel-
+    skeleton hierboven.
+    """
+    import random as _random
+    _rng = _random.Random(42)  # vaste seed -- zelfde 'grafiek' bij elke render, geen flikkerende hoogtes
+    bars_html = "".join(
+        f'<div style="width:100%; height:{_rng.randint(30, 100)}%; background:rgba(137,146,163,0.15); '
+        f'border-radius:4px 4px 0 0;"></div>'
+        for _ in range(10)
+    )
+    return (
+        f'<div style="filter:blur(4px); opacity:0.2; pointer-events:none; user-select:none; '
+        f'-webkit-user-select:none; display:flex; align-items:flex-end; gap:0.6rem; height:200px;">'
+        f'{bars_html}</div>'
+    )
+
+
+def _render_landing_soft_lock(title: str, icon_name: str, cta_text: str, button_label: str,
+                               preview_html: str, key_prefix: str) -> None:
+    """
+    HET ene, universele 'niet-ingelogd'-landingssjabloon -- gedeeld door
+    Today, My Portfolio en Analyze. Groene sectiekop + dunne lijn, dan 1
+    grote, zachte tegel met een geblurde data-preview erin, en daarover-
+    heen een kaarsrecht gecentreerde overlay (tekst + knop) die als een
+    premium 'soft-lock' op de wazige data zweeft.
+    """
+    st.markdown(
+        _uniform_section_header_html(title, icon_name, is_first=True),
+        unsafe_allow_html=True,
+    )
+    _tile_key = f"{key_prefix}_landing_tile"
+    _cta_key = f"{key_prefix}_landing_cta"
+    _text_class = f"hesty-landing-cta-text-{key_prefix}"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_tile_key} {{ position:relative !important; width:100% !important; min-height:300px !important; '
+        f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+        f'border-radius:14px !important; padding:1.5rem !important; box-sizing:border-box !important; '
+        f'overflow:hidden !important; }} '
+        f'@media (min-width:768px) {{ .st-key-{_tile_key} {{ padding:2rem !important; }} }} '
+        f'.st-key-{_cta_key} {{ '
+        f'position:absolute !important; top:50% !important; left:50% !important; '
+        f'transform:translate(-50%, -50%) !important; z-index:10 !important; '
+        f'width:auto !important; max-width:90% !important; '
+        f'display:flex !important; flex-direction:column !important; align-items:center !important; '
+        f'justify-content:center !important; text-align:center !important; }} '
+        f'.{_text_class} {{ '
+        f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+        f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+        f'@media (min-width:768px) {{ .{_text_class} {{ font-size:0.85rem !important; }} }} '
+        f'.st-key-{_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; }} '
+        f'@media (min-width:768px) {{ '
+        f'.st-key-{_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+        f'}} '
+        f'.st-key-{_cta_key} button {{ '
+        f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+        f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+        f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+        f'padding:0.6rem 1.5rem !important; width:auto !important; max-width:100% !important; '
+        f'white-space:nowrap !important; box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+        f'.st-key-{_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+        f'color:#1FAE96 !important; }} '
+        # Op mobiel is de tekst met white-space:nowrap breder dan het
+        # scherm, waardoor 'ie symmetrisch links/rechts afloopt i.p.v.
+        # netjes te passen (lijkt dan 'niet gecentreerd'). Op smalle
+        # schermen: kleinere tekst + WEL laten omklappen.
+        f'@media (max-width:480px) {{ '
+        f'.st-key-{_cta_key} button {{ '
+        f'white-space:normal !important; font-size:0.78rem !important; '
+        f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; text-align:center !important; }} '
+        f'}} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_tile_key):
+        st.markdown(preview_html, unsafe_allow_html=True)
+        with st.container(key=_cta_key):
+            st.markdown(f'<div class="{_text_class}">{cta_text}</div>', unsafe_allow_html=True)
+            if st.button(button_label, key=f"{key_prefix}_landing_cta_btn"):
+                st.session_state["login_prefill_mode"] = "Sign Up"
+                st.switch_page(login_page)
+
+
 def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = False, action_html: str = "") -> str:
     """
     HET ene, universele sectiekop-patroon voor Today, My Portfolio en
@@ -4566,15 +4674,19 @@ _LOGO_ICON_B64 = "iVBORw0KGgoAAAANSUhEUgAAAIMAAACgCAYAAAAvpd/+AAAh7klEQVR4nO19e5
 # ============================================================
 
 def render_analyze():
-    st.markdown("### Analyze")
-
     if not current_user.is_logged_in:
-        st.markdown(
-            '<div class="privacy-seal">&#128274; PRIVATE &middot; visible only to you</div>',
-            unsafe_allow_html=True,
+        _render_landing_soft_lock(
+            title="Portfolio Analytics",
+            icon_name="bar_chart",
+            cta_text="&#128274; UNLOCK DEEP PORTFOLIO ANALYTICS. VIEW YOUR ASSET ALLOCATION, RISK "
+                      "METRICS AND HISTORICAL PERFORMANCE.",
+            button_label="Unlock Deep Portfolio Analytics \u2192",
+            preview_html=_landing_chart_skeleton_html(),
+            key_prefix="analyze",
         )
-        st.info("Log in via the menu to track your own positions and analyze your portfolio. No one else can see what you add.")
         st.stop()
+
+    st.markdown("### Analyze")
 
     # Sub-navigatie via segmented_control i.p.v. HTML-links -- geen
     # volledige pagina-herlading meer bij het wisselen van tabblad. De
@@ -5200,75 +5312,15 @@ def render_analyze():
 
 def render_portfolio():
     if not current_user.is_logged_in:
-        # --- Niet-ingelogde My Portfolio-landing: zelfde 'Hestys-standaard'
-        # als Discover/Today -- groene hoofdsectiekop + dunne lijn, dan een
-        # GEBLURDE preview van hoe de positietabel eruitziet (skeleton-
-        # balkjes, GEEN nagemaakte tickers/bedragen -- dat zou op zichzelf
-        # al kunnen worden aangezien voor echte data, ook als het geblurd
-        # is) met een centrale CTA erover. Vervangt de vorige combinatie
-        # van een losse 'Private'-badge + een felblauwe st.info()-balk. ---
-        st.markdown(
-            _uniform_section_header_html("My Portfolio", "work", is_first=True),
-            unsafe_allow_html=True,
+        _render_landing_soft_lock(
+            title="My Portfolio",
+            icon_name="work",
+            cta_text="&#128274; TRACK YOUR ASSETS AND REAL-TIME PERFORMANCE. LINK YOUR BROKER OR "
+                      "INPUT YOUR POSITIONS SECURELY.",
+            button_label="Connect Portfolio to View Positions \u2192",
+            preview_html=_landing_table_skeleton_html(),
+            key_prefix="portfolio",
         )
-        _skeleton_row_html = (
-            '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0;">'
-            '<div style="width:28px; height:28px; border-radius:50%; background:rgba(137,146,163,0.15); flex-shrink:0;"></div>'
-            '<div style="height:10px; width:35%; background:rgba(137,146,163,0.18); border-radius:4px;"></div>'
-            '<div style="height:10px; width:15%; background:rgba(137,146,163,0.12); border-radius:4px; margin-left:auto;"></div>'
-            '<div style="height:10px; width:12%; background:rgba(137,146,163,0.12); border-radius:4px;"></div>'
-            '</div>'
-        )
-        # Echte position:relative/absolute-overlay i.p.v. de eerdere
-        # negatieve-margin-truc -- die dreef nog te ver naar links/onder
-        # weg. Tabel EN knop zitten nu samen in 1 gedeelde
-        # st.container(key=...) (position:relative), zodat de knop
-        # (position:absolute; top/left:50%; transform:translate(-50%,-50%))
-        # gegarandeerd kaarsrecht t.o.v. DIE container centreert, niet
-        # t.o.v. de hele pagina.
-        _preview_wrap_key = "portfolio_preview_wrap"
-        _portfolio_cta_key = "portfolio_signup_cta"
-        st.markdown(
-            f'<style>'
-            f'.st-key-{_preview_wrap_key} {{ position:relative !important; width:100% !important; '
-            f'min-height:300px !important; }} '
-            f'.st-key-{_portfolio_cta_key} {{ '
-            f'position:absolute !important; top:50% !important; left:50% !important; '
-            f'transform:translate(-50%, -50%) !important; z-index:10 !important; '
-            f'width:auto !important; max-width:90% !important; }} '
-            f'.st-key-{_portfolio_cta_key} button {{ '
-            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
-            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
-            f'text-transform:uppercase !important; letter-spacing:0.04em !important; '
-            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
-            f'padding:0.6rem 1.5rem !important; width:auto !important; max-width:100% !important; '
-            f'white-space:nowrap !important; box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
-            f'.st-key-{_portfolio_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
-            f'color:#1FAE96 !important; }} '
-            # Op mobiel is de tekst met white-space:nowrap breder dan het
-            # scherm, waardoor 'ie symmetrisch links/rechts afloopt i.p.v.
-            # netjes te passen (lijkt dan 'niet gecentreerd'). Nu op smalle
-            # schermen: kleinere tekst + WEL laten omklappen, zodat de knop
-            # altijd binnen het scherm blijft en écht in het midden zit.
-            f'@media (max-width:480px) {{ '
-            f'.st-key-{_portfolio_cta_key} button {{ '
-            f'white-space:normal !important; font-size:0.78rem !important; '
-            f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; text-align:center !important; }} '
-            f'}} '
-            f'</style>',
-            unsafe_allow_html=True,
-        )
-        with st.container(key=_preview_wrap_key):
-            st.markdown(
-                f'<div style="filter:blur(4px); opacity:0.25; pointer-events:none; user-select:none; '
-                f'-webkit-user-select:none; background:rgba(15,23,42,0.4); border-radius:14px; '
-                f'padding:1rem 1.25rem;">{_skeleton_row_html * 5}</div>',
-                unsafe_allow_html=True,
-            )
-            with st.container(key=_portfolio_cta_key):
-                if st.button("CONNECT PORTFOLIO TO VIEW POSITIONS \u2192", key="portfolio_signup_cta_btn"):
-                    st.session_state["login_prefill_mode"] = "Sign Up"
-                    st.switch_page(login_page)
         st.stop()
 
     import database
@@ -7819,59 +7871,15 @@ def render_discover_earnings_surprises():
 
 def render_today():
     if not current_user.is_logged_in:
-        # --- Niet-ingelogde Today-landing: zelfde 'Hestys-standaard' als
-        # Discover -- een groene hoofdsectiekop + dunne lijn + 1 duidelijke,
-        # minimalistische CTA-box, i.p.v. de eerdere combinatie van een
-        # hero-box, een tegel-grid EN een felblauwe st.info()-balk
-        # onderaan (voelde zwaar/inconsistent met de rest van de site). ---
-        st.markdown(
-            _uniform_section_header_html("Your Portfolio Today", "calendar_today", is_first=True),
-            unsafe_allow_html=True,
+        _render_landing_soft_lock(
+            title="Your Portfolio Today",
+            icon_name="calendar_today",
+            cta_text="&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. CONNECT YOUR PORTFOLIO OR "
+                      "WATCHLIST TO ACTIVATE THIS COCKPIT.",
+            button_label="Connect to Activate Today \u2192",
+            preview_html=_landing_table_skeleton_html(),
+            key_prefix="today",
         )
-        # --- 1 gedeelde tegel voor tekst + knop samen (st.container(key=...))
-        # i.p.v. 2 losse elementen -- dat liet de knop eerder LOS onder de
-        # tegel hangen, buiten de rand, want de <div> van de tekst-box
-        # sloot zichzelf al af voordat de knop (een apart element) werd
-        # gerenderd. ---
-        _today_cta_key = "today_signup_cta_tile"
-        st.markdown(
-            f'<style>'
-            f'.st-key-{_today_cta_key} {{ '
-            f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
-            f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
-            f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
-            f'align-items:center !important; justify-content:center !important; text-align:center !important; }} '
-            f'@media (min-width:768px) {{ .st-key-{_today_cta_key} {{ padding:2rem !important; }} }} '
-            f'.hesty-today-cta-text {{ '
-            f'max-width:42rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
-            f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
-            f'@media (min-width:768px) {{ .hesty-today-cta-text {{ font-size:0.9rem !important; }} }} '
-            f'.st-key-{_today_cta_key} [data-testid="stButton"] {{ '
-            f'margin-top:1rem !important; }} '
-            f'@media (min-width:768px) {{ '
-            f'.st-key-{_today_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
-            f'}} '
-            f'.st-key-{_today_cta_key} button {{ '
-            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
-            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
-            f'text-transform:uppercase !important; letter-spacing:0.04em !important; '
-            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
-            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
-            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
-            f'.st-key-{_today_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
-            f'color:#1FAE96 !important; }} '
-            f'</style>',
-            unsafe_allow_html=True,
-        )
-        with st.container(key=_today_cta_key):
-            st.markdown(
-                '<div class="hesty-today-cta-text">&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. '
-                'CONNECT YOUR PORTFOLIO OR WATCHLIST TO ACTIVATE THIS COCKPIT.</div>',
-                unsafe_allow_html=True,
-            )
-            if st.button("Get Started Free", key="today_signup_cta_btn"):
-                st.session_state["login_prefill_mode"] = "Sign Up"
-                st.switch_page(login_page)
     else:
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
