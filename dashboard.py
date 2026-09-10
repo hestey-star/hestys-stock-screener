@@ -8305,88 +8305,73 @@ def render_premium():
 
     st.markdown("### Premium")
 
-    _premium_free_for_all = st.secrets.get("app", {}).get("premium_free_for_all", False)
-    if _premium_free_for_all:
-        st.success("Everything is unlocked for free while we're still getting started -- "
-                   "no payment needed yet. Enjoy, and thanks for trying Hesty's early!",
-                   icon=":material/auto_awesome:")
+    # --- 2-koloms 'Early Access Lifetime'-opzet i.p.v. de oude
+    # vergelijkingstabel + losse Smart DCA Assistant-container (die tunen
+    # we achter de schermen verder, komt later terug) -- de volledige
+    # focus ligt nu op 1 boodschap: vroege gebruikers krijgen voorgoed
+    # gratis PRO-status, inclusief alle toekomstige features. ---
+    pcol1, pcol2 = st.columns(2, gap="medium")
 
-    st.write(
-        "Everything on the free plan, plus deeper portfolio analysis and unlimited tracking."
-    )
-
+    _early_card_key = "premium_early_adopter_card"
+    _early_btn_key = "premium_early_adopter_btn"
     st.markdown(
-        """
-        <table class="positions-table">
-            <thead><tr><th>Feature</th><th>Free</th><th>Premium</th></tr></thead>
-            <tbody>
-                <tr><td>Momentocrats, Snowballers, Rocket List (Discover)</td><td>Top 3 each</td><td>All results</td></tr>
-                <tr><td>Weekly email for your chosen signals</td><td>Top 3 each</td><td>All results</td></tr>
-                <tr><td>Tracked positions (My Portfolio)</td><td>Up to 10</td><td>Unlimited</td></tr>
-                <tr><td>Concentration, Diversification, Sectors, Performance (Analyze)</td><td>&#10003;</td><td>&#10003;</td></tr>
-                <tr><td>Dividend income overview (Analyze)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Weighted valuation (P/E) &amp; correlation matrix (Analyze)</td><td>--</td><td>&#10003;</td></tr>
-                <tr><td>Smart DCA Assistant (TradingView indicator download)</td><td>--</td><td>&#10003;</td></tr>
-            </tbody>
-        </table>
-        """,
+        f'<style>'
+        f'.st-key-{_early_card_key} {{ '
+        f'background:rgba(15,23,42,0.4) !important; border:1px solid rgba(31,174,150,0.4) !important; '
+        f'border-radius:14px !important; padding:1.5rem !important; box-sizing:border-box !important; }} '
+        f'.st-key-{_early_btn_key} {{ margin-top:1.25rem !important; }} '
+        f'.st-key-{_early_btn_key} button {{ '
+        f'background:transparent !important; color:#1FAE96 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+        f'border:1px solid rgba(31,174,150,0.5) !important; border-radius:8px !important; '
+        f'padding:0.6rem 1.25rem !important; width:100% !important; box-shadow:none !important; }} '
+        f'.st-key-{_early_btn_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+        f'.st-key-premium_future_card {{ '
+        f'background:rgba(15,23,42,0.2) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+        f'border-radius:14px !important; padding:1.5rem !important; box-sizing:border-box !important; '
+        f'opacity:0.4 !important; pointer-events:none !important; user-select:none !important; }} '
+        f'.st-key-premium_future_card button {{ '
+        f'background:transparent !important; color:#8992A3 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+        f'border:1px solid rgba(137,146,163,0.3) !important; border-radius:8px !important; '
+        f'padding:0.6rem 1.25rem !important; width:100% !important; box-shadow:none !important; '
+        f'margin-top:1.25rem !important; cursor:default !important; }} '
+        f'</style>',
         unsafe_allow_html=True,
     )
-
-    with st.container(border=True):
-        st.markdown("##### Smart DCA Assistant -- TradingView indicator")
-        st.write(
-            "A TradingView indicator that adjusts your periodic contribution based on how "
-            "cheap or expensive the market looks (moving average distance, RSI, drawdown) -- "
-            "buying a bit more when things look cheap, and holding back when they don't. Includes "
-            "a built-in comparison against a fixed, regular DCA strategy."
-        )
-        with st.expander("See it running on a real chart", key="see_it_running_on_a_real_chart_expander"):
-            try:
-                st.image("premium_content/dca_screenshot.jpg", width=500)
-            except Exception:
-                pass
-            st.caption(
-                "The indicator running on a real chart (Alphabet, weekly) -- the labels show the "
-                "suggested contribution at each point, and the panel on the right compares Smart DCA "
-                "against a fixed, regular DCA over the same period. This is one historical example, "
-                "not a guarantee of future results."
+    with pcol1:
+        with st.container(key=_early_card_key):
+            st.markdown(
+                '<div style="color:#F1F5F9; font-weight:800; font-size:1.05rem; text-transform:uppercase; '
+                'letter-spacing:0.03em; margin-bottom:1rem;">Early Adopter (Free Now)</div>'
+                '<div style="color:#CBD5E1; font-size:0.85rem; font-weight:600; line-height:2; '
+                'text-transform:uppercase; letter-spacing:0.02em;">'
+                '&#10003; Unlimited asset tracking (launch special)<br>'
+                '&#10003; Full access to all Signature Signals (no blurs)<br>'
+                '&#10003; Deep portfolio risk &amp; concentration metrics<br>'
+                '&#10003; Includes access to all future premium features<br>'
+                '&#127873; Lifetime PRO status: join now and stay free forever.'
+                '</div>',
+                unsafe_allow_html=True,
             )
-
-        if current_user.is_logged_in and database.is_premium_user(current_user.email, ignore_free_for_all=True):
-            try:
-                with open("premium_content/smart_dca_assistant.pine", encoding="utf-8") as f:
-                    pine_code = f.read()
-
-                # Watermerk wordt NA de //@version=6-regel geplaatst (niet ervoor) --
-                # bronnen spreken elkaar tegen of commentaar vóór die regel de
-                # compilatie kan verstoren, dus voor de zekerheid altijd erna.
-                lines = pine_code.split("\n", 1)
-                watermark = (
-                    f"// Licensed to: {current_user.email}\n"
-                    f"// Downloaded from Hesty's on {datetime.now().strftime('%Y-%m-%d')}\n"
-                    f"// For personal use only -- do not redistribute or republish.\n"
-                )
-                if len(lines) == 2:
-                    watermarked_code = lines[0] + "\n" + watermark + lines[1]
-                else:
-                    watermarked_code = pine_code + "\n" + watermark
-
-                st.download_button(
-                    "Download smart_dca_assistant.pine",
-                    data=watermarked_code,
-                    file_name="smart_dca_assistant.pine",
-                    mime="text/plain",
-                )
-                st.caption(
-                    "Open TradingView -> Pine Editor -> New blank indicator -> paste the file contents -> "
-                    "Add to chart. Right-click the indicator name in the chart legend and 'Pin to scale' "
-                    "to the same scale as your candles."
-                )
-            except FileNotFoundError:
-                st.caption("Indicator file not found -- contact support.")
-        else:
-            st.caption("Available for Premium members -- see Subscription below.")
+            with st.container(key=_early_btn_key):
+                if st.button("Claim Free Pro Access \u2192", key="premium_early_adopter_claim"):
+                    st.session_state["login_prefill_mode"] = "Sign Up"
+                    st.switch_page(login_page)
+    with pcol2:
+        with st.container(key="premium_future_card"):
+            st.markdown(
+                '<div style="color:#8992A3; font-weight:800; font-size:1.05rem; text-transform:uppercase; '
+                'letter-spacing:0.03em; margin-bottom:1rem;">Future Free Plan (Post-Launch)</div>'
+                '<div style="color:#64748B; font-size:0.85rem; font-weight:600; line-height:2; '
+                'text-transform:uppercase; letter-spacing:0.02em;">'
+                '&#10003; Limited to max 10 assets<br>'
+                '&#10003; Blurred signals &amp; screener results<br>'
+                '&#10003; Future Pro upgrade will cost $7 / month'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            st.button("Coming Soon", key="premium_future_coming_soon", disabled=True)
 
     with st.container(border=True):
         st.markdown("##### Subscription")
@@ -8679,16 +8664,32 @@ def render_login():
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
             # klikte om een NIEUW account aan te maken, niet om terug te
-            # keren naar een bestaand account.
+            # keren naar een bestaand account. Bij Sign Up specifiek staat
+            # de 'Early Access Lifetime'-boodschap er nu ook -- de plek
+            # waar iedereen die zich registreert 'm sowieso ziet, dus
+            # niemand mist de deal.
             if login_mode == "Sign Up":
                 _login_title = "Create your free account"
+                _login_subtext = (
+                    '&#128073; LAUNCH SPECIAL: ALL PREMIUM FEATURES (INCLUDING ALL FUTURE RELEASES) '
+                    'ARE 100% UNLOCKED. JOIN AS AN EARLY ADOPTER TO LOCK IN YOUR LIFETIME FREE PRO '
+                    'STATUS BEFORE THE DOOR CLOSES.'
+                )
+                _login_subtext_style = (
+                    'color:#34D399; font-size:0.75rem; font-weight:600; letter-spacing:0.04em; '
+                    'text-transform:uppercase; line-height:1.6;'
+                )
             else:
                 _login_title = "Welcome back"
+                _login_subtext = "Sign in or create an account in seconds."
+                _login_subtext_style = (
+                    'color:#8992A3; font-size:0.75rem; font-weight:600; letter-spacing:0.04em; '
+                    'text-transform:uppercase;'
+                )
             st.markdown(
                 f'<div style="max-width:420px; margin:2rem auto 1.5rem auto; text-align:center;">'
                 f'<h2 class="hero-headline" style="margin-bottom:0.3rem;">{_login_title}</h2>'
-                f'<p style="color:#8992A3; font-size:0.75rem; font-weight:600; letter-spacing:0.04em; '
-                f'text-transform:uppercase;">Sign in or create an account in seconds.</p>'
+                f'<p style="{_login_subtext_style}">{_login_subtext}</p>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
