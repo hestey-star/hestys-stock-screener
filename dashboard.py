@@ -4754,7 +4754,16 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'width:auto !important; min-height:0 !important; height:auto !important; line-height:1.3 !important; '
         f'display:inline-flex !important; align-items:center !important; }} '
         f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
+        # Streamlit wikkelt de knop-tekst zelf vaak in een eigen <p> of
+        # <div> BINNEN de <button> -- die kan een eigen marge/line-height
+        # hebben die de eerdere centrering op de knop zelf tenietdoet.
+        # Hard resetten op ALLE afstammelingen van de knop, niet alleen
+        # de knop-box zelf.
+        f'.st-key-{_table_key} button * {{ '
+        f'margin:0 !important; padding:0 !important; line-height:1.3 !important; }} '
         f'.st-key-{_table_key} [data-testid="stButton"] {{ '
+        f'display:flex !important; align-items:center !important; height:100% !important; margin:0 !important; }} '
+        f'.st-key-{_table_key} [data-testid="stElementContainer"]:has(button) {{ '
         f'display:flex !important; align-items:center !important; height:100% !important; }} '
         # Verticaal centreren, hard op ELK niveau: de hoofdrij, de
         # logo+knop-subkolom, EN de kolommen zelf (die kregen zonder
