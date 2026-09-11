@@ -4809,7 +4809,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 unsafe_allow_html=True,
             )
         with row_cols[1]:
-            st.markdown(score_html, unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align:left; width:100%;">{score_html}</div>', unsafe_allow_html=True)
         with row_cols[2]:
             st.markdown(f'<span style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</span>', unsafe_allow_html=True)
         with row_cols[3]:
@@ -4845,10 +4845,11 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             )
         with row_cols[1]:
             st.markdown(
+                f'<div style="text-align:left; width:100%;">'
                 f'<span class="hesty-row-click" data-action="{_u_action}" style="color:#a7f3d0; '
                 f'background-color:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.2); '
                 f'border-radius:0.375rem; padding:2px 8px; font-size:0.75rem; font-weight:700; '
-                f'display:inline-block;">\U0001F916 SCAN</span>',
+                f'display:inline-block;">\U0001F916 SCAN</span></div>',
                 unsafe_allow_html=True,
             )
         with row_cols[2]:
