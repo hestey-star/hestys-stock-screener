@@ -8717,73 +8717,42 @@ def render_login():
             unsafe_allow_html=True,
         )
         with st.container(key=_form_wrap_key):
-            # Toggle: exact dezelfde JS-gedreven techniek als de Discover-
-            # subtabs -- st.segmented_control() bleek CSS-resistent (harde,
-            # scherpe hokjes bleven ondanks !important overal). Een
-            # ONZICHTBARE, ECHTE Streamlit-knop regelt de daadwerkelijke
-            # state-wissel (correcte rerun, geen page-reload); een
-            # volledig ZELF gebouwde HTML-pil is het zichtbare, klikbare
-            # element (100% eigen controle over de layout).
+            # Toggle: 2 ECHTE, zichtbare st.button()'s naast elkaar i.p.v.
+            # de eerdere onzichtbare-knop-plus-JS-relay-truc -- die voegde
+            # een extra laag toe (JS moet de klik eerst 'doorsturen' naar
+            # de verborgen knop) die traag/onbetrouwbaar aanvoelde. Nu
+            # direct klikbaar, 1 druk = 1 rerun, geen tussenlaag. De
+            # zij-aan-zij-layout komt van dezelfde, elders al bewezen
+            # 'forceer de directe stVerticalBlock-kind naar flex-row'-truc.
             login_mode = st.session_state.get("login_mode_active", _login_prefill_mode)
-            _hidden_toggle_key = "login_mode_hidden_buttons"
+            _toggle_wrap_key = "login_mode_toggle_wrap"
+            _active_btn_key = "login_mode_btn_signup" if login_mode == "Sign Up" else "login_mode_btn_signin"
             st.markdown(
-                f'<style>.st-key-{_hidden_toggle_key} {{ display:none !important; }}</style>',
+                f'<style>'
+                f'.st-key-{_toggle_wrap_key} > div {{ '
+                f'display:flex !important; flex-direction:row !important; gap:2px !important; '
+                f'background:rgba(2,6,23,0.6) !important; border:1px solid rgba(15,23,42,0.9) !important; '
+                f'border-radius:8px !important; padding:2px !important; max-width:160px !important; '
+                f'margin-bottom:1.5rem !important; box-sizing:border-box !important; }} '
+                f'.st-key-{_toggle_wrap_key} > div > div {{ '
+                f'flex:1 1 0% !important; width:auto !important; min-width:0 !important; }} '
+                f'.st-key-{_toggle_wrap_key} button {{ '
+                f'width:100% !important; background:transparent !important; border:none !important; '
+                f'box-shadow:none !important; color:#64748B !important; font-weight:500 !important; '
+                f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; '
+                f'padding:0.3rem 0.5rem !important; border-radius:6px !important; }} '
+                f'.st-key-{_active_btn_key} button {{ '
+                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
+                f'</style>',
                 unsafe_allow_html=True,
             )
-            with st.container(key=_hidden_toggle_key):
+            with st.container(key=_toggle_wrap_key):
                 if st.button("Sign In", key="login_mode_btn_signin"):
                     st.session_state["login_mode_active"] = "Sign In"
                     st.rerun()
                 if st.button("Sign Up", key="login_mode_btn_signup"):
                     st.session_state["login_mode_active"] = "Sign Up"
                     st.rerun()
-
-            _toggle_tabs_html = "".join(
-                f'<div class="login-toggle-tab{" login-toggle-active" if _opt == login_mode else ""}" '
-                f'data-target-label="{_opt}">{_opt}</div>'
-                for _opt in ["Sign In", "Sign Up"]
-            )
-            st.markdown(
-                '<style>'
-                '.login-toggle-wrap { display:flex; flex-direction:row; align-items:center; gap:2px; '
-                'background:rgba(2,6,23,0.6); border:1px solid rgba(15,23,42,0.9); border-radius:8px; '
-                'padding:2px; max-width:160px; margin-bottom:1.5rem; box-sizing:border-box; } '
-                '.login-toggle-tab { flex:1; text-align:center; cursor:pointer; padding:0.3rem 0.75rem; '
-                'border-radius:6px; font-size:0.72rem; font-weight:500; text-transform:uppercase; '
-                'letter-spacing:0.04em; color:#64748B; user-select:none; -webkit-user-select:none; '
-                'font-family:\'Inter\', sans-serif; } '
-                '.login-toggle-active { background:rgba(30,41,59,0.6); color:#1FAE96; font-weight:700; } '
-                '</style>'
-                f'<div class="login-toggle-wrap">{_toggle_tabs_html}</div>',
-                unsafe_allow_html=True,
-            )
-            components.html(
-                f"""
-                <script>
-                function hestyBindLoginToggle() {{
-                    var doc = window.parent.document;
-                    if (doc.body.__hestyLoginToggleBound) {{ return; }}
-                    doc.body.__hestyLoginToggleBound = true;
-                    doc.body.addEventListener('click', function(e) {{
-                        var tab = e.target.closest('.login-toggle-tab');
-                        if (!tab) {{ return; }}
-                        var label = tab.getAttribute('data-target-label');
-                        var hiddenContainer = doc.querySelector('.st-key-{_hidden_toggle_key}');
-                        if (!hiddenContainer) {{ return; }}
-                        var buttons = hiddenContainer.querySelectorAll('button');
-                        for (var i = 0; i < buttons.length; i++) {{
-                            if (buttons[i].textContent.trim() === label) {{
-                                buttons[i].click();
-                                break;
-                            }}
-                        }}
-                    }});
-                }}
-                hestyBindLoginToggle();
-                </script>
-                """,
-                height=0,
-            )
 
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
