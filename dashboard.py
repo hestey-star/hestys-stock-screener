@@ -9159,6 +9159,7 @@ with st.sidebar:
        de 'losse ruimte', niet de margin op de <a>-tags zelf. */
     .st-key-discover_subnav_group {
         padding-left: 2.25rem !important;
+        margin-top: 0.85rem !important;
         box-sizing: border-box !important;
     }
     .st-key-discover_subnav_group [data-testid="stVerticalBlock"] {
