@@ -5312,17 +5312,156 @@ def render_analyze():
 
 
 
+def _render_portfolio_demo_landing() -> None:
+    """
+    'Demo Mode' voor de niet-ingelogde My Portfolio-pagina -- i.p.v. een
+    geblurde placeholder (nagemaakte data blurren voelde vreemd/nutteloos)
+    tonen we nu een volledig scherpe, live-aanvoelende preview met
+    duidelijk gelabelde sample-data, gevolgd door een conversie-tegel.
+    """
+    st.markdown(
+        _uniform_section_header_html("My Portfolio", "work", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
+        'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
+        '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
+        'Demo mode &middot; sample assets, not your real data</div>',
+        unsafe_allow_html=True,
+    )
+
+    _demo_positions = [
+        {"name": "NVIDIA", "ticker": "NVDA", "value": 18420, "weight": 27.0, "target": 20.0, "change": 2.4},
+        {"name": "ASML Holding", "ticker": "ASML", "value": 12980, "weight": 19.0, "target": 20.0, "change": -0.8},
+        {"name": "Apple", "ticker": "AAPL", "value": 10750, "weight": 15.8, "target": 15.0, "change": 0.6},
+        {"name": "Bitcoin", "ticker": "BTC", "value": 6300, "weight": 9.2, "target": 15.0, "change": -3.1},
+        {"name": "Microsoft", "ticker": "MSFT", "value": 9870, "weight": 14.5, "target": 15.0, "change": 1.1},
+    ]
+    _demo_watch = {"name": "Tesla", "ticker": "TSLA", "change": 4.2}
+
+    # --- Posities-tabel: exact dezelfde compacte, monochrome rij-stijl
+    # als de ingelogde pagina (dunne scheidingslijn i.p.v. losse
+    # kaartranden, ALL-CAPS namen, teal/rose voor op/neer). ---
+    _rows_html = "".join(
+        f'<div style="display:flex; align-items:center; justify-content:space-between; '
+        f'padding:0.75rem 0.25rem; border-bottom:1px solid rgba(148,163,184,0.08);">'
+        f'<div style="min-width:0;">'
+        f'<div style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
+        f'letter-spacing:0.01em;">{p["name"]}</div>'
+        f'<div style="color:#64748B; font-size:0.72rem; margin-top:1px;">{p["ticker"]} &middot; {p["weight"]:.1f}% of portfolio</div>'
+        f'</div>'
+        f'<div style="text-align:right; flex-shrink:0;">'
+        f'<div style="color:#F1F5F9; font-weight:700; font-size:0.85rem;">&euro;{p["value"]:,.0f}</div>'
+        f'<div style="color:{"#34D399" if p["change"] >= 0 else "#F87171"}; font-size:0.72rem; font-weight:600; margin-top:1px;">'
+        f'{p["change"]:+.1f}% today</div>'
+        f'</div>'
+        f'</div>'
+        for p in _demo_positions
+    )
+    st.markdown(
+        f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
+        f'border-radius:14px; padding:0.5rem 1rem; margin-bottom:1rem;">{_rows_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Watchlist: single-line, zelfde stijl als de ingelogde pagina. ---
+    st.markdown(
+        f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
+        f'border-radius:14px; padding:0.6rem 1rem; margin-bottom:2rem; display:flex; align-items:center; '
+        f'justify-content:space-between;">'
+        f'<div style="color:#94A3B8; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
+        f'letter-spacing:0.02em;">&#128065; Watching: {_demo_watch["name"]} <span style="color:#64748B; '
+        f'font-weight:400; text-transform:none;">({_demo_watch["ticker"]})</span></div>'
+        f'<div style="color:{"#34D399" if _demo_watch["change"] >= 0 else "#F87171"}; font-size:0.8rem; '
+        f'font-weight:700;">{_demo_watch["change"]:+.1f}%</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Rebalancing-grid: zelfde 2-koloms kaartenstijl als de ingelogde
+    # pagina, nu met de sample-data die daadwerkelijk uit het lood
+    # hangen -- dit IS de functionele bewijslast. ---
+    st.markdown(
+        _uniform_section_header_html("Rebalancing", "swap_horiz", is_first=False),
+        unsafe_allow_html=True,
+    )
+    _rebalance_cards = []
+    for p in _demo_positions:
+        _diff = p["weight"] - p["target"]
+        if abs(_diff) < 3:
+            continue
+        _action = "SELL" if _diff > 0 else "BUY"
+        _action_color = "#F87171" if _diff > 0 else "#34D399"
+        _rebalance_cards.append(
+            f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            f'border-radius:10px; padding:0.6rem 0.9rem;">'
+            f'<div style="display:flex; align-items:center; justify-content:space-between;">'
+            f'<div style="color:#EAEDF1; font-weight:600; font-size:0.8rem; text-transform:uppercase;">'
+            f'{p["ticker"]}</div>'
+            f'<div style="color:{_action_color}; font-weight:700; font-size:0.8rem;">{_action} REQUIRED</div>'
+            f'</div>'
+            f'<div style="color:#64748B; font-size:0.68rem; margin-top:0.2rem;">'
+            f'Target {p["target"]:.0f}% &nbsp;|&nbsp; Current {p["weight"]:.0f}%</div>'
+            f'</div>'
+        )
+    st.markdown(
+        '<style>.hesty-demo-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); '
+        'gap:0.5rem; } @media (max-width:768px) { .hesty-demo-rebalance-grid { grid-template-columns:1fr; } }</style>'
+        f'<div class="hesty-demo-rebalance-grid">{"".join(_rebalance_cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Conversie-tegel: zelfde opbouw als de andere niet-ingelogde
+    # landingspagina's (_render_landing_soft_lock), maar los opgebouwd
+    # omdat de content BOVEN de tegel hier scherpe demo-data is i.p.v.
+    # een geblurde preview. ---
+    _demo_cta_key = "portfolio_demo_cta_tile"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_demo_cta_key} {{ '
+        f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+        f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
+        f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
+        f'align-items:center !important; justify-content:center !important; text-align:center !important; '
+        f'margin-top:2rem !important; }} '
+        f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
+        f'.hesty-demo-cta-text {{ '
+        f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+        f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+        f'@media (min-width:768px) {{ .hesty-demo-cta-text {{ font-size:0.85rem !important; }} }} '
+        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:100% !important; }} '
+        f'.st-key-{_demo_cta_key} button {{ '
+        f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+        f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+        f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+        f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+        f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+        f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+        f'color:#1FAE96 !important; }} '
+        f'@media (max-width:480px) {{ '
+        f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
+        f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
+        f'}} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_demo_cta_key):
+        st.markdown(
+            '<div class="hesty-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
+            'WITH SAMPLE ASSETS. READY TO MASTER YOUR OWN CAPITAL? SECURELY CONNECT YOUR PORTFOLIO OR '
+            'INPUT YOUR REAL POSITIONS TO ACTIVATE YOUR LIVE COCKPIT.</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Connect to Activate My Portfolio \u2192", key="portfolio_demo_cta_btn"):
+            st.session_state["login_prefill_mode"] = "Sign Up"
+            st.switch_page(login_page)
+
+
 def render_portfolio():
     if not current_user.is_logged_in:
-        _render_landing_soft_lock(
-            title="My Portfolio",
-            icon_name="work",
-            cta_text="&#128274; TRACK YOUR ASSETS AND REAL-TIME PERFORMANCE. LINK YOUR BROKER OR "
-                      "INPUT YOUR POSITIONS SECURELY.",
-            button_label="Connect Portfolio to View Positions \u2192",
-            preview_html=_landing_table_skeleton_html(),
-            key_prefix="portfolio",
-        )
+        _render_portfolio_demo_landing()
         st.stop()
 
     import database
