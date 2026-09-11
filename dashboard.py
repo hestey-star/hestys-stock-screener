@@ -4776,8 +4776,8 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             score_html = '<span style="color:#64748B;">-</span>'
         thesis_full = (entry.get("investment_thesis") or "").strip()
         thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-        if len(thesis_line) > 90:
-            thesis_line = thesis_line[:87].rstrip() + "..."
+        if len(thesis_line) > 58:
+            thesis_line = thesis_line[:55].rstrip() + "..."
         thesis_html = thesis_line if thesis_line else '<span style="color:#64748B;">No thesis logged yet</span>'
         last_validated = (entry.get("created_at") or "")[:10] or "-"
         logo_url = get_company_logo_url(ticker, naam)
@@ -4834,41 +4834,50 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
             f'<span style="color:#64748B; font-weight:700; font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
         )
-        st.markdown(
-            f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
-            f'border-bottom:1px solid rgba(148,163,184,0.08); opacity:0.5;">'
-            f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
-            f'{u_logo_html}<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
-            f'text-transform:uppercase;">{u_ticker}</span></div>'
-            f'<div style="width:70px; flex-shrink:0;"></div>'
-            f'<div style="flex:1; min-width:0; color:#64748B; font-size:0.78rem; text-transform:uppercase; '
-            f'letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'
-            f'No active research record found.</div>'
-            f'<div style="width:100px; flex-shrink:0;"></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        # Rij-wrapper op position:relative, met de score-cel als KALE,
+        # lege plaatshouder (voor de uitlijning) -- de knop wordt er
+        # daarna als een apart, absoluut gepositioneerd element BOVENOP
+        # gelegd, precies op de x-positie/breedte van die ene cel (niet
+        # de hele rij) -- geen losse, verdwaalde knop onder de tabel meer.
+        _row_wrap_key = f"{key_prefix}_unmapped_wrap_{u_ticker}"
         _scan_key = f"{key_prefix}_scan_{u_ticker}"
         st.markdown(
             f'<style>'
-            f'.st-key-{_scan_key} {{ margin-top:-2.3rem !important; margin-left:190px !important; '
-            f'margin-bottom:0.45rem !important; width:130px !important; position:relative !important; z-index:3 !important; }} '
+            f'.st-key-{_row_wrap_key} {{ position:relative !important; }} '
+            f'.st-key-{_scan_key} {{ '
+            f'position:absolute !important; top:0 !important; left:128px !important; width:70px !important; '
+            f'height:100% !important; display:flex !important; align-items:center !important; z-index:3 !important; }} '
             f'.st-key-{_scan_key} button {{ '
             f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
-            f'border-radius:6px !important; color:#1FAE96 !important; font-size:0.65rem !important; '
-            f'font-weight:700 !important; letter-spacing:0.03em !important; text-transform:uppercase !important; '
-            f'padding:0.2rem 0.5rem !important; box-shadow:none !important; width:auto !important; '
-            f'white-space:nowrap !important; }} '
+            f'border-radius:6px !important; color:#1FAE96 !important; font-size:0.6rem !important; '
+            f'font-weight:700 !important; letter-spacing:0.02em !important; text-transform:uppercase !important; '
+            f'padding:0.15rem 0.3rem !important; box-shadow:none !important; width:100% !important; '
+            f'white-space:nowrap !important; line-height:1.2 !important; }} '
             f'.st-key-{_scan_key} button:hover {{ background:rgba(31,174,150,0.1) !important; }} '
             f'</style>',
             unsafe_allow_html=True,
         )
-        with st.container(key=_scan_key):
-            if st.button("\U0001F916 Quick AI Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
-                st.session_state["dd_ticker_input"] = u_ticker
-                st.session_state["dd_naam_input"] = u_naam
-                st.session_state["selected_research"] = "__NEW__"
-                st.rerun()
+        with st.container(key=_row_wrap_key):
+            st.markdown(
+                f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
+                f'border-bottom:1px solid rgba(148,163,184,0.08); opacity:0.5;">'
+                f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
+                f'{u_logo_html}<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
+                f'text-transform:uppercase;">{u_ticker}</span></div>'
+                f'<div style="width:70px; flex-shrink:0;"></div>'
+                f'<div style="flex:1; min-width:0; color:#64748B; font-size:0.78rem; '
+                f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'
+                f'No active research record found.</div>'
+                f'<div style="width:100px; flex-shrink:0;"></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_scan_key):
+                if st.button("\U0001F916 Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
+                    st.session_state["dd_ticker_input"] = u_ticker
+                    st.session_state["dd_naam_input"] = u_naam
+                    st.session_state["selected_research"] = "__NEW__"
+                    st.rerun()
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
