@@ -8025,17 +8025,205 @@ def render_discover_earnings_surprises():
 
 
 
+def _render_today_demo_landing() -> None:
+    """
+    'Demo Mode' voor de niet-ingelogde Today-pagina -- zelfde principe als
+    de My Portfolio-demo: geen geblurde placeholder, maar een volledig
+    scherpe, live-aanvoelende preview met duidelijk herkenbare sample-
+    data (populaire large caps + macro-events), gevolgd door de
+    conversie-tegel. Hergebruikt zoveel mogelijk dezelfde HTML-helpers/
+    CSS-klassen als de ingelogde pagina voor 100% visuele consistentie.
+    De Global Sector Heatmap is hier bewust weggelaten (geen directe
+    meerwaarde voor een landingspagina).
+    """
+    st.markdown(
+        _uniform_section_header_html("Your Portfolio Today", "calendar_today", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
+        'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
+        '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
+        'Demo mode &middot; sample assets, not your real data</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- 1. Performance-tegels (Portfolio today / Best / Worst) ---
+    st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
+    col1_html = (
+        '<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
+        '<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
+        'font-weight:700;">Your Portfolio Today</div>'
+        f'<div style="font-size:2.75rem; font-weight:800; color:{TODAY_NEGATIVE_TEXT}; margin-top:8px; '
+        'line-height:1.1; font-variant-numeric: tabular-nums;">-0.2%</div>'
+        '</div>'
+    )
+    col2_html = _portfolio_mover_tile_html(
+        "Best today", "trending_up", "Nvidia (NVDA)", 5.4, 18.5, TODAY_POSITIVE_TEXT,
+    )
+    col3_html = _portfolio_mover_tile_html(
+        "Worst today", "trending_down", "Bitcoin (BTC-USD)", -3.8, 12.0, TODAY_NEGATIVE_TEXT,
+    )
+    st.markdown(
+        f'<div class="hesty-portfolio-row">'
+        f'<div class="hesty-portfolio-hero-col">{col1_html}</div>'
+        f'<div class="hesty-portfolio-col">{col2_html}</div>'
+        f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- 2. Daily Radar: week-agenda + 3 bullet-regels. GEEN 'Explore
+    # all signals'-link meer -- niet functioneel op een demo-preview. ---
+    st.markdown(
+        _uniform_section_header_html("Daily Radar", "radar", is_first=False),
+        unsafe_allow_html=True,
+    )
+    _today_date = datetime.now().date()
+    _monday = (
+        _today_date - timedelta(days=_today_date.weekday()) if _today_date.weekday() < 5
+        else _today_date + timedelta(days=7 - _today_date.weekday())
+    )
+    _demo_dated_items = [
+        (_monday, "", "\U0001F1FA\U0001F1F8 US markets closed (Labor Day)"),
+        (_monday + timedelta(days=1), "", "\U0001F34F Apple Inc (AAPL) | Q3 earnings release (after market)"),
+        (_monday + timedelta(days=3), "", "\U0001F1EA\U0001F1FA ECB interest rate decision (14:15 CET)"),
+        (_monday + timedelta(days=4), "", "\U0001F1FA\U0001F1F8 US CPI data (Aug release) (14:30 CET)"),
+    ]
+    st.markdown(_week_agenda_html(_bucket_events_by_weekday(_demo_dated_items)), unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.1rem'></div>", unsafe_allow_html=True)
+
+    _demo_summary_rows = [
+        ("\u2713", "DAILY SUMMARY", "4 item(s) on your radar today.", None),
+        ("\U0001F50D", "SCREENER HITS", "6 new long-term ideas found in your active screeners.", "Top hits: NVDA, ASML, MSFT"),
+        ("\u26A1", "MACRO CATALYST", "3 key global market movement(s) detected today.", "Biggest movers: Crypto (Top 10) +4.2%, Energy -1.8%"),
+    ]
+    st.markdown(
+        "".join(
+            f'<div style="margin-top:8px;">'
+            f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
+            f'font-size:0.83rem; color:#CBD5E1; line-height:1.5;">'
+            f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
+            f'align-items:center;">{icon}</span>'
+            f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+            f'</div>'
+            + (
+                f'<div style="margin-left:2rem; margin-top:3px; font-size:0.72rem; color:#94A3B8;">'
+                f'&rarr; {snippet}</div>' if snippet else ""
+            )
+            + '</div>'
+            for icon, label, text, snippet in _demo_summary_rows
+        ),
+        unsafe_allow_html=True,
+    )
+
+    # --- 3. Portfolio Health & DCA Insights: 2 rebalance-triggers.
+    # GEEN 'Adjust target allocations'-link meer -- niet functioneel op
+    # een demo-preview. ---
+    st.markdown(
+        _uniform_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+        unsafe_allow_html=True,
+    )
+
+    def _demo_rebalance_card_html(ticker: str, name: str, diff_pct: float, current_pct: float, target_pct: float) -> str:
+        sign = "-" if diff_pct < 0 else "+"
+        target_label = "below target" if diff_pct < 0 else "above target"
+        context = (
+            "Consider pointing your next DCA at it." if diff_pct < 0
+            else f"{current_pct:.1f}% vs {target_pct:.1f}% target."
+        )
+        return (
+            '<div>'
+            '<div style="display:flex; align-items:center; gap:0.3rem;">'
+            + _icon_span("balance", size_px=13, color="#8992A3") +
+            '<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
+            'font-weight:700;">Rebalance trigger</span>'
+            '</div>'
+            f'<div style="font-size:1.65rem; font-weight:800; color:#EAEDF1; margin-top:6px; line-height:1.1; '
+            f'font-variant-numeric: tabular-nums;">{sign}{abs(diff_pct):.1f}% '
+            f'<span style="font-size:0.62rem; font-weight:700; color:#8992A3; text-transform:none; '
+            f'letter-spacing:0;">{target_label}</span></div>'
+            f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px;">{name.upper()} '
+            f'<span style="color:#64748B; font-weight:400;">({ticker})</span></div>'
+            f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px;">{context}</div>'
+            '</div>'
+        )
+
+    _demo_health_cards = [
+        _demo_rebalance_card_html("TSLA", "Tesla Inc", -12.5, 7.5, 20.0),
+        _demo_rebalance_card_html("AAPL", "Apple Inc", 6.8, 21.8, 15.0),
+    ]
+    insight_cols_html = "".join(f'<div class="hesty-insights-col">{c}</div>' for c in _demo_health_cards)
+    st.markdown(
+        '<style>'
+        '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
+        '.hesty-insights-col { flex:1; min-width:0; } '
+        '@media (max-width:768px) { '
+        '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
+        '.hesty-insights-col { width:100%; } '
+        '} '
+        '</style>'
+        f'<div class="hesty-insights-row">{insight_cols_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- 4. CTA-tegel: geen Sector Heatmap meer eronder, dus dit is nu
+    # de directe afsluiter van de pagina. Zelfde 'gedeelde container,
+    # dubbel geforceerde flex-column'-structuur als de My Portfolio-demo
+    # -- Streamlit's binnenste stVerticalBlock erft flex niet automatisch
+    # over van de buitenste .st-key-div, vandaar op BEIDE niveaus gezet. ---
+    _demo_cta_key = "today_demo_cta_tile"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_demo_cta_key} {{ '
+        f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+        f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
+        f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
+        f'align-items:center !important; justify-content:center !important; text-align:center !important; '
+        f'margin-top:2rem !important; }} '
+        f'.st-key-{_demo_cta_key} > div {{ '
+        f'display:flex !important; flex-direction:column !important; align-items:center !important; '
+        f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
+        f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
+        f'.hesty-today-demo-cta-text {{ '
+        f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+        f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+        f'@media (min-width:768px) {{ .hesty-today-demo-cta-text {{ font-size:0.85rem !important; }} }} '
+        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
+        f'@media (min-width:768px) {{ '
+        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+        f'}} '
+        f'.st-key-{_demo_cta_key} button {{ '
+        f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+        f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+        f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+        f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+        f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+        f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+        f'color:#1FAE96 !important; }} '
+        f'@media (max-width:480px) {{ '
+        f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
+        f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
+        f'}} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_demo_cta_key):
+        st.markdown(
+            '<div class="hesty-today-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
+            'WITH SAMPLE DATA. READY TO ACTIVATE YOUR PERSONAL COCKPIT? SECURELY CONNECT YOUR PORTFOLIO OR '
+            'WATCHLIST TO UNLOCK YOUR DAILY RADAR.</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Connect to Activate Today \u2192", key="today_demo_cta_btn"):
+            st.session_state["login_prefill_mode"] = "Sign Up"
+            st.switch_page(login_page)
+
+
 def render_today():
     if not current_user.is_logged_in:
-        _render_landing_soft_lock(
-            title="Your Portfolio Today",
-            icon_name="calendar_today",
-            cta_text="&#128274; UNLOCK YOUR PERSONAL MORNING BRIEFING. CONNECT YOUR PORTFOLIO OR "
-                      "WATCHLIST TO ACTIVATE THIS COCKPIT.",
-            button_label="Connect to Activate Today \u2192",
-            preview_html=_landing_table_skeleton_html(),
-            key_prefix="today",
-        )
+        _render_today_demo_landing()
     else:
         import database
         import screener as _screener_module  # noqa: F401 -- zorgt dat get_top_news_for_tickers 'm kan importeren
