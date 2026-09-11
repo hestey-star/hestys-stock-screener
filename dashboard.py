@@ -4759,11 +4759,6 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
-        # st.image() wikkelt zichzelf in een eigen element met een kleine
-        # standaard-marge -- die hard op 0 gezet zodat logo en tekst op
-        # elke regel (actief EN unmapped) exact dezelfde afstand hebben.
-        f'.st-key-{_table_key} [data-testid="stImage"] {{ margin:0 !important; line-height:0 !important; }} '
-        f'.st-key-{_table_key} [data-testid="stImageContainer"] {{ margin:0 !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
         f'</style>',
@@ -4809,7 +4804,18 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 logo_col, btn_col = st.columns([1, 3], gap="small")
                 with logo_col:
                     if logo_url:
-                        st.image(logo_url, width=24)
+                        # Pure HTML <img> i.p.v. st.image() -- die laatste
+                        # is een Streamlit-widget met een eigen 'uitklap-
+                        # naar-volledig-scherm'-knopje bij hover (ingebouwd
+                        # gedrag, ongewenst voor een klein 24px-logootje)
+                        # EN een eigen interne wrapper die de verticale
+                        # uitlijning kon verstoren. Een kale <img>-tag
+                        # heeft geen van beide problemen.
+                        st.markdown(
+                            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                            f'object-fit:contain; background:#fff; display:block;" />',
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.markdown(
                             f'<div style="width:24px; height:24px; border-radius:50%; '
@@ -4849,7 +4855,11 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 logo_col, btn_col = st.columns([1, 3], gap="small")
                 with logo_col:
                     if u_logo_url:
-                        st.image(u_logo_url, width=24)
+                        st.markdown(
+                            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                            f'object-fit:contain; background:#fff; display:block;" />',
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.markdown(
                             f'<div style="width:24px; height:24px; border-radius:50%; '
