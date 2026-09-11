@@ -8687,36 +8687,22 @@ def render_login():
             f'.st-key-{_form_wrap_key} {{ '
             f'max-width:28rem !important; width:100% !important; margin:0 !important; '
             f'padding:0 0.25rem !important; box-sizing:border-box !important; }} '
-            # Toggle: exact dezelfde platte, zacht-afgeronde stijl als de
-            # Daily/All-time-schakelaar elders op het platform -- geen
-            # harde, scherpe omlijningen meer.
-            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] {{ '
-            f'display:inline-flex !important; background:rgba(2,6,23,0.6) !important; '
-            f'border:1px solid rgba(15,23,42,0.9) !important; border-radius:8px !important; '
-            f'padding:2px !important; gap:2px !important; max-width:200px !important; '
-            f'margin-bottom:1.5rem !important; }} '
-            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] button, '
-            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] label {{ '
-            f'border:none !important; outline:none !important; box-shadow:none !important; '
-            f'background:transparent !important; color:#64748B !important; font-weight:500 !important; '
-            f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; '
-            f'padding:0.3rem 1rem !important; border-radius:6px !important; }} '
-            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
-            f'.st-key-{_form_wrap_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
-            f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
             # Input-labels: kleine, gedempte ALL-CAPS metadata i.p.v. de
             # Streamlit-standaard labelgrootte.
             f'.hesty-login-label {{ '
             f'font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
             f'text-transform:uppercase; margin-bottom:0.35rem; display:block; }} '
-            # 'Create account'/'Sign In'-knop: vol, breed, solide.
-            f'.st-key-{_form_wrap_key} div[data-testid="stButton"]:has(button[kind="primary"]) {{ '
-            f'margin-top:1rem !important; }} '
-            f'.st-key-{_form_wrap_key} button[kind="primary"] {{ '
+            # 'Create account'/'Sign In'-knop: GEEN type="primary" meer --
+            # dat triggert Streamlit's eigen, sterk-getemate thema-styling
+            # die zelfs met !important bleef doorschemeren (zelfde patroon
+            # als bij st.segmented_control). Een gewone knop, volledig
+            # eigen CSS, is wél 100% betrouwbaar te overschrijven.
+            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap {{ margin-top:1rem !important; }} '
+            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap button {{ '
             f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
             f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
             f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
-            f'.st-key-{_form_wrap_key} button[kind="primary"]:hover {{ background:#059669 !important; }} '
+            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap button:hover {{ background:#059669 !important; }} '
             # Google-knop: gat naar de knop erboven fors verkleind, blijft
             # links uitgelijnd binnen dezelfde max-w-md-breedte.
             f'.st-key-{_form_wrap_key} .st-key-login_page_google {{ margin-top:0 !important; }} '
@@ -8724,12 +8710,73 @@ def render_login():
             unsafe_allow_html=True,
         )
         with st.container(key=_form_wrap_key):
-            login_mode = st.segmented_control(
-                "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
-                default=_login_prefill_mode, key="login_mode_toggle", label_visibility="collapsed",
+            # Toggle: exact dezelfde JS-gedreven techniek als de Discover-
+            # subtabs -- st.segmented_control() bleek CSS-resistent (harde,
+            # scherpe hokjes bleven ondanks !important overal). Een
+            # ONZICHTBARE, ECHTE Streamlit-knop regelt de daadwerkelijke
+            # state-wissel (correcte rerun, geen page-reload); een
+            # volledig ZELF gebouwde HTML-pil is het zichtbare, klikbare
+            # element (100% eigen controle over de layout).
+            login_mode = st.session_state.get("login_mode_active", _login_prefill_mode)
+            _hidden_toggle_key = "login_mode_hidden_buttons"
+            st.markdown(
+                f'<style>.st-key-{_hidden_toggle_key} {{ display:none !important; }}</style>',
+                unsafe_allow_html=True,
             )
-            if login_mode is None:
-                login_mode = "Sign In"
+            with st.container(key=_hidden_toggle_key):
+                if st.button("Sign In", key="login_mode_btn_signin"):
+                    st.session_state["login_mode_active"] = "Sign In"
+                    st.rerun()
+                if st.button("Sign Up", key="login_mode_btn_signup"):
+                    st.session_state["login_mode_active"] = "Sign Up"
+                    st.rerun()
+
+            _toggle_tabs_html = "".join(
+                f'<div class="login-toggle-tab{" login-toggle-active" if _opt == login_mode else ""}" '
+                f'data-target-label="{_opt}">{_opt}</div>'
+                for _opt in ["Sign In", "Sign Up"]
+            )
+            st.markdown(
+                '<style>'
+                '.login-toggle-wrap { display:flex; flex-direction:row; align-items:center; gap:2px; '
+                'background:rgba(2,6,23,0.6); border:1px solid rgba(15,23,42,0.9); border-radius:8px; '
+                'padding:2px; max-width:160px; margin-bottom:1.5rem; box-sizing:border-box; } '
+                '.login-toggle-tab { flex:1; text-align:center; cursor:pointer; padding:0.3rem 0.75rem; '
+                'border-radius:6px; font-size:0.72rem; font-weight:500; text-transform:uppercase; '
+                'letter-spacing:0.04em; color:#64748B; user-select:none; -webkit-user-select:none; '
+                'font-family:\'Inter\', sans-serif; } '
+                '.login-toggle-active { background:rgba(30,41,59,0.6); color:#1FAE96; font-weight:700; } '
+                '</style>'
+                f'<div class="login-toggle-wrap">{_toggle_tabs_html}</div>',
+                unsafe_allow_html=True,
+            )
+            components.html(
+                f"""
+                <script>
+                function hestyBindLoginToggle() {{
+                    var doc = window.parent.document;
+                    if (doc.body.__hestyLoginToggleBound) {{ return; }}
+                    doc.body.__hestyLoginToggleBound = true;
+                    doc.body.addEventListener('click', function(e) {{
+                        var tab = e.target.closest('.login-toggle-tab');
+                        if (!tab) {{ return; }}
+                        var label = tab.getAttribute('data-target-label');
+                        var hiddenContainer = doc.querySelector('.st-key-{_hidden_toggle_key}');
+                        if (!hiddenContainer) {{ return; }}
+                        var buttons = hiddenContainer.querySelectorAll('button');
+                        for (var i = 0; i < buttons.length; i++) {{
+                            if (buttons[i].textContent.trim() === label) {{
+                                buttons[i].click();
+                                break;
+                            }}
+                        }}
+                    }});
+                }}
+                hestyBindLoginToggle();
+                </script>
+                """,
+                height=0,
+            )
 
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
@@ -8774,7 +8821,9 @@ def render_login():
                 if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
                     st.session_state["show_forgot_password"] = True
                     st.rerun()
-                if st.button("Sign In", type="primary", key="login_submit"):
+                with st.container(key="login_submit_wrap"):
+                    _login_submit_clicked = st.button("Sign In", key="login_submit")
+                if _login_submit_clicked:
                     if not login_email or not login_password:
                         st.error("Enter both your email and password.")
                     else:
@@ -8801,7 +8850,9 @@ def render_login():
                 st.markdown('<span class="hesty-login-label">Confirm password</span>', unsafe_allow_html=True)
                 signup_password_confirm = st.text_input("Confirm password", type="password",
                                                           key="signup_password_confirm", label_visibility="collapsed")
-                if st.button("Create account", type="primary", key="signup_submit"):
+                with st.container(key="login_submit_wrap"):
+                    _signup_submit_clicked = st.button("Create account", key="signup_submit")
+                if _signup_submit_clicked:
                     if not signup_name or not signup_email or not signup_password:
                         st.error("Fill in all fields.")
                     elif "@" not in signup_email:
