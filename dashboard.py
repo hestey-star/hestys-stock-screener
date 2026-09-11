@@ -8759,13 +8759,14 @@ def render_login():
             if login_mode == "Sign Up":
                 _login_title = "Create your free account"
                 _login_subtext = (
-                    '&#128073; LAUNCH SPECIAL: ALL PREMIUM FEATURES (INCLUDING ALL FUTURE RELEASES) '
-                    'ARE 100% UNLOCKED. JOIN AS AN EARLY ADOPTER TO LOCK IN YOUR LIFETIME FREE PRO '
-                    'STATUS BEFORE THE DOOR CLOSES.'
+                    'LAUNCH SPECIAL | ALL PREMIUM FEATURES (INCLUDING ALL FUTURE RELEASES) ARE 100% '
+                    'UNLOCKED. JOIN AS AN EARLY ADOPTER TO LOCK IN YOUR LIFETIME FREE PRO STATUS '
+                    'BEFORE THE DOOR CLOSES.'
                 )
                 _login_subtext_style = (
-                    'color:#34D399; font-size:0.75rem; font-weight:600; letter-spacing:0.04em; '
-                    'text-transform:uppercase; line-height:1.6;'
+                    'color:#34D399; font-size:11px; font-weight:600; letter-spacing:0.05em; '
+                    'text-transform:uppercase; line-height:1.6; max-width:28rem; display:block; '
+                    'margin-top:0.5rem; margin-bottom:1.5rem;'
                 )
             else:
                 _login_title = "Welcome back"
@@ -8776,7 +8777,8 @@ def render_login():
                 )
             st.markdown(
                 f'<div style="max-width:28rem; margin:0 0 1.5rem 0; text-align:left;">'
-                f'<h2 class="hero-headline" style="margin-bottom:0.3rem;">{_login_title}</h2>'
+                f'<h2 class="hero-headline" style="margin-bottom:0.3rem; text-transform:uppercase;">'
+                f'{_login_title}</h2>'
                 f'<p style="{_login_subtext_style}">{_login_subtext}</p>'
                 f'</div>',
                 unsafe_allow_html=True,
