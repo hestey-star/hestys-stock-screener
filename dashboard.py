@@ -4749,9 +4749,13 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'<style>'
         f'.st-key-{_table_key} button {{ '
         f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; color:#EAEDF1 !important; font-weight:700 !important; font-size:0.82rem !important; '
-        f'text-transform:uppercase !important; text-align:left !important; width:auto !important; }} '
+        f'padding:0 !important; margin:0 !important; color:#EAEDF1 !important; font-weight:700 !important; '
+        f'font-size:0.82rem !important; text-transform:uppercase !important; text-align:left !important; '
+        f'width:auto !important; min-height:0 !important; height:auto !important; line-height:1.3 !important; '
+        f'display:inline-flex !important; align-items:center !important; }} '
         f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
+        f'.st-key-{_table_key} [data-testid="stButton"] {{ '
+        f'display:flex !important; align-items:center !important; height:100% !important; }} '
         # Verticaal centreren, hard op ELK niveau: de hoofdrij, de
         # logo+knop-subkolom, EN de kolommen zelf (die kregen zonder
         # align-items:center op [data-testid="stColumn"] alsnog een
