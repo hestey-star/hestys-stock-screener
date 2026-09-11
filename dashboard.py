@@ -2746,8 +2746,12 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         f'<div style="font-weight:700; color:#EAEDF1; font-size:0.92rem; text-transform:uppercase; '
         f'letter-spacing:0.01em; font-family:\'Inter\', sans-serif !important; overflow:hidden; '
         f'text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
+        # Ticker + huidige koers compact op dezelfde regel -- 'detail_html'
+        # (bevat de koers/Avg->Current-prijs) werd hierboven al berekend
+        # maar stond nergens daadwerkelijk in de mobiele opmaak; dat was
+        # de reden dat de koers niet zichtbaar was op mobiel.
         f'<div style="color:#8992A3; font-size:0.7rem; font-family:\'Inter\', sans-serif !important; '
-        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{ticker}</div>'
+        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{ticker}{detail_html}</div>'
         f'</div>'
         # Rechts: alleen de 2 kerncijfers, gestapeld en rechts uitgelijnd --
         # waarde boven (groot), rendement/verandering eronder (klein).
