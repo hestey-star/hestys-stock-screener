@@ -4679,6 +4679,93 @@ _LOGO_ICON_B64 = "iVBORw0KGgoAAAANSUhEUgAAAIMAAACgCAYAAAAvpd/+AAAh7klEQVR4nO19e5
 # vanuit de bestaande if/elif-keten op basis van current_view.)
 # ============================================================
 
+def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool = False) -> str:
+    """1 van de 3 conviction-tegels bovenaan Analyze -- totaal portfolio-gewicht per score-bucket."""
+    border = "rgba(217,119,6,0.5)" if warn else "rgba(30,41,59,0.4)"
+    warn_html = (
+        '<div style="color:#D97706; font-size:0.68rem; font-weight:700; margin-top:6px; '
+        'text-transform:uppercase; letter-spacing:0.03em;">&#128680; Exceeds safe limit</div>'
+        if warn else ""
+    )
+    return (
+        f'<div style="background:rgba(15,23,42,0.3); border:1px solid {border}; border-radius:14px; '
+        f'padding:1rem; text-align:left;">'
+        f'<div style="color:#8992A3; font-size:0.7rem; font-weight:700; text-transform:uppercase; '
+        f'letter-spacing:0.05em;">{icon} {label}</div>'
+        f'<div style="color:#F1F5F9; font-size:1.6rem; font-weight:800; margin-top:6px;">'
+        f'{weight_pct:.0f}% <span style="font-size:0.7rem; font-weight:600; color:#64748B; '
+        f'text-transform:uppercase;">of portfolio</span></div>'
+        f'{warn_html}'
+        f'</div>'
+    )
+
+
+def _conviction_table_html(entries: list, held_tickers: set) -> str:
+    """
+    Compacte, links-uitgelijnde tabel voor Sectie A (Active Portfolio
+    Conviction) en Sectie B (Research Watchlist) -- zelfde rij-opbouw
+    voor beide. data-ticker op elke rij, alvast voorbereid op een
+    toekomstig click-event (side-drawer + AI-knop, volgende stap) --
+    nu nog geen JS-koppeling.
+    """
+    if not entries:
+        return (
+            '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">'
+            'Nothing here yet.</div>'
+        )
+    rows_html = []
+    for entry in entries:
+        ticker = entry.get("ticker", "")
+        naam = entry.get("naam", ticker)
+        score = _compute_deep_dive_overall_score(entry)
+        if score is not None:
+            score_color = _deep_dive_score_color(score)
+            score_html = f'<span style="color:{score_color}; font-weight:700;">{score:.1f}</span><span style="color:#64748B;"> / 10</span>'
+        else:
+            score_html = '<span style="color:#64748B;">-</span>'
+        thesis_full = (entry.get("investment_thesis") or "").strip()
+        thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
+        if len(thesis_line) > 90:
+            thesis_line = thesis_line[:87].rstrip() + "..."
+        thesis_html = thesis_line if thesis_line else '<span style="color:#64748B;">No thesis logged yet</span>'
+        last_validated = (entry.get("created_at") or "")[:10] or "-"
+        logo_url = get_company_logo_url(ticker, naam)
+        logo_html = (
+            f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:50%; object-fit:contain; '
+            f'background:#fff; padding:2px; flex-shrink:0;" />'
+            if logo_url else
+            f'<div style="width:26px; height:26px; border-radius:50%; background:rgba(137,146,163,0.15); '
+            f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
+            f'<span style="color:#8992A3; font-weight:700; font-size:0.65rem;">{(ticker[:1] or "?").upper()}</span></div>'
+        )
+        rows_html.append(
+            f'<div data-ticker="{ticker}" style="display:flex; align-items:center; gap:0.9rem; '
+            f'padding:0.65rem 0.25rem; border-bottom:1px solid rgba(148,163,184,0.08); cursor:pointer;">'
+            f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
+            f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; text-transform:uppercase;">{ticker}</span>'
+            f'</div>'
+            f'<div style="width:70px; flex-shrink:0; font-size:0.82rem;">{score_html}</div>'
+            f'<div style="flex:1; min-width:0; color:#F1F5F9; font-size:0.82rem; overflow:hidden; '
+            f'text-overflow:ellipsis; white-space:nowrap;">{thesis_html}</div>'
+            f'<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.75rem;">{last_validated}</div>'
+            f'</div>'
+        )
+    header_html = (
+        '<div style="display:flex; align-items:center; gap:0.9rem; padding:0 0.25rem 0.5rem 0.25rem; '
+        'border-bottom:1px solid rgba(148,163,184,0.15);">'
+        '<div style="width:110px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
+        'text-transform:uppercase; letter-spacing:0.05em;">Asset</div>'
+        '<div style="width:70px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
+        'text-transform:uppercase; letter-spacing:0.05em;">Score</div>'
+        '<div style="flex:1; color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
+        'letter-spacing:0.05em;">Core thesis</div>'
+        '<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.65rem; '
+        'font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Last validated</div>'
+        '</div>'
+    )
+    return header_html + "".join(rows_html)
+
+
 def render_analyze():
     if not current_user.is_logged_in:
         _render_landing_soft_lock(
@@ -4692,627 +4779,196 @@ def render_analyze():
         )
         st.stop()
 
-    st.markdown("### Analyze")
+    import database
 
-    # Sub-navigatie via segmented_control i.p.v. HTML-links -- geen
-    # volledige pagina-herlading meer bij het wisselen van tabblad. De
-    # subview blijft leesbaar via de URL bij het EERSTE bezoek (bv. een
-    # gedeelde link naar /analyze?subview=dividend), maar daarna neemt
-    # de widget het zelf over via zijn eigen, key-gebaseerde sessie-status.
-    _analyze_subview_map = {
-        "Performance": "performance", "Portfolio Overview": "portfolio",
-        "Dividend": "dividend", "Deep-dives": "deepdives",
+    user_email = current_user.email
+
+    st.markdown(
+        _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
+        unsafe_allow_html=True,
+    )
+
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
+    total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
+    held_tickers = {h["ticker"] for h in holdings if h.get("ticker")}
+    holding_weight_by_ticker = {
+        h["ticker"]: ((h.get("position_value") or 0) / total_portfolio_value * 100 if total_portfolio_value else 0)
+        for h in holdings if h.get("ticker")
     }
-    _analyze_subview_reverse = {v: k for k, v in _analyze_subview_map.items()}
-    _analyze_default_label = _analyze_subview_reverse.get(
-        st.query_params.get("subview", "performance"), "Performance",
+
+    deep_dives = database.get_all_deep_dive_tickers(user_email)
+
+    # --- 1. Conviction-tegels: som van portfolio-gewicht per score-
+    # bucket, uitsluitend voor BEZETEN assets waar ook een deep-dive-
+    # score voor bestaat (holdings zonder deep-dive tellen dus nergens
+    # in mee -- vandaar dat de 3 percentages niet per se optellen tot
+    # 100% van de hele portfolio, alleen van het 'onderzochte' deel). ---
+    high_weight = medium_weight = low_weight = 0.0
+    for entry in deep_dives:
+        ticker = entry.get("ticker")
+        if ticker not in held_tickers:
+            continue
+        score = _compute_deep_dive_overall_score(entry)
+        if score is None:
+            continue
+        weight = holding_weight_by_ticker.get(ticker, 0)
+        if score >= 8:
+            high_weight += weight
+        elif score >= 5:
+            medium_weight += weight
+        else:
+            low_weight += weight
+
+    tiles_html = (
+        _conviction_tile_html("\U0001F7E2", "High conviction (8-10)", high_weight)
+        + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
+        + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
     )
-    _analyze_selected_label = st.segmented_control(
-        "Analyze section", options=list(_analyze_subview_map.keys()),
-        selection_mode="single", default=_analyze_default_label,
-        key="analyze_subnav", label_visibility="collapsed",
+    st.markdown(
+        '<style>.hesty-conviction-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; '
+        'margin-bottom:2rem; } @media (max-width:768px) { .hesty-conviction-grid { grid-template-columns:1fr; } }</style>'
+        f'<div class="hesty-conviction-grid">{tiles_html}</div>',
+        unsafe_allow_html=True,
     )
-    if _analyze_selected_label is None:
-        _analyze_selected_label = "Performance"
-    current_subview = _analyze_subview_map[_analyze_selected_label]
 
-    if current_subview == "deepdives":
-        import database
+    # --- 2. Sectie A: Active Portfolio Conviction -- bezeten assets MET
+    # een deep-dive. ---
+    st.markdown(
+        _uniform_section_header_html("Active Portfolio Conviction", "work", is_first=False),
+        unsafe_allow_html=True,
+    )
+    owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
+    st.markdown(_conviction_table_html(owned_dive_entries, held_tickers), unsafe_allow_html=True)
+    if not owned_dive_entries:
+        st.caption("None of your current holdings have a deep-dive logged yet.")
 
-        user_email = current_user.email
+    # --- 3. Sectie B: Research Watchlist -- NIET-bezeten assets met een
+    # deep-dive waarvan de conclusie 'Watch' of 'Pass' is. ('Pass' is de
+    # dichtstbijzijnde match voor 'NO BUY' -- die exacte waarde bestaat
+    # niet in het opslagmodel, dat kent alleen Watch/Buy/Pass.) ---
+    st.markdown(
+        _uniform_section_header_html("Research Watchlist", "visibility", is_first=False),
+        unsafe_allow_html=True,
+    )
+    watchlist_entries = [
+        e for e in deep_dives
+        if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
+    ]
+    st.markdown(_conviction_table_html(watchlist_entries, held_tickers), unsafe_allow_html=True)
+    if not watchlist_entries:
+        st.caption("No research-pipeline ideas yet -- add a deep-dive below.")
 
-        st.markdown(
-            f"""
-            <div style="background: rgba(137,146,163,0.05);
-                        border: 1px solid rgba(137,146,163,0.2); border-radius: 10px;
-                        padding: 1rem 1.25rem; margin: 0.5rem 0 1rem 0;">
-                <div style="color:#8992A3; font-weight:700; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase;">
-                    {_icon_span("menu_book", size_px=14, color="#8992A3")} Deep-dives
-                </div>
-                <div style="color:#8992A3; font-size:0.9rem; margin-top:6px; line-height:1.5;">
-                    Log your own research per stock -- every time you update it, the previous
-                    version stays saved, so you can later see exactly how your view has changed.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+    # --- 'Add a new deep-dive' blijft functioneel bereikbaar (anders
+    # kun je helemaal geen research meer loggen) maar staat nu
+    # weggestopt, collapsed, onderaan -- de volgende stap verhuist dit
+    # naar de side-drawer + AI-knop. ---
+    with st.expander("Add a new deep-dive (or update)", expanded=False, icon=":material/add:", key="add_a_new_deep_dive_or_update_expander"):
+        dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
+
+        if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
+            st.session_state["dd_last_looked_up_ticker"] = dd_ticker
+            try:
+                auto_info = get_cached_ticker_info(dd_ticker)
+                auto_name = auto_info.get("longName") or auto_info.get("shortName")
+                if auto_name:
+                    st.session_state["dd_naam_input"] = auto_name
+            except Exception:
+                pass
+
+        dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
+        dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
+
+        st.markdown("**Business overview** -- what does the company do, in your own words")
+        dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
+
+        st.markdown("**Investment thesis** -- why this could be a good investment")
+        dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
+        dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
+
+        st.markdown("**Management/CEO** -- assess the management and the CEO")
+        dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
+        dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
+
+        st.markdown("**Bear case / risks** -- what could go wrong")
+        dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
+        dd_bear_score = st.columns([1, 1])[0].slider(
+            "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
+            help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
         )
 
-        with st.expander("Add a new deep-dive (or update)", expanded=False, icon=":material/add:", key="add_a_new_deep_dive_or_update_expander"):
-            dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
+        st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
+        dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
+        dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
+        dd_interested_price = st.number_input(
+            f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
+            help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
+        )
 
-            # Automatisch de bedrijfsnaam invullen zodra de ticker verandert
-            # (via session_state, VÓÓR het naam-veld zelf wordt aangemaakt) --
-            # scheelt typewerk, en je kan het altijd nog zelf overschrijven.
-            if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
-                st.session_state["dd_last_looked_up_ticker"] = dd_ticker
-                try:
-                    auto_info = get_cached_ticker_info(dd_ticker)
-                    auto_name = auto_info.get("longName") or auto_info.get("shortName")
-                    if auto_name:
-                        st.session_state["dd_naam_input"] = auto_name
-                except Exception:
-                    pass
+        st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
+                    "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
+        dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
+        dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
 
-            dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
+        st.markdown("**Catalysts** -- what upcoming events could move the price")
+        dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
+        dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
 
-            # Het valutasymbool volgt het aandeel zelf (bv. $voor een
-            # Amerikaans aandeel, €voor een Europees) -- belangrijk omdat
-            # het grootste deel van de aankopen in USD is, maar niet alles.
-            dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "€"
+        st.markdown("**Position sizing plan** -- how big a position, and why")
+        dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
 
-            st.markdown("**Business overview** -- what does the company do, in your own words")
-            dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
+        st.markdown("**Sell criteria** -- under what conditions do you exit "
+                    "(this is also where a specific triggering EVENT belongs, e.g. "
+                    "'if they miss 2 consecutive quarters' -- we can't check that "
+                    "automatically, so it stays a reminder here on this page)")
+        dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
 
-            st.markdown("**Investment thesis** -- why this could be a good investment")
-            dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-            dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
-
-            st.markdown("**Management/CEO** -- assess the management and the CEO")
-            dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-            dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
-
-            st.markdown("**Bear case / risks** -- what could go wrong")
-            dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
-            dd_bear_score = st.columns([1, 1])[0].slider(
-                "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
-                help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
+        st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
+        dd_sell_trigger_cols = st.columns(2)
+        with dd_sell_trigger_cols[0]:
+            dd_sell_trigger_price = st.number_input(
+                f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
+                help="Works both ways: a target above today's price is treated as a profit "
+                     "target, below it as a stop-loss.",
+            )
+        with dd_sell_trigger_cols[1]:
+            dd_sell_trigger_date = st.date_input(
+                "Sell by date", value=None, key="dd_sell_trigger_date",
+                help="A hard deadline to reconsider this position, regardless of price.",
             )
 
-            st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
-            dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-            dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
-            dd_interested_price = st.number_input(
-                f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
-                help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
-            )
+        dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
 
-            st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
-                        "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
-            dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
-            dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
-
-            st.markdown("**Catalysts** -- what upcoming events could move the price")
-            dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-            dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
-
-            st.markdown("**Position sizing plan** -- how big a position, and why")
-            dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
-
-            st.markdown("**Sell criteria** -- under what conditions do you exit "
-                        "(this is also where a specific triggering EVENT belongs, e.g. "
-                        "'if they miss 2 consecutive quarters' -- we can't check that "
-                        "automatically, so it stays a reminder here on this page)")
-            dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
-
-            st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
-            dd_sell_trigger_cols = st.columns(2)
-            with dd_sell_trigger_cols[0]:
-                dd_sell_trigger_price = st.number_input(
-                    f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
-                    help="Works both ways: a target above today's price is treated as a profit "
-                         "target, below it as a stop-loss.",
-                )
-            with dd_sell_trigger_cols[1]:
-                dd_sell_trigger_date = st.date_input(
-                    "Sell by date", value=None, key="dd_sell_trigger_date",
-                    help="A hard deadline to reconsider this position, regardless of price.",
-                )
-
-            dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
-
-            if st.button("Save this version", type="primary", key="dd_save_btn"):
-                if not dd_ticker or not dd_naam:
-                    st.error("Please fill in at least a ticker and name.")
-                else:
-                    with st.spinner("Fetching market data..."):
-                        market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
-                    database.add_deep_dive(
-                        user_email, dd_ticker, dd_naam,
-                        business_overview=dd_business or None,
-                        investment_thesis=dd_thesis or None,
-                        management_assessment=dd_management or None,
-                        bear_case=dd_bear or None,
-                        valuation_view=dd_valuation or None,
-                        interested_price=dd_interested_price or None,
-                        catalysts=dd_catalysts or None,
-                        position_sizing_plan=dd_sizing or None,
-                        sell_criteria=dd_sell_criteria or None,
-                        conclusion=dd_conclusion,
-                        market_snapshot=market_snapshot,
-                        sell_trigger_price=dd_sell_trigger_price or None,
-                        sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
-                        thesis_score=dd_thesis_score,
-                        management_score=dd_management_score,
-                        bear_case_score=dd_bear_score,
-                        valuation_score=dd_valuation_score,
-                        catalysts_score=dd_catalysts_score,
-                        technical_analysis=dd_technical_analysis or None,
-                        technical_analysis_score=dd_technical_analysis_score,
-                    )
-                    st.success(f"New version for {dd_ticker} saved!")
-                    st.rerun()
-
-        st.markdown("**Your deep-dives**")
-        dd_overview = database.get_all_deep_dive_tickers(user_email)
-        if not dd_overview:
-            st.caption("No deep-dives logged yet -- add one above.")
-        else:
-            conclusion_emoji_map = {"Buy": "🟢", "Watch": "🟡", "Pass": "🔴"}
-            dd_tiles_per_row = 4
-            for row_start in range(0, len(dd_overview), dd_tiles_per_row):
-                row_entries = dd_overview[row_start:row_start + dd_tiles_per_row]
-                tile_cols = st.columns(dd_tiles_per_row)
-                for tile_col, entry in zip(tile_cols, row_entries):
-                    with tile_col:
-                        with st.container(border=True):
-                            logo_url = get_company_logo_url(entry["ticker"], entry.get("naam"))
-                            conclusion_emoji = conclusion_emoji_map.get(entry["conclusion"], "")
-                            tile_overall_score = _compute_deep_dive_overall_score(entry)
-
-                            # logo_url is nu server-kant al geverifieerd
-                            # (get_company_logo_url), dus altijd bruikbaar
-                            # als 'ie niet None is -- geen client-side
-                            # onerror-fallback meer nodig.
-                            logo_html = (
-                                f'<img src="{logo_url}" width="56" height="56" '
-                                f'style="border-radius:12px; object-fit:contain; background:#fff; padding:4px;" />'
-                                if logo_url else
-                                f'<div style="width:56px; height:56px; border-radius:12px; background:rgba(137,146,163,0.1); '
-                                f'display:flex; align-items:center; justify-content:center;">{_icon_span("candlestick_chart", size_px=24, color="#8992A3")}</div>'
-                            )
-                            if tile_overall_score is not None:
-                                score_color = _deep_dive_score_color(tile_overall_score)
-                                score_html = (
-                                    f'<div style="font-size:2rem; font-weight:800; color:{score_color}; line-height:1;">'
-                                    f'{tile_overall_score:.1f}<span style="font-size:0.85rem; font-weight:600; opacity:0.75;">/10</span></div>'
-                                )
-                            else:
-                                score_html = '<div style="font-size:0.85rem; color:#8992A3;">No score yet</div>'
-
-                            st.markdown(
-                                f"""
-                                <div style="text-align:center; padding: 0.25rem 0 0.75rem 0;">
-                                    <div style="display:flex; justify-content:center; margin-bottom:8px;">{logo_html}</div>
-                                    <div style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{entry['ticker']} {conclusion_emoji}</div>
-                                    <div style="font-size:0.8rem; color:#8992A3; margin: 2px 0 10px 0;">{entry['naam']}</div>
-                                    {score_html}
-                                    <div style="font-size:0.7rem; color:#8992A3; margin-top:8px;">Updated {entry['created_at'][:10]}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-                            with st.expander("View history", key=f"view_history_expander_{entry['ticker']}"):
-                                history = database.get_deep_dives_for_ticker(user_email, entry["ticker"])
-                                st.caption(f"{len(history)} version(s) logged, most recent first.")
-                                for version in history:
-                                    _render_deep_dive_version(version, user_email)
-
-        st.divider()
-
-    elif current_subview == "portfolio":
-        import database
-
-        user_email = current_user.email
-        holdings = filter_active_holdings(database.get_user_holdings(user_email))
-        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
-        is_premium = database.is_premium_user(user_email)
-
-        if not holdings:
-            st.info("Add positions under My Portfolio to see your analysis here.")
-            st.stop()
-
-        risk_profile = database.get_risk_profile(user_email)
-        with st.spinner("Loading sector/valuation data..."):
-            infos = get_tickers_info(holdings)
-
-        # --- Concentratie Risk ---
-        st.markdown(
-            _flowing_section_header_html("Concentration Risk", "target", is_first=True),
-            unsafe_allow_html=True,
-        )
-        for finding in analyze_concentration(holdings, risk_profile["max_position_pct"]):
-            st.markdown(f"- {finding}")
-
-        total_value_check = sum(h.get("position_value") or 0 for h in holdings)
-        if total_value_check > 0:
-            largest_check = max(holdings, key=lambda h: h.get("position_value") or 0)
-            largest_pct_check = (largest_check.get("position_value") or 0) / total_value_check * 100
-            if largest_pct_check > risk_profile["max_position_pct"]:
-                st.caption("One way to gradually correct an overweight position without a big, "
-                           "one-time move: adjust future contributions with the Smart DCA Assistant.")
-                st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
-
-        # --- Sectoren -- nu met een taartdiagram i.p.v. alleen tekst ---
-        # --- Portfolio-samenstelling: Sectors + Asset Type + Region samen,
-        # in een compactere 2-koloms-layout i.p.v. elk een eigen, volle-
-        # breedte sectie. Elke categorie toont nu ook de tickers erachter
-        # (bv. welk ETF, welke positie telt als 'Future') i.p.v. alleen een
-        # kaal percentage. ---
-        st.markdown(
-            _flowing_section_header_html("Portfolio Composition", "pie_chart", is_first=False),
-            unsafe_allow_html=True,
-        )
-        sector_groups, type_groups, region_groups = {}, {}, {}
-        for h in holdings:
-            value = h.get("position_value") or 0
-            info = infos.get(h["ticker"], {})
-
-            sector = info.get("sector") or "Non-equity / Other"
-            sector_groups.setdefault(sector, []).append((h["naam"], h["ticker"], value))
-
-            raw_quote_type = info.get("quoteType")
-            if raw_quote_type:
-                asset_type = raw_quote_type.title()
+        if st.button("Save this version", type="primary", key="dd_save_btn"):
+            if not dd_ticker or not dd_naam:
+                st.error("Please fill in at least a ticker and name.")
             else:
-                ticker_suffix = h["ticker"].rsplit("-", 1)[-1].upper() if "-" in h["ticker"] else ""
-                asset_type = "Cryptocurrency" if ticker_suffix in ("EUR", "USD", "GBP", "USDT", "USDC") else "Unknown"
-            type_groups.setdefault(asset_type, []).append((h["naam"], h["ticker"], value))
-
-            region = get_holding_region(h["ticker"], info)
-            region_groups.setdefault(region, []).append((h["naam"], h["ticker"], value))
-
-        total_value_for_breakdown = sum(h.get("position_value") or 0 for h in holdings)
-
-        def _render_breakdown(title, groups):
-            with st.container(border=True):
-                st.markdown(f"**{title}**")
-                chart_values = {cat: sum(v for _, _, v in items) for cat, items in groups.items()}
-                if chart_values:
-                    fig = build_breakdown_pie_chart(list(chart_values.keys()), list(chart_values.values()))
-                    # Unieke key nodig -- deze functie wordt 3x aangeroepen
-                    # (Sectors/Asset Type/Region) en st.plotly_chart() zonder
-                    # key kan dan met StreamlitDuplicateElementId crashen.
-                    chart_key = "breakdown_chart_" + title.lower().replace(" ", "_")
-                    st.plotly_chart(fig, key=chart_key)
-
-        comp_col1, comp_col2 = st.columns(2)
-        with comp_col1:
-            _render_breakdown("Sectors", sector_groups)
-        with comp_col2:
-            _render_breakdown("Asset Type", type_groups)
-
-        # Region krijgt dezelfde kolomstructuur (i.p.v. los, gecentreerd
-        # over de volle breedte) -- staat zo netjes uitgelijnd onder
-        # Sectors, consistent met de blokken hierboven.
-        region_col1, region_col2 = st.columns(2)
-        with region_col1:
-            _render_breakdown("Region", region_groups)
-
-        sector_values_check = {
-            s: sum(v for _, _, v in items) for s, items in sector_groups.items() if s != "Non-equity / Other"
-        }
-        if sector_values_check and total_value_for_breakdown > 0:
-            dominant_sector_pct = max(sector_values_check.values()) / total_value_for_breakdown * 100
-            if dominant_sector_pct > risk_profile["max_sector_pct"]:
-                st.caption("Overweight in one sector? Steering future contributions toward other "
-                           "sectors is often smoother than selling. The Smart DCA Assistant can help with the timing.")
-                st.page_link(premium_page, label="Buy smarter with DCA", icon=":material/auto_awesome:")
-
-        # --- Risico ---
-        st.markdown(
-            _flowing_section_header_html("Risk", "balance", is_first=False),
-            unsafe_allow_html=True,
-        )
-        for finding in analyze_risk(holdings, infos):
-            st.markdown(f"- {finding}", unsafe_allow_html=True)
-
-            if is_premium:
-                if len(holdings) >= 2:
-                    with st.spinner("Building correlation matrix..."):
-                        corr_chart = build_correlation_matrix_chart(holdings)
-                    if corr_chart is not None:
-                        st.plotly_chart(corr_chart, width="stretch")
-                else:
-                    st.caption("Add at least 2 positions to see a correlation matrix.")
-            else:
-                st.info("Upgrade to Premium for a correlation matrix (which positions move together?).", icon=":material/lock:")
-
-
-    elif current_subview == "dividend":
-        import database
-
-        user_email = current_user.email
-        holdings = filter_active_holdings(database.get_user_holdings(user_email))
-        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
-        is_premium = database.is_premium_user(user_email)
-
-        if not holdings:
-            st.info("Add positions under My Portfolio to see your analysis here.")
-            st.stop()
-
-        risk_profile = database.get_risk_profile(user_email)
-
-        # --- Performance (rendement uit gelogde transacties) ---
-        # BELANGRIJK: dit gebruikt de SNELLE, gebatchte koersgeschiedenis
-        # (shared_history) als EERSTE keuze voor de huidige prijs, i.p.v.
-        # te wachten op infos/.info (die pas hierONDER wordt opgehaald,
-        # en van yfinance bekend traag is). Zo verschijnt Performance
-        # meteen, terwijl de rest van de pagina (Sectors/Diversification/
-        # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
-        with st.spinner("Loading dividend data..."):
-            infos = get_tickers_info(holdings)
-
-        st.markdown(
-            _flowing_section_header_html("Dividend", "payments", is_first=True),
-            unsafe_allow_html=True,
-        )
-        if is_premium:
-            dividend_result = analyze_dividend(holdings, infos)
-            for finding in dividend_result["findings"]:
-                st.markdown(f"- {finding}", unsafe_allow_html=True)
-            if dividend_result["per_position"]:
-                if st.checkbox(f"Show breakdown per position ({len(dividend_result['per_position'])})", key="dividend_breakdown"):
-                    df_div = pd.DataFrame(dividend_result["per_position"])
-                    symbol = dividend_result["currency_symbol"]
-                    df_display = pd.DataFrame({
-                        "Name": df_div["naam"],
-                        "Ticker": df_div["ticker"],
-                        "Annual Dividend": df_div["annual_dividend"].apply(
-                            lambda v: f"{symbol}{v:,.2f}" if v is not None else "-"
-                        ),
-                        "Yield": df_div["yield_pct"].apply(
-                            lambda v: f"{v:.2f}%" if v is not None else "-"
-                        ),
-                    })
-                    st.dataframe(
-                        df_display, width=480, hide_index=True,
-                        height=min(38 * (len(df_display) + 1), 300),
-                    )
-        else:
-            st.info("Upgrade to Premium for your dividend income overview and upcoming ex-dividend dates.", icon=":material/lock:")
-
-
-    else:
-        import database
-
-        user_email = current_user.email
-        holdings = filter_active_holdings(database.get_user_holdings(user_email))
-        holdings.sort(key=lambda h: h.get("position_value") or 0, reverse=True)
-        is_premium = database.is_premium_user(user_email)
-
-        if not holdings:
-            st.info("Add positions under My Portfolio to see your analysis here.")
-            st.stop()
-
-        risk_profile = database.get_risk_profile(user_email)
-
-        # --- Performance (rendement uit gelogde transacties) ---
-        # BELANGRIJK: dit gebruikt de SNELLE, gebatchte koersgeschiedenis
-        # (shared_history) als EERSTE keuze voor de huidige prijs, i.p.v.
-        # te wachten op infos/.info (die pas hierONDER wordt opgehaald,
-        # en van yfinance bekend traag is). Zo verschijnt Performance
-        # meteen, terwijl de rest van de pagina (Sectors/Diversification/
-        # Risk, die WEL .info-velden nodig hebben) daarna pas verder laadt.
-        st.markdown(
-            _flowing_section_header_html("Performance", "monitoring", is_first=True),
-            unsafe_allow_html=True,
-        )
-        st.caption("Your real return, based on the buy/sell transactions you've logged under "
-                   "My Portfolio -- excludes dividends. Includes fully closed positions. "
-                   "Positions without logged transactions won't show a return here.")
-
-        snapshot = database.get_performance_snapshot(user_email)
-        refresh_col1, refresh_col2 = st.columns([3, 1])
-        with refresh_col1:
-            if snapshot and snapshot.get("computed_at"):
-                st.caption(f"Last updated: {snapshot['computed_at'][:16].replace('T', ' ')}")
-            else:
-                st.caption("Calculating your performance for the first time...")
-        with refresh_col2:
-            refresh_clicked = st.button("Refresh", key="perf_refresh_btn")
-
-        if refresh_clicked or not snapshot:
-            # VOLLEDIGE (trage) herberekening -- alleen op expliciet verzoek
-            # (de Refresh-knop) of bij het allereerste bezoek, NIET meer bij
-            # elk bezoek aan de pagina. Dit is de kern van de snelheidsfix:
-            # een volgend bezoek toont de opgeslagen snapshot INSTANT.
-            all_holdings_incl_closed = database.get_user_holdings(user_email)
-            with st.spinner("Loading price history..."):
-                shared_history = get_shared_history_for_holdings(all_holdings_incl_closed, period="max")
-            today = datetime.now().date()
-            performance_rows = []
-            total_invested = 0.0
-            total_pnl = 0.0
-            earliest_date = None
-            excluded_no_price = []
-            for h in all_holdings_incl_closed:
-                transactions = database.get_transactions_for_holding(user_email, h["id"])
-                if not transactions:
-                    continue
-                current_price = _price_near_date(shared_history.get(h["ticker"]), today, tolerance_days=10)
-                if current_price is None:
-                    single_info = get_cached_ticker_info(h["ticker"])
-                    current_price = single_info.get("currentPrice") or single_info.get("regularMarketPrice")
-                perf = compute_holding_performance(transactions, current_price)
-                if perf:
-                    is_closed = perf["shares_held"] <= 0.0001
-                    performance_rows.append({"naam": h["naam"], "ticker": h["ticker"], "closed": is_closed, **perf})
-                    bought_cost = sum(t["shares"] * t["price"] + t["fee"] for t in transactions if t["transaction_type"] == "buy")
-                    total_invested += bought_cost
-                    total_pnl += perf["total_pnl"]
-                    for t in transactions:
-                        if earliest_date is None or t["transaction_date"] < earliest_date:
-                            earliest_date = t["transaction_date"]
-                elif current_price is None:
-                    excluded_no_price.append(h["naam"])
-
-            if excluded_no_price:
-                st.caption(
-                    f"{_icon_span('warning', size_px=13, color='#8992A3')} Couldn't fetch a current price for: {', '.join(excluded_no_price)} -- "
-                    f"excluded from the totals below until that's available again.",
-                    unsafe_allow_html=True,
+                with st.spinner("Fetching market data..."):
+                    market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
+                database.add_deep_dive(
+                    user_email, dd_ticker, dd_naam,
+                    business_overview=dd_business or None,
+                    investment_thesis=dd_thesis or None,
+                    management_assessment=dd_management or None,
+                    bear_case=dd_bear or None,
+                    valuation_view=dd_valuation or None,
+                    interested_price=dd_interested_price or None,
+                    catalysts=dd_catalysts or None,
+                    position_sizing_plan=dd_sizing or None,
+                    sell_criteria=dd_sell_criteria or None,
+                    conclusion=dd_conclusion,
+                    market_snapshot=market_snapshot,
+                    sell_trigger_price=dd_sell_trigger_price or None,
+                    sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
+                    thesis_score=dd_thesis_score,
+                    management_score=dd_management_score,
+                    bear_case_score=dd_bear_score,
+                    valuation_score=dd_valuation_score,
+                    catalysts_score=dd_catalysts_score,
+                    technical_analysis=dd_technical_analysis or None,
+                    technical_analysis_score=dd_technical_analysis_score,
                 )
-
-            if performance_rows:
-                overall_return_pct = (total_pnl / total_invested * 100) if total_invested else None
-                if overall_return_pct is not None and pd.isna(overall_return_pct):
-                    overall_return_pct = None
-
-                checkpoints = []
-                if earliest_date:
-                    try:
-                        since_inception_date = datetime.strptime(earliest_date, "%Y-%m-%d").date()
-                        checkpoints.append(("Since inception", since_inception_date))
-                    except Exception:
-                        pass
-                checkpoints.append(("3 years", (datetime.now() - timedelta(days=365 * 3)).date()))
-                checkpoints.append(("1 year", (datetime.now() - timedelta(days=365)).date()))
-                checkpoints.append(("YTD", date(datetime.now().year, 1, 1)))
-                checkpoints.append(("3 months", (datetime.now() - timedelta(days=90)).date()))
-                checkpoints.append(("1 month", (datetime.now() - timedelta(days=30)).date()))
-
-                checkpoint_results = []
-                for label, window_start in checkpoints:
-                    result = compute_personal_windowed_return(
-                        all_holdings_incl_closed, user_email, window_start, history_by_ticker=shared_history
-                    )
-                    if result is not None:
-                        checkpoint_results.append({"label": label, "return_pct": result["return_pct"]})
-
-                value_series_raw = compute_portfolio_value_over_time(
-                    all_holdings_incl_closed, user_email, shared_history, num_points=60
-                )
-                value_series = [{"date": p["date"].isoformat(), "value": p["value"]} for p in value_series_raw]
-
-                database.save_performance_snapshot(
-                    user_email, overall_return_pct=overall_return_pct, total_pnl=total_pnl,
-                    earliest_date=earliest_date, checkpoint_results=checkpoint_results,
-                    value_series=value_series, performance_rows=performance_rows,
-                )
-                st.rerun()  # herlaad meteen om de zojuist opgeslagen snapshot te tonen (consistente weergave-route)
-            else:
-                st.caption("No positions with logged transactions yet -- log a buy under My Portfolio "
-                           "to start tracking your return.")
-
-        elif snapshot:
-            # INSTANT -- toon de opgeslagen snapshot, GEEN netwerk-aanroepen nodig.
-            overall_return_pct = snapshot.get("overall_return_pct")
-            total_pnl = snapshot.get("total_pnl")
-            earliest_date = snapshot.get("earliest_date")
-            checkpoint_results = snapshot.get("checkpoint_results") or []
-            value_series = [
-                {"date": datetime.strptime(p["date"], "%Y-%m-%d").date(), "value": p["value"]}
-                for p in (snapshot.get("value_series") or [])
-            ]
-            performance_rows = snapshot.get("performance_rows") or []
-
-            if overall_return_pct is not None:
-                since_txt = f" since {earliest_date}" if earliest_date else ""
-                st.metric(f"Overall return{since_txt}", f"{overall_return_pct:+.1f}%", f"€{total_pnl:+,.2f}")
-
-            ytd_result = next((r for r in checkpoint_results if r["label"] == "YTD"), None)
-            one_year_result = next((r for r in checkpoint_results if r["label"] == "1 year"), None)
-            ytd_pct = ytd_result["return_pct"] if ytd_result else None
-            one_year_pct = one_year_result["return_pct"] if one_year_result else None
-
-            # Benchmark-vergelijking is nu OPT-IN (een knop) i.p.v. automatisch
-            # bij elk bezoek -- scheelt een extra netwerk-aanroep als je 'm
-            # niet nodig hebt.
-            show_benchmark = st.checkbox("Compare against a benchmark", key="perf_show_benchmark")
-            benchmark_ytd = benchmark_1y = None
-            benchmark_name = None
-            if show_benchmark:
-                benchmark_name = st.selectbox("Compare against", list(BENCHMARK_OPTIONS.keys()), key="perf_benchmark")
-                if st.button(f"Fetch {benchmark_name}", key="perf_fetch_benchmark"):
-                    with st.spinner(f"Fetching {benchmark_name}..."):
-                        try:
-                            benchmark_history = get_cached_ticker_history(BENCHMARK_OPTIONS[benchmark_name], period="2y")
-                            benchmark_ytd = compute_price_return(benchmark_history, since_date=datetime(datetime.now().year, 1, 1))
-                            benchmark_1y = compute_price_return(benchmark_history, days_back=365)
-                        except Exception:
-                            benchmark_ytd = benchmark_1y = None
-
-            pcol1, pcol2 = st.columns(2)
-            with pcol1:
-                if ytd_pct is not None:
-                    delta_txt = f"{ytd_pct - benchmark_ytd:+.1f}% vs {benchmark_name}" if benchmark_ytd is not None else None
-                    st.metric("YTD", f"{ytd_pct:+.1f}%", delta_txt)
-                else:
-                    st.metric("YTD", "n/a")
-            with pcol2:
-                if one_year_pct is not None:
-                    delta_txt = f"{one_year_pct - benchmark_1y:+.1f}% vs {benchmark_name}" if benchmark_1y is not None else None
-                    st.metric("1-Year", f"{one_year_pct:+.1f}%", delta_txt)
-                else:
-                    st.metric("1-Year", "n/a")
-            st.caption("Your real return over this period -- accounts for shares you already "
-                       "held plus any buys/sells you made during it.")
-
-            if len(value_series) >= 2:
-                st.markdown("**Your portfolio value over time**")
-                chart_timeframe = st.radio(
-                    "Timeframe", ["1M", "3M", "1Y", "3Y", "ALL"], index=4,
-                    horizontal=True, key="perf_chart_timeframe",
-                )
-                # Filteren op de AL berekende data -- geen nieuwe netwerk-
-                # aanroepen nodig, dus dit is instant, ook vanuit een
-                # opgeslagen snapshot.
-                timeframe_days = {"1M": 30, "3M": 90, "1Y": 365, "3Y": 365 * 3, "ALL": None}
-                days_back = timeframe_days[chart_timeframe]
-                if days_back is not None:
-                    cutoff_date = datetime.now().date() - timedelta(days=days_back)
-                    filtered_series = [p for p in value_series if p["date"] >= cutoff_date]
-                    if len(filtered_series) < 2:
-                        # Te weinig punten binnen deze periode (bv. account
-                        # bestaat nog niet zo lang) -- terugvallen op ALL
-                        # i.p.v. een lege/kapotte grafiek te tonen.
-                        filtered_series = value_series
-                else:
-                    filtered_series = value_series
-
-                value_fig = go.Figure()
-                value_fig.add_trace(go.Scatter(
-                    x=[p["date"].isoformat() for p in filtered_series],
-                    y=[p["value"] for p in filtered_series],
-                    mode="lines",
-                    line=dict(color="#1FAE96", width=2),
-                    fill="tozeroy",
-                    fillcolor="rgba(31,174,150,0.10)",
-                    hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
-                ))
-                value_fig.update_layout(
-                    yaxis_title="Portfolio value (€)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Inter, sans-serif", color="#EAEDF1", size=11),
-                    margin=dict(t=30, b=10, l=10, r=10),
-                    height=320,
-                    showlegend=False,
-                    xaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                    yaxis=dict(gridcolor="rgba(137,146,163,0.15)"),
-                )
-                st.plotly_chart(value_fig, width="stretch")
-
-            if performance_rows and st.checkbox(f"Show individual positions ({len(performance_rows)})", key="show_perf_positions"):
-                for r in performance_rows:
-                    pct = r["total_return_pct"]
-                    closed_txt = " *(closed)*" if r.get("closed") else ""
-                    if pct is not None:
-                        color_emoji = "🟢" if pct >= 0 else "🔴"
-                        st.markdown(f"- {color_emoji} **{r['naam']} ({r['ticker']})**{closed_txt}: {pct:+.1f}% (€{r['total_pnl']:+,.2f})")
-                    else:
-                        st.markdown(f"- {r['naam']} ({r['ticker']}){closed_txt}: return unknown")
+                st.success(f"New version for {dd_ticker} saved!")
+                st.rerun()
 
 
 
