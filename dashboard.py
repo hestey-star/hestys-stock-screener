@@ -5312,26 +5312,30 @@ def render_analyze():
 
 
 
-def _demo_watermark_html() -> str:
+def _demo_watermark_css(container_key: str) -> str:
     """
-    Schuine, extreem subtiele 'DEMO MODE'-stempel -- 1 losse, absoluut
-    gepositioneerde overlay-laag binnen een position:relative-ouder.
-    pointer-events:none zorgt dat 'ie nooit clicks onderschept, ook al
-    ligt 'ie qua stacking-volgorde BOVEN de content (z-index:5 -- was
-    eerder z-index:0, waardoor de content-kaarten, die pas NA het
-    watermerk in de HTML-volgorde komen, er gewoon bovenop kwamen te
-    liggen en het watermerk onzichtbaar maakten). De iets hogere
-    opacity (0.05, was 0.03) houdt 'm nog steeds zuiver decoratief --
-    geen impact op de leesbaarheid van de cijfers -- maar nu ook
-    daadwerkelijk zichtbaar over de kaarten heen.
+    Schuine, subtiele 'DEMO MODE'-stempel -- als CSS ::after-pseudo-
+    element rechtstreeks op de .st-key-<container_key>-container zelf,
+    i.p.v. een los HTML-element via st.markdown(). Dat laatste bleek
+    onzichtbaar te blijven, vermoedelijk omdat Streamlit elke
+    st.markdown()-aanroep in een eigen, klein element-container wikkelt
+    die (met overflow:hidden of vergelijkbaar) het absoluut-gepositio-
+    neerde kind kan wegclippen. Een ::after zit direct IN de doos van
+    .st-key-<container_key> zelf -- geen aparte, door Streamlit beheerde
+    DOM-node waar dat probleem kan optreden. content: attr(data-stamp)
+    gebruikt de tekst uit een data-attribuut op diezelfde container
+    (hieronder gezet), zodat de tekst niet hardcoded in de CSS zelf
+    hoeft te staan.
     """
     return (
-        '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; '
-        'pointer-events:none; overflow:hidden; user-select:none; -webkit-user-select:none; z-index:5;">'
-        '<span style="font-size:12vw; font-weight:900; letter-spacing:0.15em; color:#F1F5F9; '
-        'opacity:0.05; text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap;">'
-        'DEMO MODE</span>'
-        '</div>'
+        f'<style>'
+        f'.st-key-{container_key} {{ position:relative !important; }}'
+        f'.st-key-{container_key}::after {{ '
+        f'content:"DEMO MODE"; position:absolute; inset:0; display:flex; align-items:center; '
+        f'justify-content:center; pointer-events:none; overflow:hidden; z-index:5; '
+        f'font-size:12vw; font-weight:900; letter-spacing:0.15em; color:#F1F5F9; opacity:0.06; '
+        f'text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap; }}'
+        f'</style>'
     )
 
 
@@ -5347,9 +5351,8 @@ def _render_portfolio_demo_landing() -> None:
         unsafe_allow_html=True,
     )
     _demo_wrap_key = "portfolio_demo_wrap"
-    st.markdown('<style>.st-key-portfolio_demo_wrap { position:relative !important; }</style>', unsafe_allow_html=True)
+    st.markdown(_demo_watermark_css(_demo_wrap_key), unsafe_allow_html=True)
     with st.container(key=_demo_wrap_key):
-        st.markdown(_demo_watermark_html(), unsafe_allow_html=True)
         st.markdown(
             '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
             'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
@@ -8068,9 +8071,8 @@ def _render_today_demo_landing() -> None:
         unsafe_allow_html=True,
     )
     _demo_wrap_key = "today_demo_wrap"
-    st.markdown('<style>.st-key-today_demo_wrap { position:relative !important; }</style>', unsafe_allow_html=True)
+    st.markdown(_demo_watermark_css(_demo_wrap_key), unsafe_allow_html=True)
     with st.container(key=_demo_wrap_key):
-        st.markdown(_demo_watermark_html(), unsafe_allow_html=True)
         st.markdown(
             '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
             'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
