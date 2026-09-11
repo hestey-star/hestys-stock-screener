@@ -5312,6 +5312,25 @@ def render_analyze():
 
 
 
+def _demo_watermark_html() -> str:
+    """
+    Schuine, extreem subtiele 'DEMO MODE'-stempel -- 1 losse, absoluut
+    gepositioneerde overlay-laag binnen een position:relative-ouder.
+    pointer-events:none zorgt dat 'ie nooit clicks onderschept (zelfs al
+    zou 'ie qua stacking-volgorde boven de content liggen), en de
+    extreem lage opacity (0.03) houdt 'm zuiver decoratief -- geen
+    impact op de leesbaarheid van de cijfers eronder.
+    """
+    return (
+        '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; '
+        'pointer-events:none; overflow:hidden; user-select:none; -webkit-user-select:none; z-index:0;">'
+        '<span style="font-size:12vw; font-weight:900; letter-spacing:0.15em; color:#F1F5F9; '
+        'opacity:0.03; text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap;">'
+        'DEMO MODE</span>'
+        '</div>'
+    )
+
+
 def _render_portfolio_demo_landing() -> None:
     """
     'Demo Mode' voor de niet-ingelogde My Portfolio-pagina -- i.p.v. een
@@ -5323,153 +5342,157 @@ def _render_portfolio_demo_landing() -> None:
         _uniform_section_header_html("My Portfolio", "work", is_first=True),
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
-        'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
-        '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
-        'Demo mode &middot; sample assets, not your real data</div>',
-        unsafe_allow_html=True,
-    )
-
-    _demo_positions = [
-        {"name": "NVIDIA", "ticker": "NVDA", "value": 18420, "weight": 27.0, "target": 20.0, "change": 2.4},
-        {"name": "ASML Holding", "ticker": "ASML", "value": 12980, "weight": 19.0, "target": 20.0, "change": -0.8},
-        {"name": "Apple", "ticker": "AAPL", "value": 10750, "weight": 15.8, "target": 15.0, "change": 0.6},
-        {"name": "Bitcoin", "ticker": "BTC", "value": 6300, "weight": 9.2, "target": 15.0, "change": -3.1},
-        {"name": "Microsoft", "ticker": "MSFT", "value": 9870, "weight": 14.5, "target": 15.0, "change": 1.1},
-    ]
-    _demo_watch = {"name": "Tesla", "ticker": "TSLA", "change": 4.2}
-
-    # --- Posities-tabel: exact dezelfde compacte, monochrome rij-stijl
-    # als de ingelogde pagina (dunne scheidingslijn i.p.v. losse
-    # kaartranden, ALL-CAPS namen, teal/rose voor op/neer). ---
-    _rows_html = "".join(
-        f'<div style="display:flex; align-items:center; justify-content:space-between; '
-        f'padding:0.75rem 0.25rem; border-bottom:1px solid rgba(148,163,184,0.08);">'
-        f'<div style="min-width:0;">'
-        f'<div style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
-        f'letter-spacing:0.01em;">{p["name"]}</div>'
-        f'<div style="color:#64748B; font-size:0.72rem; margin-top:1px;">{p["ticker"]} &middot; {p["weight"]:.1f}% of portfolio</div>'
-        f'</div>'
-        f'<div style="text-align:right; flex-shrink:0;">'
-        f'<div style="color:#F1F5F9; font-weight:700; font-size:0.85rem;">&euro;{p["value"]:,.0f}</div>'
-        f'<div style="color:{"#34D399" if p["change"] >= 0 else "#F87171"}; font-size:0.72rem; font-weight:600; margin-top:1px;">'
-        f'{p["change"]:+.1f}% today</div>'
-        f'</div>'
-        f'</div>'
-        for p in _demo_positions
-    )
-    st.markdown(
-        f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
-        f'border-radius:14px; padding:0.5rem 1rem; margin-bottom:1rem;">{_rows_html}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- Watchlist: single-line, zelfde stijl als de ingelogde pagina. ---
-    st.markdown(
-        f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
-        f'border-radius:14px; padding:0.6rem 1rem; margin-bottom:2rem; display:flex; align-items:center; '
-        f'justify-content:space-between;">'
-        f'<div style="color:#94A3B8; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
-        f'letter-spacing:0.02em;">&#128065; Watching: {_demo_watch["name"]} <span style="color:#64748B; '
-        f'font-weight:400; text-transform:none;">({_demo_watch["ticker"]})</span></div>'
-        f'<div style="color:{"#34D399" if _demo_watch["change"] >= 0 else "#F87171"}; font-size:0.8rem; '
-        f'font-weight:700;">{_demo_watch["change"]:+.1f}%</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- Rebalancing-grid: zelfde 2-koloms kaartenstijl als de ingelogde
-    # pagina, nu met de sample-data die daadwerkelijk uit het lood
-    # hangen -- dit IS de functionele bewijslast. ---
-    st.markdown(
-        _uniform_section_header_html("Rebalancing", "swap_horiz", is_first=False),
-        unsafe_allow_html=True,
-    )
-    _rebalance_cards = []
-    for p in _demo_positions:
-        _diff = p["weight"] - p["target"]
-        if abs(_diff) < 3:
-            continue
-        _action = "SELL" if _diff > 0 else "BUY"
-        _action_color = "#F87171" if _diff > 0 else "#34D399"
-        _rebalance_cards.append(
-            f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-            f'border-radius:10px; padding:0.6rem 0.9rem;">'
-            f'<div style="display:flex; align-items:center; justify-content:space-between;">'
-            f'<div style="color:#EAEDF1; font-weight:600; font-size:0.8rem; text-transform:uppercase;">'
-            f'{p["ticker"]}</div>'
-            f'<div style="color:{_action_color}; font-weight:700; font-size:0.8rem;">{_action} REQUIRED</div>'
-            f'</div>'
-            f'<div style="color:#64748B; font-size:0.68rem; margin-top:0.2rem;">'
-            f'Target {p["target"]:.0f}% &nbsp;|&nbsp; Current {p["weight"]:.0f}%</div>'
-            f'</div>'
-        )
-    st.markdown(
-        '<style>.hesty-demo-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); '
-        'gap:0.5rem; } @media (max-width:768px) { .hesty-demo-rebalance-grid { grid-template-columns:1fr; } }</style>'
-        f'<div class="hesty-demo-rebalance-grid">{"".join(_rebalance_cards)}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- Conversie-tegel: zelfde opbouw als de andere niet-ingelogde
-    # landingspagina's (_render_landing_soft_lock), maar los opgebouwd
-    # omdat de content BOVEN de tegel hier scherpe demo-data is i.p.v.
-    # een geblurde preview. ---
-    _demo_cta_key = "portfolio_demo_cta_tile"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_demo_cta_key} {{ '
-        f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
-        f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
-        f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
-        f'align-items:center !important; justify-content:center !important; text-align:center !important; '
-        f'margin-top:2rem !important; }} '
-        # Streamlit nest de content van st.container(key=...) in een
-        # EIGEN, binnenste stVerticalBlock -- die erft flex NIET
-        # automatisch over van de buitenste .st-key-div, vandaar hier
-        # expliciet nogmaals dezelfde flex-column-opmaak afgedwongen.
-        # Dit was de daadwerkelijke oorzaak van tekst+knop die los onder
-        # elkaar bleven staan i.p.v. als 1 samenhangende, gecentreerde
-        # tegel.
-        f'.st-key-{_demo_cta_key} > div {{ '
-        f'display:flex !important; flex-direction:column !important; align-items:center !important; '
-        f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
-        f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
-        f'.hesty-demo-cta-text {{ '
-        f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
-        f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
-        f'@media (min-width:768px) {{ .hesty-demo-cta-text {{ font-size:0.85rem !important; }} }} '
-        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
-        f'@media (min-width:768px) {{ '
-        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
-        f'}} '
-        f'.st-key-{_demo_cta_key} button {{ '
-        f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
-        f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
-        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
-        f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
-        f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
-        f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
-        f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
-        f'color:#1FAE96 !important; }} '
-        f'@media (max-width:480px) {{ '
-        f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
-        f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
-        f'}} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_demo_cta_key):
+    _demo_wrap_key = "portfolio_demo_wrap"
+    st.markdown('<style>.st-key-portfolio_demo_wrap { position:relative !important; }</style>', unsafe_allow_html=True)
+    with st.container(key=_demo_wrap_key):
+        st.markdown(_demo_watermark_html(), unsafe_allow_html=True)
         st.markdown(
-            '<div class="hesty-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
-            'WITH SAMPLE ASSETS. READY TO MASTER YOUR OWN CAPITAL? SECURELY CONNECT YOUR PORTFOLIO OR '
-            'INPUT YOUR REAL POSITIONS TO ACTIVATE YOUR LIVE COCKPIT.</div>',
+            '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
+            'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
+            '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
+            'Demo mode &middot; sample assets, not your real data</div>',
             unsafe_allow_html=True,
         )
-        if st.button("Connect to Activate My Portfolio \u2192", key="portfolio_demo_cta_btn"):
-            st.session_state["login_prefill_mode"] = "Sign Up"
-            st.switch_page(login_page)
+
+        _demo_positions = [
+            {"name": "NVIDIA", "ticker": "NVDA", "value": 18420, "weight": 27.0, "target": 20.0, "change": 2.4},
+            {"name": "ASML Holding", "ticker": "ASML", "value": 12980, "weight": 19.0, "target": 20.0, "change": -0.8},
+            {"name": "Apple", "ticker": "AAPL", "value": 10750, "weight": 15.8, "target": 15.0, "change": 0.6},
+            {"name": "Bitcoin", "ticker": "BTC", "value": 6300, "weight": 9.2, "target": 15.0, "change": -3.1},
+            {"name": "Microsoft", "ticker": "MSFT", "value": 9870, "weight": 14.5, "target": 15.0, "change": 1.1},
+        ]
+        _demo_watch = {"name": "Tesla", "ticker": "TSLA", "change": 4.2}
+
+        # --- Posities-tabel: exact dezelfde compacte, monochrome rij-stijl
+        # als de ingelogde pagina (dunne scheidingslijn i.p.v. losse
+        # kaartranden, ALL-CAPS namen, teal/rose voor op/neer). ---
+        _rows_html = "".join(
+            f'<div style="display:flex; align-items:center; justify-content:space-between; '
+            f'padding:0.75rem 0.25rem; border-bottom:1px solid rgba(148,163,184,0.08);">'
+            f'<div style="min-width:0;">'
+            f'<div style="color:#EAEDF1; font-weight:600; font-size:0.85rem; text-transform:uppercase; '
+            f'letter-spacing:0.01em;">{p["name"]}</div>'
+            f'<div style="color:#64748B; font-size:0.72rem; margin-top:1px;">{p["ticker"]} &middot; {p["weight"]:.1f}% of portfolio</div>'
+            f'</div>'
+            f'<div style="text-align:right; flex-shrink:0;">'
+            f'<div style="color:#F1F5F9; font-weight:700; font-size:0.85rem;">&euro;{p["value"]:,.0f}</div>'
+            f'<div style="color:{"#34D399" if p["change"] >= 0 else "#F87171"}; font-size:0.72rem; font-weight:600; margin-top:1px;">'
+            f'{p["change"]:+.1f}% today</div>'
+            f'</div>'
+            f'</div>'
+            for p in _demo_positions
+        )
+        st.markdown(
+            f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
+            f'border-radius:14px; padding:0.5rem 1rem; margin-bottom:1rem;">{_rows_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- Watchlist: single-line, zelfde stijl als de ingelogde pagina. ---
+        st.markdown(
+            f'<div style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6); '
+            f'border-radius:14px; padding:0.6rem 1rem; margin-bottom:2rem; display:flex; align-items:center; '
+            f'justify-content:space-between;">'
+            f'<div style="color:#94A3B8; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
+            f'letter-spacing:0.02em;">&#128065; Watching: {_demo_watch["name"]} <span style="color:#64748B; '
+            f'font-weight:400; text-transform:none;">({_demo_watch["ticker"]})</span></div>'
+            f'<div style="color:{"#34D399" if _demo_watch["change"] >= 0 else "#F87171"}; font-size:0.8rem; '
+            f'font-weight:700;">{_demo_watch["change"]:+.1f}%</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- Rebalancing-grid: zelfde 2-koloms kaartenstijl als de ingelogde
+        # pagina, nu met de sample-data die daadwerkelijk uit het lood
+        # hangen -- dit IS de functionele bewijslast. ---
+        st.markdown(
+            _uniform_section_header_html("Rebalancing", "swap_horiz", is_first=False),
+            unsafe_allow_html=True,
+        )
+        _rebalance_cards = []
+        for p in _demo_positions:
+            _diff = p["weight"] - p["target"]
+            if abs(_diff) < 3:
+                continue
+            _action = "SELL" if _diff > 0 else "BUY"
+            _action_color = "#F87171" if _diff > 0 else "#34D399"
+            _rebalance_cards.append(
+                f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+                f'border-radius:10px; padding:0.6rem 0.9rem;">'
+                f'<div style="display:flex; align-items:center; justify-content:space-between;">'
+                f'<div style="color:#EAEDF1; font-weight:600; font-size:0.8rem; text-transform:uppercase;">'
+                f'{p["ticker"]}</div>'
+                f'<div style="color:{_action_color}; font-weight:700; font-size:0.8rem;">{_action} REQUIRED</div>'
+                f'</div>'
+                f'<div style="color:#64748B; font-size:0.68rem; margin-top:0.2rem;">'
+                f'Target {p["target"]:.0f}% &nbsp;|&nbsp; Current {p["weight"]:.0f}%</div>'
+                f'</div>'
+            )
+        st.markdown(
+            '<style>.hesty-demo-rebalance-grid { display:grid; grid-template-columns:repeat(2, 1fr); '
+            'gap:0.5rem; } @media (max-width:768px) { .hesty-demo-rebalance-grid { grid-template-columns:1fr; } }</style>'
+            f'<div class="hesty-demo-rebalance-grid">{"".join(_rebalance_cards)}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- Conversie-tegel: zelfde opbouw als de andere niet-ingelogde
+        # landingspagina's (_render_landing_soft_lock), maar los opgebouwd
+        # omdat de content BOVEN de tegel hier scherpe demo-data is i.p.v.
+        # een geblurde preview. ---
+        _demo_cta_key = "portfolio_demo_cta_tile"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_demo_cta_key} {{ '
+            f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+            f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
+            f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
+            f'align-items:center !important; justify-content:center !important; text-align:center !important; '
+            f'margin-top:2rem !important; }} '
+            # Streamlit nest de content van st.container(key=...) in een
+            # EIGEN, binnenste stVerticalBlock -- die erft flex NIET
+            # automatisch over van de buitenste .st-key-div, vandaar hier
+            # expliciet nogmaals dezelfde flex-column-opmaak afgedwongen.
+            # Dit was de daadwerkelijke oorzaak van tekst+knop die los onder
+            # elkaar bleven staan i.p.v. als 1 samenhangende, gecentreerde
+            # tegel.
+            f'.st-key-{_demo_cta_key} > div {{ '
+            f'display:flex !important; flex-direction:column !important; align-items:center !important; '
+            f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
+            f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
+            f'.hesty-demo-cta-text {{ '
+            f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+            f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+            f'@media (min-width:768px) {{ .hesty-demo-cta-text {{ font-size:0.85rem !important; }} }} '
+            f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
+            f'@media (min-width:768px) {{ '
+            f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+            f'}} '
+            f'.st-key-{_demo_cta_key} button {{ '
+            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+            f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+            f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+            f'color:#1FAE96 !important; }} '
+            f'@media (max-width:480px) {{ '
+            f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
+            f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
+            f'}} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_demo_cta_key):
+            st.markdown(
+                '<div class="hesty-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
+                'WITH SAMPLE ASSETS. READY TO MASTER YOUR OWN CAPITAL? SECURELY CONNECT YOUR PORTFOLIO OR '
+                'INPUT YOUR REAL POSITIONS TO ACTIVATE YOUR LIVE COCKPIT.</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Connect to Activate My Portfolio \u2192", key="portfolio_demo_cta_btn"):
+                st.session_state["login_prefill_mode"] = "Sign Up"
+                st.switch_page(login_page)
 
 
 def render_portfolio():
@@ -8040,185 +8063,189 @@ def _render_today_demo_landing() -> None:
         _uniform_section_header_html("Your Portfolio Today", "calendar_today", is_first=True),
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
-        'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
-        '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
-        'Demo mode &middot; sample assets, not your real data</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- 1. Performance-tegels (Portfolio today / Best / Worst) ---
-    st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
-    col1_html = (
-        '<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
-        '<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
-        'font-weight:700;">Your Portfolio Today</div>'
-        f'<div style="font-size:2.75rem; font-weight:800; color:{TODAY_POSITIVE_TEXT}; margin-top:8px; '
-        'line-height:1.1; font-variant-numeric: tabular-nums;">+0.6%</div>'
-        '</div>'
-    )
-    col2_html = _portfolio_mover_tile_html(
-        "Best today", "trending_up", "Nvidia (NVDA)", 5.4, 18.5, TODAY_POSITIVE_TEXT,
-    )
-    col3_html = _portfolio_mover_tile_html(
-        "Worst today", "trending_down", "Bitcoin (BTC-USD)", -3.8, 12.0, TODAY_NEGATIVE_TEXT,
-    )
-    st.markdown(
-        f'<div class="hesty-portfolio-row">'
-        f'<div class="hesty-portfolio-hero-col">{col1_html}</div>'
-        f'<div class="hesty-portfolio-col">{col2_html}</div>'
-        f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- 2. Daily Radar: week-agenda + 3 bullet-regels. GEEN 'Explore
-    # all signals'-link meer -- niet functioneel op een demo-preview. ---
-    st.markdown(
-        _uniform_section_header_html("Daily Radar", "radar", is_first=False),
-        unsafe_allow_html=True,
-    )
-    _today_date = datetime.now().date()
-    _monday = (
-        _today_date - timedelta(days=_today_date.weekday()) if _today_date.weekday() < 5
-        else _today_date + timedelta(days=7 - _today_date.weekday())
-    )
-    _demo_dated_items = [
-        (_monday, "", "\U0001F1FA\U0001F1F8 US markets closed (Labor Day)"),
-        (_monday + timedelta(days=1), "", "\U0001F34F Apple Inc (AAPL) | Q3 earnings release (after market)"),
-        (_monday + timedelta(days=3), "", "\U0001F1EA\U0001F1FA ECB interest rate decision (14:15 CET)"),
-        (_monday + timedelta(days=4), "", "\U0001F1FA\U0001F1F8 US CPI data (Aug release) (14:30 CET)"),
-    ]
-    st.markdown(_week_agenda_html(_bucket_events_by_weekday(_demo_dated_items)), unsafe_allow_html=True)
-    st.markdown("<div style='height: 1.1rem'></div>", unsafe_allow_html=True)
-
-    _demo_summary_rows = [
-        ("\u2713", "DAILY SUMMARY", "4 item(s) on your radar today.", None),
-        ("\U0001F50D", "SCREENER HITS", "6 new long-term ideas found in your active screeners.", "Top hits: NVDA, ASML, MSFT"),
-        ("\u26A1", "MACRO CATALYST", "3 key global market movement(s) detected today.", "Biggest movers: Crypto (Top 10) +4.2%, Energy -1.8%"),
-    ]
-    st.markdown(
-        "".join(
-            f'<div style="margin-top:8px;">'
-            f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
-            f'font-size:0.83rem; color:#CBD5E1; line-height:1.5;">'
-            f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
-            f'align-items:center;">{icon}</span>'
-            f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
-            f'</div>'
-            + (
-                f'<div style="margin-left:2rem; margin-top:3px; font-size:0.72rem; color:#94A3B8;">'
-                f'&rarr; {snippet}</div>' if snippet else ""
-            )
-            + '</div>'
-            for icon, label, text, snippet in _demo_summary_rows
-        ),
-        unsafe_allow_html=True,
-    )
-
-    # --- 3. Portfolio Health & DCA Insights: 2 rebalance-triggers.
-    # GEEN 'Adjust target allocations'-link meer -- niet functioneel op
-    # een demo-preview. ---
-    st.markdown(
-        _uniform_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
-        unsafe_allow_html=True,
-    )
-
-    def _demo_rebalance_card_html(ticker: str, name: str, diff_pct: float, current_pct: float, target_pct: float) -> str:
-        sign = "-" if diff_pct < 0 else "+"
-        target_label = "below target" if diff_pct < 0 else "above target"
-        context = (
-            "Consider pointing your next DCA at it." if diff_pct < 0
-            else f"{current_pct:.1f}% vs {target_pct:.1f}% target."
-        )
-        return (
-            '<div>'
-            '<div style="display:flex; align-items:center; gap:0.3rem;">'
-            + _icon_span("balance", size_px=13, color="#8992A3") +
-            '<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
-            'font-weight:700;">Rebalance trigger</span>'
-            '</div>'
-            f'<div style="font-size:1.65rem; font-weight:800; color:#EAEDF1; margin-top:6px; line-height:1.1; '
-            f'font-variant-numeric: tabular-nums;">{sign}{abs(diff_pct):.1f}% '
-            f'<span style="font-size:0.62rem; font-weight:700; color:#8992A3; text-transform:none; '
-            f'letter-spacing:0;">{target_label}</span></div>'
-            f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px;">{name.upper()} '
-            f'<span style="color:#64748B; font-weight:400;">({ticker})</span></div>'
-            f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px;">{context}</div>'
-            '</div>'
-        )
-
-    _demo_health_cards = [
-        _demo_rebalance_card_html("TSLA", "Tesla Inc", -12.5, 7.5, 20.0),
-        _demo_rebalance_card_html("AAPL", "Apple Inc", 6.8, 21.8, 15.0),
-    ]
-    insight_cols_html = "".join(f'<div class="hesty-insights-col">{c}</div>' for c in _demo_health_cards)
-    st.markdown(
-        '<style>'
-        '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
-        '.hesty-insights-col { flex:1; min-width:0; } '
-        '@media (max-width:768px) { '
-        '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
-        '.hesty-insights-col { width:100%; } '
-        '} '
-        '</style>'
-        f'<div class="hesty-insights-row">{insight_cols_html}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- 4. CTA-tegel: geen Sector Heatmap meer eronder, dus dit is nu
-    # de directe afsluiter van de pagina. Zelfde 'gedeelde container,
-    # dubbel geforceerde flex-column'-structuur als de My Portfolio-demo
-    # -- Streamlit's binnenste stVerticalBlock erft flex niet automatisch
-    # over van de buitenste .st-key-div, vandaar op BEIDE niveaus gezet. ---
-    _demo_cta_key = "today_demo_cta_tile"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_demo_cta_key} {{ '
-        f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
-        f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
-        f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
-        f'align-items:center !important; justify-content:center !important; text-align:center !important; '
-        f'margin-top:2rem !important; }} '
-        f'.st-key-{_demo_cta_key} > div {{ '
-        f'display:flex !important; flex-direction:column !important; align-items:center !important; '
-        f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
-        f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
-        f'.hesty-today-demo-cta-text {{ '
-        f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
-        f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
-        f'@media (min-width:768px) {{ .hesty-today-demo-cta-text {{ font-size:0.85rem !important; }} }} '
-        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
-        f'@media (min-width:768px) {{ '
-        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
-        f'}} '
-        f'.st-key-{_demo_cta_key} button {{ '
-        f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
-        f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
-        f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
-        f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
-        f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
-        f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
-        f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
-        f'color:#1FAE96 !important; }} '
-        f'@media (max-width:480px) {{ '
-        f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
-        f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
-        f'}} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_demo_cta_key):
+    _demo_wrap_key = "today_demo_wrap"
+    st.markdown('<style>.st-key-today_demo_wrap { position:relative !important; }</style>', unsafe_allow_html=True)
+    with st.container(key=_demo_wrap_key):
+        st.markdown(_demo_watermark_html(), unsafe_allow_html=True)
         st.markdown(
-            '<div class="hesty-today-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
-            'WITH SAMPLE DATA. READY TO ACTIVATE YOUR PERSONAL COCKPIT? SECURELY CONNECT YOUR PORTFOLIO OR '
-            'WATCHLIST TO UNLOCK YOUR DAILY RADAR.</div>',
+            '<div style="color:#64748B; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; '
+            'text-transform:uppercase; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
+            '<span style="width:6px; height:6px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
+            'Demo mode &middot; sample assets, not your real data</div>',
             unsafe_allow_html=True,
         )
-        if st.button("Connect to Activate Today \u2192", key="today_demo_cta_btn"):
-            st.session_state["login_prefill_mode"] = "Sign Up"
-            st.switch_page(login_page)
+
+        # --- 1. Performance-tegels (Portfolio today / Best / Worst) ---
+        st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
+        col1_html = (
+            '<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
+            '<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
+            'font-weight:700;">Your Portfolio Today</div>'
+            f'<div style="font-size:2.75rem; font-weight:800; color:{TODAY_POSITIVE_TEXT}; margin-top:8px; '
+            'line-height:1.1; font-variant-numeric: tabular-nums;">+0.6%</div>'
+            '</div>'
+        )
+        col2_html = _portfolio_mover_tile_html(
+            "Best today", "trending_up", "Nvidia (NVDA)", 5.4, 18.5, TODAY_POSITIVE_TEXT,
+        )
+        col3_html = _portfolio_mover_tile_html(
+            "Worst today", "trending_down", "Bitcoin (BTC-USD)", -3.8, 12.0, TODAY_NEGATIVE_TEXT,
+        )
+        st.markdown(
+            f'<div class="hesty-portfolio-row">'
+            f'<div class="hesty-portfolio-hero-col">{col1_html}</div>'
+            f'<div class="hesty-portfolio-col">{col2_html}</div>'
+            f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- 2. Daily Radar: week-agenda + 3 bullet-regels. GEEN 'Explore
+        # all signals'-link meer -- niet functioneel op een demo-preview. ---
+        st.markdown(
+            _uniform_section_header_html("Daily Radar", "radar", is_first=False),
+            unsafe_allow_html=True,
+        )
+        _today_date = datetime.now().date()
+        _monday = (
+            _today_date - timedelta(days=_today_date.weekday()) if _today_date.weekday() < 5
+            else _today_date + timedelta(days=7 - _today_date.weekday())
+        )
+        _demo_dated_items = [
+            (_monday, "", "\U0001F1FA\U0001F1F8 US markets closed (Labor Day)"),
+            (_monday + timedelta(days=1), "", "\U0001F34F Apple Inc (AAPL) | Q3 earnings release (after market)"),
+            (_monday + timedelta(days=3), "", "\U0001F1EA\U0001F1FA ECB interest rate decision (14:15 CET)"),
+            (_monday + timedelta(days=4), "", "\U0001F1FA\U0001F1F8 US CPI data (Aug release) (14:30 CET)"),
+        ]
+        st.markdown(_week_agenda_html(_bucket_events_by_weekday(_demo_dated_items)), unsafe_allow_html=True)
+        st.markdown("<div style='height: 1.1rem'></div>", unsafe_allow_html=True)
+
+        _demo_summary_rows = [
+            ("\u2713", "DAILY SUMMARY", "4 item(s) on your radar today.", None),
+            ("\U0001F50D", "SCREENER HITS", "6 new long-term ideas found in your active screeners.", "Top hits: NVDA, ASML, MSFT"),
+            ("\u26A1", "MACRO CATALYST", "3 key global market movement(s) detected today.", "Biggest movers: Crypto (Top 10) +4.2%, Energy -1.8%"),
+        ]
+        st.markdown(
+            "".join(
+                f'<div style="margin-top:8px;">'
+                f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
+                f'font-size:0.83rem; color:#CBD5E1; line-height:1.5;">'
+                f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
+                f'align-items:center;">{icon}</span>'
+                f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+                f'</div>'
+                + (
+                    f'<div style="margin-left:2rem; margin-top:3px; font-size:0.72rem; color:#94A3B8;">'
+                    f'&rarr; {snippet}</div>' if snippet else ""
+                )
+                + '</div>'
+                for icon, label, text, snippet in _demo_summary_rows
+            ),
+            unsafe_allow_html=True,
+        )
+
+        # --- 3. Portfolio Health & DCA Insights: 2 rebalance-triggers.
+        # GEEN 'Adjust target allocations'-link meer -- niet functioneel op
+        # een demo-preview. ---
+        st.markdown(
+            _uniform_section_header_html("Portfolio Health & DCA Insights", "insights", is_first=False),
+            unsafe_allow_html=True,
+        )
+
+        def _demo_rebalance_card_html(ticker: str, name: str, diff_pct: float, current_pct: float, target_pct: float) -> str:
+            sign = "-" if diff_pct < 0 else "+"
+            target_label = "below target" if diff_pct < 0 else "above target"
+            context = (
+                "Consider pointing your next DCA at it." if diff_pct < 0
+                else f"{current_pct:.1f}% vs {target_pct:.1f}% target."
+            )
+            return (
+                '<div>'
+                '<div style="display:flex; align-items:center; gap:0.3rem;">'
+                + _icon_span("balance", size_px=13, color="#8992A3") +
+                '<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
+                'font-weight:700;">Rebalance trigger</span>'
+                '</div>'
+                f'<div style="font-size:1.65rem; font-weight:800; color:#EAEDF1; margin-top:6px; line-height:1.1; '
+                f'font-variant-numeric: tabular-nums;">{sign}{abs(diff_pct):.1f}% '
+                f'<span style="font-size:0.62rem; font-weight:700; color:#8992A3; text-transform:none; '
+                f'letter-spacing:0;">{target_label}</span></div>'
+                f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px;">{name.upper()} '
+                f'<span style="color:#64748B; font-weight:400;">({ticker})</span></div>'
+                f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px;">{context}</div>'
+                '</div>'
+            )
+
+        _demo_health_cards = [
+            _demo_rebalance_card_html("TSLA", "Tesla Inc", -12.5, 7.5, 20.0),
+            _demo_rebalance_card_html("AAPL", "Apple Inc", 6.8, 21.8, 15.0),
+        ]
+        insight_cols_html = "".join(f'<div class="hesty-insights-col">{c}</div>' for c in _demo_health_cards)
+        st.markdown(
+            '<style>'
+            '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
+            '.hesty-insights-col { flex:1; min-width:0; } '
+            '@media (max-width:768px) { '
+            '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
+            '.hesty-insights-col { width:100%; } '
+            '} '
+            '</style>'
+            f'<div class="hesty-insights-row">{insight_cols_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- 4. CTA-tegel: geen Sector Heatmap meer eronder, dus dit is nu
+        # de directe afsluiter van de pagina. Zelfde 'gedeelde container,
+        # dubbel geforceerde flex-column'-structuur als de My Portfolio-demo
+        # -- Streamlit's binnenste stVerticalBlock erft flex niet automatisch
+        # over van de buitenste .st-key-div, vandaar op BEIDE niveaus gezet. ---
+        _demo_cta_key = "today_demo_cta_tile"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_demo_cta_key} {{ '
+            f'background:rgba(15,23,42,0.3) !important; border:1px solid rgba(30,41,59,0.4) !important; '
+            f'border-radius:14px !important; padding:1.5rem !important; width:100% !important; '
+            f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
+            f'align-items:center !important; justify-content:center !important; text-align:center !important; '
+            f'margin-top:2rem !important; }} '
+            f'.st-key-{_demo_cta_key} > div {{ '
+            f'display:flex !important; flex-direction:column !important; align-items:center !important; '
+            f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
+            f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
+            f'.hesty-today-demo-cta-text {{ '
+            f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
+            f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
+            f'@media (min-width:768px) {{ .hesty-today-demo-cta-text {{ font-size:0.85rem !important; }} }} '
+            f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
+            f'@media (min-width:768px) {{ '
+            f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+            f'}} '
+            f'.st-key-{_demo_cta_key} button {{ '
+            f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
+            f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
+            f'text-transform:uppercase !important; letter-spacing:0.04em !important; font-size:0.85rem !important; '
+            f'border:1px solid rgba(148,163,184,0.35) !important; border-radius:8px !important; '
+            f'padding:0.6rem 1.5rem !important; width:auto !important; white-space:nowrap !important; '
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.45) !important; }} '
+            f'.st-key-{_demo_cta_key} button:hover {{ border-color:rgba(31,174,150,0.6) !important; '
+            f'color:#1FAE96 !important; }} '
+            f'@media (max-width:480px) {{ '
+            f'.st-key-{_demo_cta_key} button {{ white-space:normal !important; font-size:0.78rem !important; '
+            f'padding:0.55rem 1.1rem !important; line-height:1.35 !important; }} '
+            f'}} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_demo_cta_key):
+            st.markdown(
+                '<div class="hesty-today-demo-cta-text">&#128161; YOU ARE CURRENTLY VIEWING HESTYS IN DEMO MODE '
+                'WITH SAMPLE DATA. READY TO ACTIVATE YOUR PERSONAL COCKPIT? SECURELY CONNECT YOUR PORTFOLIO OR '
+                'WATCHLIST TO UNLOCK YOUR DAILY RADAR.</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Connect to Activate Today \u2192", key="today_demo_cta_btn"):
+                st.session_state["login_prefill_mode"] = "Sign Up"
+                st.switch_page(login_page)
 
 
 def render_today():
