@@ -5329,12 +5329,25 @@ def _demo_watermark_css(container_key: str) -> str:
     """
     return (
         f'<style>'
-        f'.st-key-{container_key} {{ position:relative !important; }}'
+        # Vorige poging (overflow:hidden verplaatsen naar de buitenste
+        # container) loste het NIET op, want de ::after-doos volgt via
+        # inset:0 exact dezelfde grenzen als de ouder -- zelfde clip-
+        # rand, dus geen verschil. De ECHTE oorzaak: 'font-size:12vw' is
+        # relatief aan de VIEWPORT-breedte, niet aan de (veel smallere)
+        # kaart-container zelf -- de tekst was daardoor al vóór het
+        # draaien breder dan de doos, en justify-content:center knipte
+        # 'm dan symmetrisch af aan beide kanten (de D vooraan en de
+        # laatste E achteraan precies zo breed als het te veel was).
+        # clamp() begrenst de tekst nu hard op een MAXIMALE grootte
+        # (5rem) die ruim binnen een normale kaart-breedte past, en
+        # schaalt alleen omlaag op kleinere containers -- kan dus nooit
+        # meer breder worden dan de doos zelf.
+        f'.st-key-{container_key} {{ position:relative !important; overflow:hidden !important; }}'
         f'.st-key-{container_key}::after {{ '
         f'content:"DEMO MODE"; position:absolute; inset:0; display:flex; align-items:center; '
-        f'justify-content:center; pointer-events:none; overflow:hidden; z-index:5; '
-        f'font-size:12vw; font-weight:900; letter-spacing:0.15em; color:#F1F5F9; opacity:0.06; '
-        f'text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap; }}'
+        f'justify-content:center; pointer-events:none; z-index:5; '
+        f'font-size:clamp(1.5rem, 6vw, 5rem); font-weight:900; letter-spacing:0.15em; color:#F1F5F9; '
+        f'opacity:0.06; text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap; }}'
         f'</style>'
     )
 
