@@ -8697,12 +8697,19 @@ def render_login():
             # die zelfs met !important bleef doorschemeren (zelfde patroon
             # als bij st.segmented_control). Een gewone knop, volledig
             # eigen CSS, is wél 100% betrouwbaar te overschrijven.
-            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap {{ margin-top:1rem !important; }} '
-            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap button {{ '
-            f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
-            f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
-            f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
-            f'.st-key-{_form_wrap_key} .st-key-login_submit_wrap button:hover {{ background:#059669 !important; }} '
+            # Simpelere, single-class selector (niet meer via de ouder-
+            # container gekoppeld) + width:100% ook op de WRAPPER zelf --
+            # anders blijft de knop binnen een krappe, om-de-tekst-heen-
+            # passende wrapper hangen, ook al wil de knop zelf 100% breed.
+            f'.st-key-login_submit_wrap {{ '
+            f'margin-top:1rem !important; width:100% !important; display:block !important; }} '
+            f'.st-key-login_submit_wrap [data-testid="stButton"] {{ width:100% !important; }} '
+            f'.st-key-login_submit_wrap button {{ '
+            f'display:block !important; width:100% !important; background:#10B981 !important; '
+            f'color:#020617 !important; font-weight:700 !important; font-size:0.9rem !important; '
+            f'padding:0.75rem 1rem !important; border-radius:12px !important; border:none !important; '
+            f'box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+            f'.st-key-login_submit_wrap button:hover {{ background:#059669 !important; }} '
             # Google-knop: gat naar de knop erboven fors verkleind, blijft
             # links uitgelijnd binnen dezelfde max-w-md-breedte.
             f'.st-key-{_form_wrap_key} .st-key-login_page_google {{ margin-top:0 !important; }} '
