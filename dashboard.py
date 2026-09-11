@@ -5425,12 +5425,25 @@ def _render_portfolio_demo_landing() -> None:
         f'box-sizing:border-box !important; display:flex !important; flex-direction:column !important; '
         f'align-items:center !important; justify-content:center !important; text-align:center !important; '
         f'margin-top:2rem !important; }} '
+        # Streamlit nest de content van st.container(key=...) in een
+        # EIGEN, binnenste stVerticalBlock -- die erft flex NIET
+        # automatisch over van de buitenste .st-key-div, vandaar hier
+        # expliciet nogmaals dezelfde flex-column-opmaak afgedwongen.
+        # Dit was de daadwerkelijke oorzaak van tekst+knop die los onder
+        # elkaar bleven staan i.p.v. als 1 samenhangende, gecentreerde
+        # tegel.
+        f'.st-key-{_demo_cta_key} > div {{ '
+        f'display:flex !important; flex-direction:column !important; align-items:center !important; '
+        f'justify-content:center !important; text-align:center !important; width:100% !important; }} '
         f'@media (min-width:768px) {{ .st-key-{_demo_cta_key} {{ padding:2rem !important; }} }} '
         f'.hesty-demo-cta-text {{ '
         f'max-width:32rem; color:#CBD5E1; font-weight:600; letter-spacing:0.04em; '
         f'text-transform:uppercase; line-height:1.6; font-size:0.78rem; }} '
         f'@media (min-width:768px) {{ .hesty-demo-cta-text {{ font-size:0.85rem !important; }} }} '
-        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:100% !important; }} '
+        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1rem !important; width:auto !important; }} '
+        f'@media (min-width:768px) {{ '
+        f'.st-key-{_demo_cta_key} [data-testid="stButton"] {{ margin-top:1.25rem !important; }} '
+        f'}} '
         f'.st-key-{_demo_cta_key} button {{ '
         f'background:rgba(2,6,23,0.8) !important; backdrop-filter:blur(6px) !important; '
         f'-webkit-backdrop-filter:blur(6px) !important; color:#EAEDF1 !important; font-weight:700 !important; '
