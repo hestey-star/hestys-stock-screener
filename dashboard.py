@@ -4727,88 +4727,138 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     )
 
 
-def _render_conviction_grid(entries: list, key_prefix: str, unmapped: list = None) -> None:
+def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Native st.dataframe(on_select="rerun")-grid i.p.v. handmatige HTML-
-    rijen + onzichtbare knoppen-overlays -- die laatste bleken op den
-    duur instabiel (kolommen die niet uitlijnden, dode kliks, losse
-    rechthoekjes). Een native Streamlit-widget met ingebouwde rij-
-    selectie is de stabiele, 100% ondersteunde manier om dit te doen:
-    geen custom CSS-positionering nodig, Streamlit tekent de tabel zelf.
+    Tabel opgebouwd met NATIVE st.columns() per rij -- na 2 mislukte
+    pogingen (custom HTML + onzichtbare knoppen-overlays gaf instabiele
+    uitlijning/dode kliks; st.dataframe gaf checkboxes en een dubbele
+    index) is dit de simpelste, meest betrouwbare route: elke cel is
+    een ECHT Streamlit-element in een ECHTE kolom, dus Streamlit regelt
+    de uitlijning zelf en elke knop-klik werkt gegarandeerd.
     """
-    import pandas as pd
-
-    rows = []
-    tickers_in_order = []
-    unmapped_ticker_set = {u.get("ticker") for u in (unmapped or [])}
-
-    for entry in entries:
-        ticker = entry.get("ticker", "")
-        naam = entry.get("naam", ticker)
-        score = _compute_deep_dive_overall_score(entry)
-        score_text = f"{score:.1f} / 10" if score is not None else "-"
-        thesis_full = (entry.get("investment_thesis") or "").strip()
-        thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-        if len(thesis_line) > 58:
-            thesis_line = thesis_line[:55].rstrip() + "..."
-        thesis_text = thesis_line or "No thesis logged yet"
-        last_validated = (entry.get("created_at") or "")[:10] or "-"
-        rows.append({
-            "Logo": get_company_logo_url(ticker, naam) or "",
-            "Asset": ticker,
-            "Score": score_text,
-            "Core Thesis": thesis_text,
-            "Last Validated": last_validated,
-        })
-        tickers_in_order.append(ticker)
-
-    for u in (unmapped or []):
-        u_ticker = u.get("ticker", "")
-        u_naam = u.get("naam", u_ticker)
-        rows.append({
-            "Logo": get_company_logo_url(u_ticker, u_naam) or "",
-            "Asset": u_ticker,
-            "Score": "\U0001F916 SCAN REQUIRED",
-            "Core Thesis": "No active research record found.",
-            "Last Validated": "-",
-        })
-        tickers_in_order.append(u_ticker)
-
-    if not rows:
+    if not entries and not unmapped:
         st.markdown(
             '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">Nothing here yet.</div>',
             unsafe_allow_html=True,
         )
         return
 
-    df = pd.DataFrame(rows)
-    event = st.dataframe(
-        df,
-        column_config={
-            "Logo": st.column_config.ImageColumn(" ", width="small"),
-            "Asset": st.column_config.TextColumn("Asset", width="small"),
-            "Score": st.column_config.TextColumn("Score", width="small"),
-            "Core Thesis": st.column_config.TextColumn("Core Thesis", width="large"),
-            "Last Validated": st.column_config.TextColumn("Last Validated", width="small"),
-        },
-        hide_index=True,
-        width="stretch",
-        on_select="rerun",
-        selection_mode="single-row",
-        key=f"{key_prefix}_grid",
+    _col_ratios = [1, 1.2, 4, 1.2]
+    _table_key = f"{key_prefix}_table"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_table_key} button {{ '
+        f'background:transparent !important; border:none !important; box-shadow:none !important; '
+        f'padding:0 !important; color:#EAEDF1 !important; font-weight:700 !important; font-size:0.82rem !important; '
+        f'text-transform:uppercase !important; text-align:left !important; width:auto !important; }} '
+        f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
+        f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
+        f'letter-spacing:0.05em; }} '
+        f'</style>',
+        unsafe_allow_html=True,
     )
+    with st.container(key=_table_key):
+        head_cols = st.columns(_col_ratios, gap="small")
+        head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
+        head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
+        head_cols[2].markdown('<div class="hesty-conviction-thead">Core thesis</div>', unsafe_allow_html=True)
+        head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
+            unsafe_allow_html=True,
+        )
 
-    selected_rows = event.selection.rows if event and event.selection else []
-    if selected_rows:
-        selected_ticker = tickers_in_order[selected_rows[0]]
-        if selected_ticker in unmapped_ticker_set:
-            _u = next(u for u in unmapped if u.get("ticker") == selected_ticker)
-            st.session_state["dd_ticker_input"] = selected_ticker
-            st.session_state["dd_naam_input"] = _u.get("naam", selected_ticker)
-            st.session_state["selected_research"] = "__NEW__"
-        else:
-            st.session_state["selected_research"] = selected_ticker
-        st.rerun()
+        for entry in entries:
+            ticker = entry.get("ticker", "")
+            naam = entry.get("naam", ticker)
+            score = _compute_deep_dive_overall_score(entry)
+            score_text = f"{score:.1f} / 10" if score is not None else "-"
+            thesis_full = (entry.get("investment_thesis") or "").strip()
+            thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
+            if len(thesis_line) > 60:
+                thesis_line = thesis_line[:60] + "..."
+            thesis_text = thesis_line or "No thesis logged yet"
+            last_validated = (entry.get("created_at") or "")[:10] or "-"
+            logo_url = get_company_logo_url(ticker, naam)
+
+            row_cols = st.columns(_col_ratios, gap="small")
+            with row_cols[0]:
+                logo_col, btn_col = st.columns([1, 3], gap="small")
+                with logo_col:
+                    if logo_url:
+                        st.image(logo_url, width=24)
+                    else:
+                        st.markdown(
+                            f'<div style="width:24px; height:24px; border-radius:50%; '
+                            f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
+                            f'justify-content:center;"><span style="color:#8992A3; font-weight:700; '
+                            f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>',
+                            unsafe_allow_html=True,
+                        )
+                with btn_col:
+                    if st.button(ticker, key=f"{key_prefix}_openbtn_{ticker}"):
+                        st.session_state["selected_research"] = ticker
+                        st.rerun()
+            with row_cols[1]:
+                st.markdown(f'<div style="padding-top:0.4rem; font-size:0.82rem;">{score_text}</div>', unsafe_allow_html=True)
+            with row_cols[2]:
+                st.markdown(
+                    f'<div style="padding-top:0.4rem; color:#F1F5F9; font-size:0.82rem;">{thesis_text}</div>',
+                    unsafe_allow_html=True,
+                )
+            with row_cols[3]:
+                st.markdown(
+                    f'<div style="padding-top:0.4rem; color:#64748B; font-size:0.75rem;">{last_validated}</div>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown(
+                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
+                unsafe_allow_html=True,
+            )
+
+        for u in (unmapped or []):
+            u_ticker = u.get("ticker", "")
+            u_naam = u.get("naam", u_ticker)
+            u_logo_url = get_company_logo_url(u_ticker, u_naam)
+
+            row_cols = st.columns(_col_ratios, gap="small")
+            with row_cols[0]:
+                logo_col, btn_col = st.columns([1, 3], gap="small")
+                with logo_col:
+                    if u_logo_url:
+                        st.image(u_logo_url, width=24)
+                    else:
+                        st.markdown(
+                            f'<div style="width:24px; height:24px; border-radius:50%; '
+                            f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
+                            f'justify-content:center;"><span style="color:#64748B; font-weight:700; '
+                            f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>',
+                            unsafe_allow_html=True,
+                        )
+                with btn_col:
+                    st.markdown(
+                        f'<div style="padding-top:0.4rem; color:#94A3B8; font-weight:700; '
+                        f'font-size:0.82rem; text-transform:uppercase;">{u_ticker}</div>',
+                        unsafe_allow_html=True,
+                    )
+            with row_cols[1]:
+                if st.button("\U0001F916 Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
+                    st.session_state["dd_ticker_input"] = u_ticker
+                    st.session_state["dd_naam_input"] = u_naam
+                    st.session_state["selected_research"] = "__NEW__"
+                    st.rerun()
+            with row_cols[2]:
+                st.markdown(
+                    '<div style="padding-top:0.4rem; color:#64748B; font-size:0.82rem;">'
+                    'No active research record found.</div>',
+                    unsafe_allow_html=True,
+                )
+            with row_cols[3]:
+                st.markdown('<div style="padding-top:0.4rem; color:#64748B; font-size:0.75rem;">-</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
@@ -5123,7 +5173,7 @@ def render_analyze():
             unsafe_allow_html=True,
         )
         owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
-        _render_conviction_grid(owned_dive_entries, key_prefix="owned", unmapped=unmapped_assets)
+        _render_conviction_table(owned_dive_entries, key_prefix="owned", unmapped=unmapped_assets)
         if not owned_dive_entries and not unmapped_assets:
             st.caption("You don't have any active holdings yet.")
 
@@ -5136,7 +5186,7 @@ def render_analyze():
             e for e in deep_dives
             if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
         ]
-        _render_conviction_grid(watchlist_entries, key_prefix="watch")
+        _render_conviction_table(watchlist_entries, key_prefix="watch")
         if not watchlist_entries:
             st.caption("No research-pipeline ideas yet -- click '+ Add New' above.")
 
