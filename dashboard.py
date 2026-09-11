@@ -4729,12 +4729,11 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
 
 def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Tabel opgebouwd met NATIVE st.columns() per rij -- na 2 mislukte
-    pogingen (custom HTML + onzichtbare knoppen-overlays gaf instabiele
-    uitlijning/dode kliks; st.dataframe gaf checkboxes en een dubbele
-    index) is dit de simpelste, meest betrouwbare route: elke cel is
-    een ECHT Streamlit-element in een ECHTE kolom, dus Streamlit regelt
-    de uitlijning zelf en elke knop-klik werkt gegarandeerd.
+    Tabel opgebouwd met NATIVE st.columns() + ECHTE st.button()'s per
+    rij (geen HTML-overlay/negatieve-margin-trucs meer -- die bleken
+    de interactiviteit stuk te maken). Uitlijning komt nu van 1 globaal
+    CSS-blok dat 1x bovenaan de Analyze-pagina wordt geinjecteerd (zie
+    render_analyze()), niet meer van losse, per-rij CSS-blokken.
     """
     if not entries and not unmapped:
         st.markdown(
@@ -4744,188 +4743,109 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         return
 
     _col_ratios = [1, 1.2, 4, 1.2]
-    _table_key = f"{key_prefix}_table"
+    head_cols = st.columns(_col_ratios, gap="small")
+    head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
+    head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
+    head_cols[2].markdown('<div class="hesty-conviction-thead">Core thesis</div>', unsafe_allow_html=True)
+    head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
     st.markdown(
-        f'<style>'
-        # Verticaal centreren op de hoofdrij en elke top-level kolom.
-        f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
-        f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
-        f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
-        f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
-        f'letter-spacing:0.05em; }} '
-        f'</style>',
+        '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
         unsafe_allow_html=True,
     )
-    with st.container(key=_table_key):
-        head_cols = st.columns(_col_ratios, gap="small")
-        head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
-        head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
-        head_cols[2].markdown('<div class="hesty-conviction-thead">Core thesis</div>', unsafe_allow_html=True)
-        head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
+
+    for entry in entries:
+        ticker = entry.get("ticker", "")
+        naam = entry.get("naam", ticker)
+        score = _compute_deep_dive_overall_score(entry)
+        if score is not None:
+            # Zelfde 8/5-grenzen als de conviction-tegels bovenaan.
+            if score >= 8:
+                _score_color = "#34D399"
+            elif score >= 5:
+                _score_color = "#FBBF24"
+            else:
+                _score_color = "#FB7185"
+            score_text = f'<span style="color:{_score_color}; font-weight:700;">{score:.1f} / 10</span>'
+        else:
+            score_text = '<span style="color:#64748B;">-</span>'
+        thesis_full = (entry.get("investment_thesis") or "").strip()
+        thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
+        if len(thesis_line) > 60:
+            thesis_line = thesis_line[:60] + "..."
+        thesis_text = thesis_line or "No thesis logged yet"
+        last_validated = (entry.get("created_at") or "")[:10] or "-"
+        logo_url = get_company_logo_url(ticker, naam)
+
+        row_cols = st.columns(_col_ratios, gap="small")
+        with row_cols[0]:
+            logo_col, btn_col = st.columns([1, 3], gap="small")
+            with logo_col:
+                if logo_url:
+                    st.markdown(f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                                f'object-fit:contain; background:#fff;" />', unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        f'<div style="width:24px; height:24px; border-radius:50%; '
+                        f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
+                        f'justify-content:center;"><span style="color:#8992A3; font-weight:700; '
+                        f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+            with btn_col:
+                if st.button(ticker, key=f"btn_{key_prefix}_{ticker}"):
+                    st.session_state["selected_research"] = ticker
+                    st.rerun()
+        with row_cols[1]:
+            st.markdown(score_text, unsafe_allow_html=True)
+        with row_cols[2]:
+            st.markdown(f'<span style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</span>', unsafe_allow_html=True)
+        with row_cols[3]:
+            st.markdown(f'<span style="color:#64748B; font-size:0.75rem;">{last_validated}</span>', unsafe_allow_html=True)
         st.markdown(
-            '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
+            '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
             unsafe_allow_html=True,
         )
 
-        for _idx, entry in enumerate(entries):
-            ticker = entry.get("ticker", "")
-            naam = entry.get("naam", ticker)
-            score = _compute_deep_dive_overall_score(entry)
-            if score is not None:
-                # Zelfde 8/5-grenzen als de conviction-tegels bovenaan --
-                # groen/amber/rose i.p.v. platte witte tekst.
-                if score >= 8:
-                    _score_color = "#34D399"
-                elif score >= 5:
-                    _score_color = "#FBBF24"
+    for u in (unmapped or []):
+        u_ticker = u.get("ticker", "")
+        u_naam = u.get("naam", u_ticker)
+        u_logo_url = get_company_logo_url(u_ticker, u_naam)
+
+        row_cols = st.columns(_col_ratios, gap="small")
+        with row_cols[0]:
+            logo_col, btn_col = st.columns([1, 3], gap="small")
+            with logo_col:
+                if u_logo_url:
+                    st.markdown(f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                                f'object-fit:contain; background:#fff;" />', unsafe_allow_html=True)
                 else:
-                    _score_color = "#FB7185"
-                score_text = f'<span style="color:{_score_color}; font-weight:700;">{score:.1f} / 10</span>'
-            else:
-                score_text = '<span style="color:#64748B;">-</span>'
-            thesis_full = (entry.get("investment_thesis") or "").strip()
-            thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-            if len(thesis_line) > 60:
-                thesis_line = thesis_line[:60] + "..."
-            thesis_text = thesis_line or "No thesis logged yet"
-            last_validated = (entry.get("created_at") or "")[:10] or "-"
-            logo_url = get_company_logo_url(ticker, naam)
-
-            row_cols = st.columns(_col_ratios, gap="small")
-            with row_cols[0]:
-                logo_html = (
-                    f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                    f'object-fit:contain; background:#fff; flex-shrink:0;" />'
-                    if logo_url else
-                    f'<div style="width:24px; height:24px; border-radius:50%; '
-                    f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
-                    f'justify-content:center; flex-shrink:0;"><span style="color:#8992A3; font-weight:700; '
-                    f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>'
-                )
-                # Logo + ticker nu als 1 SAMENHANGEND stuk HTML (simpele
-                # flex-rij, geen geneste st.columns() meer -- die bleek de
-                # daadwerkelijke bron van de scheve uitlijning: een
-                # geneste kolom-splitsing heeft z'n EIGEN, kleinere hoogte
-                # en strekt niet automatisch mee met de rest van de rij).
-                # Een klein, onzichtbaar knopje ligt er specifiek overheen
-                # (niet over de hele rij, dat gaf eerder dode kliks
-                # elders) om de klik af te handelen.
-                # Index i.p.v. de ruwe ticker in de key -- een ticker als
-                # 'TDIV.AS' bevat een punt, en een punt in een CSS-
-                # klasse-selector betekent een NIEUWE klasse ('.a.b' = 2
-                # klassen tegelijk vereist, matcht dus NOOIT de ene
-                # daadwerkelijke klasse die Streamlit genereert). Vandaar
-                # dat de knop bij dat soort tickers zichtbaar en verkeerd
-                # gepositioneerd bleef -- een schoon, alfanumeriek
-                # rij-nummer kan dat probleem nooit hebben.
-                #
-                # GEEN position:absolute meer -- die leunde op een
-                # aanname over Streamlit's interne DOM-structuur
-                # ([data-testid="stButton"]) die kennelijk niet
-                # betrouwbaar genoeg matchte, waardoor de knop wel
-                # onzichtbaar werd maar niet meer op de juiste plek
-                # (en dus niet meer klikbaar) terechtkwam. Nu een
-                # simpelere, robuustere truc: de zichtbare rij krijgt
-                # pointer-events:none (clicks vallen er dwars doorheen),
-                # en de ECHTE knop staat er met een negatieve margin-top
-                # gewoon overheen getrokken -- puur normale document-
-                # flow + margin, geen enkele aanname over interne
-                # testid's nodig.
-                _asset_key = f"{key_prefix}_asset_{_idx}"
+                    st.markdown(
+                        f'<div style="width:24px; height:24px; border-radius:50%; '
+                        f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
+                        f'justify-content:center;"><span style="color:#64748B; font-weight:700; '
+                        f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+            with btn_col:
                 st.markdown(
-                    f'<style>'
-                    f'.st-key-{_asset_key} {{ margin-top:-28px !important; }} '
-                    f'.st-key-{_asset_key} button {{ '
-                    f'width:100% !important; height:28px !important; opacity:0 !important; cursor:pointer !important; '
-                    f'border:none !important; background:transparent !important; padding:0 !important; margin:0 !important; }} '
-                    f'</style>',
+                    f'<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
+                    f'text-transform:uppercase;">{u_ticker}</span>',
                     unsafe_allow_html=True,
                 )
-                st.markdown(
-                    f'<div style="display:flex; align-items:center; gap:0.5rem; height:28px; '
-                    f'pointer-events:none;">{logo_html}<span style="color:#EAEDF1; font-weight:700; '
-                    f'font-size:0.82rem; text-transform:uppercase;">{ticker}</span></div>',
-                    unsafe_allow_html=True,
-                )
-                with st.container(key=_asset_key):
-                    if st.button(" ", key=f"{key_prefix}_openbtn_{ticker}"):
-                        st.session_state["selected_research"] = ticker
-                        st.rerun()
-            with row_cols[1]:
-                st.markdown(f'<div style="font-size:0.82rem;">{score_text}</div>', unsafe_allow_html=True)
-            with row_cols[2]:
-                st.markdown(
-                    f'<div style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</div>',
-                    unsafe_allow_html=True,
-                )
-            with row_cols[3]:
-                st.markdown(
-                    f'<div style="color:#64748B; font-size:0.75rem;">{last_validated}</div>',
-                    unsafe_allow_html=True,
-                )
-            st.markdown(
-                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-                unsafe_allow_html=True,
-            )
-
-        for _u_idx, u in enumerate(unmapped or []):
-            u_ticker = u.get("ticker", "")
-            u_naam = u.get("naam", u_ticker)
-            u_logo_url = get_company_logo_url(u_ticker, u_naam)
-
-            row_cols = st.columns(_col_ratios, gap="small")
-            with row_cols[0]:
-                u_logo_html = (
-                    f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                    f'object-fit:contain; background:#fff; flex-shrink:0;" />'
-                    if u_logo_url else
-                    f'<div style="width:24px; height:24px; border-radius:50%; '
-                    f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
-                    f'justify-content:center; flex-shrink:0;"><span style="color:#64748B; font-weight:700; '
-                    f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
-                )
-                _u_asset_key = f"{key_prefix}_uasset_{_u_idx}"
-                st.markdown(
-                    f'<style>'
-                    f'.st-key-{_u_asset_key} {{ margin-top:-28px !important; }} '
-                    f'.st-key-{_u_asset_key} button {{ '
-                    f'width:100% !important; height:28px !important; opacity:0 !important; cursor:pointer !important; '
-                    f'border:none !important; background:transparent !important; padding:0 !important; margin:0 !important; }} '
-                    f'</style>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    f'<div style="display:flex; align-items:center; gap:0.5rem; height:28px; '
-                    f'pointer-events:none;">{u_logo_html}<span style="color:#EAEDF1; font-weight:700; '
-                    f'font-size:0.82rem; text-transform:uppercase;">{u_ticker}</span></div>',
-                    unsafe_allow_html=True,
-                )
-                with st.container(key=_u_asset_key):
-                    # De klik op deze cel triggert nu de '__NEW__'-actie --
-                    # geen aparte 'Scan'-knop meer in de Score-kolom.
-                    if st.button(" ", key=f"{key_prefix}_openbtn_{u_ticker}"):
-                        st.session_state["dd_ticker_input"] = u_ticker
-                        st.session_state["dd_naam_input"] = u_naam
-                        st.session_state["selected_research"] = "__NEW__"
-                        st.rerun()
-            with row_cols[1]:
-                st.markdown(
-                    '<div style="font-size:0.82rem;">\U0001F916 '
-                    '<span style="color:#A7F3D0; font-weight:700; letter-spacing:0.02em;">SCAN</span></div>',
-                    unsafe_allow_html=True,
-                )
-            with row_cols[2]:
-                st.markdown(
-                    '<div style="color:#64748B; font-size:0.82rem;">'
-                    'No active research record found.</div>',
-                    unsafe_allow_html=True,
-                )
-            with row_cols[3]:
-                st.markdown('<div style="color:#64748B; font-size:0.75rem;">-</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-                unsafe_allow_html=True,
-            )
+        with row_cols[1]:
+            if st.button("\U0001F916 Scan", key=f"scan_{key_prefix}_{u_ticker}"):
+                st.session_state["dd_ticker_input"] = u_ticker
+                st.session_state["dd_naam_input"] = u_naam
+                st.session_state["selected_research"] = "__NEW__"
+                st.rerun()
+        with row_cols[2]:
+            st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
+        with row_cols[3]:
+            st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
@@ -5136,6 +5056,33 @@ def render_analyze():
 
     if "selected_research" not in st.session_state:
         st.session_state["selected_research"] = None
+
+    # Globaal CSS-blok, 1x bovenaan de pagina geinjecteerd (i.p.v.
+    # losse, per-rij <style>-blokken die eerder onbetrouwbaar bleken
+    # te matchen) -- dwingt verticale centrering en strakke uitlijning
+    # af op ALLE st.columns()-rijen in de tabellen hieronder.
+    st.markdown(
+        """
+        <style>
+        /* Forceer verticale centrering op alle kolommen in de tabel-rijen */
+        [data-testid="stHorizontalBlock"] {
+            align-items: center !important;
+        }
+        /* Zorg dat de afbeeldingen/logo's geen rare top-margins hebben */
+        [data-testid="stHorizontalBlock"] img {
+            margin-top: 0 !important;
+            vertical-align: middle !important;
+        }
+        /* Lijn de native buttons strak links uit zonder extra witruimte */
+        [data-testid="stHorizontalBlock"] button {
+            text-align: left !important;
+            padding-left: 0 !important;
+            margin-left: 0 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
