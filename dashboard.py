@@ -4747,28 +4747,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
     _table_key = f"{key_prefix}_table"
     st.markdown(
         f'<style>'
-        f'.st-key-{_table_key} button {{ '
-        f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; margin:0 !important; color:#EAEDF1 !important; font-weight:700 !important; '
-        f'font-size:0.82rem !important; text-transform:uppercase !important; text-align:left !important; '
-        f'width:auto !important; min-height:0 !important; height:auto !important; line-height:1.3 !important; '
-        f'display:inline-flex !important; align-items:center !important; }} '
-        f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
-        # Streamlit wikkelt de knop-tekst zelf vaak in een eigen <p> of
-        # <div> BINNEN de <button> -- die kan een eigen marge/line-height
-        # hebben die de eerdere centrering op de knop zelf tenietdoet.
-        # Hard resetten op ALLE afstammelingen van de knop, niet alleen
-        # de knop-box zelf.
-        f'.st-key-{_table_key} button * {{ '
-        f'margin:0 !important; padding:0 !important; line-height:1.3 !important; }} '
-        f'.st-key-{_table_key} [data-testid="stButton"] {{ '
-        f'display:flex !important; align-items:center !important; height:100% !important; margin:0 !important; }} '
-        f'.st-key-{_table_key} [data-testid="stElementContainer"]:has(button) {{ '
-        f'display:flex !important; align-items:center !important; height:100% !important; }} '
-        # Verticaal centreren, hard op ELK niveau: de hoofdrij, de
-        # logo+knop-subkolom, EN de kolommen zelf (die kregen zonder
-        # align-items:center op [data-testid="stColumn"] alsnog een
-        # eigen, standaard boven-uitlijning binnenin).
+        # Verticaal centreren op de hoofdrij en elke top-level kolom.
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
@@ -4814,31 +4793,44 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
 
             row_cols = st.columns(_col_ratios, gap="small")
             with row_cols[0]:
-                logo_col, btn_col = st.columns([1, 3], gap="small")
-                with logo_col:
-                    if logo_url:
-                        # Pure HTML <img> i.p.v. st.image() -- die laatste
-                        # is een Streamlit-widget met een eigen 'uitklap-
-                        # naar-volledig-scherm'-knopje bij hover (ingebouwd
-                        # gedrag, ongewenst voor een klein 24px-logootje)
-                        # EN een eigen interne wrapper die de verticale
-                        # uitlijning kon verstoren. Een kale <img>-tag
-                        # heeft geen van beide problemen.
-                        st.markdown(
-                            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                            f'object-fit:contain; background:#fff; display:block;" />',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<div style="width:24px; height:24px; border-radius:50%; '
-                            f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
-                            f'justify-content:center;"><span style="color:#8992A3; font-weight:700; '
-                            f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>',
-                            unsafe_allow_html=True,
-                        )
-                with btn_col:
-                    if st.button(ticker, key=f"{key_prefix}_openbtn_{ticker}"):
+                logo_html = (
+                    f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                    f'object-fit:contain; background:#fff; flex-shrink:0;" />'
+                    if logo_url else
+                    f'<div style="width:24px; height:24px; border-radius:50%; '
+                    f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
+                    f'justify-content:center; flex-shrink:0;"><span style="color:#8992A3; font-weight:700; '
+                    f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>'
+                )
+                # Logo + ticker nu als 1 SAMENHANGEND stuk HTML (simpele
+                # flex-rij, geen geneste st.columns() meer -- die bleek de
+                # daadwerkelijke bron van de scheve uitlijning: een
+                # geneste kolom-splitsing heeft z'n EIGEN, kleinere hoogte
+                # en strekt niet automatisch mee met de rest van de rij).
+                # Een klein, onzichtbaar knopje ligt er specifiek overheen
+                # (niet over de hele rij, dat gaf eerder dode kliks
+                # elders) om de klik af te handelen.
+                _asset_key = f"{key_prefix}_asset_{ticker}"
+                st.markdown(
+                    f'<style>'
+                    f'.st-key-{_asset_key} {{ position:relative !important; }} '
+                    f'.st-key-{_asset_key} [data-testid="stButton"] {{ '
+                    f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
+                    f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
+                    f'.st-key-{_asset_key} button {{ '
+                    f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
+                    f'border:none !important; background:transparent !important; padding:0 !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_asset_key):
+                    st.markdown(
+                        f'<div style="display:flex; align-items:center; gap:0.5rem;">'
+                        f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
+                        f'text-transform:uppercase;">{ticker}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(" ", key=f"{key_prefix}_openbtn_{ticker}"):
                         st.session_state["selected_research"] = ticker
                         st.rerun()
             with row_cols[1]:
@@ -4865,29 +4857,38 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
 
             row_cols = st.columns(_col_ratios, gap="small")
             with row_cols[0]:
-                logo_col, btn_col = st.columns([1, 3], gap="small")
-                with logo_col:
-                    if u_logo_url:
-                        st.markdown(
-                            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                            f'object-fit:contain; background:#fff; display:block;" />',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<div style="width:24px; height:24px; border-radius:50%; '
-                            f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
-                            f'justify-content:center;"><span style="color:#64748B; font-weight:700; '
-                            f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>',
-                            unsafe_allow_html=True,
-                        )
-                with btn_col:
-                    # De ticker-knop zelf triggert nu de '__NEW__'-actie --
-                    # geen aparte 'Scan'-knop meer in de Score-kolom (die
-                    # veroorzaakte de verschuiving naar rechts, want een
-                    # native st.button() heeft nooit exact dezelfde
-                    # box-model-afmetingen als platte tekst).
-                    if st.button(u_ticker, key=f"{key_prefix}_openbtn_{u_ticker}"):
+                u_logo_html = (
+                    f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
+                    f'object-fit:contain; background:#fff; flex-shrink:0;" />'
+                    if u_logo_url else
+                    f'<div style="width:24px; height:24px; border-radius:50%; '
+                    f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
+                    f'justify-content:center; flex-shrink:0;"><span style="color:#64748B; font-weight:700; '
+                    f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
+                )
+                _u_asset_key = f"{key_prefix}_asset_{u_ticker}"
+                st.markdown(
+                    f'<style>'
+                    f'.st-key-{_u_asset_key} {{ position:relative !important; }} '
+                    f'.st-key-{_u_asset_key} [data-testid="stButton"] {{ '
+                    f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
+                    f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
+                    f'.st-key-{_u_asset_key} button {{ '
+                    f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
+                    f'border:none !important; background:transparent !important; padding:0 !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_u_asset_key):
+                    st.markdown(
+                        f'<div style="display:flex; align-items:center; gap:0.5rem;">'
+                        f'{u_logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
+                        f'text-transform:uppercase;">{u_ticker}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    # De klik op deze cel triggert nu de '__NEW__'-actie --
+                    # geen aparte 'Scan'-knop meer in de Score-kolom.
+                    if st.button(" ", key=f"{key_prefix}_openbtn_{u_ticker}"):
                         st.session_state["dd_ticker_input"] = u_ticker
                         st.session_state["dd_naam_input"] = u_naam
                         st.session_state["selected_research"] = "__NEW__"
