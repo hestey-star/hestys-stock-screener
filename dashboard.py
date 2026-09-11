@@ -9122,6 +9122,14 @@ with st.sidebar:
     [data-testid="stSidebar"] {
         border-right: 1px solid rgba(148,163,184,0.15) !important;
     }
+    /* Sidebar-brede verkleining van Streamlit's eigen tussenruimte tussen
+       gestapelde st.container()'s -- elk hoofdmenu-item (en de Discover-
+       subnav-groep) is een EIGEN container, en Streamlit's standaard
+       tussenruimte daartussen (~1rem) was de daadwerkelijke bron van de
+       'te los'-uitstraling, niet de padding/margin op de items zelf. */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.2rem !important;
+    }
     /* Hoofdmenu-items (Discover, Today, My Portfolio, Analyze, Support,
        Premium) -- ALLEMAAL exact dezelfde opbouw: st.page_link() met
        icon=, elk gescoped via z'n eigen container-key i.p.v. href, dus
@@ -9130,9 +9138,9 @@ with st.sidebar:
     .st-key-nav_analyze a, .st-key-nav_support a, .st-key-nav_premium a {
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        padding: 0.6rem 0.9rem 0.6rem 0.75rem !important; border-radius: 8px !important;
+        padding: 0.4rem 0.9rem 0.4rem 0.75rem !important; border-radius: 8px !important;
         text-decoration: none !important; color: #8992A3 !important;
-        margin-bottom: 3px !important;
+        margin-bottom: 0 !important;
     }
     .st-key-nav_discover a:hover, .st-key-nav_today a:hover, .st-key-nav_portfolio a:hover,
     .st-key-nav_analyze a:hover, .st-key-nav_support a:hover, .st-key-nav_premium a:hover {
