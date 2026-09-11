@@ -4752,8 +4752,19 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'padding:0 !important; color:#EAEDF1 !important; font-weight:700 !important; font-size:0.82rem !important; '
         f'text-transform:uppercase !important; text-align:left !important; width:auto !important; }} '
         f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
+        # Verticaal centreren: elke st.columns()-rij binnen deze tabel
+        # (zowel de hoofdrij als de logo+knop-subkolom) krijgt
+        # align-items:center, zodat het logo, de ticker-knop en de
+        # tekstcellen altijd op dezelfde middellijn staan i.p.v. boven-
+        # uitgelijnd.
+        f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
+        # SCAN-knop op dezelfde verticale startlijn als de platte score-
+        # cijfers ernaast (die hebben allemaal padding-top:0.4rem).
+        f'.st-key-{_table_key} [class*="st-key-{key_prefix}_scanwrap"] {{ margin-top:0.4rem !important; }} '
+        f'.st-key-{_table_key} [class*="st-key-{key_prefix}_scanwrap"] button {{ '
+        f'font-size:0.72rem !important; text-transform:none !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -4772,7 +4783,18 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             ticker = entry.get("ticker", "")
             naam = entry.get("naam", ticker)
             score = _compute_deep_dive_overall_score(entry)
-            score_text = f"{score:.1f} / 10" if score is not None else "-"
+            if score is not None:
+                # Zelfde 8/5-grenzen als de conviction-tegels bovenaan --
+                # groen/amber/rose i.p.v. platte witte tekst.
+                if score >= 8:
+                    _score_color = "#34D399"
+                elif score >= 5:
+                    _score_color = "#FBBF24"
+                else:
+                    _score_color = "#FB7185"
+                score_text = f'<span style="color:{_score_color}; font-weight:700;">{score:.1f} / 10</span>'
+            else:
+                score_text = '<span style="color:#64748B;">-</span>'
             thesis_full = (entry.get("investment_thesis") or "").strip()
             thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
             if len(thesis_line) > 60:
@@ -4842,11 +4864,12 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                         unsafe_allow_html=True,
                     )
             with row_cols[1]:
-                if st.button("\U0001F916 Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
-                    st.session_state["dd_ticker_input"] = u_ticker
-                    st.session_state["dd_naam_input"] = u_naam
-                    st.session_state["selected_research"] = "__NEW__"
-                    st.rerun()
+                with st.container(key=f"{key_prefix}_scanwrap_{u_ticker}"):
+                    if st.button("\U0001F916 Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
+                        st.session_state["dd_ticker_input"] = u_ticker
+                        st.session_state["dd_naam_input"] = u_naam
+                        st.session_state["selected_research"] = "__NEW__"
+                        st.rerun()
             with row_cols[2]:
                 st.markdown(
                     '<div style="padding-top:0.4rem; color:#64748B; font-size:0.82rem;">'
