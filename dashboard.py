@@ -8897,7 +8897,10 @@ def render_support():
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### Frequently asked questions")
+    st.markdown(
+        '<div class="hesty-support-subhead">Frequently Asked Questions</div>',
+        unsafe_allow_html=True,
+    )
 
     # FAQ als zachte, afgeronde dashboard-strips i.p.v. de scherpe,
     # paginabrede standaard-accordeonlijnen -- st.expander() blijft het
@@ -8906,25 +8909,36 @@ def render_support():
     st.markdown(
         """
         <style>
-        [data-testid="stExpander"] {
-            background: rgba(15,23,42,0.3) !important;
+        .hesty-support-subhead {
+            color: #E2E8F0; font-size: 0.85rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; margin-top: 2rem; margin-bottom: 1rem; display: block;
+        }
+        @media (min-width: 768px) { .hesty-support-subhead { font-size: 1rem !important; } }
+        div[data-testid="stExpander"] {
+            background-color: rgba(15,23,42,0.3) !important;
             border: 1px solid rgba(30,41,59,0.4) !important;
             border-radius: 14px !important;
             margin-bottom: 0.75rem !important;
             max-width: 56rem;
+            overflow: hidden !important;
         }
-        [data-testid="stExpander"] summary {
+        div[data-testid="stExpander"] details {
+            background-color: transparent !important;
+        }
+        div[data-testid="stExpander"] summary {
             padding: 1rem !important;
+            background-color: transparent !important;
         }
-        [data-testid="stExpander"] summary p {
+        div[data-testid="stExpander"] summary p {
             color: #F1F5F9 !important;
             font-weight: 600 !important;
             font-size: 0.9rem !important;
         }
-        [data-testid="stExpanderDetails"] {
+        div[data-testid="stExpanderDetails"] {
             padding: 0 1rem 1rem 1rem !important;
+            background-color: transparent !important;
         }
-        [data-testid="stExpanderDetails"] p {
+        div[data-testid="stExpanderDetails"] p {
             color: #94A3B8 !important;
             font-size: 0.82rem !important;
             line-height: 1.6 !important;
@@ -8969,22 +8983,32 @@ def render_support():
             "screener, daily screener, and/or portfolio emails on or off."
         )
 
-    st.markdown("#### Send us a message")
+    st.markdown(
+        '<div class="hesty-support-subhead">Send Us a Message</div>',
+        unsafe_allow_html=True,
+    )
 
     _support_form_key = "support_contact_form"
     st.markdown(
         f'<style>'
         f'.st-key-{_support_form_key} {{ '
-        f'max-width:28rem !important; width:100% !important; margin-top:2.5rem !important; }} '
+        f'max-width:28rem !important; width:100% !important; box-sizing:border-box !important; }} '
+        f'.st-key-{_support_form_key} [data-testid="stTextInput"], '
+        f'.st-key-{_support_form_key} [data-testid="stSelectbox"], '
+        f'.st-key-{_support_form_key} [data-testid="stTextArea"] {{ '
+        f'width:100% !important; max-width:100% !important; }} '
         f'.hesty-support-label {{ '
         f'font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
         f'text-transform:uppercase; margin-bottom:0.35rem; display:block; }} '
-        f'.st-key-{_support_form_key} .st-key-support_submit_wrap {{ margin-top:1rem !important; }} '
-        f'.st-key-{_support_form_key} .st-key-support_submit_wrap button {{ '
-        f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
-        f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
-        f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
-        f'.st-key-{_support_form_key} .st-key-support_submit_wrap button:hover {{ background:#059669 !important; }} '
+        f'.st-key-support_submit_wrap {{ '
+        f'margin-top:1rem !important; width:100% !important; display:block !important; }} '
+        f'.st-key-support_submit_wrap [data-testid="stButton"] {{ width:100% !important; }} '
+        f'.st-key-support_submit_wrap button {{ '
+        f'display:block !important; width:100% !important; background:#10B981 !important; '
+        f'color:#020617 !important; font-weight:700 !important; font-size:0.9rem !important; '
+        f'padding:0.75rem 1rem !important; border-radius:12px !important; border:none !important; '
+        f'box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+        f'.st-key-support_submit_wrap button:hover {{ background:#059669 !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
