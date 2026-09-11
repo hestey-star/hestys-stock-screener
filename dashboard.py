@@ -4818,26 +4818,36 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 # dat de knop bij dat soort tickers zichtbaar en verkeerd
                 # gepositioneerd bleef -- een schoon, alfanumeriek
                 # rij-nummer kan dat probleem nooit hebben.
+                #
+                # GEEN position:absolute meer -- die leunde op een
+                # aanname over Streamlit's interne DOM-structuur
+                # ([data-testid="stButton"]) die kennelijk niet
+                # betrouwbaar genoeg matchte, waardoor de knop wel
+                # onzichtbaar werd maar niet meer op de juiste plek
+                # (en dus niet meer klikbaar) terechtkwam. Nu een
+                # simpelere, robuustere truc: de zichtbare rij krijgt
+                # pointer-events:none (clicks vallen er dwars doorheen),
+                # en de ECHTE knop staat er met een negatieve margin-top
+                # gewoon overheen getrokken -- puur normale document-
+                # flow + margin, geen enkele aanname over interne
+                # testid's nodig.
                 _asset_key = f"{key_prefix}_asset_{_idx}"
                 st.markdown(
                     f'<style>'
-                    f'.st-key-{_asset_key} {{ position:relative !important; }} '
-                    f'.st-key-{_asset_key} [data-testid="stButton"] {{ '
-                    f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
-                    f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
+                    f'.st-key-{_asset_key} {{ margin-top:-28px !important; }} '
                     f'.st-key-{_asset_key} button {{ '
-                    f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
-                    f'border:none !important; background:transparent !important; padding:0 !important; }} '
+                    f'width:100% !important; height:28px !important; opacity:0 !important; cursor:pointer !important; '
+                    f'border:none !important; background:transparent !important; padding:0 !important; margin:0 !important; }} '
                     f'</style>',
                     unsafe_allow_html=True,
                 )
+                st.markdown(
+                    f'<div style="display:flex; align-items:center; gap:0.5rem; height:28px; '
+                    f'pointer-events:none;">{logo_html}<span style="color:#EAEDF1; font-weight:700; '
+                    f'font-size:0.82rem; text-transform:uppercase;">{ticker}</span></div>',
+                    unsafe_allow_html=True,
+                )
                 with st.container(key=_asset_key):
-                    st.markdown(
-                        f'<div style="display:flex; align-items:center; gap:0.5rem;">'
-                        f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
-                        f'text-transform:uppercase;">{ticker}</span></div>',
-                        unsafe_allow_html=True,
-                    )
                     if st.button(" ", key=f"{key_prefix}_openbtn_{ticker}"):
                         st.session_state["selected_research"] = ticker
                         st.rerun()
@@ -4877,23 +4887,20 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 _u_asset_key = f"{key_prefix}_uasset_{_u_idx}"
                 st.markdown(
                     f'<style>'
-                    f'.st-key-{_u_asset_key} {{ position:relative !important; }} '
-                    f'.st-key-{_u_asset_key} [data-testid="stButton"] {{ '
-                    f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
-                    f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
+                    f'.st-key-{_u_asset_key} {{ margin-top:-28px !important; }} '
                     f'.st-key-{_u_asset_key} button {{ '
-                    f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
-                    f'border:none !important; background:transparent !important; padding:0 !important; }} '
+                    f'width:100% !important; height:28px !important; opacity:0 !important; cursor:pointer !important; '
+                    f'border:none !important; background:transparent !important; padding:0 !important; margin:0 !important; }} '
                     f'</style>',
                     unsafe_allow_html=True,
                 )
+                st.markdown(
+                    f'<div style="display:flex; align-items:center; gap:0.5rem; height:28px; '
+                    f'pointer-events:none;">{u_logo_html}<span style="color:#EAEDF1; font-weight:700; '
+                    f'font-size:0.82rem; text-transform:uppercase;">{u_ticker}</span></div>',
+                    unsafe_allow_html=True,
+                )
                 with st.container(key=_u_asset_key):
-                    st.markdown(
-                        f'<div style="display:flex; align-items:center; gap:0.5rem;">'
-                        f'{u_logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
-                        f'text-transform:uppercase;">{u_ticker}</span></div>',
-                        unsafe_allow_html=True,
-                    )
                     # De klik op deze cel triggert nu de '__NEW__'-actie --
                     # geen aparte 'Scan'-knop meer in de Score-kolom.
                     if st.button(" ", key=f"{key_prefix}_openbtn_{u_ticker}"):
