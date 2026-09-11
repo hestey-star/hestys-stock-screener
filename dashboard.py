@@ -8717,37 +8717,65 @@ def render_login():
             unsafe_allow_html=True,
         )
         with st.container(key=_form_wrap_key):
-            # Toggle: exact hetzelfde, BEWEZEN werkende patroon als de
-            # Daily/Weekly-toggle bij Momentocrats -- gewoon
-            # st.segmented_control() met platte CSS. Mijn eigen eerdere
-            # 2-losse-knoppen-aanpak gaf 2 los gestapelde vierkante
-            # knoppen i.p.v. 1 pil (de 'forceer flex-row'-CSS werkte hier
-            # kennelijk niet), en de JS-relay-versie daarvoor was traag.
-            # Dit segmented_control-patroon draait al meerdere schermen
-            # verder probleemloos, dus 1-op-1 overgenomen.
+            # Toggle: puur zichtbare custom HTML (exact zoals gevraagd) +
+            # ONZICHTBARE, ECHTE st.button()'s eroverheen (position:
+            # absolute, inset:0, opacity:0) die de daadwerkelijke klik
+            # afhandelen. Geeft zowel het exacte, gewenste uiterlijk ALS
+            # 100% betrouwbare functionaliteit (een echte knop-klik, geen
+            # widget-CSS-gevecht en geen JS-relay-vertraging).
             _login_toggle_key = "login_mode_toggle_wrap"
+            _login_toggle_btns_key = "login_mode_toggle_btns"
+            login_mode_current = st.session_state.get("login_mode_active", _login_prefill_mode)
             st.markdown(
                 f'<style>'
-                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] {{ '
-                f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
-                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] button, '
-                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] label {{ '
-                f'border:none !important; outline:none !important; box-shadow:none !important; '
-                f'background:transparent !important; color:#64748B !important; font-weight:600 !important; '
-                f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; }} '
-                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
-                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
-                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; border:none !important; }} '
+                f'.st-key-{_login_toggle_key} {{ '
+                f'position:relative !important; max-width:160px !important; '
+                f'margin-bottom:1.5rem !important; }} '
+                f'.login-toggle-visual {{ '
+                f'display:flex !important; flex-direction:row !important; align-items:center !important; '
+                f'gap:2px !important; background:rgba(2,6,23,0.6) !important; border-radius:8px !important; '
+                f'padding:2px !important; border:1px solid rgba(15,23,42,0.9) !important; '
+                f'box-sizing:border-box !important; width:100% !important; pointer-events:none !important; }} '
+                f'.login-toggle-visual > div {{ '
+                f'flex:1 !important; text-align:center !important; padding:0.3rem 0.6rem !important; '
+                f'border-radius:6px !important; font-size:0.72rem !important; font-weight:500 !important; '
+                f'text-transform:uppercase !important; letter-spacing:0.04em !important; color:#64748B !important; }} '
+                f'.login-toggle-visual > div.hesty-toggle-active {{ '
+                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
+                # Onzichtbare knoppenrij: exact over de zichtbare pil heen
+                # gelegd (position:absolute, inset:0) -- beide zijn kind
+                # van dezelfde position:relative-container hierboven.
+                f'.st-key-{_login_toggle_btns_key} {{ '
+                f'position:absolute !important; top:0 !important; left:0 !important; '
+                f'width:100% !important; height:100% !important; z-index:2 !important; }} '
+                f'.st-key-{_login_toggle_btns_key} > div {{ '
+                f'display:flex !important; flex-direction:row !important; '
+                f'width:100% !important; height:100% !important; }} '
+                f'.st-key-{_login_toggle_btns_key} > div > div {{ '
+                f'flex:1 1 0% !important; width:auto !important; min-width:0 !important; }} '
+                f'.st-key-{_login_toggle_btns_key} button {{ '
+                f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
+                f'border:none !important; background:transparent !important; padding:0 !important; '
+                f'box-shadow:none !important; }} '
                 f'</style>',
                 unsafe_allow_html=True,
             )
             with st.container(key=_login_toggle_key):
-                login_mode = st.segmented_control(
-                    "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
-                    default=_login_prefill_mode, key="login_mode_toggle", label_visibility="collapsed",
+                st.markdown(
+                    '<div class="login-toggle-visual">'
+                    f'<div class="{"hesty-toggle-active" if login_mode_current == "Sign Up" else ""}">Sign Up</div>'
+                    f'<div class="{"hesty-toggle-active" if login_mode_current == "Sign In" else ""}">Sign In</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
                 )
-            if login_mode is None:  # kan gebeuren als je 'm handmatig deselecteert
-                login_mode = "Sign In"
+                with st.container(key=_login_toggle_btns_key):
+                    if st.button("Sign Up", key="login_toggle_btn_signup"):
+                        st.session_state["login_mode_active"] = "Sign Up"
+                        st.rerun()
+                    if st.button("Sign In", key="login_toggle_btn_signin"):
+                        st.session_state["login_mode_active"] = "Sign In"
+                        st.rerun()
+            login_mode = login_mode_current
 
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
@@ -8795,7 +8823,7 @@ def render_login():
                     st.session_state["show_forgot_password"] = True
                     st.rerun()
                 with st.container(key="login_submit_wrap"):
-                    _login_submit_clicked = st.button("Sign In", key="login_submit")
+                    _login_submit_clicked = st.button("Sign In", key="login_submit", use_container_width=True)
                 if _login_submit_clicked:
                     if not login_email or not login_password:
                         st.error("Enter both your email and password.")
@@ -8824,7 +8852,7 @@ def render_login():
                 signup_password_confirm = st.text_input("Confirm password", type="password",
                                                           key="signup_password_confirm", label_visibility="collapsed")
                 with st.container(key="login_submit_wrap"):
-                    _signup_submit_clicked = st.button("Create account", key="signup_submit")
+                    _signup_submit_clicked = st.button("Create account", key="signup_submit", use_container_width=True)
                 if _signup_submit_clicked:
                     if not signup_name or not signup_email or not signup_password:
                         st.error("Fill in all fields.")
