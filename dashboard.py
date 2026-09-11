@@ -8885,11 +8885,55 @@ def render_login():
 
 
 def render_support():
-    st.markdown("### Support")
-    st.write("Questions, ideas, or something not working as expected? Check the FAQ below, "
-              "or send us a message directly. Business inquiries and partnerships are welcome too.")
+    st.markdown(
+        _uniform_section_header_html("Support &amp; Help", "support_agent", is_first=True),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="color:#64748B; font-size:0.75rem; font-weight:600; text-transform:uppercase; '
+        'letter-spacing:0.03em; margin-bottom:2rem;">'
+        'QUESTIONS, IDEAS, OR SOMETHING NOT WORKING AS EXPECTED? CHECK THE FAQ BELOW OR SEND US A '
+        'MESSAGE DIRECTLY.</div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("#### Frequently asked questions")
+
+    # FAQ als zachte, afgeronde dashboard-strips i.p.v. de scherpe,
+    # paginabrede standaard-accordeonlijnen -- st.expander() blijft het
+    # klap-mechanisme (geen custom JS-accordeon nodig, dat bracht eerder
+    # elders onnodige complexiteit), maar volledig herstyled via CSS.
+    st.markdown(
+        """
+        <style>
+        [data-testid="stExpander"] {
+            background: rgba(15,23,42,0.3) !important;
+            border: 1px solid rgba(30,41,59,0.4) !important;
+            border-radius: 14px !important;
+            margin-bottom: 0.75rem !important;
+            max-width: 56rem;
+        }
+        [data-testid="stExpander"] summary {
+            padding: 1rem !important;
+        }
+        [data-testid="stExpander"] summary p {
+            color: #F1F5F9 !important;
+            font-weight: 600 !important;
+            font-size: 0.9rem !important;
+        }
+        [data-testid="stExpanderDetails"] {
+            padding: 0 1rem 1rem 1rem !important;
+        }
+        [data-testid="stExpanderDetails"] p {
+            color: #94A3B8 !important;
+            font-size: 0.82rem !important;
+            line-height: 1.6 !important;
+            margin-top: 0.5rem !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.expander("What does Discover do?", key="what_does_discover_do_expander"):
         st.write(
@@ -8912,23 +8956,11 @@ def render_support():
 
     with st.expander("What's the difference between Free and Premium?", key="what_s_the_difference_between_free_and_premium_expander"):
         st.write(
-            "Free covers concentration, diversification, sector and asset mix, and up to 10 "
-            "tracked positions. Premium adds dividend income, valuation, cash%, rebalancing "
-            "ideas, a return-vs-benchmark chart, a correlation matrix, unlimited positions, and "
-            "the Smart DCA Assistant TradingView indicator. See the Premium page for the full comparison."
-        )
-
-    with st.expander("How do I cancel my Premium subscription?", key="how_do_i_cancel_my_premium_subscription_expander"):
-        st.write(
-            "On the Premium page, under Subscription, click 'Manage subscription' -- this opens "
-            "Stripe's secure billing portal, where you can cancel anytime. You'll keep Premium "
-            "access until the end of your current billing period."
-        )
-
-    with st.expander("How do I get the Smart DCA Assistant TradingView indicator?", key="how_do_i_get_the_smart_dca_assistant_tradingview_indicator_expander"):
-        st.write(
-            "Premium members can download it directly from the Premium page, with setup "
-            "instructions for TradingView's Pine Editor."
+            "Right now, everyone gets full Premium access for free as part of our Early Access "
+            "launch -- unlimited tracked positions, all Discover signals unblurred, and every "
+            "future Premium feature we build. Join now as an Early Adopter and that stays free "
+            "for you for life. After launch, the free plan will be limited to 10 tracked positions "
+            "with blurred signals -- see the Premium page for the full breakdown."
         )
 
     with st.expander("How do I change what emails I receive?", key="how_do_i_change_what_emails_i_receive_expander"):
@@ -8938,29 +8970,54 @@ def render_support():
         )
 
     st.markdown("#### Send us a message")
-    st.write("Found a bug, have an idea, or need help with something else? Let us know.")
 
-    contact_email = st.text_input("Your email")
-    message_type = st.selectbox("Type", ["Idea", "Problem / bug", "Billing question", "Business inquiry", "Other"])
-    message_body = st.text_area("Message", height=150)
+    _support_form_key = "support_contact_form"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_support_form_key} {{ '
+        f'max-width:28rem !important; width:100% !important; margin-top:2.5rem !important; }} '
+        f'.hesty-support-label {{ '
+        f'font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
+        f'text-transform:uppercase; margin-bottom:0.35rem; display:block; }} '
+        f'.st-key-{_support_form_key} .st-key-support_submit_wrap {{ margin-top:1rem !important; }} '
+        f'.st-key-{_support_form_key} .st-key-support_submit_wrap button {{ '
+        f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
+        f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
+        f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+        f'.st-key-{_support_form_key} .st-key-support_submit_wrap button:hover {{ background:#059669 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_support_form_key):
+        st.markdown('<span class="hesty-support-label">Your email</span>', unsafe_allow_html=True)
+        contact_email = st.text_input("Your email", label_visibility="collapsed")
+        st.markdown('<span class="hesty-support-label">Type</span>', unsafe_allow_html=True)
+        message_type = st.selectbox(
+            "Type", ["Idea", "Problem / bug", "Billing question", "Business inquiry", "Other"],
+            label_visibility="collapsed",
+        )
+        st.markdown('<span class="hesty-support-label">Message</span>', unsafe_allow_html=True)
+        message_body = st.text_area("Message", height=150, label_visibility="collapsed")
 
-    if st.button("Send message", type="primary"):
-        if not contact_email or not message_body.strip():
-            st.error("Please fill in your email and a message before sending.")
-        else:
-            support_email = st.secrets.get("support", {}).get("email")
-            if not support_email:
-                st.error("Support inbox isn't configured yet -- please try again later.")
+        with st.container(key="support_submit_wrap"):
+            _support_submit_clicked = st.button("Send Message \u2192", key="support_submit")
+        if _support_submit_clicked:
+            if not contact_email or not message_body.strip():
+                st.error("Please fill in your email and a message before sending.")
             else:
-                success = send_email(
-                    subject=f"[Hesty's Support] {message_type} from {contact_email}",
-                    body_text=message_body,
-                    to_email=support_email,
-                )
-                if success:
-                    st.success("Thanks! Your message has been sent -- we'll get back to you by email.")
+                support_email = st.secrets.get("support", {}).get("email")
+                if not support_email:
+                    st.error("Support inbox isn't configured yet -- please try again later.")
                 else:
-                    st.error("Something went wrong sending your message -- please try again later.")
+                    success = send_email(
+                        subject=f"[Hesty's Support] {message_type} from {contact_email}",
+                        body_text=message_body,
+                        to_email=support_email,
+                    )
+                    if success:
+                        st.success("Thanks! Your message has been sent -- we'll get back to you by email.")
+                    else:
+                        st.error("Something went wrong sending your message -- please try again later.")
 
 
 def render_privacy():
