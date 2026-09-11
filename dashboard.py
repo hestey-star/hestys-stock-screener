@@ -35,6 +35,7 @@ import requests
 import stripe
 import streamlit as st
 import streamlit.components.v1 as components
+import urllib.parse
 import yfinance as yf
 
 from emailer import send_email
@@ -4729,11 +4730,14 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
 
 def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Tabel opgebouwd met NATIVE st.columns() + ECHTE st.button()'s per
-    rij (geen HTML-overlay/negatieve-margin-trucs meer -- die bleken
-    de interactiviteit stuk te maken). Uitlijning komt nu van 1 globaal
-    CSS-blok dat 1x bovenaan de Analyze-pagina wordt geinjecteerd (zie
-    render_analyze()), niet meer van losse, per-rij CSS-blokken.
+    Tabel opgebouwd met NATIVE st.columns() + PURE HTML-tekst/links in
+    elke cel -- geen st.button() meer in de rijen. Na meerdere mislukte
+    pogingen om Streamlit's eigen knop-wrapper (stButton-div, interne
+    <p>-tags) via CSS te dwingen tot exacte uitlijning, is dit de
+    stabielste route: gewone tekst/links lijnen ALTIJD van nature
+    correct uit via st.columns(), zonder CSS-gevecht. De klik-interactie
+    loopt nu via een query-param-link (?selected_research=TICKER) i.p.v.
+    een widget-klik -- zie render_analyze() voor het opvangen daarvan.
     """
     if not entries and not unmapped:
         st.markdown(
@@ -4758,45 +4762,44 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         naam = entry.get("naam", ticker)
         score = _compute_deep_dive_overall_score(entry)
         if score is not None:
-            # Zelfde 8/5-grenzen als de conviction-tegels bovenaan.
             if score >= 8:
                 _score_color = "#34D399"
             elif score >= 5:
                 _score_color = "#FBBF24"
             else:
                 _score_color = "#FB7185"
-            score_text = f'<span style="color:{_score_color}; font-weight:700;">{score:.1f} / 10</span>'
+            score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem;">{score:.1f} / 10</span>'
         else:
-            score_text = '<span style="color:#64748B;">-</span>'
+            score_html = '<span style="color:#64748B; font-size:0.82rem;">-</span>'
         thesis_full = (entry.get("investment_thesis") or "").strip()
         thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-        if len(thesis_line) > 60:
-            thesis_line = thesis_line[:60] + "..."
+        if len(thesis_line) > 55:
+            thesis_line = thesis_line[:55] + "..."
         thesis_text = thesis_line or "No thesis logged yet"
         last_validated = (entry.get("created_at") or "")[:10] or "-"
         logo_url = get_company_logo_url(ticker, naam)
+        logo_html = (
+            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
+            f'object-fit:contain; background:#fff; vertical-align:middle;" />'
+            if logo_url else
+            f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
+            f'background:rgba(137,146,163,0.15); align-items:center; justify-content:center; '
+            f'vertical-align:middle;"><span style="color:#8992A3; font-weight:700; '
+            f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
+        )
+        _ticker_q = urllib.parse.quote(ticker)
 
         row_cols = st.columns(_col_ratios, gap="small")
         with row_cols[0]:
-            logo_col, btn_col = st.columns([1, 3], gap="small")
-            with logo_col:
-                if logo_url:
-                    st.markdown(f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                                f'object-fit:contain; background:#fff;" />', unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f'<div style="width:24px; height:24px; border-radius:50%; '
-                        f'background:rgba(137,146,163,0.15); display:flex; align-items:center; '
-                        f'justify-content:center;"><span style="color:#8992A3; font-weight:700; '
-                        f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>',
-                        unsafe_allow_html=True,
-                    )
-            with btn_col:
-                if st.button(ticker, key=f"btn_{key_prefix}_{ticker}"):
-                    st.session_state["selected_research"] = ticker
-                    st.rerun()
+            st.markdown(
+                f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
+                f'<a href="?selected_research={_ticker_q}" target="_self" style="color:#ffffff; '
+                f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
+                f'text-transform:uppercase;">{ticker}</a></div>',
+                unsafe_allow_html=True,
+            )
         with row_cols[1]:
-            st.markdown(score_text, unsafe_allow_html=True)
+            st.markdown(score_html, unsafe_allow_html=True)
         with row_cols[2]:
             st.markdown(f'<span style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</span>', unsafe_allow_html=True)
         with row_cols[3]:
@@ -4810,35 +4813,35 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         u_ticker = u.get("ticker", "")
         u_naam = u.get("naam", u_ticker)
         u_logo_url = get_company_logo_url(u_ticker, u_naam)
+        u_logo_html = (
+            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
+            f'object-fit:contain; background:#fff; vertical-align:middle;" />'
+            if u_logo_url else
+            f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
+            f'background:rgba(137,146,163,0.1); align-items:center; justify-content:center; '
+            f'vertical-align:middle;"><span style="color:#64748B; font-weight:700; '
+            f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
+        )
+        _u_ticker_q = urllib.parse.quote(u_ticker)
 
         row_cols = st.columns(_col_ratios, gap="small")
         with row_cols[0]:
-            logo_col, btn_col = st.columns([1, 3], gap="small")
-            with logo_col:
-                if u_logo_url:
-                    st.markdown(f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
-                                f'object-fit:contain; background:#fff;" />', unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f'<div style="width:24px; height:24px; border-radius:50%; '
-                        f'background:rgba(137,146,163,0.1); display:flex; align-items:center; '
-                        f'justify-content:center;"><span style="color:#64748B; font-weight:700; '
-                        f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>',
-                        unsafe_allow_html=True,
-                    )
-            with btn_col:
-                st.markdown(
-                    f'<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
-                    f'text-transform:uppercase;">{u_ticker}</span>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown(
+                f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
+                f'<a href="?selected_research={_u_ticker_q}&amp;new_research=1" target="_self" '
+                f'style="color:#94A3B8; font-weight:700; text-decoration:none; font-size:0.875rem; '
+                f'letter-spacing:0.05em; text-transform:uppercase;">{u_ticker}</a></div>',
+                unsafe_allow_html=True,
+            )
         with row_cols[1]:
-            with st.container(key=f"scanbadge_{key_prefix}_{u_ticker}"):
-                if st.button("\U0001F916 Scan", key=f"scan_{key_prefix}_{u_ticker}"):
-                    st.session_state["dd_ticker_input"] = u_ticker
-                    st.session_state["dd_naam_input"] = u_naam
-                    st.session_state["selected_research"] = "__NEW__"
-                    st.rerun()
+            st.markdown(
+                f'<a href="?selected_research={_u_ticker_q}&amp;new_research=1" target="_self" '
+                f'style="color:#a7f3d0; background-color:rgba(16,185,129,0.1); '
+                f'border:1px solid rgba(52,211,153,0.2); border-radius:0.375rem; padding:2px 8px; '
+                f'font-size:0.75rem; font-weight:700; text-decoration:none; display:inline-block;">'
+                f'\U0001F916 SCAN</a>',
+                unsafe_allow_html=True,
+            )
         with row_cols[2]:
             st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
         with row_cols[3]:
@@ -4847,195 +4850,6 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
             unsafe_allow_html=True,
         )
-
-
-def _render_deep_dive_add_form(user_email: str) -> None:
-    """
-    Formulier om een nieuwe deep-dive (of een bijgewerkte versie) te
-    loggen -- verhuisd vanaf de hoofdpagina naar de side-drawer, zodat
-    de hoofdpagina van Analyze altijd clean en overzichtelijk blijft.
-    """
-    import database
-
-    # AI-copilot-knop: bereidt de drawer voor op de daadwerkelijke AI-
-    # koppeling (nog niet gebouwd) -- klikken laat dat nu eerlijk weten
-    # i.p.v. te doen alsof er al een AI-briefing wordt gegenereerd.
-    _ai_btn_key = "dd_ai_briefing_btn_wrap"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
-        f'.st-key-{_ai_btn_key} button {{ '
-        f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
-        f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
-        f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
-        f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
-        f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_ai_btn_key):
-        if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
-            st.info(
-                "AI briefing generation isn't wired up yet -- this button is just the placeholder "
-                "for the next step. For now, fill in the fields below yourself.",
-                icon=":material/smart_toy:",
-            )
-
-    dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
-
-    if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
-        st.session_state["dd_last_looked_up_ticker"] = dd_ticker
-        try:
-            auto_info = get_cached_ticker_info(dd_ticker)
-            auto_name = auto_info.get("longName") or auto_info.get("shortName")
-            if auto_name:
-                st.session_state["dd_naam_input"] = auto_name
-        except Exception:
-            pass
-
-    dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
-    dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
-
-    st.markdown("**Business overview** -- what does the company do, in your own words")
-    dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
-
-    st.markdown("**Investment thesis** -- why this could be a good investment")
-    dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-    dd_thesis_score = st.slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
-
-    st.markdown("**Management/CEO** -- assess the management and the CEO")
-    dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-    dd_management_score = st.slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
-
-    st.markdown("**Bear case / risks** -- what could go wrong")
-    dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
-    dd_bear_score = st.slider(
-        "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
-        help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
-    )
-
-    st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
-    dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-    dd_valuation_score = st.slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
-    dd_interested_price = st.number_input(
-        f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
-        help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
-    )
-
-    st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
-                "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
-    dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
-    dd_technical_analysis_score = st.slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
-
-    st.markdown("**Catalysts** -- what upcoming events could move the price")
-    dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-    dd_catalysts_score = st.slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
-
-    st.markdown("**Position sizing plan** -- how big a position, and why")
-    dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
-
-    st.markdown("**Sell criteria** -- under what conditions do you exit "
-                "(this is also where a specific triggering EVENT belongs, e.g. "
-                "'if they miss 2 consecutive quarters' -- we can't check that "
-                "automatically, so it stays a reminder here on this page)")
-    dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
-
-    st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
-    dd_sell_trigger_price = st.number_input(
-        f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
-        help="Works both ways: a target above today's price is treated as a profit "
-             "target, below it as a stop-loss.",
-    )
-    dd_sell_trigger_date = st.date_input(
-        "Sell by date", value=None, key="dd_sell_trigger_date",
-        help="A hard deadline to reconsider this position, regardless of price.",
-    )
-
-    dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
-
-    if st.button("Save this version", type="primary", key="dd_save_btn"):
-        if not dd_ticker or not dd_naam:
-            st.error("Please fill in at least a ticker and name.")
-        else:
-            with st.spinner("Fetching market data..."):
-                market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
-            database.add_deep_dive(
-                user_email, dd_ticker, dd_naam,
-                business_overview=dd_business or None,
-                investment_thesis=dd_thesis or None,
-                management_assessment=dd_management or None,
-                bear_case=dd_bear or None,
-                valuation_view=dd_valuation or None,
-                interested_price=dd_interested_price or None,
-                catalysts=dd_catalysts or None,
-                position_sizing_plan=dd_sizing or None,
-                sell_criteria=dd_sell_criteria or None,
-                conclusion=dd_conclusion,
-                market_snapshot=market_snapshot,
-                sell_trigger_price=dd_sell_trigger_price or None,
-                sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
-                thesis_score=dd_thesis_score,
-                management_score=dd_management_score,
-                bear_case_score=dd_bear_score,
-                valuation_score=dd_valuation_score,
-                catalysts_score=dd_catalysts_score,
-                technical_analysis=dd_technical_analysis or None,
-                technical_analysis_score=dd_technical_analysis_score,
-            )
-            st.success(f"New version for {dd_ticker} saved!")
-            st.session_state["selected_research"] = None
-            st.rerun()
-
-
-def _render_analyze_drawer(user_email: str) -> None:
-    """
-    De rechter drawer-kolom -- toont ofwel het 'nieuwe deep-dive'-
-    formulier (selected_research == '__NEW__'), ofwel de volledige,
-    rijke details + versiegeschiedenis van 1 geselecteerde ticker.
-    """
-    import database
-
-    _drawer_key = "analyze_drawer"
-    st.markdown(
-        f'<style>.st-key-{_drawer_key} {{ '
-        f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
-        f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
-        f'.st-key-analyze_drawer_close button {{ '
-        f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; color:#64748B !important; font-size:0.7rem !important; font-weight:700 !important; '
-        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; }} '
-        f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_drawer_key):
-        with st.container(key="analyze_drawer_close"):
-            if st.button("\u2715 Close", key="analyze_drawer_close_btn"):
-                st.session_state["selected_research"] = None
-                st.rerun()
-
-        selected = st.session_state.get("selected_research")
-        if selected == "__NEW__":
-            st.markdown(
-                '<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
-                'letter-spacing:0.03em; margin-bottom:1rem;">Add a new deep-dive</div>',
-                unsafe_allow_html=True,
-            )
-            _render_deep_dive_add_form(user_email)
-        else:
-            history = database.get_deep_dives_for_ticker(user_email, selected)
-            if not history:
-                st.caption("No research found for this ticker.")
-                return
-            latest = history[0]
-            st.markdown(
-                f'<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
-                f'letter-spacing:0.03em; margin-bottom:1rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
-                unsafe_allow_html=True,
-            )
-            st.caption(f"{len(history)} version(s) logged, most recent first.")
-            for version in history:
-                _render_deep_dive_version(version, user_email)
 
 
 def render_analyze():
@@ -5058,102 +4872,24 @@ def render_analyze():
     if "selected_research" not in st.session_state:
         st.session_state["selected_research"] = None
 
-    # Globaal CSS-blok, 1x bovenaan de pagina geinjecteerd (i.p.v.
-    # losse, per-rij <style>-blokken die eerder onbetrouwbaar bleken
-    # te matchen) -- dwingt verticale centrering en strakke uitlijning
-    # af op ALLE st.columns()-rijen in de tabellen hieronder, en maakt
-    # de grijze native knop-chrome (achtergrond/rand/padding) volledig
-    # onzichtbaar zodat alleen onze eigen Hestys-styling overblijft.
-    st.markdown(
-        """
-        <style>
-        /* 1. Forceer absolute verticale centrering op de complete rij-container */
-        [data-testid="stHorizontalBlock"] {
-            align-items: center !important;
-            display: flex !important;
-            flex-direction: row !important;
-        }
-
-        /* 2. Target de specifieke Streamlit Button wrapper div */
-        [data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
-        /* 3. Strip alle interne elementen, margins en padding van de buttons */
-        [data-testid="stHorizontalBlock"] button {
-            background-color: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            color: #ffffff !important;
-            font-weight: 700 !important;
-            font-size: 0.875rem !important;
-            letter-spacing: 0.05em !important;
-            text-transform: uppercase !important;
-            display: flex !important;
-            align-items: center !important;
-            height: auto !important;
-            min-height: unset !important;
-            line-height: 1 !important;
-        }
-
-        /* Sloop de verborgen Streamlit paragraph-margin binnen de knop die de tekst omhoog duwt */
-        [data-testid="stHorizontalBlock"] button p {
-            margin: 0 !important;
-            padding: 0 !important;
-            line-height: 1 !important;
-        }
-
-        /* 4. Specifieke, vlijmscherpe styling voor de SCAN-badge (overschrijf de transparantie) */
-        [data-testid="stHorizontalBlock"] button[key^="scan_"] {
-            color: #a7f3d0 !important;
-            background-color: rgba(16, 185, 129, 0.1) !important;
-            border: 1px solid rgba(52, 211, 153, 0.2) !important;
-            border-radius: 0.375rem !important;
-            padding: 4px 10px !important;
-            font-size: 0.75rem !important;
-            justify-content: center !important;
-        }
-
-        [data-testid="stHorizontalBlock"] button[key^="scan_"]:hover {
-            background-color: rgba(16, 185, 129, 0.2) !important;
-            border: 1px solid rgba(52, 211, 153, 0.4) !important;
-        }
-
-        /* Vangnet voor punt 4 hierboven: 'key=' is een intern React-concept
-           en wordt NIET als HTML-attribuut gerenderd, dus button[key^=...]
-           matcht vermoedelijk niets. Deze class-gebaseerde selector (op de
-           al bestaande st.container(key="scanbadge_...")-wrapper) is
-           functioneel identiek en WEL bewezen betrouwbaar. */
-        [class*="st-key-scanbadge"] button {
-            color: #a7f3d0 !important;
-            background-color: rgba(16, 185, 129, 0.1) !important;
-            border: 1px solid rgba(52, 211, 153, 0.2) !important;
-            border-radius: 0.375rem !important;
-            padding: 4px 10px !important;
-            font-size: 0.75rem !important;
-            justify-content: center !important;
-        }
-        [class*="st-key-scanbadge"] button:hover {
-            background-color: rgba(16, 185, 129, 0.2) !important;
-            border: 1px solid rgba(52, 211, 153, 0.4) !important;
-        }
-
-        /* 5. Fix de afbeeldingen/logo's zodat ze exact op de middellijn zweven */
-        [data-testid="stHorizontalBlock"] img {
-            margin: 0 !important;
-            padding: 0 !important;
-            vertical-align: middle !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Query-param-gedreven selectie i.p.v. st.button()-widgets in de
+    # rijen -- elke rij is nu een pure HTML-link (?selected_research=...)
+    # die de pagina herlaadt. We vangen die parameter hier op en zetten
+    # 'm in session_state, waarna de query-param zelf weer wordt
+    # opgeruimd -- anders zou de drawer NOOIT meer dichtgaan (bij het
+    # klikken op 'Close' wordt session_state leeggemaakt, maar de oude
+    # query-param in de URL zou 'm bij de eerstvolgende rerun weer
+    # terugzetten als we 'm niet expliciet verwijderen).
+    _qp = st.query_params
+    if "selected_research" in _qp:
+        if _qp.get("new_research") == "1":
+            st.session_state["dd_ticker_input"] = _qp["selected_research"]
+            st.session_state["selected_research"] = "__NEW__"
+        else:
+            st.session_state["selected_research"] = _qp["selected_research"]
+        del _qp["selected_research"]
+        if "new_research" in _qp:
+            del _qp["new_research"]
 
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
