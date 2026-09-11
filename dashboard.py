@@ -8717,42 +8717,37 @@ def render_login():
             unsafe_allow_html=True,
         )
         with st.container(key=_form_wrap_key):
-            # Toggle: 2 ECHTE, zichtbare st.button()'s naast elkaar i.p.v.
-            # de eerdere onzichtbare-knop-plus-JS-relay-truc -- die voegde
-            # een extra laag toe (JS moet de klik eerst 'doorsturen' naar
-            # de verborgen knop) die traag/onbetrouwbaar aanvoelde. Nu
-            # direct klikbaar, 1 druk = 1 rerun, geen tussenlaag. De
-            # zij-aan-zij-layout komt van dezelfde, elders al bewezen
-            # 'forceer de directe stVerticalBlock-kind naar flex-row'-truc.
-            login_mode = st.session_state.get("login_mode_active", _login_prefill_mode)
-            _toggle_wrap_key = "login_mode_toggle_wrap"
-            _active_btn_key = "login_mode_btn_signup" if login_mode == "Sign Up" else "login_mode_btn_signin"
+            # Toggle: exact hetzelfde, BEWEZEN werkende patroon als de
+            # Daily/Weekly-toggle bij Momentocrats -- gewoon
+            # st.segmented_control() met platte CSS. Mijn eigen eerdere
+            # 2-losse-knoppen-aanpak gaf 2 los gestapelde vierkante
+            # knoppen i.p.v. 1 pil (de 'forceer flex-row'-CSS werkte hier
+            # kennelijk niet), en de JS-relay-versie daarvoor was traag.
+            # Dit segmented_control-patroon draait al meerdere schermen
+            # verder probleemloos, dus 1-op-1 overgenomen.
+            _login_toggle_key = "login_mode_toggle_wrap"
             st.markdown(
                 f'<style>'
-                f'.st-key-{_toggle_wrap_key} > div {{ '
-                f'display:flex !important; flex-direction:row !important; gap:2px !important; '
-                f'background:rgba(2,6,23,0.6) !important; border:1px solid rgba(15,23,42,0.9) !important; '
-                f'border-radius:8px !important; padding:2px !important; max-width:160px !important; '
-                f'margin-bottom:1.5rem !important; box-sizing:border-box !important; }} '
-                f'.st-key-{_toggle_wrap_key} > div > div {{ '
-                f'flex:1 1 0% !important; width:auto !important; min-width:0 !important; }} '
-                f'.st-key-{_toggle_wrap_key} button {{ '
-                f'width:100% !important; background:transparent !important; border:none !important; '
-                f'box-shadow:none !important; color:#64748B !important; font-weight:500 !important; '
-                f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; '
-                f'padding:0.3rem 0.5rem !important; border-radius:6px !important; }} '
-                f'.st-key-{_active_btn_key} button {{ '
-                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
+                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] {{ '
+                f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] button, '
+                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] label {{ '
+                f'border:none !important; outline:none !important; box-shadow:none !important; '
+                f'background:transparent !important; color:#64748B !important; font-weight:600 !important; '
+                f'font-size:0.72rem !important; text-transform:uppercase !important; letter-spacing:0.04em !important; }} '
+                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+                f'.st-key-{_login_toggle_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; border:none !important; }} '
                 f'</style>',
                 unsafe_allow_html=True,
             )
-            with st.container(key=_toggle_wrap_key):
-                if st.button("Sign In", key="login_mode_btn_signin"):
-                    st.session_state["login_mode_active"] = "Sign In"
-                    st.rerun()
-                if st.button("Sign Up", key="login_mode_btn_signup"):
-                    st.session_state["login_mode_active"] = "Sign Up"
-                    st.rerun()
+            with st.container(key=_login_toggle_key):
+                login_mode = st.segmented_control(
+                    "Mode", options=["Sign In", "Sign Up"], selection_mode="single",
+                    default=_login_prefill_mode, key="login_mode_toggle", label_visibility="collapsed",
+                )
+            if login_mode is None:  # kan gebeuren als je 'm handmatig deselecteert
+                login_mode = "Sign In"
 
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
