@@ -4852,6 +4852,195 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
 
 
+def _render_deep_dive_add_form(user_email: str) -> None:
+    """
+    Formulier om een nieuwe deep-dive (of een bijgewerkte versie) te
+    loggen -- verhuisd vanaf de hoofdpagina naar de side-drawer, zodat
+    de hoofdpagina van Analyze altijd clean en overzichtelijk blijft.
+    """
+    import database
+
+    # AI-copilot-knop: bereidt de drawer voor op de daadwerkelijke AI-
+    # koppeling (nog niet gebouwd) -- klikken laat dat nu eerlijk weten
+    # i.p.v. te doen alsof er al een AI-briefing wordt gegenereerd.
+    _ai_btn_key = "dd_ai_briefing_btn_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
+        f'.st-key-{_ai_btn_key} button {{ '
+        f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
+        f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
+        f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
+        f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
+        f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_ai_btn_key):
+        if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
+            st.info(
+                "AI briefing generation isn't wired up yet -- this button is just the placeholder "
+                "for the next step. For now, fill in the fields below yourself.",
+                icon=":material/smart_toy:",
+            )
+
+    dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
+
+    if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
+        st.session_state["dd_last_looked_up_ticker"] = dd_ticker
+        try:
+            auto_info = get_cached_ticker_info(dd_ticker)
+            auto_name = auto_info.get("longName") or auto_info.get("shortName")
+            if auto_name:
+                st.session_state["dd_naam_input"] = auto_name
+        except Exception:
+            pass
+
+    dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
+    dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
+
+    st.markdown("**Business overview** -- what does the company do, in your own words")
+    dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
+
+    st.markdown("**Investment thesis** -- why this could be a good investment")
+    dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
+    dd_thesis_score = st.slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
+
+    st.markdown("**Management/CEO** -- assess the management and the CEO")
+    dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
+    dd_management_score = st.slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
+
+    st.markdown("**Bear case / risks** -- what could go wrong")
+    dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
+    dd_bear_score = st.slider(
+        "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
+        help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
+    )
+
+    st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
+    dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
+    dd_valuation_score = st.slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
+    dd_interested_price = st.number_input(
+        f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
+        help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
+    )
+
+    st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
+                "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
+    dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
+    dd_technical_analysis_score = st.slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
+
+    st.markdown("**Catalysts** -- what upcoming events could move the price")
+    dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
+    dd_catalysts_score = st.slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
+
+    st.markdown("**Position sizing plan** -- how big a position, and why")
+    dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
+
+    st.markdown("**Sell criteria** -- under what conditions do you exit "
+                "(this is also where a specific triggering EVENT belongs, e.g. "
+                "'if they miss 2 consecutive quarters' -- we can't check that "
+                "automatically, so it stays a reminder here on this page)")
+    dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
+
+    st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
+    dd_sell_trigger_price = st.number_input(
+        f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
+        help="Works both ways: a target above today's price is treated as a profit "
+             "target, below it as a stop-loss.",
+    )
+    dd_sell_trigger_date = st.date_input(
+        "Sell by date", value=None, key="dd_sell_trigger_date",
+        help="A hard deadline to reconsider this position, regardless of price.",
+    )
+
+    dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
+
+    if st.button("Save this version", type="primary", key="dd_save_btn"):
+        if not dd_ticker or not dd_naam:
+            st.error("Please fill in at least a ticker and name.")
+        else:
+            with st.spinner("Fetching market data..."):
+                market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
+            database.add_deep_dive(
+                user_email, dd_ticker, dd_naam,
+                business_overview=dd_business or None,
+                investment_thesis=dd_thesis or None,
+                management_assessment=dd_management or None,
+                bear_case=dd_bear or None,
+                valuation_view=dd_valuation or None,
+                interested_price=dd_interested_price or None,
+                catalysts=dd_catalysts or None,
+                position_sizing_plan=dd_sizing or None,
+                sell_criteria=dd_sell_criteria or None,
+                conclusion=dd_conclusion,
+                market_snapshot=market_snapshot,
+                sell_trigger_price=dd_sell_trigger_price or None,
+                sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
+                thesis_score=dd_thesis_score,
+                management_score=dd_management_score,
+                bear_case_score=dd_bear_score,
+                valuation_score=dd_valuation_score,
+                catalysts_score=dd_catalysts_score,
+                technical_analysis=dd_technical_analysis or None,
+                technical_analysis_score=dd_technical_analysis_score,
+            )
+            st.success(f"New version for {dd_ticker} saved!")
+            st.session_state["selected_research"] = None
+            st.rerun()
+
+
+def _render_analyze_drawer(user_email: str) -> None:
+    """
+    De rechter drawer-kolom -- toont ofwel het 'nieuwe deep-dive'-
+    formulier (selected_research == '__NEW__'), ofwel de volledige,
+    rijke details + versiegeschiedenis van 1 geselecteerde ticker.
+    """
+    import database
+
+    _drawer_key = "analyze_drawer"
+    st.markdown(
+        f'<style>.st-key-{_drawer_key} {{ '
+        f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
+        f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
+        f'.st-key-analyze_drawer_close button {{ '
+        f'background:transparent !important; border:none !important; box-shadow:none !important; '
+        f'padding:0 !important; color:#64748B !important; font-size:0.7rem !important; font-weight:700 !important; '
+        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; }} '
+        f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_drawer_key):
+        with st.container(key="analyze_drawer_close"):
+            if st.button("\u2715 Close", key="analyze_drawer_close_btn"):
+                st.session_state["selected_research"] = None
+                st.rerun()
+
+        selected = st.session_state.get("selected_research")
+        if selected == "__NEW__":
+            st.markdown(
+                '<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
+                'letter-spacing:0.03em; margin-bottom:1rem;">Add a new deep-dive</div>',
+                unsafe_allow_html=True,
+            )
+            _render_deep_dive_add_form(user_email)
+        else:
+            history = database.get_deep_dives_for_ticker(user_email, selected)
+            if not history:
+                st.caption("No research found for this ticker.")
+                return
+            latest = history[0]
+            st.markdown(
+                f'<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
+                f'letter-spacing:0.03em; margin-bottom:1rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{len(history)} version(s) logged, most recent first.")
+            for version in history:
+                _render_deep_dive_version(version, user_email)
+
+
 def render_analyze():
     if not current_user.is_logged_in:
         _render_landing_soft_lock(
