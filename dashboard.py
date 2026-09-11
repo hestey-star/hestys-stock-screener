@@ -4752,19 +4752,20 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'padding:0 !important; color:#EAEDF1 !important; font-weight:700 !important; font-size:0.82rem !important; '
         f'text-transform:uppercase !important; text-align:left !important; width:auto !important; }} '
         f'.st-key-{_table_key} button:hover {{ color:#1FAE96 !important; }} '
-        # Verticaal centreren: elke st.columns()-rij binnen deze tabel
-        # (zowel de hoofdrij als de logo+knop-subkolom) krijgt
-        # align-items:center, zodat het logo, de ticker-knop en de
-        # tekstcellen altijd op dezelfde middellijn staan i.p.v. boven-
-        # uitgelijnd.
+        # Verticaal centreren, hard op ELK niveau: de hoofdrij, de
+        # logo+knop-subkolom, EN de kolommen zelf (die kregen zonder
+        # align-items:center op [data-testid="stColumn"] alsnog een
+        # eigen, standaard boven-uitlijning binnenin).
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
+        f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
+        f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
+        # st.image() wikkelt zichzelf in een eigen element met een kleine
+        # standaard-marge -- die hard op 0 gezet zodat logo en tekst op
+        # elke regel (actief EN unmapped) exact dezelfde afstand hebben.
+        f'.st-key-{_table_key} [data-testid="stImage"] {{ margin:0 !important; line-height:0 !important; }} '
+        f'.st-key-{_table_key} [data-testid="stImageContainer"] {{ margin:0 !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
-        # SCAN-knop op dezelfde verticale startlijn als de platte score-
-        # cijfers ernaast (die hebben allemaal padding-top:0.4rem).
-        f'.st-key-{_table_key} [class*="st-key-{key_prefix}_scanwrap"] {{ margin-top:0.4rem !important; }} '
-        f'.st-key-{_table_key} [class*="st-key-{key_prefix}_scanwrap"] button {{ '
-        f'font-size:0.72rem !important; text-transform:none !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -4822,15 +4823,15 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                         st.session_state["selected_research"] = ticker
                         st.rerun()
             with row_cols[1]:
-                st.markdown(f'<div style="padding-top:0.4rem; font-size:0.82rem;">{score_text}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:0.82rem;">{score_text}</div>', unsafe_allow_html=True)
             with row_cols[2]:
                 st.markdown(
-                    f'<div style="padding-top:0.4rem; color:#F1F5F9; font-size:0.82rem;">{thesis_text}</div>',
+                    f'<div style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</div>',
                     unsafe_allow_html=True,
                 )
             with row_cols[3]:
                 st.markdown(
-                    f'<div style="padding-top:0.4rem; color:#64748B; font-size:0.75rem;">{last_validated}</div>',
+                    f'<div style="color:#64748B; font-size:0.75rem;">{last_validated}</div>',
                     unsafe_allow_html=True,
                 )
             st.markdown(
@@ -4858,26 +4859,30 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                             unsafe_allow_html=True,
                         )
                 with btn_col:
-                    st.markdown(
-                        f'<div style="padding-top:0.4rem; color:#94A3B8; font-weight:700; '
-                        f'font-size:0.82rem; text-transform:uppercase;">{u_ticker}</div>',
-                        unsafe_allow_html=True,
-                    )
-            with row_cols[1]:
-                with st.container(key=f"{key_prefix}_scanwrap_{u_ticker}"):
-                    if st.button("\U0001F916 Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
+                    # De ticker-knop zelf triggert nu de '__NEW__'-actie --
+                    # geen aparte 'Scan'-knop meer in de Score-kolom (die
+                    # veroorzaakte de verschuiving naar rechts, want een
+                    # native st.button() heeft nooit exact dezelfde
+                    # box-model-afmetingen als platte tekst).
+                    if st.button(u_ticker, key=f"{key_prefix}_openbtn_{u_ticker}"):
                         st.session_state["dd_ticker_input"] = u_ticker
                         st.session_state["dd_naam_input"] = u_naam
                         st.session_state["selected_research"] = "__NEW__"
                         st.rerun()
+            with row_cols[1]:
+                st.markdown(
+                    '<div style="font-size:0.82rem;">\U0001F916 '
+                    '<span style="color:#A7F3D0; font-weight:700; letter-spacing:0.02em;">SCAN</span></div>',
+                    unsafe_allow_html=True,
+                )
             with row_cols[2]:
                 st.markdown(
-                    '<div style="padding-top:0.4rem; color:#64748B; font-size:0.82rem;">'
+                    '<div style="color:#64748B; font-size:0.82rem;">'
                     'No active research record found.</div>',
                     unsafe_allow_html=True,
                 )
             with row_cols[3]:
-                st.markdown('<div style="padding-top:0.4rem; color:#64748B; font-size:0.75rem;">-</div>', unsafe_allow_html=True)
+                st.markdown('<div style="color:#64748B; font-size:0.75rem;">-</div>', unsafe_allow_html=True)
             st.markdown(
                 '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
                 unsafe_allow_html=True,
