@@ -312,19 +312,23 @@ code, .stDataFrame, [data-testid="stMetricValue"] {
 .st-key-login_page_google button {
     background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbD0iIzQyODVGNCIgZD0iTTE3LjY0IDkuMmMwLS42MzctLjA1Ny0xLjI1MS0uMTY0LTEuODRIOXYzLjQ4MWg0Ljg0NGMtLjIwOSAxLjEyNS0uODQzIDIuMDc4LTEuNzk2IDIuNzE3djIuMjU4aDIuOTA4YzEuNzAyLTEuNTY3IDIuNjg0LTMuODc0IDIuNjg0LTYuNjE1eiIvPgo8cGF0aCBmaWxsPSIjMzRBODUzIiBkPSJNOSAxOGMyLjQzIDAgNC40NjctLjgwNiA1Ljk1Ni0yLjE4bC0yLjkwOC0yLjI1OWMtLjgwNi41NC0xLjgzNy44Ni0zLjA0OC44Ni0yLjM0NCAwLTQuMzI4LTEuNTg0LTUuMDM2LTMuNzExSC45NTd2Mi4zMzJDMi40MzggMTUuOTgzIDUuNDgyIDE4IDkgMTh6Ii8+CjxwYXRoIGZpbGw9IiNGQkJDMDUiIGQ9Ik0zLjk2NCAxMC43MWMtLjE4LS41NC0uMjgyLTEuMTE3LS4yODItMS43MXMuMTAyLTEuMTcuMjgyLTEuNzFWNC45NThILjk1N0MuMzQ3IDYuMTczIDAgNy41NDggMCA5cy4zNDggMi44MjcuOTU3IDQuMDQybDMuMDA3LTIuMzMyeiIvPgo8cGF0aCBmaWxsPSIjRUE0MzM1IiBkPSJNOSAzLjU4YzEuMzIxIDAgMi41MDguNDU0IDMuNDQgMS4zNDVsMi41ODItMi41OEMxMy40NjMuODkxIDExLjQyNiAwIDkgMCA1LjQ4MiAwIDIuNDM4IDIuMDE3Ljk1NyA0Ljk1OEwzLjk2NCA3LjI5QzQuNjcyIDUuMTYzIDYuNjU2IDMuNTggOSAzLjU4MHoiLz4KPC9zdmc+");
     background-repeat: no-repeat;
-    background-position: 16px center;
-    padding-left: 42px !important;
+    background-position: 20px center;
+    padding-left: 48px !important;
+    padding-right: 48px !important;
     background-color: rgba(15,23,42,0.4) !important;
     border: 1px solid rgba(51,65,85,0.6) !important;
     color: #EAEDF1 !important;
     font-weight: 600 !important;
     box-shadow: none !important;
-    /* Links uitgelijnd i.p.v. gecentreerd (margin:0 auto -> margin:0),
-       consistent met de rest van de site. */
+    /* Volle breedte i.p.v. fit-content -- net zo breed als de groene
+       Sign In-knop erboven. text-align:center + symmetrische links/
+       rechts-padding centreert de tekst zelf keurig in de resterende
+       ruimte (het logo blijft links gepind, zoals gebruikelijk bij
+       'Sign in with Google'-knoppen). */
     display: block !important;
+    text-align: center !important;
     margin: 0 !important;
-    width: fit-content !important;
-    min-width: 240px !important;
+    width: 100% !important;
 }
 .st-key-login_page_google button:hover {
     background-color: rgba(30,41,59,0.6) !important;
@@ -8692,6 +8696,15 @@ def render_login():
             f'.hesty-login-label {{ '
             f'font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
             f'text-transform:uppercase; margin-bottom:0.35rem; display:block; }} '
+            # 'Forgot password?' als compacte, gedempte ALL-CAPS metadata
+            # i.p.v. gewone kleine letters.
+            f'.st-key-forgot_password_wrap {{ margin:0.35rem 0 0 0 !important; }} '
+            f'.st-key-forgot_password_wrap button {{ '
+            f'background:transparent !important; border:none !important; box-shadow:none !important; '
+            f'padding:0 !important; font-size:11px !important; font-weight:600 !important; '
+            f'letter-spacing:0.05em !important; text-transform:uppercase !important; '
+            f'color:#64748B !important; transition:color 0.15s ease !important; }} '
+            f'.st-key-forgot_password_wrap button:hover {{ color:#CBD5E1 !important; }} '
             # 'Create account'/'Sign In'-knop: GEEN type="primary" meer --
             # dat triggert Streamlit's eigen, sterk-getemate thema-styling
             # die zelfs met !important bleef doorschemeren (zelfde patroon
@@ -8804,9 +8817,10 @@ def render_login():
                 st.markdown('<span class="hesty-login-label">Password</span>', unsafe_allow_html=True)
                 login_password = st.text_input("Password", type="password", key="login_password",
                                                 label_visibility="collapsed")
-                if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
-                    st.session_state["show_forgot_password"] = True
-                    st.rerun()
+                with st.container(key="forgot_password_wrap"):
+                    if st.button("Forgot password?", key="forgot_password_trigger", type="tertiary"):
+                        st.session_state["show_forgot_password"] = True
+                        st.rerun()
                 with st.container(key="login_submit_wrap"):
                     _login_submit_clicked = st.button("Sign In", key="login_submit", use_container_width=True)
                 if _login_submit_clicked:
