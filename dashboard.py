@@ -4730,14 +4730,15 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
 
 def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Tabel opgebouwd met NATIVE st.columns() + PURE HTML-tekst/links in
-    elke cel -- geen st.button() meer in de rijen. Na meerdere mislukte
-    pogingen om Streamlit's eigen knop-wrapper (stButton-div, interne
-    <p>-tags) via CSS te dwingen tot exacte uitlijning, is dit de
-    stabielste route: gewone tekst/links lijnen ALTIJD van nature
-    correct uit via st.columns(), zonder CSS-gevecht. De klik-interactie
-    loopt nu via een query-param-link (?selected_research=TICKER) i.p.v.
-    een widget-klik -- zie render_analyze() voor het opvangen daarvan.
+    Tabel met NATIVE st.columns() + PURE HTML-tekst/spans in elke cel
+    (garandeert de kaarsrechte uitlijning), gecombineerd met ONZICHTBARE,
+    ECHTE st.button()'s die de daadwerkelijke klik afhandelen -- zelfde,
+    al bewezen betrouwbare techniek als de Discover-subtabs en de Sign
+    In/Sign Up-toggle op de inlogpagina eerder in dit project. Een klik
+    op de zichtbare HTML-span wordt via JS 'doorgestuurd' naar de
+    verborgen knop, die Streamlit's eigen websocket-verbinding gebruikt
+    (dus GEEN page-reload, GEEN wit scherm -- in tegenstelling tot de
+    <a href="?...">-links van de vorige poging).
     """
     if not entries and not unmapped:
         st.markdown(
@@ -4754,6 +4755,15 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
     head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
     st.markdown(
         '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+        .hesty-row-click { cursor: pointer; transition: color 0.2s ease; }
+        .hesty-row-click:hover { color: #34D399 !important; }
+        </style>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -4787,15 +4797,15 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             f'vertical-align:middle;"><span style="color:#8992A3; font-weight:700; '
             f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
         )
-        _ticker_q = urllib.parse.quote(ticker)
+        _action = f"{key_prefix}|open|{ticker}"
 
         row_cols = st.columns(_col_ratios, gap="small")
         with row_cols[0]:
             st.markdown(
                 f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
-                f'<a href="?selected_research={_ticker_q}" target="_self" style="color:#ffffff; '
-                f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
-                f'text-transform:uppercase;">{ticker}</a></div>',
+                f'<span class="hesty-row-click" data-action="{_action}" style="color:#ffffff; '
+                f'font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
+                f'text-transform:uppercase;">{ticker}</span></div>',
                 unsafe_allow_html=True,
             )
         with row_cols[1]:
@@ -4822,24 +4832,23 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             f'vertical-align:middle;"><span style="color:#64748B; font-weight:700; '
             f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
         )
-        _u_ticker_q = urllib.parse.quote(u_ticker)
+        _u_action = f"{key_prefix}|scan|{u_ticker}"
 
         row_cols = st.columns(_col_ratios, gap="small")
         with row_cols[0]:
             st.markdown(
                 f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
-                f'<a href="?selected_research={_u_ticker_q}&amp;new_research=1" target="_self" '
-                f'style="color:#94A3B8; font-weight:700; text-decoration:none; font-size:0.875rem; '
-                f'letter-spacing:0.05em; text-transform:uppercase;">{u_ticker}</a></div>',
+                f'<span class="hesty-row-click" data-action="{_u_action}" style="color:#94A3B8; '
+                f'font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
+                f'text-transform:uppercase;">{u_ticker}</span></div>',
                 unsafe_allow_html=True,
             )
         with row_cols[1]:
             st.markdown(
-                f'<a href="?selected_research={_u_ticker_q}&amp;new_research=1" target="_self" '
-                f'style="color:#a7f3d0; background-color:rgba(16,185,129,0.1); '
-                f'border:1px solid rgba(52,211,153,0.2); border-radius:0.375rem; padding:2px 8px; '
-                f'font-size:0.75rem; font-weight:700; text-decoration:none; display:inline-block;">'
-                f'\U0001F916 SCAN</a>',
+                f'<span class="hesty-row-click" data-action="{_u_action}" style="color:#a7f3d0; '
+                f'background-color:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.2); '
+                f'border-radius:0.375rem; padding:2px 8px; font-size:0.75rem; font-weight:700; '
+                f'display:inline-block;">\U0001F916 SCAN</span>',
                 unsafe_allow_html=True,
             )
         with row_cols[2]:
@@ -4850,6 +4859,30 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
             unsafe_allow_html=True,
         )
+
+    # --- Onzichtbare, ECHTE knoppen: 1 per ticker (open bestaande
+    # research) + 1 per unmapped asset (start nieuwe scan). Deze regelen
+    # de daadwerkelijke state-wissel; de zichtbare HTML hierboven is
+    # puur decoratief totdat JS (zie render_analyze()) een klik erop
+    # doorstuurt naar de bijpassende, hier verborgen knop. ---
+    _hidden_key = f"{key_prefix}_hidden_clicks"
+    st.markdown(f'<style>.st-key-{_hidden_key} {{ display:none !important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_hidden_key):
+        for entry in entries:
+            ticker = entry.get("ticker", "")
+            _action = f"{key_prefix}|open|{ticker}"
+            if st.button(_action, key=f"hiddenbtn_{key_prefix}_open_{ticker}"):
+                st.session_state["selected_research"] = ticker
+                st.rerun()
+        for u in (unmapped or []):
+            u_ticker = u.get("ticker", "")
+            u_naam = u.get("naam", u_ticker)
+            _u_action = f"{key_prefix}|scan|{u_ticker}"
+            if st.button(_u_action, key=f"hiddenbtn_{key_prefix}_scan_{u_ticker}"):
+                st.session_state["dd_ticker_input"] = u_ticker
+                st.session_state["dd_naam_input"] = u_naam
+                st.session_state["selected_research"] = "__NEW__"
+                st.rerun()
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
@@ -5061,24 +5094,42 @@ def render_analyze():
     if "selected_research" not in st.session_state:
         st.session_state["selected_research"] = None
 
-    # Query-param-gedreven selectie i.p.v. st.button()-widgets in de
-    # rijen -- elke rij is nu een pure HTML-link (?selected_research=...)
-    # die de pagina herlaadt. We vangen die parameter hier op en zetten
-    # 'm in session_state, waarna de query-param zelf weer wordt
-    # opgeruimd -- anders zou de drawer NOOIT meer dichtgaan (bij het
-    # klikken op 'Close' wordt session_state leeggemaakt, maar de oude
-    # query-param in de URL zou 'm bij de eerstvolgende rerun weer
-    # terugzetten als we 'm niet expliciet verwijderen).
-    _qp = st.query_params
-    if "selected_research" in _qp:
-        if _qp.get("new_research") == "1":
-            st.session_state["dd_ticker_input"] = _qp["selected_research"]
-            st.session_state["selected_research"] = "__NEW__"
-        else:
-            st.session_state["selected_research"] = _qp["selected_research"]
-        del _qp["selected_research"]
-        if "new_research" in _qp:
-            del _qp["new_research"]
+    # JS-click-forwarding i.p.v. query-param-links -- die laatste
+    # veroorzaakten een ECHTE, volledige browser-paginaherlading (wit
+    # scherm), want een <a href="?...">-link wordt door de browser
+    # afgehandeld, niet door Streamlit's eigen websocket-verbinding.
+    # Nu: de zichtbare HTML-spans in de tabel (zie _render_conviction_
+    # table) hebben puur een 'data-action'-attribuut, geen href. Deze
+    # ene, 1x-per-pagina geinjecteerde JS-listener luistert op clicks,
+    # zoekt de bijpassende VERBORGEN, ECHTE st.button() (op basis van
+    # z'n tekst, die exact hetzelfde 'data-action'-format gebruikt) en
+    # simuleert daar een klik op -- dat gebruikt Streamlit's eigen
+    # sessie, dus geen page-reload, geen wit scherm.
+    components.html(
+        """
+        <script>
+        function hestyBindAnalyzeClicks() {
+            var doc = window.parent.document;
+            if (doc.body.__hestyAnalyzeClickBound) { return; }
+            doc.body.__hestyAnalyzeClickBound = true;
+            doc.body.addEventListener('click', function(e) {
+                var el = e.target.closest('.hesty-row-click');
+                if (!el) { return; }
+                var action = el.getAttribute('data-action');
+                var buttons = doc.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) {
+                    if (buttons[i].textContent.trim() === action) {
+                        buttons[i].click();
+                        break;
+                    }
+                }
+            });
+        }
+        hestyBindAnalyzeClicks();
+        </script>
+        """,
+        height=0,
+    )
 
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
