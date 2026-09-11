@@ -7616,35 +7616,44 @@ def render_discover_signals():
     )
     st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
 
-    # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
-    # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
-    # <a href="?...">), waardoor de expander steeds weer dichtklapte.
-    # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
-    # (geen page-reload), dus de expander-status blijft nu intact.
-    # Vlakke, minimalistische stijl -- zelfde patroon als de sub-tabs
-    # bovenaan de pagina en de Daily/All-time-toggle op Portfolio --
-    # i.p.v. de eerdere felle groene omlijning.
-    _momentum_tf_key = "momentocrats_timeframe_wrap"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] {{ '
-        f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
-        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button, '
-        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label {{ '
-        f'border:none !important; outline:none !important; box-shadow:none !important; '
-        f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
-        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
-        f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
-        f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_momentum_tf_key):
-        current_timeframe = st.segmented_control(
-            "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
-            default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
+    st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
+
+    # Daily/Weekly-toggle heeft voor een niet-ingelogde bezoeker geen
+    # functie -- zorgt alleen voor verwarring zonder duidelijke meerwaarde
+    # op de publieke landingspagina. Alleen nog zichtbaar voor ingelogde
+    # gebruikers; niet-ingelogd valt gewoon terug op 'Daily'.
+    if current_user.is_logged_in:
+        # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
+        # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
+        # <a href="?...">), waardoor de expander steeds weer dichtklapte.
+        # Een native widget zoals deze blijft BINNEN de Streamlit-sessie
+        # (geen page-reload), dus de expander-status blijft nu intact.
+        # Vlakke, minimalistische stijl -- zelfde patroon als de sub-tabs
+        # bovenaan de pagina en de Daily/All-time-toggle op Portfolio --
+        # i.p.v. de eerdere felle groene omlijning.
+        _momentum_tf_key = "momentocrats_timeframe_wrap"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] {{ '
+            f'border:none !important; background:transparent !important; box-shadow:none !important; }} '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button, '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label {{ '
+            f'border:none !important; outline:none !important; box-shadow:none !important; '
+            f'background:transparent !important; color:#8992A3 !important; font-weight:600 !important; }} '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] button[aria-pressed="true"], '
+            f'.st-key-{_momentum_tf_key} div[data-testid="stSegmentedControl"] label[data-checked="true"] {{ '
+            f'background:rgba(31,174,150,0.15) !important; color:#1FAE96 !important; border:none !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
         )
-    if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
+        with st.container(key=_momentum_tf_key):
+            current_timeframe = st.segmented_control(
+                "Timeframe", options=["Daily", "Weekly"], selection_mode="single",
+                default="Daily", key="momentocrats_timeframe", label_visibility="collapsed",
+            )
+        if current_timeframe is None:  # kan gebeuren als je 'm handmatig deselecteert
+            current_timeframe = "Daily"
+    else:
         current_timeframe = "Daily"
     csv_file = "supertrend_signals_daily.csv" if current_timeframe == "Daily" else "supertrend_signals.csv"
 
