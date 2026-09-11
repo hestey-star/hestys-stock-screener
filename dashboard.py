@@ -4833,11 +4833,12 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     unsafe_allow_html=True,
                 )
         with row_cols[1]:
-            if st.button("\U0001F916 Scan", key=f"scan_{key_prefix}_{u_ticker}"):
-                st.session_state["dd_ticker_input"] = u_ticker
-                st.session_state["dd_naam_input"] = u_naam
-                st.session_state["selected_research"] = "__NEW__"
-                st.rerun()
+            with st.container(key=f"scanbadge_{key_prefix}_{u_ticker}"):
+                if st.button("\U0001F916 Scan", key=f"scan_{key_prefix}_{u_ticker}"):
+                    st.session_state["dd_ticker_input"] = u_ticker
+                    st.session_state["dd_naam_input"] = u_naam
+                    st.session_state["selected_research"] = "__NEW__"
+                    st.rerun()
         with row_cols[2]:
             st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
         with row_cols[3]:
@@ -5060,24 +5061,61 @@ def render_analyze():
     # Globaal CSS-blok, 1x bovenaan de pagina geinjecteerd (i.p.v.
     # losse, per-rij <style>-blokken die eerder onbetrouwbaar bleken
     # te matchen) -- dwingt verticale centrering en strakke uitlijning
-    # af op ALLE st.columns()-rijen in de tabellen hieronder.
+    # af op ALLE st.columns()-rijen in de tabellen hieronder, en maakt
+    # de grijze native knop-chrome (achtergrond/rand/padding) volledig
+    # onzichtbaar zodat alleen onze eigen Hestys-styling overblijft.
     st.markdown(
         """
         <style>
-        /* Forceer verticale centrering op alle kolommen in de tabel-rijen */
+        /* Forceer alle rijen in stHorizontalBlock tot absolute verticale centrering */
         [data-testid="stHorizontalBlock"] {
             align-items: center !important;
+            display: flex !important;
+            flex-direction: row !important;
         }
-        /* Zorg dat de afbeeldingen/logo's geen rare top-margins hebben */
+        /* Sloop de grijze achtergrond, borders en paddings van de tabel-buttons */
+        [data-testid="stHorizontalBlock"] button {
+            background-color: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            color: #ffffff !important; /* Ticker letters helder wit */
+            font-weight: 700 !important;
+            font-size: 0.875rem !important;
+            letter-spacing: 0.05em !important;
+            text-transform: uppercase !important;
+            text-align: left !important;
+            height: auto !important;
+            min-height: unset !important;
+        }
+        /* Zorg dat de hover-status ook transparant blijft en niet grijs oplicht */
+        [data-testid="stHorizontalBlock"] button:hover {
+            background-color: transparent !important;
+            color: #34d399 !important; /* Subtiele groene Hestys glow op hover */
+            border: none !important;
+        }
+        /* Fix de images/logo's zodat ze exact op de middellijn zweven */
         [data-testid="stHorizontalBlock"] img {
-            margin-top: 0 !important;
+            margin: 0 !important;
             vertical-align: middle !important;
         }
-        /* Lijn de native buttons strak links uit zonder extra witruimte */
-        [data-testid="stHorizontalBlock"] button {
-            text-align: left !important;
-            padding-left: 0 !important;
-            margin-left: 0 !important;
+        /* De '🤖 SCAN'-knop voor unmapped assets krijgt een EIGEN,
+           specifiekere selector (via z'n container-key-voorvoegsel) --
+           overschrijft de platte-tekst-stijl hierboven met een kleine,
+           chique badge-look. */
+        [class*="st-key-scanbadge"] button {
+            color: #a7f3d0 !important;
+            background-color: rgba(16, 185, 129, 0.1) !important;
+            border: 1px solid rgba(52, 211, 153, 0.2) !important;
+            border-radius: 0.375rem !important;
+            padding: 2px 8px !important;
+            font-size: 0.75rem !important;
+            letter-spacing: 0.02em !important;
+        }
+        [class*="st-key-scanbadge"] button:hover {
+            background-color: rgba(16, 185, 129, 0.18) !important;
+            color: #a7f3d0 !important;
         }
         </style>
         """,
