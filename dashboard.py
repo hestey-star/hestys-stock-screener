@@ -4700,20 +4700,38 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     )
 
 
-def _conviction_table_html(entries: list, held_tickers: set) -> str:
+def _render_conviction_table(entries: list, key_prefix: str) -> None:
     """
-    Compacte, links-uitgelijnde tabel voor Sectie A (Active Portfolio
-    Conviction) en Sectie B (Research Watchlist) -- zelfde rij-opbouw
-    voor beide. data-ticker op elke rij, alvast voorbereid op een
-    toekomstig click-event (side-drawer + AI-knop, volgende stap) --
-    nu nog geen JS-koppeling.
+    Rendert de compacte, links-uitgelijnde tabel voor Sectie A (Active
+    Portfolio Conviction) en Sectie B (Research Watchlist). Elke rij is
+    nu ECHT klikbaar: rijke HTML voor de weergave + een ONZICHTBARE,
+    ECHTE st.button() eroverheen (position:absolute; inset:0; opacity:0)
+    -- zelfde, al bewezen betrouwbare overlay-techniek als de CTA-
+    knoppen elders (een klik op de tekst/HTML zelf kan niet rechtstreeks
+    naar Python, een echte widget-klik wel). Bij een klik wordt
+    st.session_state.selected_research op de ticker gezet en volgt een
+    rerun, die de 2-koloms drawer-splitsing activeert.
     """
     if not entries:
-        return (
-            '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">'
-            'Nothing here yet.</div>'
+        st.markdown(
+            '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">Nothing here yet.</div>',
+            unsafe_allow_html=True,
         )
-    rows_html = []
+        return
+    st.markdown(
+        '<div style="display:flex; align-items:center; gap:0.9rem; padding:0 0.25rem 0.4rem 0.25rem; '
+        'border-bottom:1px solid rgba(148,163,184,0.15);">'
+        '<div style="width:110px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
+        'text-transform:uppercase; letter-spacing:0.05em;">Asset</div>'
+        '<div style="width:70px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
+        'text-transform:uppercase; letter-spacing:0.05em;">Score</div>'
+        '<div style="flex:1; color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
+        'letter-spacing:0.05em;">Core thesis</div>'
+        '<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.65rem; '
+        'font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Last validated</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     for entry in entries:
         ticker = entry.get("ticker", "")
         naam = entry.get("naam", ticker)
@@ -4731,39 +4749,210 @@ def _conviction_table_html(entries: list, held_tickers: set) -> str:
         last_validated = (entry.get("created_at") or "")[:10] or "-"
         logo_url = get_company_logo_url(ticker, naam)
         logo_html = (
-            f'<img src="{logo_url}" style="width:26px; height:26px; border-radius:50%; object-fit:contain; '
+            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
             f'background:#fff; padding:2px; flex-shrink:0;" />'
             if logo_url else
-            f'<div style="width:26px; height:26px; border-radius:50%; background:rgba(137,146,163,0.15); '
+            f'<div style="width:24px; height:24px; border-radius:50%; background:rgba(137,146,163,0.15); '
             f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
-            f'<span style="color:#8992A3; font-weight:700; font-size:0.65rem;">{(ticker[:1] or "?").upper()}</span></div>'
+            f'<span style="color:#8992A3; font-weight:700; font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>'
         )
-        rows_html.append(
-            f'<div data-ticker="{ticker}" style="display:flex; align-items:center; gap:0.9rem; '
-            f'padding:0.65rem 0.25rem; border-bottom:1px solid rgba(148,163,184,0.08); cursor:pointer;">'
-            f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
-            f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; text-transform:uppercase;">{ticker}</span>'
-            f'</div>'
-            f'<div style="width:70px; flex-shrink:0; font-size:0.82rem;">{score_html}</div>'
-            f'<div style="flex:1; min-width:0; color:#F1F5F9; font-size:0.82rem; overflow:hidden; '
-            f'text-overflow:ellipsis; white-space:nowrap;">{thesis_html}</div>'
-            f'<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.75rem;">{last_validated}</div>'
-            f'</div>'
+        row_key = f"{key_prefix}_row_{ticker}"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{row_key} {{ position:relative !important; }} '
+            f'.st-key-{row_key} [data-testid="stButton"] {{ '
+            f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
+            f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
+            f'.st-key-{row_key} button {{ '
+            f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
+            f'border:none !important; background:transparent !important; padding:0 !important; }} '
+            f'.st-key-{row_key}:hover {{ background:rgba(255,255,255,0.03) !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
         )
-    header_html = (
-        '<div style="display:flex; align-items:center; gap:0.9rem; padding:0 0.25rem 0.5rem 0.25rem; '
-        'border-bottom:1px solid rgba(148,163,184,0.15);">'
-        '<div style="width:110px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
-        'text-transform:uppercase; letter-spacing:0.05em;">Asset</div>'
-        '<div style="width:70px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
-        'text-transform:uppercase; letter-spacing:0.05em;">Score</div>'
-        '<div style="flex:1; color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
-        'letter-spacing:0.05em;">Core thesis</div>'
-        '<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.65rem; '
-        'font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Last validated</div>'
-        '</div>'
+        with st.container(key=row_key):
+            st.markdown(
+                f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
+                f'border-bottom:1px solid rgba(148,163,184,0.08);">'
+                f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
+                f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
+                f'text-transform:uppercase;">{ticker}</span></div>'
+                f'<div style="width:70px; flex-shrink:0; font-size:0.82rem;">{score_html}</div>'
+                f'<div style="flex:1; min-width:0; color:#F1F5F9; font-size:0.82rem; overflow:hidden; '
+                f'text-overflow:ellipsis; white-space:nowrap;">{thesis_html}</div>'
+                f'<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; '
+                f'font-size:0.75rem;">{last_validated}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(" ", key=f"{key_prefix}_btn_{ticker}"):
+                st.session_state["selected_research"] = ticker
+                st.rerun()
+
+
+def _render_deep_dive_add_form(user_email: str) -> None:
+    """
+    Formulier om een nieuwe deep-dive (of een bijgewerkte versie) te
+    loggen -- verhuisd vanaf de hoofdpagina naar de side-drawer, zodat
+    de hoofdpagina van Analyze altijd clean en overzichtelijk blijft.
+    """
+    import database
+
+    dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
+
+    if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
+        st.session_state["dd_last_looked_up_ticker"] = dd_ticker
+        try:
+            auto_info = get_cached_ticker_info(dd_ticker)
+            auto_name = auto_info.get("longName") or auto_info.get("shortName")
+            if auto_name:
+                st.session_state["dd_naam_input"] = auto_name
+        except Exception:
+            pass
+
+    dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
+    dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
+
+    st.markdown("**Business overview** -- what does the company do, in your own words")
+    dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
+
+    st.markdown("**Investment thesis** -- why this could be a good investment")
+    dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
+    dd_thesis_score = st.slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
+
+    st.markdown("**Management/CEO** -- assess the management and the CEO")
+    dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
+    dd_management_score = st.slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
+
+    st.markdown("**Bear case / risks** -- what could go wrong")
+    dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
+    dd_bear_score = st.slider(
+        "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
+        help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
     )
-    return header_html + "".join(rows_html)
+
+    st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
+    dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
+    dd_valuation_score = st.slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
+    dd_interested_price = st.number_input(
+        f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
+        help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
+    )
+
+    st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
+                "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
+    dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
+    dd_technical_analysis_score = st.slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
+
+    st.markdown("**Catalysts** -- what upcoming events could move the price")
+    dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
+    dd_catalysts_score = st.slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
+
+    st.markdown("**Position sizing plan** -- how big a position, and why")
+    dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
+
+    st.markdown("**Sell criteria** -- under what conditions do you exit "
+                "(this is also where a specific triggering EVENT belongs, e.g. "
+                "'if they miss 2 consecutive quarters' -- we can't check that "
+                "automatically, so it stays a reminder here on this page)")
+    dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
+
+    st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
+    dd_sell_trigger_price = st.number_input(
+        f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
+        help="Works both ways: a target above today's price is treated as a profit "
+             "target, below it as a stop-loss.",
+    )
+    dd_sell_trigger_date = st.date_input(
+        "Sell by date", value=None, key="dd_sell_trigger_date",
+        help="A hard deadline to reconsider this position, regardless of price.",
+    )
+
+    dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
+
+    if st.button("Save this version", type="primary", key="dd_save_btn"):
+        if not dd_ticker or not dd_naam:
+            st.error("Please fill in at least a ticker and name.")
+        else:
+            with st.spinner("Fetching market data..."):
+                market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
+            database.add_deep_dive(
+                user_email, dd_ticker, dd_naam,
+                business_overview=dd_business or None,
+                investment_thesis=dd_thesis or None,
+                management_assessment=dd_management or None,
+                bear_case=dd_bear or None,
+                valuation_view=dd_valuation or None,
+                interested_price=dd_interested_price or None,
+                catalysts=dd_catalysts or None,
+                position_sizing_plan=dd_sizing or None,
+                sell_criteria=dd_sell_criteria or None,
+                conclusion=dd_conclusion,
+                market_snapshot=market_snapshot,
+                sell_trigger_price=dd_sell_trigger_price or None,
+                sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
+                thesis_score=dd_thesis_score,
+                management_score=dd_management_score,
+                bear_case_score=dd_bear_score,
+                valuation_score=dd_valuation_score,
+                catalysts_score=dd_catalysts_score,
+                technical_analysis=dd_technical_analysis or None,
+                technical_analysis_score=dd_technical_analysis_score,
+            )
+            st.success(f"New version for {dd_ticker} saved!")
+            st.session_state["selected_research"] = None
+            st.rerun()
+
+
+def _render_analyze_drawer(user_email: str) -> None:
+    """
+    De rechter drawer-kolom -- toont ofwel het 'nieuwe deep-dive'-
+    formulier (selected_research == '__NEW__'), ofwel de volledige,
+    rijke details + versiegeschiedenis van 1 geselecteerde ticker.
+    """
+    import database
+
+    _drawer_key = "analyze_drawer"
+    st.markdown(
+        f'<style>.st-key-{_drawer_key} {{ '
+        f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
+        f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
+        f'.st-key-analyze_drawer_close button {{ '
+        f'background:transparent !important; border:none !important; box-shadow:none !important; '
+        f'padding:0 !important; color:#64748B !important; font-size:0.7rem !important; font-weight:700 !important; '
+        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; }} '
+        f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_drawer_key):
+        with st.container(key="analyze_drawer_close"):
+            if st.button("\u2715 Close", key="analyze_drawer_close_btn"):
+                st.session_state["selected_research"] = None
+                st.rerun()
+
+        selected = st.session_state.get("selected_research")
+        if selected == "__NEW__":
+            st.markdown(
+                '<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
+                'letter-spacing:0.03em; margin-bottom:1rem;">Add a new deep-dive</div>',
+                unsafe_allow_html=True,
+            )
+            _render_deep_dive_add_form(user_email)
+        else:
+            history = database.get_deep_dives_for_ticker(user_email, selected)
+            if not history:
+                st.caption("No research found for this ticker.")
+                return
+            latest = history[0]
+            st.markdown(
+                f'<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
+                f'letter-spacing:0.03em; margin-bottom:1rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{len(history)} version(s) logged, most recent first.")
+            for version in history:
+                _render_deep_dive_version(version, user_email)
 
 
 def render_analyze():
@@ -4783,10 +4972,34 @@ def render_analyze():
 
     user_email = current_user.email
 
+    if "selected_research" not in st.session_state:
+        st.session_state["selected_research"] = None
+
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
         unsafe_allow_html=True,
     )
+    # '+ ADD NEW' -- rechtsboven, dicht tegen de hoofdsectietitel aan
+    # getrokken via een negatieve margin-top. Een ECHTE st.button()
+    # i.p.v. een kale tekstlink -- die laatste kan niet rechtstreeks
+    # naar Python-state schrijven.
+    _add_new_key = "analyze_add_new_link"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_add_new_key} {{ display:flex !important; justify-content:flex-end !important; '
+        f'margin-top:-2.5rem !important; margin-bottom:1.25rem !important; }} '
+        f'.st-key-{_add_new_key} button {{ '
+        f'background:transparent !important; border:none !important; box-shadow:none !important; '
+        f'padding:0 !important; font-size:0.72rem !important; font-weight:700 !important; '
+        f'letter-spacing:0.05em !important; text-transform:uppercase !important; color:#1FAE96 !important; }} '
+        f'.st-key-{_add_new_key} button:hover {{ color:#24C7AB !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_add_new_key):
+        if st.button("+ Add New", key="analyze_add_new_btn"):
+            st.session_state["selected_research"] = "__NEW__"
+            st.rerun()
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
     total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
@@ -4798,177 +5011,75 @@ def render_analyze():
 
     deep_dives = database.get_all_deep_dive_tickers(user_email)
 
-    # --- 1. Conviction-tegels: som van portfolio-gewicht per score-
-    # bucket, uitsluitend voor BEZETEN assets waar ook een deep-dive-
-    # score voor bestaat (holdings zonder deep-dive tellen dus nergens
-    # in mee -- vandaar dat de 3 percentages niet per se optellen tot
-    # 100% van de hele portfolio, alleen van het 'onderzochte' deel). ---
-    high_weight = medium_weight = low_weight = 0.0
-    for entry in deep_dives:
-        ticker = entry.get("ticker")
-        if ticker not in held_tickers:
-            continue
-        score = _compute_deep_dive_overall_score(entry)
-        if score is None:
-            continue
-        weight = holding_weight_by_ticker.get(ticker, 0)
-        if score >= 8:
-            high_weight += weight
-        elif score >= 5:
-            medium_weight += weight
-        else:
-            low_weight += weight
+    # --- 2-koloms drawer-splitsing: alleen actief zodra er iets
+    # geselecteerd is (een ticker, of '__NEW__'). Zonder selectie vult
+    # het overzicht de volledige breedte. ---
+    _drawer_open = st.session_state["selected_research"] is not None
+    if _drawer_open:
+        main_col, drawer_col = st.columns([2, 1], gap="large")
+    else:
+        main_col, drawer_col = st.container(), None
 
-    tiles_html = (
-        _conviction_tile_html("\U0001F7E2", "High conviction (8-10)", high_weight)
-        + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
-        + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
-    )
-    st.markdown(
-        '<style>.hesty-conviction-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; '
-        'margin-bottom:2rem; } @media (max-width:768px) { .hesty-conviction-grid { grid-template-columns:1fr; } }</style>'
-        f'<div class="hesty-conviction-grid">{tiles_html}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- 2. Sectie A: Active Portfolio Conviction -- bezeten assets MET
-    # een deep-dive. ---
-    st.markdown(
-        _uniform_section_header_html("Active Portfolio Conviction", "work", is_first=False),
-        unsafe_allow_html=True,
-    )
-    owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
-    st.markdown(_conviction_table_html(owned_dive_entries, held_tickers), unsafe_allow_html=True)
-    if not owned_dive_entries:
-        st.caption("None of your current holdings have a deep-dive logged yet.")
-
-    # --- 3. Sectie B: Research Watchlist -- NIET-bezeten assets met een
-    # deep-dive waarvan de conclusie 'Watch' of 'Pass' is. ('Pass' is de
-    # dichtstbijzijnde match voor 'NO BUY' -- die exacte waarde bestaat
-    # niet in het opslagmodel, dat kent alleen Watch/Buy/Pass.) ---
-    st.markdown(
-        _uniform_section_header_html("Research Watchlist", "visibility", is_first=False),
-        unsafe_allow_html=True,
-    )
-    watchlist_entries = [
-        e for e in deep_dives
-        if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
-    ]
-    st.markdown(_conviction_table_html(watchlist_entries, held_tickers), unsafe_allow_html=True)
-    if not watchlist_entries:
-        st.caption("No research-pipeline ideas yet -- add a deep-dive below.")
-
-    # --- 'Add a new deep-dive' blijft functioneel bereikbaar (anders
-    # kun je helemaal geen research meer loggen) maar staat nu
-    # weggestopt, collapsed, onderaan -- de volgende stap verhuist dit
-    # naar de side-drawer + AI-knop. ---
-    with st.expander("Add a new deep-dive (or update)", expanded=False, icon=":material/add:", key="add_a_new_deep_dive_or_update_expander"):
-        dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
-
-        if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
-            st.session_state["dd_last_looked_up_ticker"] = dd_ticker
-            try:
-                auto_info = get_cached_ticker_info(dd_ticker)
-                auto_name = auto_info.get("longName") or auto_info.get("shortName")
-                if auto_name:
-                    st.session_state["dd_naam_input"] = auto_name
-            except Exception:
-                pass
-
-        dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
-        dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
-
-        st.markdown("**Business overview** -- what does the company do, in your own words")
-        dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
-
-        st.markdown("**Investment thesis** -- why this could be a good investment")
-        dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-        dd_thesis_score = st.columns([1, 1])[0].slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
-
-        st.markdown("**Management/CEO** -- assess the management and the CEO")
-        dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-        dd_management_score = st.columns([1, 1])[0].slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
-
-        st.markdown("**Bear case / risks** -- what could go wrong")
-        dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
-        dd_bear_score = st.columns([1, 1])[0].slider(
-            "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
-            help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
-        )
-
-        st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
-        dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-        dd_valuation_score = st.columns([1, 1])[0].slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
-        dd_interested_price = st.number_input(
-            f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
-            help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
-        )
-
-        st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
-                    "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
-        dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
-        dd_technical_analysis_score = st.columns([1, 1])[0].slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
-
-        st.markdown("**Catalysts** -- what upcoming events could move the price")
-        dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-        dd_catalysts_score = st.columns([1, 1])[0].slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
-
-        st.markdown("**Position sizing plan** -- how big a position, and why")
-        dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
-
-        st.markdown("**Sell criteria** -- under what conditions do you exit "
-                    "(this is also where a specific triggering EVENT belongs, e.g. "
-                    "'if they miss 2 consecutive quarters' -- we can't check that "
-                    "automatically, so it stays a reminder here on this page)")
-        dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
-
-        st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
-        dd_sell_trigger_cols = st.columns(2)
-        with dd_sell_trigger_cols[0]:
-            dd_sell_trigger_price = st.number_input(
-                f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
-                help="Works both ways: a target above today's price is treated as a profit "
-                     "target, below it as a stop-loss.",
-            )
-        with dd_sell_trigger_cols[1]:
-            dd_sell_trigger_date = st.date_input(
-                "Sell by date", value=None, key="dd_sell_trigger_date",
-                help="A hard deadline to reconsider this position, regardless of price.",
-            )
-
-        dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
-
-        if st.button("Save this version", type="primary", key="dd_save_btn"):
-            if not dd_ticker or not dd_naam:
-                st.error("Please fill in at least a ticker and name.")
+    with main_col:
+        # --- 1. Conviction-tegels: som van portfolio-gewicht per score-
+        # bucket, uitsluitend voor BEZETEN assets waar ook een deep-dive-
+        # score voor bestaat. ---
+        high_weight = medium_weight = low_weight = 0.0
+        for entry in deep_dives:
+            ticker = entry.get("ticker")
+            if ticker not in held_tickers:
+                continue
+            score = _compute_deep_dive_overall_score(entry)
+            if score is None:
+                continue
+            weight = holding_weight_by_ticker.get(ticker, 0)
+            if score >= 8:
+                high_weight += weight
+            elif score >= 5:
+                medium_weight += weight
             else:
-                with st.spinner("Fetching market data..."):
-                    market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
-                database.add_deep_dive(
-                    user_email, dd_ticker, dd_naam,
-                    business_overview=dd_business or None,
-                    investment_thesis=dd_thesis or None,
-                    management_assessment=dd_management or None,
-                    bear_case=dd_bear or None,
-                    valuation_view=dd_valuation or None,
-                    interested_price=dd_interested_price or None,
-                    catalysts=dd_catalysts or None,
-                    position_sizing_plan=dd_sizing or None,
-                    sell_criteria=dd_sell_criteria or None,
-                    conclusion=dd_conclusion,
-                    market_snapshot=market_snapshot,
-                    sell_trigger_price=dd_sell_trigger_price or None,
-                    sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
-                    thesis_score=dd_thesis_score,
-                    management_score=dd_management_score,
-                    bear_case_score=dd_bear_score,
-                    valuation_score=dd_valuation_score,
-                    catalysts_score=dd_catalysts_score,
-                    technical_analysis=dd_technical_analysis or None,
-                    technical_analysis_score=dd_technical_analysis_score,
-                )
-                st.success(f"New version for {dd_ticker} saved!")
-                st.rerun()
+                low_weight += weight
+
+        tiles_html = (
+            _conviction_tile_html("\U0001F7E2", "High conviction (8-10)", high_weight)
+            + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
+            + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
+        )
+        _tiles_grid_cols = "1fr" if _drawer_open else "repeat(3, 1fr)"
+        st.markdown(
+            f'<style>.hesty-conviction-grid {{ display:grid; '
+            f'grid-template-columns:{"1fr" if _drawer_open else "repeat(3, 1fr)"}; gap:1rem; margin-bottom:2rem; }} '
+            f'@media (max-width:768px) {{ .hesty-conviction-grid {{ grid-template-columns:1fr; }} }}</style>'
+            f'<div class="hesty-conviction-grid">{tiles_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # --- 2. Sectie A: Active Portfolio Conviction ---
+        st.markdown(
+            _uniform_section_header_html("Active Portfolio Conviction", "work", is_first=False),
+            unsafe_allow_html=True,
+        )
+        owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
+        _render_conviction_table(owned_dive_entries, key_prefix="owned")
+        if not owned_dive_entries:
+            st.caption("None of your current holdings have a deep-dive logged yet.")
+
+        # --- 3. Sectie B: Research Watchlist ---
+        st.markdown(
+            _uniform_section_header_html("Research Watchlist", "visibility", is_first=False),
+            unsafe_allow_html=True,
+        )
+        watchlist_entries = [
+            e for e in deep_dives
+            if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
+        ]
+        _render_conviction_table(watchlist_entries, key_prefix="watch")
+        if not watchlist_entries:
+            st.caption("No research-pipeline ideas yet -- click '+ Add New' above.")
+
+    if _drawer_open:
+        with drawer_col:
+            _render_analyze_drawer(user_email)
 
 
 
