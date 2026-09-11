@@ -5346,8 +5346,9 @@ def _demo_watermark_css(container_key: str) -> str:
         f'.st-key-{container_key}::after {{ '
         f'content:"DEMO MODE"; position:absolute; inset:0; display:flex; align-items:center; '
         f'justify-content:center; pointer-events:none; z-index:5; '
-        f'font-size:clamp(1.5rem, 6vw, 5rem); font-weight:900; letter-spacing:0.15em; color:#F1F5F9; '
-        f'opacity:0.06; text-transform:uppercase; transform:rotate(-15deg); white-space:nowrap; }}'
+        f'font-size:clamp(2.5rem, 9vw, 8rem); font-weight:900; letter-spacing:0.15em; color:#F1F5F9; '
+        f'opacity:0.06; text-transform:uppercase; white-space:nowrap; '
+        f'transform:translateY(-18%) rotate(-15deg); }}'
         f'</style>'
     )
 
