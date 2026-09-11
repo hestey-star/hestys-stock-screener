@@ -8054,8 +8054,8 @@ def _render_today_demo_landing() -> None:
         '<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
         '<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
         'font-weight:700;">Your Portfolio Today</div>'
-        f'<div style="font-size:2.75rem; font-weight:800; color:{TODAY_NEGATIVE_TEXT}; margin-top:8px; '
-        'line-height:1.1; font-variant-numeric: tabular-nums;">-0.2%</div>'
+        f'<div style="font-size:2.75rem; font-weight:800; color:{TODAY_POSITIVE_TEXT}; margin-top:8px; '
+        'line-height:1.1; font-variant-numeric: tabular-nums;">+0.6%</div>'
         '</div>'
     )
     col2_html = _portfolio_mover_tile_html(
