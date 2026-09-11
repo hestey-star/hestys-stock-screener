@@ -5067,55 +5067,88 @@ def render_analyze():
     st.markdown(
         """
         <style>
-        /* Forceer alle rijen in stHorizontalBlock tot absolute verticale centrering */
+        /* 1. Forceer absolute verticale centrering op de complete rij-container */
         [data-testid="stHorizontalBlock"] {
             align-items: center !important;
             display: flex !important;
             flex-direction: row !important;
         }
-        /* Sloop de grijze achtergrond, borders en paddings van de tabel-buttons */
+
+        /* 2. Target de specifieke Streamlit Button wrapper div */
+        [data-testid="stHorizontalBlock"] div[data-testid="stButton"] {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* 3. Strip alle interne elementen, margins en padding van de buttons */
         [data-testid="stHorizontalBlock"] button {
             background-color: transparent !important;
             border: none !important;
             padding: 0 !important;
             margin: 0 !important;
             box-shadow: none !important;
-            color: #ffffff !important; /* Ticker letters helder wit */
+            color: #ffffff !important;
             font-weight: 700 !important;
             font-size: 0.875rem !important;
             letter-spacing: 0.05em !important;
             text-transform: uppercase !important;
-            text-align: left !important;
+            display: flex !important;
+            align-items: center !important;
             height: auto !important;
             min-height: unset !important;
+            line-height: 1 !important;
         }
-        /* Zorg dat de hover-status ook transparant blijft en niet grijs oplicht */
-        [data-testid="stHorizontalBlock"] button:hover {
-            background-color: transparent !important;
-            color: #34d399 !important; /* Subtiele groene Hestys glow op hover */
-            border: none !important;
-        }
-        /* Fix de images/logo's zodat ze exact op de middellijn zweven */
-        [data-testid="stHorizontalBlock"] img {
+
+        /* Sloop de verborgen Streamlit paragraph-margin binnen de knop die de tekst omhoog duwt */
+        [data-testid="stHorizontalBlock"] button p {
             margin: 0 !important;
-            vertical-align: middle !important;
+            padding: 0 !important;
+            line-height: 1 !important;
         }
-        /* De '🤖 SCAN'-knop voor unmapped assets krijgt een EIGEN,
-           specifiekere selector (via z'n container-key-voorvoegsel) --
-           overschrijft de platte-tekst-stijl hierboven met een kleine,
-           chique badge-look. */
+
+        /* 4. Specifieke, vlijmscherpe styling voor de SCAN-badge (overschrijf de transparantie) */
+        [data-testid="stHorizontalBlock"] button[key^="scan_"] {
+            color: #a7f3d0 !important;
+            background-color: rgba(16, 185, 129, 0.1) !important;
+            border: 1px solid rgba(52, 211, 153, 0.2) !important;
+            border-radius: 0.375rem !important;
+            padding: 4px 10px !important;
+            font-size: 0.75rem !important;
+            justify-content: center !important;
+        }
+
+        [data-testid="stHorizontalBlock"] button[key^="scan_"]:hover {
+            background-color: rgba(16, 185, 129, 0.2) !important;
+            border: 1px solid rgba(52, 211, 153, 0.4) !important;
+        }
+
+        /* Vangnet voor punt 4 hierboven: 'key=' is een intern React-concept
+           en wordt NIET als HTML-attribuut gerenderd, dus button[key^=...]
+           matcht vermoedelijk niets. Deze class-gebaseerde selector (op de
+           al bestaande st.container(key="scanbadge_...")-wrapper) is
+           functioneel identiek en WEL bewezen betrouwbaar. */
         [class*="st-key-scanbadge"] button {
             color: #a7f3d0 !important;
             background-color: rgba(16, 185, 129, 0.1) !important;
             border: 1px solid rgba(52, 211, 153, 0.2) !important;
             border-radius: 0.375rem !important;
-            padding: 2px 8px !important;
+            padding: 4px 10px !important;
             font-size: 0.75rem !important;
-            letter-spacing: 0.02em !important;
+            justify-content: center !important;
         }
         [class*="st-key-scanbadge"] button:hover {
-            background-color: rgba(16, 185, 129, 0.18) !important;
-            color: #a7f3d0 !important;
+            background-color: rgba(16, 185, 129, 0.2) !important;
+            border: 1px solid rgba(52, 211, 153, 0.4) !important;
+        }
+
+        /* 5. Fix de afbeeldingen/logo's zodat ze exact op de middellijn zweven */
+        [data-testid="stHorizontalBlock"] img {
+            margin: 0 !important;
+            padding: 0 !important;
+            vertical-align: middle !important;
         }
         </style>
         """,
