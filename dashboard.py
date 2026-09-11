@@ -4727,156 +4727,88 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     )
 
 
-def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
+def _render_conviction_grid(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Rendert de compacte, links-uitgelijnde tabel voor Sectie A (Active
-    Portfolio Conviction) en Sectie B (Research Watchlist). Elke rij is
-    nu ECHT klikbaar: rijke HTML voor de weergave + een ONZICHTBARE,
-    ECHTE st.button() eroverheen (position:absolute; inset:0; opacity:0)
-    -- zelfde, al bewezen betrouwbare overlay-techniek als de CTA-
-    knoppen elders (een klik op de tekst/HTML zelf kan niet rechtstreeks
-    naar Python, een echte widget-klik wel). Bij een klik wordt
-    st.session_state.selected_research op de ticker gezet en volgt een
-    rerun, die de 2-koloms drawer-splitsing activeert.
+    Native st.dataframe(on_select="rerun")-grid i.p.v. handmatige HTML-
+    rijen + onzichtbare knoppen-overlays -- die laatste bleken op den
+    duur instabiel (kolommen die niet uitlijnden, dode kliks, losse
+    rechthoekjes). Een native Streamlit-widget met ingebouwde rij-
+    selectie is de stabiele, 100% ondersteunde manier om dit te doen:
+    geen custom CSS-positionering nodig, Streamlit tekent de tabel zelf.
+    """
+    import pandas as pd
 
-    'unmapped' (optioneel, alleen relevant voor Sectie A): bezeten
-    tickers ZONDER enige deep-dive -- stromen onderaan in, gedempt
-    gestyled, met 'NO ACTIVE RESEARCH RECORD FOUND.' i.p.v. een thesis
-    en een '\U0001F916 QUICK AI SCAN'-knop i.p.v. een score. Die knop
-    opent de drawer in '__NEW__'-modus, met de ticker al vooringevuld.
-    """
-    if not entries and not unmapped:
+    rows = []
+    tickers_in_order = []
+    unmapped_ticker_set = {u.get("ticker") for u in (unmapped or [])}
+
+    for entry in entries:
+        ticker = entry.get("ticker", "")
+        naam = entry.get("naam", ticker)
+        score = _compute_deep_dive_overall_score(entry)
+        score_text = f"{score:.1f} / 10" if score is not None else "-"
+        thesis_full = (entry.get("investment_thesis") or "").strip()
+        thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
+        if len(thesis_line) > 58:
+            thesis_line = thesis_line[:55].rstrip() + "..."
+        thesis_text = thesis_line or "No thesis logged yet"
+        last_validated = (entry.get("created_at") or "")[:10] or "-"
+        rows.append({
+            "Logo": get_company_logo_url(ticker, naam) or "",
+            "Asset": ticker,
+            "Score": score_text,
+            "Core Thesis": thesis_text,
+            "Last Validated": last_validated,
+        })
+        tickers_in_order.append(ticker)
+
+    for u in (unmapped or []):
+        u_ticker = u.get("ticker", "")
+        u_naam = u.get("naam", u_ticker)
+        rows.append({
+            "Logo": get_company_logo_url(u_ticker, u_naam) or "",
+            "Asset": u_ticker,
+            "Score": "\U0001F916 SCAN REQUIRED",
+            "Core Thesis": "No active research record found.",
+            "Last Validated": "-",
+        })
+        tickers_in_order.append(u_ticker)
+
+    if not rows:
         st.markdown(
             '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">Nothing here yet.</div>',
             unsafe_allow_html=True,
         )
         return
-    st.markdown(
-        '<div style="display:flex; align-items:center; gap:0.9rem; padding:0 0.25rem 0.4rem 0.25rem; '
-        'border-bottom:1px solid rgba(148,163,184,0.15);">'
-        '<div style="width:110px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
-        'text-transform:uppercase; letter-spacing:0.05em;">Asset</div>'
-        '<div style="width:70px; flex-shrink:0; color:#64748B; font-size:0.65rem; font-weight:700; '
-        'text-transform:uppercase; letter-spacing:0.05em;">Score</div>'
-        '<div style="flex:1; color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
-        'letter-spacing:0.05em;">Core thesis</div>'
-        '<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; font-size:0.65rem; '
-        'font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Last validated</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    for entry in entries:
-        ticker = entry.get("ticker", "")
-        naam = entry.get("naam", ticker)
-        score = _compute_deep_dive_overall_score(entry)
-        if score is not None:
-            score_color = _deep_dive_score_color(score)
-            score_html = f'<span style="color:{score_color}; font-weight:700;">{score:.1f}</span><span style="color:#64748B;"> / 10</span>'
-        else:
-            score_html = '<span style="color:#64748B;">-</span>'
-        thesis_full = (entry.get("investment_thesis") or "").strip()
-        thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-        if len(thesis_line) > 58:
-            thesis_line = thesis_line[:55].rstrip() + "..."
-        thesis_html = thesis_line if thesis_line else '<span style="color:#64748B;">No thesis logged yet</span>'
-        last_validated = (entry.get("created_at") or "")[:10] or "-"
-        logo_url = get_company_logo_url(ticker, naam)
-        logo_html = (
-            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-            f'background:#fff; padding:2px; flex-shrink:0;" />'
-            if logo_url else
-            f'<div style="width:24px; height:24px; border-radius:50%; background:rgba(137,146,163,0.15); '
-            f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
-            f'<span style="color:#8992A3; font-weight:700; font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></div>'
-        )
-        row_key = f"{key_prefix}_row_{ticker}"
-        st.markdown(
-            f'<style>'
-            f'.st-key-{row_key} {{ position:relative !important; }} '
-            f'.st-key-{row_key} [data-testid="stButton"] {{ '
-            f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
-            f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
-            f'.st-key-{row_key} button {{ '
-            f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
-            f'border:none !important; background:transparent !important; padding:0 !important; }} '
-            f'.st-key-{row_key}:hover {{ background:rgba(255,255,255,0.03) !important; }} '
-            f'</style>',
-            unsafe_allow_html=True,
-        )
-        with st.container(key=row_key):
-            st.markdown(
-                f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
-                f'border-bottom:1px solid rgba(148,163,184,0.08);">'
-                f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
-                f'{logo_html}<span style="color:#EAEDF1; font-weight:700; font-size:0.82rem; '
-                f'text-transform:uppercase;">{ticker}</span></div>'
-                f'<div style="width:70px; flex-shrink:0; font-size:0.82rem;">{score_html}</div>'
-                f'<div style="flex:1; min-width:0; color:#F1F5F9; font-size:0.82rem; overflow:hidden; '
-                f'text-overflow:ellipsis; white-space:nowrap;">{thesis_html}</div>'
-                f'<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; '
-                f'font-size:0.75rem;">{last_validated}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            if st.button(" ", key=f"{key_prefix}_btn_{ticker}"):
-                st.session_state["selected_research"] = ticker
-                st.rerun()
 
-    for u in (unmapped or []):
-        u_ticker = u.get("ticker", "")
-        u_naam = u.get("naam", u_ticker)
-        u_logo_url = get_company_logo_url(u_ticker, u_naam)
-        u_logo_html = (
-            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-            f'background:#fff; padding:2px; flex-shrink:0; opacity:0.6;" />'
-            if u_logo_url else
-            f'<div style="width:24px; height:24px; border-radius:50%; background:rgba(137,146,163,0.1); '
-            f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
-            f'<span style="color:#64748B; font-weight:700; font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
-        )
-        # Zelfde patroon als de gewone rijen hierboven: de HELE rij is
-        # klikbaar via 1 onzichtbare, echte st.button() die de volledige
-        # rij bedekt (inset:0) -- de '\U0001F916 SCAN'-badge in de SCORE-
-        # cel is PUUR decoratieve HTML, geen eigen native widget meer die
-        # de flex-uitlijning van de rij kon verstoren.
-        row_key = f"{key_prefix}_unmapped_row_{u_ticker}"
-        st.markdown(
-            f'<style>'
-            f'.st-key-{row_key} {{ position:relative !important; }} '
-            f'.st-key-{row_key} [data-testid="stButton"] {{ '
-            f'position:absolute !important; top:0 !important; left:0 !important; right:0 !important; '
-            f'bottom:0 !important; width:100% !important; height:100% !important; z-index:2 !important; }} '
-            f'.st-key-{row_key} button {{ '
-            f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
-            f'border:none !important; background:transparent !important; padding:0 !important; }} '
-            f'.st-key-{row_key}:hover {{ background:rgba(255,255,255,0.03) !important; }} '
-            f'</style>',
-            unsafe_allow_html=True,
-        )
-        with st.container(key=row_key):
-            st.markdown(
-                f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
-                f'border-bottom:1px solid rgba(148,163,184,0.08); opacity:0.6;">'
-                f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
-                f'{u_logo_html}<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
-                f'text-transform:uppercase;">{u_ticker}</span></div>'
-                f'<div style="width:70px; flex-shrink:0;">'
-                f'<span style="font-size:11px; font-weight:700; color:#34D399; background:rgba(6,78,59,0.3); '
-                f'border:1px solid rgba(16,185,129,0.2); padding:0.1rem 0.4rem; border-radius:6px; '
-                f'text-align:center; display:inline-block; white-space:nowrap;">\U0001F916 Scan</span></div>'
-                f'<div style="flex:1; min-width:0; color:#64748B; font-size:0.78rem; '
-                f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'
-                f'No active research record found.</div>'
-                f'<div style="width:100px; flex-shrink:0; text-align:right; color:#64748B; '
-                f'font-size:0.75rem;">-</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            if st.button(" ", key=f"{key_prefix}_scanbtn_{u_ticker}"):
-                st.session_state["dd_ticker_input"] = u_ticker
-                st.session_state["dd_naam_input"] = u_naam
-                st.session_state["selected_research"] = "__NEW__"
-                st.rerun()
+    df = pd.DataFrame(rows)
+    event = st.dataframe(
+        df,
+        column_config={
+            "Logo": st.column_config.ImageColumn(" ", width="small"),
+            "Asset": st.column_config.TextColumn("Asset", width="small"),
+            "Score": st.column_config.TextColumn("Score", width="small"),
+            "Core Thesis": st.column_config.TextColumn("Core Thesis", width="large"),
+            "Last Validated": st.column_config.TextColumn("Last Validated", width="small"),
+        },
+        hide_index=True,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"{key_prefix}_grid",
+    )
+
+    selected_rows = event.selection.rows if event and event.selection else []
+    if selected_rows:
+        selected_ticker = tickers_in_order[selected_rows[0]]
+        if selected_ticker in unmapped_ticker_set:
+            _u = next(u for u in unmapped if u.get("ticker") == selected_ticker)
+            st.session_state["dd_ticker_input"] = selected_ticker
+            st.session_state["dd_naam_input"] = _u.get("naam", selected_ticker)
+            st.session_state["selected_research"] = "__NEW__"
+        else:
+            st.session_state["selected_research"] = selected_ticker
+        st.rerun()
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
@@ -5191,7 +5123,7 @@ def render_analyze():
             unsafe_allow_html=True,
         )
         owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
-        _render_conviction_table(owned_dive_entries, key_prefix="owned", unmapped=unmapped_assets)
+        _render_conviction_grid(owned_dive_entries, key_prefix="owned", unmapped=unmapped_assets)
         if not owned_dive_entries and not unmapped_assets:
             st.caption("You don't have any active holdings yet.")
 
@@ -5204,7 +5136,7 @@ def render_analyze():
             e for e in deep_dives
             if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
         ]
-        _render_conviction_table(watchlist_entries, key_prefix="watch")
+        _render_conviction_grid(watchlist_entries, key_prefix="watch")
         if not watchlist_entries:
             st.caption("No research-pipeline ideas yet -- click '+ Add New' above.")
 
