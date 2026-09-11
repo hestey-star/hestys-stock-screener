@@ -2904,14 +2904,18 @@ def _render_deep_dive_version(version: dict, user_email: str):
     edit_key = f"dd_editing_{version_id}"
     is_editing = st.session_state.get(edit_key, False)
 
-    st.markdown(f"##### {version['created_at'][:10]} -- {version['conclusion']}")
+    st.markdown(
+        f'<div style="color:#F1F5F9; font-weight:700; font-size:0.85rem; margin-bottom:0.25rem;">'
+        f'{version["created_at"][:10]} <span style="color:#64748B; font-weight:500;">&middot; {version["conclusion"].upper()}</span></div>',
+        unsafe_allow_html=True,
+    )
 
     overall_score = _compute_deep_dive_overall_score(version)
     if overall_score is not None:
         score_color = _deep_dive_score_color(overall_score)
         st.markdown(
-            f'<span style="font-size:1.3rem; font-weight:800; color:{score_color};">{overall_score:.1f}/10</span> '
-            f'<span style="font-size:0.8rem; color:#8992A3;">overall score</span>',
+            f'<span style="font-size:1.15rem; font-weight:800; color:{score_color};">{overall_score:.1f}/10</span> '
+            f'<span style="font-size:0.68rem; color:#64748B; text-transform:uppercase; letter-spacing:0.03em;">overall score</span>',
             unsafe_allow_html=True,
         )
 
@@ -2936,36 +2940,59 @@ def _render_deep_dive_version(version: dict, user_email: str):
     if version.get("sector_rotation_pct_at_creation") is not None:
         snapshot_parts.append(f"Sector rotation (1m): {version['sector_rotation_pct_at_creation']:+.1f}%")
     if snapshot_parts:
-        st.caption(" · ".join(snapshot_parts))
+        st.markdown(
+            f'<div style="color:#64748B; font-size:0.7rem; margin-top:0.3rem;">{" &middot; ".join(snapshot_parts)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    def _dd_field_html(label: str, text: str) -> str:
+        # Compacte, ALL-CAPS metadata-label + tekst eronder -- zelfde
+        # stijl als de rest van het platform (bv. de input-labels op de
+        # login/support-pagina's), i.p.v. Streamlit's **bold inline**-
+        # markdown die vorige keer nog los/lomp oogde.
+        return (
+            f'<div style="margin-top:0.85rem;">'
+            f'<div style="color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
+            f'letter-spacing:0.05em; margin-bottom:0.2rem;">{label}</div>'
+            f'<div style="color:#CBD5E1; font-size:0.82rem; line-height:1.5;">{text}</div>'
+            f'</div>'
+        )
 
     if not is_editing:
+        _dd_fields_html = ""
         if version.get("business_overview"):
-            st.markdown(f"**Business overview**: {version['business_overview']}")
+            _dd_fields_html += _dd_field_html("Business overview", version["business_overview"])
         if version.get("investment_thesis"):
-            st.markdown(f"**Investment thesis**: {version['investment_thesis']}")
+            _dd_fields_html += _dd_field_html("Investment thesis", version["investment_thesis"])
         if version.get("management_assessment"):
-            st.markdown(f"**Management/CEO**: {version['management_assessment']}")
+            _dd_fields_html += _dd_field_html("Management / CEO", version["management_assessment"])
         if version.get("bear_case"):
-            st.markdown(f"**Bear case**: {version['bear_case']}")
+            _dd_fields_html += _dd_field_html("Bear case", version["bear_case"])
         if version.get("valuation_view"):
-            st.markdown(f"**Valuation**: {version['valuation_view']}")
+            _dd_fields_html += _dd_field_html("Valuation", version["valuation_view"])
         if version.get("interested_price"):
-            st.markdown(f"**Interested from**: {ticker_currency_symbol}{version['interested_price']:.2f}")
+            _dd_fields_html += _dd_field_html("Interested from", f"{ticker_currency_symbol}{version['interested_price']:.2f}")
         if version.get("technical_analysis"):
-            st.markdown(f"**Technical analysis**: {version['technical_analysis']}")
+            _dd_fields_html += _dd_field_html("Technical analysis", version["technical_analysis"])
         if version.get("catalysts"):
-            st.markdown(f"**Catalysts**: {version['catalysts']}")
+            _dd_fields_html += _dd_field_html("Catalysts", version["catalysts"])
         if version.get("position_sizing_plan"):
-            st.markdown(f"**Position sizing plan**: {version['position_sizing_plan']}")
+            _dd_fields_html += _dd_field_html("Position sizing plan", version["position_sizing_plan"])
         if version.get("sell_criteria"):
-            st.markdown(f"**Sell criteria**: {version['sell_criteria']}")
+            _dd_fields_html += _dd_field_html("Sell criteria", version["sell_criteria"])
+        st.markdown(_dd_fields_html, unsafe_allow_html=True)
+
         if version.get("sell_trigger_price") or version.get("sell_trigger_date"):
             trigger_parts = []
             if version.get("sell_trigger_price"):
                 trigger_parts.append(f"at {ticker_currency_symbol}{version['sell_trigger_price']:.2f}")
             if version.get("sell_trigger_date"):
                 trigger_parts.append(f"by {version['sell_trigger_date']}")
-            st.caption(f"Sell trigger set: {' or '.join(trigger_parts)} -- you'll see this on Today once reached.")
+            st.markdown(
+                f'<div style="color:#64748B; font-size:0.7rem; margin-top:0.6rem;">Sell trigger set: '
+                f'{" or ".join(trigger_parts)} -- you\'ll see this on Today once reached.</div>',
+                unsafe_allow_html=True,
+            )
 
         edit_col, delete_col = st.columns(2)
         with edit_col:
@@ -4700,7 +4727,7 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     )
 
 
-def _render_conviction_table(entries: list, key_prefix: str) -> None:
+def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
     Rendert de compacte, links-uitgelijnde tabel voor Sectie A (Active
     Portfolio Conviction) en Sectie B (Research Watchlist). Elke rij is
@@ -4711,8 +4738,14 @@ def _render_conviction_table(entries: list, key_prefix: str) -> None:
     naar Python, een echte widget-klik wel). Bij een klik wordt
     st.session_state.selected_research op de ticker gezet en volgt een
     rerun, die de 2-koloms drawer-splitsing activeert.
+
+    'unmapped' (optioneel, alleen relevant voor Sectie A): bezeten
+    tickers ZONDER enige deep-dive -- stromen onderaan in, gedempt
+    gestyled, met 'NO ACTIVE RESEARCH RECORD FOUND.' i.p.v. een thesis
+    en een '\U0001F916 QUICK AI SCAN'-knop i.p.v. een score. Die knop
+    opent de drawer in '__NEW__'-modus, met de ticker al vooringevuld.
     """
-    if not entries:
+    if not entries and not unmapped:
         st.markdown(
             '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">Nothing here yet.</div>',
             unsafe_allow_html=True,
@@ -4789,6 +4822,54 @@ def _render_conviction_table(entries: list, key_prefix: str) -> None:
                 st.session_state["selected_research"] = ticker
                 st.rerun()
 
+    for u in (unmapped or []):
+        u_ticker = u.get("ticker", "")
+        u_naam = u.get("naam", u_ticker)
+        u_logo_url = get_company_logo_url(u_ticker, u_naam)
+        u_logo_html = (
+            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
+            f'background:#fff; padding:2px; flex-shrink:0; opacity:0.6;" />'
+            if u_logo_url else
+            f'<div style="width:24px; height:24px; border-radius:50%; background:rgba(137,146,163,0.1); '
+            f'display:flex; align-items:center; justify-content:center; flex-shrink:0;">'
+            f'<span style="color:#64748B; font-weight:700; font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
+        )
+        st.markdown(
+            f'<div style="display:flex; align-items:center; gap:0.9rem; padding:0.45rem 0.25rem; '
+            f'border-bottom:1px solid rgba(148,163,184,0.08); opacity:0.5;">'
+            f'<div style="display:flex; align-items:center; gap:0.5rem; width:110px; flex-shrink:0;">'
+            f'{u_logo_html}<span style="color:#94A3B8; font-weight:700; font-size:0.82rem; '
+            f'text-transform:uppercase;">{u_ticker}</span></div>'
+            f'<div style="width:70px; flex-shrink:0;"></div>'
+            f'<div style="flex:1; min-width:0; color:#64748B; font-size:0.78rem; text-transform:uppercase; '
+            f'letter-spacing:0.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">'
+            f'No active research record found.</div>'
+            f'<div style="width:100px; flex-shrink:0;"></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        _scan_key = f"{key_prefix}_scan_{u_ticker}"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_scan_key} {{ margin-top:-2.3rem !important; margin-left:190px !important; '
+            f'margin-bottom:0.45rem !important; width:130px !important; position:relative !important; z-index:3 !important; }} '
+            f'.st-key-{_scan_key} button {{ '
+            f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
+            f'border-radius:6px !important; color:#1FAE96 !important; font-size:0.65rem !important; '
+            f'font-weight:700 !important; letter-spacing:0.03em !important; text-transform:uppercase !important; '
+            f'padding:0.2rem 0.5rem !important; box-shadow:none !important; width:auto !important; '
+            f'white-space:nowrap !important; }} '
+            f'.st-key-{_scan_key} button:hover {{ background:rgba(31,174,150,0.1) !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_scan_key):
+            if st.button("\U0001F916 Quick AI Scan", key=f"{key_prefix}_scanbtn_{u_ticker}"):
+                st.session_state["dd_ticker_input"] = u_ticker
+                st.session_state["dd_naam_input"] = u_naam
+                st.session_state["selected_research"] = "__NEW__"
+                st.rerun()
+
 
 def _render_deep_dive_add_form(user_email: str) -> None:
     """
@@ -4797,6 +4878,30 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     de hoofdpagina van Analyze altijd clean en overzichtelijk blijft.
     """
     import database
+
+    # AI-copilot-knop: bereidt de drawer voor op de daadwerkelijke AI-
+    # koppeling (nog niet gebouwd) -- klikken laat dat nu eerlijk weten
+    # i.p.v. te doen alsof er al een AI-briefing wordt gegenereerd.
+    _ai_btn_key = "dd_ai_briefing_btn_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
+        f'.st-key-{_ai_btn_key} button {{ '
+        f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
+        f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
+        f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
+        f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
+        f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_ai_btn_key):
+        if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
+            st.info(
+                "AI briefing generation isn't wired up yet -- this button is just the placeholder "
+                "for the next step. For now, fill in the fields below yourself.",
+                icon=":material/smart_toy:",
+            )
 
     dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
@@ -5023,17 +5128,24 @@ def render_analyze():
     with main_col:
         # --- 1. Conviction-tegels: som van portfolio-gewicht per score-
         # bucket, uitsluitend voor BEZETEN assets waar ook een deep-dive-
-        # score voor bestaat. ---
-        high_weight = medium_weight = low_weight = 0.0
-        for entry in deep_dives:
-            ticker = entry.get("ticker")
-            if ticker not in held_tickers:
-                continue
-            score = _compute_deep_dive_overall_score(entry)
-            if score is None:
+        # score voor bestaat. Alles wat bezeten is MAAR geen deep-dive
+        # heeft (de 'blinde vlekken') wordt apart bijgehouden -- telt in
+        # geen van de 3 tegels mee, maar bepaalt de waarschuwingsbalk
+        # eronder. ---
+        dive_by_ticker = {e.get("ticker"): e for e in deep_dives}
+        high_weight = medium_weight = low_weight = unmapped_weight = 0.0
+        unmapped_assets = []
+        for h in holdings:
+            ticker = h.get("ticker")
+            if not ticker:
                 continue
             weight = holding_weight_by_ticker.get(ticker, 0)
-            if score >= 8:
+            entry = dive_by_ticker.get(ticker)
+            score = _compute_deep_dive_overall_score(entry) if entry else None
+            if score is None:
+                unmapped_weight += weight
+                unmapped_assets.append({"ticker": ticker, "naam": h.get("naam", ticker)})
+            elif score >= 8:
                 high_weight += weight
             elif score >= 5:
                 medium_weight += weight
@@ -5045,24 +5157,35 @@ def render_analyze():
             + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
             + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
         )
-        _tiles_grid_cols = "1fr" if _drawer_open else "repeat(3, 1fr)"
         st.markdown(
             f'<style>.hesty-conviction-grid {{ display:grid; '
-            f'grid-template-columns:{"1fr" if _drawer_open else "repeat(3, 1fr)"}; gap:1rem; margin-bottom:2rem; }} '
+            f'grid-template-columns:{"1fr" if _drawer_open else "repeat(3, 1fr)"}; gap:1rem; margin-bottom:0.75rem; }} '
             f'@media (max-width:768px) {{ .hesty-conviction-grid {{ grid-template-columns:1fr; }} }}</style>'
             f'<div class="hesty-conviction-grid">{tiles_html}</div>',
             unsafe_allow_html=True,
         )
+        if unmapped_weight > 0.5:
+            st.markdown(
+                f'<div style="color:#94A3B8; font-size:0.78rem; margin-bottom:2rem;">'
+                f'<span style="color:#D97706; font-weight:700;">\u26A0\uFE0F UNMAPPED ASSETS:</span> '
+                f'{unmapped_weight:.0f}% OF PORTFOLIO HAS NO ACTIVE RESEARCH. RUN A QUICK SCAN TO '
+                f'CATEGORIZE THEM.</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div style="margin-bottom:1.25rem;"></div>', unsafe_allow_html=True)
 
-        # --- 2. Sectie A: Active Portfolio Conviction ---
+        # --- 2. Sectie A: Active Portfolio Conviction -- inclusief de
+        # unmapped assets, die onderaan instromen (gedempt, met een
+        # Quick AI Scan-knop i.p.v. een score). ---
         st.markdown(
             _uniform_section_header_html("Active Portfolio Conviction", "work", is_first=False),
             unsafe_allow_html=True,
         )
         owned_dive_entries = [e for e in deep_dives if e.get("ticker") in held_tickers]
-        _render_conviction_table(owned_dive_entries, key_prefix="owned")
-        if not owned_dive_entries:
-            st.caption("None of your current holdings have a deep-dive logged yet.")
+        _render_conviction_table(owned_dive_entries, key_prefix="owned", unmapped=unmapped_assets)
+        if not owned_dive_entries and not unmapped_assets:
+            st.caption("You don't have any active holdings yet.")
 
         # --- 3. Sectie B: Research Watchlist ---
         st.markdown(
