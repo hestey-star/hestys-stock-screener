@@ -8717,66 +8717,50 @@ def render_login():
             unsafe_allow_html=True,
         )
         with st.container(key=_form_wrap_key):
-            # Toggle: puur zichtbare custom HTML (exact zoals gevraagd) +
-            # ONZICHTBARE, ECHTE st.button()'s eroverheen (position:
-            # absolute, inset:0, opacity:0) die de daadwerkelijke klik
-            # afhandelen. Geeft zowel het exacte, gewenste uiterlijk ALS
-            # 100% betrouwbare functionaliteit (een echte knop-klik, geen
-            # widget-CSS-gevecht en geen JS-relay-vertraging).
-            _login_toggle_key = "login_mode_toggle_wrap"
-            _login_toggle_btns_key = "login_mode_toggle_btns"
-            login_mode_current = st.session_state.get("login_mode_active", _login_prefill_mode)
+            # Toggle: st.pills() -- Streamlit's eigen, native pil-widget.
+            # Reageert gegarandeerd direct op een klik (geen CSS-overlay-
+            # trucs meer die Streamlit's eigen click-handling in de weg
+            # konden zitten).
             st.markdown(
-                f'<style>'
-                f'.st-key-{_login_toggle_key} {{ '
-                f'position:relative !important; max-width:160px !important; '
-                f'margin-bottom:1.5rem !important; }} '
-                f'.login-toggle-visual {{ '
-                f'display:flex !important; flex-direction:row !important; align-items:center !important; '
-                f'gap:2px !important; background:rgba(2,6,23,0.6) !important; border-radius:8px !important; '
-                f'padding:2px !important; border:1px solid rgba(15,23,42,0.9) !important; '
-                f'box-sizing:border-box !important; width:100% !important; pointer-events:none !important; }} '
-                f'.login-toggle-visual > div {{ '
-                f'flex:1 !important; text-align:center !important; padding:0.3rem 0.6rem !important; '
-                f'border-radius:6px !important; font-size:0.72rem !important; font-weight:500 !important; '
-                f'text-transform:uppercase !important; letter-spacing:0.04em !important; color:#64748B !important; }} '
-                f'.login-toggle-visual > div.hesty-toggle-active {{ '
-                f'background:rgba(30,41,59,0.6) !important; color:#1FAE96 !important; font-weight:700 !important; }} '
-                # Onzichtbare knoppenrij: exact over de zichtbare pil heen
-                # gelegd (position:absolute, inset:0) -- beide zijn kind
-                # van dezelfde position:relative-container hierboven.
-                f'.st-key-{_login_toggle_btns_key} {{ '
-                f'position:absolute !important; top:0 !important; left:0 !important; '
-                f'right:0 !important; bottom:0 !important; width:100% !important; height:100% !important; '
-                f'z-index:2 !important; }} '
-                f'.st-key-{_login_toggle_btns_key} > div {{ '
-                f'display:flex !important; flex-direction:row !important; '
-                f'width:100% !important; height:100% !important; }} '
-                f'.st-key-{_login_toggle_btns_key} > div > div {{ '
-                f'flex:1 1 0% !important; width:auto !important; min-width:0 !important; }} '
-                f'.st-key-{_login_toggle_btns_key} button {{ '
-                f'width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer !important; '
-                f'border:none !important; background:transparent !important; padding:0 !important; '
-                f'box-shadow:none !important; }} '
-                f'</style>',
+                """
+                <style>
+                [data-testid="stPills"] {
+                    background-color: rgba(15, 23, 42, 0.6) !important;
+                    border: 1px solid rgb(15, 23, 42) !important;
+                    border-radius: 0.5rem !important;
+                    padding: 2px !important;
+                    width: fit-content !important;
+                    margin-bottom: 1.5rem !important;
+                }
+                [data-testid="stPills"] button[aria-selected="true"] {
+                    background-color: rgba(30, 41, 59, 0.6) !important;
+                    color: rgb(52, 211, 153) !important;
+                    font-weight: 700 !important;
+                    font-size: 0.75rem !important;
+                    letter-spacing: 0.05em !important;
+                    border-radius: 0.375rem !important;
+                    border: none !important;
+                }
+                [data-testid="stPills"] button[aria-selected="false"] {
+                    background-color: transparent !important;
+                    color: rgb(100, 116, 139) !important;
+                    font-weight: 500 !important;
+                    font-size: 0.75rem !important;
+                    letter-spacing: 0.05em !important;
+                    border: none !important;
+                }
+                </style>
+                """,
                 unsafe_allow_html=True,
             )
-            with st.container(key=_login_toggle_key):
-                st.markdown(
-                    '<div class="login-toggle-visual">'
-                    f'<div class="{"hesty-toggle-active" if login_mode_current == "Sign Up" else ""}">Sign Up</div>'
-                    f'<div class="{"hesty-toggle-active" if login_mode_current == "Sign In" else ""}">Sign In</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
-                with st.container(key=_login_toggle_btns_key):
-                    if st.button("Sign Up", key="login_toggle_btn_signup"):
-                        st.session_state["login_mode_active"] = "Sign Up"
-                        st.rerun()
-                    if st.button("Sign In", key="login_toggle_btn_signin"):
-                        st.session_state["login_mode_active"] = "Sign In"
-                        st.rerun()
-            login_mode = login_mode_current
+            _login_prefill_pill = "SIGN UP" if _login_prefill_mode == "Sign Up" else "SIGN IN"
+            active_tab = st.pills(
+                label="Mode", options=["SIGN IN", "SIGN UP"], default=_login_prefill_pill,
+                label_visibility="collapsed", key="login_pills_toggle",
+            )
+            if active_tab is None:  # kan gebeuren als je 'm handmatig deselecteert
+                active_tab = "SIGN IN"
+            login_mode = "Sign Up" if active_tab == "SIGN UP" else "Sign In"
 
             # Titel + subtekst reageren live op de actieve tab -- 'Welcome
             # back' is verwarrend voor iemand die net op 'Unlock premium'
