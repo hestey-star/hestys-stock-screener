@@ -8747,7 +8747,8 @@ def render_login():
                 # van dezelfde position:relative-container hierboven.
                 f'.st-key-{_login_toggle_btns_key} {{ '
                 f'position:absolute !important; top:0 !important; left:0 !important; '
-                f'width:100% !important; height:100% !important; z-index:2 !important; }} '
+                f'right:0 !important; bottom:0 !important; width:100% !important; height:100% !important; '
+                f'z-index:2 !important; }} '
                 f'.st-key-{_login_toggle_btns_key} > div {{ '
                 f'display:flex !important; flex-direction:row !important; '
                 f'width:100% !important; height:100% !important; }} '
