@@ -4767,7 +4767,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             unsafe_allow_html=True,
         )
 
-        for entry in entries:
+        for _idx, entry in enumerate(entries):
             ticker = entry.get("ticker", "")
             naam = entry.get("naam", ticker)
             score = _compute_deep_dive_overall_score(entry)
@@ -4810,7 +4810,15 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 # Een klein, onzichtbaar knopje ligt er specifiek overheen
                 # (niet over de hele rij, dat gaf eerder dode kliks
                 # elders) om de klik af te handelen.
-                _asset_key = f"{key_prefix}_asset_{ticker}"
+                # Index i.p.v. de ruwe ticker in de key -- een ticker als
+                # 'TDIV.AS' bevat een punt, en een punt in een CSS-
+                # klasse-selector betekent een NIEUWE klasse ('.a.b' = 2
+                # klassen tegelijk vereist, matcht dus NOOIT de ene
+                # daadwerkelijke klasse die Streamlit genereert). Vandaar
+                # dat de knop bij dat soort tickers zichtbaar en verkeerd
+                # gepositioneerd bleef -- een schoon, alfanumeriek
+                # rij-nummer kan dat probleem nooit hebben.
+                _asset_key = f"{key_prefix}_asset_{_idx}"
                 st.markdown(
                     f'<style>'
                     f'.st-key-{_asset_key} {{ position:relative !important; }} '
@@ -4850,7 +4858,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 unsafe_allow_html=True,
             )
 
-        for u in (unmapped or []):
+        for _u_idx, u in enumerate(unmapped or []):
             u_ticker = u.get("ticker", "")
             u_naam = u.get("naam", u_ticker)
             u_logo_url = get_company_logo_url(u_ticker, u_naam)
@@ -4866,7 +4874,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     f'justify-content:center; flex-shrink:0;"><span style="color:#64748B; font-weight:700; '
                     f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></div>'
                 )
-                _u_asset_key = f"{key_prefix}_asset_{u_ticker}"
+                _u_asset_key = f"{key_prefix}_uasset_{_u_idx}"
                 st.markdown(
                     f'<style>'
                     f'.st-key-{_u_asset_key} {{ position:relative !important; }} '
