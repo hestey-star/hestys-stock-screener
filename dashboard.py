@@ -4730,15 +4730,18 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
 
 def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Tabel met NATIVE st.columns() + PURE HTML-tekst/spans in elke cel
-    (garandeert de kaarsrechte uitlijning), gecombineerd met ONZICHTBARE,
-    ECHTE st.button()'s die de daadwerkelijke klik afhandelen -- zelfde,
-    al bewezen betrouwbare techniek als de Discover-subtabs en de Sign
-    In/Sign Up-toggle op de inlogpagina eerder in dit project. Een klik
-    op de zichtbare HTML-span wordt via JS 'doorgestuurd' naar de
-    verborgen knop, die Streamlit's eigen websocket-verbinding gebruikt
-    (dus GEEN page-reload, GEEN wit scherm -- in tegenstelling tot de
-    <a href="?...">-links van de vorige poging).
+    ECHTE, pure HTML <table> (1 st.markdown()-call per sectie) i.p.v.
+    st.columns() -- die laatste bleef, ondanks meerdere pogingen, last
+    hebben van Streamlit's eigen interne wrapper-divs die de verticale
+    uitlijning verstoorden. Een standaard HTML-tabel lijnt cellen altijd
+    pixel-perfect uit via de browser's eigen, decennialang beproefde
+    tabel-rendering -- geen enkele Streamlit-laag zit daar nog tussen.
+
+    Klik-interactie loopt via data-action + verborgen st.button()'s +
+    1 gedeelde JS-listener (zie render_analyze()) -- BEWUST GEEN
+    <a href="?selected_research=...">-links, want die veroorzaken een
+    ECHTE, volledige page-reload (wit scherm), wat we vorige beurt net
+    hebben afgeschaft.
     """
     if not entries and not unmapped:
         st.markdown(
@@ -4747,25 +4750,11 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
-    _col_ratios = [1, 1.2, 4, 1.2]
-    head_cols = st.columns(_col_ratios, gap="small")
-    head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
-    head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
-    head_cols[2].markdown('<div class="hesty-conviction-thead">Core thesis</div>', unsafe_allow_html=True)
-    head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        """
-        <style>
-        .hesty-row-click { cursor: pointer; transition: color 0.2s ease; }
-        .hesty-row-click:hover { color: #34D399 !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    _td = 'style="vertical-align:middle; padding:10px 0; border-bottom:1px solid rgba(30,41,59,0.4);"'
+    _th = ('style="text-align:left; padding:0 0 8px 0; color:#64748B; font-size:0.65rem; font-weight:700; '
+           'text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid rgba(148,163,184,0.15);"')
+
+    rows_html = []
 
     for entry in entries:
         ticker = entry.get("ticker", "")
@@ -4778,9 +4767,9 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 _score_color = "#FBBF24"
             else:
                 _score_color = "#FB7185"
-            score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem;">{score:.1f} / 10</span>'
+            score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem; vertical-align:middle;">{score:.1f} / 10</span>'
         else:
-            score_html = '<span style="color:#64748B; font-size:0.82rem;">-</span>'
+            score_html = '<span style="color:#64748B; font-size:0.82rem; vertical-align:middle;">-</span>'
         thesis_full = (entry.get("investment_thesis") or "").strip()
         thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
         if len(thesis_line) > 55:
@@ -4789,34 +4778,24 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         last_validated = (entry.get("created_at") or "")[:10] or "-"
         logo_url = get_company_logo_url(ticker, naam)
         logo_html = (
-            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; '
-            f'object-fit:contain; background:#fff; vertical-align:middle;" />'
+            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
+            f'background:#fff; vertical-align:middle; margin-right:12px;" />'
             if logo_url else
             f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
             f'background:rgba(137,146,163,0.15); align-items:center; justify-content:center; '
-            f'vertical-align:middle;"><span style="color:#8992A3; font-weight:700; '
+            f'vertical-align:middle; margin-right:12px;"><span style="color:#8992A3; font-weight:700; '
             f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
         )
         _action = f"{key_prefix}|open|{ticker}"
-
-        row_cols = st.columns(_col_ratios, gap="small")
-        with row_cols[0]:
-            st.markdown(
-                f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
-                f'<span class="hesty-row-click" data-action="{_action}" style="color:#ffffff; '
-                f'font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
-                f'text-transform:uppercase;">{ticker}</span></div>',
-                unsafe_allow_html=True,
-            )
-        with row_cols[1]:
-            st.markdown(f'<div style="text-align:left; width:100%;">{score_html}</div>', unsafe_allow_html=True)
-        with row_cols[2]:
-            st.markdown(f'<span style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</span>', unsafe_allow_html=True)
-        with row_cols[3]:
-            st.markdown(f'<span style="color:#64748B; font-size:0.75rem;">{last_validated}</span>', unsafe_allow_html=True)
-        st.markdown(
-            '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-            unsafe_allow_html=True,
+        rows_html.append(
+            f'<tr>'
+            f'<td {_td}>{logo_html}<span class="hesty-row-click" data-action="{_action}" style="color:#ffffff; '
+            f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
+            f'text-transform:uppercase; vertical-align:middle;">{ticker}</span></td>'
+            f'<td {_td}>{score_html}</td>'
+            f'<td {_td}><span style="color:#F1F5F9; font-size:0.82rem; vertical-align:middle;">{thesis_text}</span></td>'
+            f'<td {_td}><span style="color:#64748B; font-size:0.75rem; vertical-align:middle;">{last_validated}</span></td>'
+            f'</tr>'
         )
 
     for u in (unmapped or []):
@@ -4824,48 +4803,47 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         u_naam = u.get("naam", u_ticker)
         u_logo_url = get_company_logo_url(u_ticker, u_naam)
         u_logo_html = (
-            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; '
-            f'object-fit:contain; background:#fff; vertical-align:middle;" />'
+            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
+            f'background:#fff; vertical-align:middle; margin-right:12px;" />'
             if u_logo_url else
             f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
             f'background:rgba(137,146,163,0.1); align-items:center; justify-content:center; '
-            f'vertical-align:middle;"><span style="color:#64748B; font-weight:700; '
+            f'vertical-align:middle; margin-right:12px;"><span style="color:#64748B; font-weight:700; '
             f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
         )
         _u_action = f"{key_prefix}|scan|{u_ticker}"
-
-        row_cols = st.columns(_col_ratios, gap="small")
-        with row_cols[0]:
-            st.markdown(
-                f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
-                f'<span class="hesty-row-click" data-action="{_u_action}" style="color:#94A3B8; '
-                f'font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
-                f'text-transform:uppercase;">{u_ticker}</span></div>',
-                unsafe_allow_html=True,
-            )
-        with row_cols[1]:
-            st.markdown(
-                f'<div style="text-align:left; width:100%;">'
-                f'<span class="hesty-row-click" data-action="{_u_action}" style="color:#a7f3d0; '
-                f'background-color:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.2); '
-                f'border-radius:0.375rem; padding:2px 8px; font-size:0.75rem; font-weight:700; '
-                f'display:inline-block;">\U0001F916 SCAN</span></div>',
-                unsafe_allow_html=True,
-            )
-        with row_cols[2]:
-            st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
-        with row_cols[3]:
-            st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
-        st.markdown(
-            '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-            unsafe_allow_html=True,
+        rows_html.append(
+            f'<tr>'
+            f'<td {_td}>{u_logo_html}<span class="hesty-row-click" data-action="{_u_action}" style="color:#94A3B8; '
+            f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
+            f'text-transform:uppercase; vertical-align:middle;">{u_ticker}</span></td>'
+            f'<td {_td}><span class="hesty-row-click" data-action="{_u_action}" style="color:#a7f3d0; '
+            f'background-color:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.2); '
+            f'border-radius:0.375rem; padding:4px 10px; font-size:0.75rem; font-weight:700; '
+            f'display:inline-block; vertical-align:middle;">\U0001F916 SCAN</span></td>'
+            f'<td {_td}><span style="color:#64748B; font-size:0.82rem; vertical-align:middle;">No active research record found.</span></td>'
+            f'<td {_td}><span style="color:#64748B; font-size:0.75rem; vertical-align:middle;">-</span></td>'
+            f'</tr>'
         )
 
+    st.markdown(
+        f'<style>.hesty-row-click {{ cursor:pointer; transition:color 0.2s ease; }} '
+        f'.hesty-row-click:hover {{ color:#34D399 !important; }}</style>'
+        f'<table style="width:100%; border-collapse:collapse; text-align:left;">'
+        f'<thead><tr>'
+        f'<th {_th}>Asset</th><th {_th}>Score</th><th {_th}>Core thesis</th><th {_th}>Last validated</th>'
+        f'</tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody>'
+        f'</table>',
+        unsafe_allow_html=True,
+    )
+
     # --- Onzichtbare, ECHTE knoppen: 1 per ticker (open bestaande
-    # research) + 1 per unmapped asset (start nieuwe scan). Deze regelen
-    # de daadwerkelijke state-wissel; de zichtbare HTML hierboven is
-    # puur decoratief totdat JS (zie render_analyze()) een klik erop
-    # doorstuurt naar de bijpassende, hier verborgen knop. ---
+    # research) + 1 per unmapped asset (start nieuwe scan). Regelen de
+    # daadwerkelijke state-wissel; de HTML-tabel hierboven is puur
+    # decoratief totdat JS (zie render_analyze()) een klik erop
+    # doorstuurt naar de bijpassende, hier verborgen knop -- dit
+    # gebruikt Streamlit's eigen sessie, dus GEEN page-reload. ---
     _hidden_key = f"{key_prefix}_hidden_clicks"
     st.markdown(f'<style>.st-key-{_hidden_key} {{ display:none !important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_hidden_key):
