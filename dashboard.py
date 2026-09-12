@@ -4827,7 +4827,13 @@ def render_hestys_table(assets_list: list, key_prefix: str) -> None:
     # (zie render_analyze()) een klik erop doorstuurt naar de
     # bijpassende, hier verborgen knop.
     _hidden_key = f"{key_prefix}_hidden_clicks"
-    st.markdown(f'<style>.st-key-{_hidden_key} {{ display:none !important; }}</style>', unsafe_allow_html=True)
+    st.markdown(
+        f'<style>.st-key-{_hidden_key} {{ '
+        f'position:absolute !important; width:1px !important; height:1px !important; '
+        f'overflow:hidden !important; opacity:0 !important; pointer-events:none !important; '
+        f'clip:rect(0,0,0,0) !important; }}</style>',
+        unsafe_allow_html=True,
+    )
     with st.container(key=_hidden_key):
         for asset in assets_list:
             ticker = asset["ticker"]
@@ -5108,19 +5114,28 @@ def render_analyze():
             if (doc.body.__hestyAnalyzeClickBound) { return; }
             doc.body.__hestyAnalyzeClickBound = true;
             doc.body.addEventListener('click', function(e) {
-                var el = e.target.closest('.hesty-row-click');
+                // [data-action] i.p.v. de CSS-klasse .hesty-row-click als
+                // primaire hook -- de klasse was oorspronkelijk puur voor
+                // de hover-kleur bedoeld; het attribuut zelf is de
+                // daadwerkelijke, betrouwbaardere functionele marker.
+                var el = e.target.closest('[data-action]');
                 if (!el) { return; }
                 var action = el.getAttribute('data-action');
+                if (!action) { return; }
                 var buttons = doc.querySelectorAll('button');
                 for (var i = 0; i < buttons.length; i++) {
-                    if (buttons[i].textContent.trim() === action) {
+                    if (buttons[i].textContent.trim() === action.trim()) {
                         buttons[i].click();
-                        break;
+                        return;
                     }
                 }
-            });
+            }, true);
         }
         hestyBindAnalyzeClicks();
+        // Opnieuw proberen te binden na een korte vertraging, voor het
+        // geval de hoofdpagina bij de allereerste render nog niet
+        // volledig klaar was toen dit script voor het eerst draaide.
+        setTimeout(hestyBindAnalyzeClicks, 500);
         </script>
         """,
         height=0,
