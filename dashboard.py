@@ -9531,13 +9531,28 @@ with st.sidebar:
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
         line-height: 1.2 !important; box-sizing: border-box !important;
-        padding: 0.22rem 0.9rem 0.22rem 0.75rem !important; border-radius: 8px !important;
+        padding: 0.4rem 0.9rem 0.4rem 0.75rem !important; border-radius: 8px !important;
         text-decoration: none !important; color: #8992A3 !important;
-        margin: 1px 0 !important;
+        margin: 0 !important;
     }
     .st-key-nav_discover a:hover, .st-key-nav_today a:hover, .st-key-nav_portfolio a:hover,
     .st-key-nav_analyze a:hover, .st-key-nav_support a:hover, .st-key-nav_premium a:hover {
         background: rgba(255,255,255,0.04) !important;
+    }
+    /* De grijze hover-achtergrond bleek eigenlijk NIET van de <a>-tag zelf
+       te komen (die is netjes klein), maar van Streamlit's EIGEN, native
+       hover-stijl op de omliggende wrapper-elementen -- die is standaard
+       fors groter dan de zichtbare pil, en 'lekte' daardoor optisch over
+       de buurknop heen. Hard neutraliseren op elk wrapper-niveau. */
+    [data-testid="stSidebar"] [data-testid="stPageLink"],
+    [data-testid="stSidebar"] [data-testid="element-container"],
+    [data-testid="stSidebar"] [data-testid="stElementContainer"] {
+        background: transparent !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stPageLink"]:hover,
+    [data-testid="stSidebar"] [data-testid="element-container"]:hover,
+    [data-testid="stSidebar"] [data-testid="stElementContainer"]:hover {
+        background: transparent !important;
     }
     /* Discover-subpagina's -- eigen, gezamenlijke groep-container
        (.st-key-discover_subnav_group) met de inspringing op de
