@@ -4728,140 +4728,145 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     )
 
 
-def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
+def render_hestys_table(assets_list: list, key_prefix: str) -> None:
     """
-    ECHTE, pure HTML <table> (1 st.markdown()-call per sectie) i.p.v.
-    st.columns() -- die laatste bleef, ondanks meerdere pogingen, last
-    hebben van Streamlit's eigen interne wrapper-divs die de verticale
-    uitlijning verstoorden. Een standaard HTML-tabel lijnt cellen altijd
-    pixel-perfect uit via de browser's eigen, decennialang beproefde
-    tabel-rendering -- geen enkele Streamlit-laag zit daar nog tussen.
-
-    Klik-interactie loopt via data-action + verborgen st.button()'s +
-    1 gedeelde JS-listener (zie render_analyze()) -- BEWUST GEEN
-    <a href="?selected_research=...">-links, want die veroorzaken een
-    ECHTE, volledige page-reload (wit scherm), wat we vorige beurt net
-    hebben afgeschaft.
+    Onwrikbare, pure HTML <table> -- exact de structuur die is
+    aangeleverd, met 1 bewuste aanpassing: <a href="?selected_research=
+    ...">-links zijn vervangen door <span data-action="...">-elementen.
+    Een href-link is een ECHTE browser-navigatie (volledige page-reload,
+    wit scherm) -- data-action + de verborgen st.button()'s/JS-listener
+    hieronder gebruiken Streamlit's eigen sessie, dus geen reload.
+    'assets_list' is een lijst dicts met: ticker, naam, logo_url, score
+    (of None), thesis, date, is_unmapped.
     """
-    if not entries and not unmapped:
+    if not assets_list:
         st.markdown(
             '<div style="color:#64748B; font-size:0.82rem; padding:1rem 0.25rem;">Nothing here yet.</div>',
             unsafe_allow_html=True,
         )
         return
 
-    _td = 'style="vertical-align:middle; padding:10px 0; border-bottom:1px solid rgba(30,41,59,0.4);"'
-    _th = ('style="text-align:left; padding:0 0 8px 0; color:#64748B; font-size:0.65rem; font-weight:700; '
-           'text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid rgba(148,163,184,0.15);"')
+    table_html = """
+    <style>.hesty-row-click { cursor:pointer; transition:color 0.2s ease; }
+    .hesty-row-click:hover { color:#34D399 !important; }</style>
+    <table style="width:100%; border-collapse: collapse; text-align: left; font-family: sans-serif; color: #ffffff;">
+        <thead>
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; color: #64748b;">
+                <th style="padding: 10px 0; font-weight: 700; width: 15%;">Asset</th>
+                <th style="padding: 10px 0; font-weight: 700; width: 15%;">Score</th>
+                <th style="padding: 10px 0; font-weight: 700; width: 55%;">Core Thesis</th>
+                <th style="padding: 10px 0; font-weight: 700; width: 15%;">Last Validated</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
 
-    rows_html = []
+    for asset in assets_list:
+        ticker = asset["ticker"]
+        score_val = asset.get("score")
+        if score_val is not None and score_val >= 8.0:
+            score_style = "color: #34d399; font-weight: 700;"
+        elif score_val is not None and score_val >= 5.0:
+            score_style = "color: #fbbf24; font-weight: 700;"
+        elif score_val is not None:
+            score_style = "color: #f43f5e; font-weight: 700;"
+        else:
+            score_style = "color: #64748b; font-weight: 700;"
 
+        thesis_text = asset.get("thesis") or "No active research record found."
+        if len(thesis_text) > 55:
+            thesis_text = thesis_text[:55] + "..."
+
+        is_unmapped = asset.get("is_unmapped", False)
+        _action = f"{key_prefix}|{'scan' if is_unmapped else 'open'}|{ticker}"
+
+        if is_unmapped:
+            score_cell = (
+                f'<span class="hesty-row-click" data-action="{_action}" style="color: #a7f3d0; '
+                f'background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(52, 211, 153, 0.2); '
+                f'border-radius: 0.375rem; padding: 4px 10px; font-size: 11px; font-weight: 700; '
+                f'display: inline-block; vertical-align: middle;">\U0001F916 SCAN</span>'
+            )
+            thesis_cell = '<span style="color: #475569; font-size: 13px;">No active research record found.</span>'
+            date_cell = "-"
+            row_style = "opacity: 0.5;"
+        else:
+            score_cell = f'<span style="{score_style} vertical-align: middle;">{score_val:.1f} / 10</span>' if score_val is not None else '<span style="color:#64748b;">-</span>'
+            thesis_cell = f'<span style="color: #cbd5e1; font-size: 13px; vertical-align: middle;">{thesis_text}</span>'
+            date_cell = asset.get("date") or "-"
+            row_style = ""
+
+        table_html += f"""
+        <tr style="border-bottom: 1px solid rgba(30, 41, 59, 0.5); {row_style}">
+            <td style="padding: 12px 0; vertical-align: middle; white-space: nowrap;">
+                <img src="{asset['logo_url']}" style="width:24px; height:24px; border-radius:50%; vertical-align: middle; margin-right: 10px; display: inline-block;">
+                <span class="hesty-row-click" data-action="{_action}" style="color: #ffffff; font-weight: 700; text-decoration: none; font-size: 13px; vertical-align: middle; display: inline-block;">{ticker}</span>
+            </td>
+            <td style="padding: 12px 0; vertical-align: middle;">{score_cell}</td>
+            <td style="padding: 12px 0; vertical-align: middle;">{thesis_cell}</td>
+            <td style="padding: 12px 0; vertical-align: middle; color: #64748b; font-size: 13px;">{date_cell}</td>
+        </tr>
+        """
+
+    table_html += "</tbody></table>"
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    # Onzichtbare, ECHTE knoppen: 1 per asset. Regelen de daadwerkelijke
+    # state-wissel; de HTML-tabel hierboven is puur decoratief totdat JS
+    # (zie render_analyze()) een klik erop doorstuurt naar de
+    # bijpassende, hier verborgen knop.
+    _hidden_key = f"{key_prefix}_hidden_clicks"
+    st.markdown(f'<style>.st-key-{_hidden_key} {{ display:none !important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_hidden_key):
+        for asset in assets_list:
+            ticker = asset["ticker"]
+            is_unmapped = asset.get("is_unmapped", False)
+            _action = f"{key_prefix}|{'scan' if is_unmapped else 'open'}|{ticker}"
+            if st.button(_action, key=f"hiddenbtn_{key_prefix}_{ticker}"):
+                if is_unmapped:
+                    st.session_state["dd_ticker_input"] = ticker
+                    st.session_state["dd_naam_input"] = asset.get("naam", ticker)
+                    st.session_state["selected_research"] = "__NEW__"
+                else:
+                    st.session_state["selected_research"] = ticker
+                st.rerun()
+
+
+def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
+    """
+    Bouwt 'assets_list' (de generieke vorm die render_hestys_table()
+    verwacht) op vanuit onze eigen deep-dive-records/holdings, en
+    rendert de tabel.
+    """
+    assets_list = []
     for entry in entries:
         ticker = entry.get("ticker", "")
         naam = entry.get("naam", ticker)
         score = _compute_deep_dive_overall_score(entry)
-        if score is not None:
-            if score >= 8:
-                _score_color = "#34D399"
-            elif score >= 5:
-                _score_color = "#FBBF24"
-            else:
-                _score_color = "#FB7185"
-            score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem; vertical-align:middle;">{score:.1f} / 10</span>'
-        else:
-            score_html = '<span style="color:#64748B; font-size:0.82rem; vertical-align:middle;">-</span>'
         thesis_full = (entry.get("investment_thesis") or "").strip()
         thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-        if len(thesis_line) > 55:
-            thesis_line = thesis_line[:55] + "..."
-        thesis_text = thesis_line or "No thesis logged yet"
-        last_validated = (entry.get("created_at") or "")[:10] or "-"
-        logo_url = get_company_logo_url(ticker, naam)
-        logo_html = (
-            f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-            f'background:#fff; vertical-align:middle; margin-right:12px;" />'
-            if logo_url else
-            f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
-            f'background:rgba(137,146,163,0.15); align-items:center; justify-content:center; '
-            f'vertical-align:middle; margin-right:12px;"><span style="color:#8992A3; font-weight:700; '
-            f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
-        )
-        _action = f"{key_prefix}|open|{ticker}"
-        rows_html.append(
-            f'<tr>'
-            f'<td {_td}>{logo_html}<span class="hesty-row-click" data-action="{_action}" style="color:#ffffff; '
-            f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
-            f'text-transform:uppercase; vertical-align:middle;">{ticker}</span></td>'
-            f'<td {_td}>{score_html}</td>'
-            f'<td {_td}><span style="color:#F1F5F9; font-size:0.82rem; vertical-align:middle;">{thesis_text}</span></td>'
-            f'<td {_td}><span style="color:#64748B; font-size:0.75rem; vertical-align:middle;">{last_validated}</span></td>'
-            f'</tr>'
-        )
-
+        assets_list.append({
+            "ticker": ticker,
+            "naam": naam,
+            "logo_url": get_company_logo_url(ticker, naam) or "",
+            "score": score,
+            "thesis": thesis_line,
+            "date": (entry.get("created_at") or "")[:10] or "-",
+            "is_unmapped": False,
+        })
     for u in (unmapped or []):
         u_ticker = u.get("ticker", "")
         u_naam = u.get("naam", u_ticker)
-        u_logo_url = get_company_logo_url(u_ticker, u_naam)
-        u_logo_html = (
-            f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-            f'background:#fff; vertical-align:middle; margin-right:12px;" />'
-            if u_logo_url else
-            f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
-            f'background:rgba(137,146,163,0.1); align-items:center; justify-content:center; '
-            f'vertical-align:middle; margin-right:12px;"><span style="color:#64748B; font-weight:700; '
-            f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
-        )
-        _u_action = f"{key_prefix}|scan|{u_ticker}"
-        rows_html.append(
-            f'<tr>'
-            f'<td {_td}>{u_logo_html}<span class="hesty-row-click" data-action="{_u_action}" style="color:#94A3B8; '
-            f'font-weight:700; text-decoration:none; font-size:0.875rem; letter-spacing:0.05em; '
-            f'text-transform:uppercase; vertical-align:middle;">{u_ticker}</span></td>'
-            f'<td {_td}><span class="hesty-row-click" data-action="{_u_action}" style="color:#a7f3d0; '
-            f'background-color:rgba(16,185,129,0.1); border:1px solid rgba(52,211,153,0.2); '
-            f'border-radius:0.375rem; padding:4px 10px; font-size:0.75rem; font-weight:700; '
-            f'display:inline-block; vertical-align:middle;">\U0001F916 SCAN</span></td>'
-            f'<td {_td}><span style="color:#64748B; font-size:0.82rem; vertical-align:middle;">No active research record found.</span></td>'
-            f'<td {_td}><span style="color:#64748B; font-size:0.75rem; vertical-align:middle;">-</span></td>'
-            f'</tr>'
-        )
-
-    st.markdown(
-        f'<style>.hesty-row-click {{ cursor:pointer; transition:color 0.2s ease; }} '
-        f'.hesty-row-click:hover {{ color:#34D399 !important; }}</style>'
-        f'<table style="width:100%; border-collapse:collapse; text-align:left;">'
-        f'<thead><tr>'
-        f'<th {_th}>Asset</th><th {_th}>Score</th><th {_th}>Core thesis</th><th {_th}>Last validated</th>'
-        f'</tr></thead>'
-        f'<tbody>{"".join(rows_html)}</tbody>'
-        f'</table>',
-        unsafe_allow_html=True,
-    )
-
-    # --- Onzichtbare, ECHTE knoppen: 1 per ticker (open bestaande
-    # research) + 1 per unmapped asset (start nieuwe scan). Regelen de
-    # daadwerkelijke state-wissel; de HTML-tabel hierboven is puur
-    # decoratief totdat JS (zie render_analyze()) een klik erop
-    # doorstuurt naar de bijpassende, hier verborgen knop -- dit
-    # gebruikt Streamlit's eigen sessie, dus GEEN page-reload. ---
-    _hidden_key = f"{key_prefix}_hidden_clicks"
-    st.markdown(f'<style>.st-key-{_hidden_key} {{ display:none !important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_hidden_key):
-        for entry in entries:
-            ticker = entry.get("ticker", "")
-            _action = f"{key_prefix}|open|{ticker}"
-            if st.button(_action, key=f"hiddenbtn_{key_prefix}_open_{ticker}"):
-                st.session_state["selected_research"] = ticker
-                st.rerun()
-        for u in (unmapped or []):
-            u_ticker = u.get("ticker", "")
-            u_naam = u.get("naam", u_ticker)
-            _u_action = f"{key_prefix}|scan|{u_ticker}"
-            if st.button(_u_action, key=f"hiddenbtn_{key_prefix}_scan_{u_ticker}"):
-                st.session_state["dd_ticker_input"] = u_ticker
-                st.session_state["dd_naam_input"] = u_naam
-                st.session_state["selected_research"] = "__NEW__"
-                st.rerun()
+        assets_list.append({
+            "ticker": u_ticker,
+            "naam": u_naam,
+            "logo_url": get_company_logo_url(u_ticker, u_naam) or "",
+            "score": None,
+            "thesis": None,
+            "date": None,
+            "is_unmapped": True,
+        })
+    render_hestys_table(assets_list, key_prefix=key_prefix)
 
 
 def _render_deep_dive_add_form(user_email: str) -> None:
