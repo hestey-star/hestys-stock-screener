@@ -4899,6 +4899,119 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             )
 
 
+def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
+    """
+    Roept Claude Haiku 4.5 aan om een ticker te onderzoeken, en slaat het
+    resultaat op via database.add_deep_dive() -- DEZELFDE opslagroute als
+    het handmatige formulier, zodat AI-gegenereerde research overal
+    (conviction-tegels, tabellen, drawer) er identiek uitziet en meetelt.
+    De aangeleverde code schreef rechtstreeks naar een losse 'deep_dives'-
+    Supabase-tabel met andere veldnamen (bv. 'management_check' i.p.v.
+    'management_assessment') en zonder score-velden -- dat zou de rest
+    van de app (die leunt op database.add_deep_dive() en de 6 score-
+    velden voor de conviction-berekening) omzeild en losgekoppeld hebben.
+    Model-ID 'claude-haiku-4-5' geverifieerd via web-search (het model
+    'claude-3-5-haiku' uit het aangeleverde voorbeeld bestaat niet als
+    volledig, geldig API-ID).
+    """
+    import json
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        st.error("The 'anthropic' package isn't installed -- add it to requirements.txt (pip install anthropic).")
+        return False
+
+    api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic", {}).get("api_key")
+    if not api_key:
+        st.error(
+            "AI research isn't configured yet -- add an ANTHROPIC_API_KEY (or an "
+            "[anthropic] api_key = \"...\" section) to your Streamlit secrets."
+        )
+        return False
+
+    client = Anthropic(api_key=api_key)
+
+    system_prompt = (
+        "You are the Hestys AI Research Assistant. Analyze the requested stock ticker. "
+        "Respond with ONLY a raw JSON object -- no markdown code fences, no commentary before or after. "
+        "All text field values MUST be written in uppercase (ALL-CAPS). Crisp, professional, "
+        "institutional-grade insights. No chatty intros or fluff. Max 3 punchy points per text field, "
+        "separated by ' | '."
+    )
+    user_prompt = f"""Analyze the ticker {ticker} ({naam}). Return a JSON object with exactly these keys:
+- "business_overview" (string): what the company does and its business model
+- "investment_thesis" (string): the bull case for a long-term position
+- "bear_case" (string): the biggest fundamental risks
+- "management_assessment" (string): a quick evaluation of the CEO and governance
+- "thesis_score", "management_score", "bear_case_score", "valuation_score", "catalysts_score" (numbers, 1.0-10.0): your rating of each dimension, higher always meaning more favorable for a buy decision
+
+Respond with ONLY the JSON object, starting with {{ and ending with }}."""
+
+    with st.spinner(f"Hestys AI is scanning {ticker}..."):
+        try:
+            message = client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=1200,
+                temperature=0.2,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_prompt},
+                    # Prefill dwingt het model tot een schoon JSON-antwoord
+                    # zonder omliggende tekst of markdown-codeblokken --
+                    # betrouwbaarder dan alleen de instructie in de prompt.
+                    {"role": "assistant", "content": "{"},
+                ],
+            )
+            raw_text = "{" + message.content[0].text
+            ai_data = json.loads(raw_text)
+        except json.JSONDecodeError:
+            st.error("AI scan failed: the model didn't return valid JSON. Please try again.")
+            return False
+        except Exception as e:
+            st.error(f"AI scan failed: {e}")
+            return False
+
+    try:
+        import database
+        market_snapshot = get_deep_dive_market_snapshot(ticker)
+
+        def _safe_score(key):
+            try:
+                return max(1.0, min(10.0, float(ai_data.get(key, 5.0))))
+            except (TypeError, ValueError):
+                return 5.0
+
+        database.add_deep_dive(
+            user_email, ticker.upper(), naam,
+            business_overview=ai_data.get("business_overview") or None,
+            investment_thesis=ai_data.get("investment_thesis") or None,
+            management_assessment=ai_data.get("management_assessment") or None,
+            bear_case=ai_data.get("bear_case") or None,
+            valuation_view=None,
+            interested_price=None,
+            catalysts=None,
+            position_sizing_plan=None,
+            sell_criteria=None,
+            conclusion="Watch",
+            market_snapshot=market_snapshot,
+            sell_trigger_price=None,
+            sell_trigger_date=None,
+            thesis_score=_safe_score("thesis_score"),
+            management_score=_safe_score("management_score"),
+            bear_case_score=_safe_score("bear_case_score"),
+            valuation_score=_safe_score("valuation_score"),
+            catalysts_score=_safe_score("catalysts_score"),
+            technical_analysis=None,
+            technical_analysis_score=None,
+        )
+    except Exception as e:
+        st.error(f"AI research was generated but saving it failed: {e}")
+        return False
+
+    st.success(f"Research for {ticker} generated and saved.")
+    return True
+
+
 def _render_deep_dive_add_form(user_email: str) -> None:
     """
     Formulier om een nieuwe deep-dive (of een bijgewerkte versie) te
@@ -4925,11 +5038,14 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     )
     with st.container(key=_ai_btn_key):
         if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
-            st.info(
-                "AI briefing generation isn't wired up yet -- this button is just the placeholder "
-                "for the next step. For now, fill in the fields below yourself.",
-                icon=":material/smart_toy:",
-            )
+            _briefing_ticker = (st.session_state.get("dd_ticker_input") or "").strip().upper()
+            _briefing_naam = st.session_state.get("dd_naam_input") or _briefing_ticker
+            if not _briefing_ticker:
+                st.error("Fill in a ticker above first, then generate the briefing.")
+            else:
+                if _run_ai_cockpit_briefing(_briefing_ticker, _briefing_naam, user_email):
+                    st.session_state["selected_research"] = _briefing_ticker
+                    st.rerun()
 
     dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
