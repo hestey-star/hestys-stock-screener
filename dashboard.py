@@ -9522,80 +9522,42 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
         gap: 0.2rem !important;
     }
-    /* Hoofdmenu-items (Discover, Today, My Portfolio, Analyze, Support,
-       Premium) -- ALLEMAAL exact dezelfde opbouw: st.page_link() met
-       icon=, elk gescoped via z'n eigen container-key i.p.v. href, dus
-       gegarandeerd identieke uitlijning voor alle 6.
-       LET OP: via de DevTools-HTML die is doorgestuurd bleek de klasse
-       'st-key-nav_X' NERGENS voor te komen op de <a> zelf of z'n
-       directe ouder -- dus deze regels matchten mogelijk NOOIT. Daarom
-       nu OOK, als hoofd-aanpak, het stabiele, Streamlit-versie-
-       onafhankelijke data-testid="stPageLink-NavLink"-attribuut
-       gebruikt, dat WEL gegarandeerd op de link zelf staat. */
-    [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] {
+    /* Discover blijft st.page_link() (subnav-highlight-logica hangt
+       daarvan af) -- basisstijl hier gescoped, GEEN vaste-hoogte-
+       gevecht meer nodig aangezien dat item niet het gerapporteerde
+       overlap-probleem had. */
+    .st-key-nav_discover a {
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        box-sizing: border-box !important;
-        /* Vaste, harde hoogte i.p.v. padding-gedreven hoogte -- een
-           icoon (via icon=) kan een eigen, groter intrinsiek formaat
-           hebben dan de tekst, waardoor de <a>-box breder uitviel dan
-           de padding alleen deed vermoeden. Met een vaste height staat
-           dat vast, ongeacht wat er precies in de rij staat. */
-        height: 36px !important; max-height: 36px !important; min-height: 0 !important;
-        padding: 0 0.9rem 0 0.75rem !important; border-radius: 8px !important;
-        text-decoration: none !important; color: #8992A3 !important;
-        margin: 0 !important; overflow: hidden !important;
+        padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
+        text-decoration: none !important; color: #8992A3 !important; margin: 0 !important;
     }
-    [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] * {
-        max-height: 20px !important;
+    .st-key-nav_discover a:hover { background: rgba(255,255,255,0.04) !important; }
+    /* Today/My Portfolio/Analyze/Support/Premium: nu ECHTE st.button()'s
+       i.p.v. st.page_link() -- st.page_link() rendert een
+       <a data-testid="stPageLink-NavLink"> met Streamlit's eigen,
+       automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs met
+       !important niet naar een vaste, kleine hoogte te dwingen bleken
+       (de hover-achtergrond bleef over de buurknop heen lopen). Een
+       st.button() hebben we elders in dit project (login-knop, close-
+       knop) al herhaaldelijk volledig kunnen herstijlen, dus dat is de
+       betrouwbaardere route. */
+    .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze,
+    .st-key-nav_support, .st-key-nav_premium {
+        width: 100% !important;
     }
-    [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:hover {
-        background: rgba(255,255,255,0.04) !important;
-    }
-    .st-key-nav_discover a, .st-key-nav_today a, .st-key-nav_portfolio a,
-    .st-key-nav_analyze a, .st-key-nav_support a, .st-key-nav_premium a {
-        display: flex !important; align-items: center !important; gap: 0.75rem !important;
+    .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button,
+    .st-key-nav_support button, .st-key-nav_premium button {
+        display: flex !important; align-items: center !important; justify-content: flex-start !important;
+        gap: 0.75rem !important; width: 100% !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        box-sizing: border-box !important;
-        height: 36px !important; max-height: 36px !important; min-height: 0 !important;
-        padding: 0 0.9rem 0 0.75rem !important; border-radius: 8px !important;
-        text-decoration: none !important; color: #8992A3 !important;
-        margin: 0 !important; overflow: hidden !important;
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
+        color: #8992A3 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
-    .st-key-nav_discover a *, .st-key-nav_today a *, .st-key-nav_portfolio a *,
-    .st-key-nav_analyze a *, .st-key-nav_support a *, .st-key-nav_premium a * {
-        max-height: 20px !important;
-    }
-    .st-key-nav_discover a:hover, .st-key-nav_today a:hover, .st-key-nav_portfolio a:hover,
-    .st-key-nav_analyze a:hover, .st-key-nav_support a:hover, .st-key-nav_premium a:hover {
-        background: rgba(255,255,255,0.04) !important;
-    }
-    /* De <div> die de <a> DIRECT omwikkelt (bevestigd via DevTools) --
-       ook DIE krijgt nu een harde, matchende hoogte, voor het geval de
-       hover/achtergrond daar toch nog vandaan blijkt te komen i.p.v.
-       van de <a> zelf. */
-    [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] {
-        display: flex !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stPageLink"] {
-        height: 36px !important; max-height: 36px !important; min-height: 0 !important;
-        overflow: hidden !important; box-sizing: border-box !important;
-        display: flex !important; align-items: center !important;
-    }
-    /* De grijze hover-achtergrond bleek eigenlijk NIET van de <a>-tag zelf
-       te komen (die is netjes klein), maar van Streamlit's EIGEN, native
-       hover-stijl op de omliggende wrapper-elementen -- die is standaard
-       fors groter dan de zichtbare pil, en 'lekte' daardoor optisch over
-       de buurknop heen. Hard neutraliseren op elk wrapper-niveau. */
-    [data-testid="stSidebar"] [data-testid="stPageLink"],
-    [data-testid="stSidebar"] [data-testid="element-container"],
-    [data-testid="stSidebar"] [data-testid="stElementContainer"] {
-        background: transparent !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stPageLink"]:hover,
-    [data-testid="stSidebar"] [data-testid="element-container"]:hover,
-    [data-testid="stSidebar"] [data-testid="stElementContainer"]:hover {
-        background: transparent !important;
+    .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover,
+    .st-key-nav_support button:hover, .st-key-nav_premium button:hover {
+        background: rgba(255,255,255,0.04) !important; color: #8992A3 !important; border: none !important;
     }
     /* Discover-subpagina's -- eigen, gezamenlijke groep-container
        (.st-key-discover_subnav_group) met de inspringing op de
@@ -9667,7 +9629,7 @@ with st.sidebar:
     }
     if _active_url_path in _main_key_by_path:
         _nav_css_parts.append(f"""
-    .st-key-{_main_key_by_path[_active_url_path]} a {{
+    .st-key-{_main_key_by_path[_active_url_path]} button {{
         color: #1FAE96 !important;
         background: rgba(31,174,150,0.15) !important;
         border-radius: 8px !important;
@@ -9722,16 +9684,30 @@ with st.sidebar:
             st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES")
         with st.container(key="discover_sub_earnings"):
             st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES")
+    # Today/My Portfolio/Analyze/Support/Premium: overgestapt van
+    # st.page_link() naar st.button() + st.switch_page(). st.page_link()
+    # rendert een <a data-testid="stPageLink-NavLink"> met Streamlit's
+    # eigen, automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs
+    # met !important niet naar een vaste, kleine hoogte te dwingen
+    # bleken -- de hover-achtergrond bleef daardoor over de buurknop
+    # heen lopen. st.button() hebben we elders in dit project (login-
+    # knop, close-knop, etc.) al herhaaldelijk volledig kunnen
+    # herstijlen, dus dat is de betrouwbaardere route hier ook.
     with st.container(key="nav_today"):
-        st.page_link(today_page, label="TODAY", icon=":material/calendar_today:")
+        if st.button("TODAY", key="navbtn_today", icon=":material/calendar_today:"):
+            st.switch_page(today_page)
     with st.container(key="nav_portfolio"):
-        st.page_link(portfolio_page, label="MY PORTFOLIO", icon=":material/work:")
+        if st.button("MY PORTFOLIO", key="navbtn_portfolio", icon=":material/work:"):
+            st.switch_page(portfolio_page)
     with st.container(key="nav_analyze"):
-        st.page_link(analyze_page, label="ANALYZE", icon=":material/bar_chart:")
+        if st.button("ANALYZE", key="navbtn_analyze", icon=":material/bar_chart:"):
+            st.switch_page(analyze_page)
     with st.container(key="nav_support"):
-        st.page_link(support_page, label="SUPPORT", icon=":material/support_agent:")
+        if st.button("SUPPORT", key="navbtn_support", icon=":material/support_agent:"):
+            st.switch_page(support_page)
     with st.container(key="nav_premium"):
-        st.page_link(premium_page, label="PREMIUM", icon=":material/star:")
+        if st.button("PREMIUM", key="navbtn_premium", icon=":material/star:"):
+            st.switch_page(premium_page)
     st.divider()
     if current_user.is_logged_in:
         import database as _database_for_identity
