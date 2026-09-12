@@ -9530,7 +9530,7 @@ with st.sidebar:
     .st-key-nav_analyze a, .st-key-nav_support a, .st-key-nav_premium a {
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        padding: 0.4rem 0.9rem 0.4rem 0.75rem !important; border-radius: 8px !important;
+        padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         text-decoration: none !important; color: #8992A3 !important;
         margin-bottom: 0 !important;
     }
