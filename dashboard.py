@@ -4809,6 +4809,12 @@ def render_hestys_table(assets_list: list, key_prefix: str) -> None:
         """
 
     table_html += "</tbody></table>"
+    # KRITIEK: elke regel in de hierboven opgebouwde string heeft 4+
+    # spaties inspringing (gewone Python-broncode-opmaak) -- Markdown
+    # interpreteert dat als een CODE-BLOK, niet als HTML, waardoor de
+    # rauwe broncode letterlijk op het scherm verscheen i.p.v. gerenderd
+    # te worden. Alle regel-inspringing hier hard wegstrippen lost dat op.
+    table_html = "\n".join(line.strip() for line in table_html.split("\n"))
     st.markdown(table_html, unsafe_allow_html=True)
 
     # Onzichtbare, ECHTE knoppen: 1 per asset. Regelen de daadwerkelijke
