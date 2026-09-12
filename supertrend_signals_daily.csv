@@ -1,7 +1,5 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-ELV,2026-09-10,0,40,416.54,416.54,0.0,True,^GSPC,3.6,True,,onbekend,20.0,True,2026-07-15,57.0,449.1,-7.2,6.72
-AMD,2026-09-09,1,30,521.1,503.6,-3.36,True,^GSPC,-8.47,True,4.5,stijgend,3.2,True,2026-08-04,37.0,615.38,-18.2,6.22
-CA.PA,2026-09-04,2,30,16.41,16.42,0.06,True,^FCHI,4.25,True,15.8,dalend,,,,,16.89,-2.2,4.87
-QCOM,2026-09-08,2,61,174.09,176.88,1.6,True,^GSPC,-19.95,True,30.5,stijgend,-0.5,False,2026-07-29,43.0,193.9,-8.8,4.51
-INTC,2026-09-08,2,40,104.47,100.32,-3.97,True,^GSPC,-22.03,True,-0.0,stijgend,94.6,True,2026-07-23,49.0,115.88,-13.4,4.2
-VST,2026-09-08,2,28,151.72,147.05,-3.08,False,^GSPC,-4.58,True,6.6,dalend,-53.4,False,2026-08-10,31.0,217.42,-32.4,4.18
+HUM,2026-09-11,0,31,409.8,409.8,0.0,True,^GSPC,9.23,False,,onbekend,8.8,True,2026-07-29,44,418.61,-2.1,6.56
+IBM,2026-09-11,0,42,243.29,243.29,0.0,True,^GSPC,-11.46,True,11.2,stijgend,-0.1,False,2026-07-22,51,245.35,-0.8,6.18
+ELV,2026-09-10,1,40,416.54,418.72,0.52,True,^GSPC,3.78,True,,onbekend,20.0,True,2026-07-15,58,450.05,-7.0,5.97
+AMD,2026-09-09,2,30,521.1,516.13,-0.95,True,^GSPC,-0.2,True,4.5,stijgend,3.2,True,2026-08-04,38,615.38,-16.1,5.91
