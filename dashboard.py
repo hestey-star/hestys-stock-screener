@@ -4762,6 +4762,34 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} button:hover {{ border-color:rgba(31,174,150,0.5) !important; background:rgba(31,174,150,0.08) !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
+        # Mobiel (<640px): st.columns() stapelt van zichzelf verticaal
+        # (elke kolom wordt een eigen, los, volle-breedte blok) -- dat
+        # gaf de 'enorme lijst met grote vakken'. Forceer de rij hard
+        # terug naar 1 horizontale lijn, EN maak sowieso alles compacter
+        # (kleinere tekst/padding/gap) als extra vangnet mocht de
+        # flex-force op sommige mobiele browsers toch niet aanslaan.
+        f'@media (max-width:640px) {{ '
+        f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ '
+        f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0.35rem !important; }} '
+        f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
+        f'min-width:0 !important; width:auto !important; padding:0 !important; }} '
+        f'.st-key-{_table_key} img {{ width:18px !important; height:18px !important; }} '
+        f'.st-key-{_table_key} button {{ padding:1px 5px !important; font-size:0.72rem !important; }} '
+        f'.hesty-conviction-thead {{ font-size:0.58rem !important; }} '
+        # Alle overige inline tekstgroottes (score/ticker/thesis/datum)
+        # staan hardcoded op desktop-formaat -- die kunnen inline styles
+        # niet zelf op basis van schermbreedte aanpassen, dus hier hard
+        # overschrijven met !important.
+        f'.st-key-{_table_key} span {{ font-size:0.68rem !important; }} '
+        # Voorkom horizontale overflow op smalle schermen -- alleen de
+        # Thesis-kolom (3e) en Last validated-kolom (4e) knippen we af,
+        # NIET de Asset-kolom (logo+ticker in een flex-rij zou door
+        # dezelfde regel juist verstoord raken).
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(3) span, '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) span {{ '
+        f'overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; '
+        f'display:block !important; max-width:100% !important; }} '
+        f'}} '
         f'</style>',
         unsafe_allow_html=True,
     )
