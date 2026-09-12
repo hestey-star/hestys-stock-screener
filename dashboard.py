@@ -4747,11 +4747,16 @@ def render_hestys_table(assets_list: list, key_prefix: str) -> None:
         return
 
     table_html = """
-    <style>.hesty-row-click { cursor:pointer; transition:color 0.2s ease; }
-    .hesty-row-click:hover { color:#34D399 !important; }</style>
+    <style>
+    .hesty-row-click { cursor:pointer; transition:color 0.2s ease; text-decoration:none !important; }
+    .hesty-row-click:hover { color:#34D399 !important; }
+    .hesty-conviction-table a, .hesty-conviction-table span { color: inherit; text-decoration: none; }
+    </style>
+    <div class="hesty-conviction-table" style="background:rgba(2,6,23,0.4); border:1px solid rgba(15,23,42,0.6);
+    border-radius:14px; padding:0.5rem 1.25rem; box-sizing:border-box;">
     <table style="width:100%; border-collapse: collapse; text-align: left; font-family: sans-serif; color: #ffffff;">
         <thead>
-            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; color: #64748b;">
+            <tr style="border-bottom: 1px solid rgba(148,163,184,0.15); text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; color: #64748b;">
                 <th style="padding: 10px 0; font-weight: 700; width: 15%;">Asset</th>
                 <th style="padding: 10px 0; font-weight: 700; width: 15%;">Score</th>
                 <th style="padding: 10px 0; font-weight: 700; width: 55%;">Core Thesis</th>
@@ -4765,13 +4770,13 @@ def render_hestys_table(assets_list: list, key_prefix: str) -> None:
         ticker = asset["ticker"]
         score_val = asset.get("score")
         if score_val is not None and score_val >= 8.0:
-            score_style = "color: #34d399; font-weight: 700;"
+            score_style = "color: #34d399 !important; font-weight: 700;"
         elif score_val is not None and score_val >= 5.0:
-            score_style = "color: #fbbf24; font-weight: 700;"
+            score_style = "color: #fbbf24 !important; font-weight: 700;"
         elif score_val is not None:
-            score_style = "color: #f43f5e; font-weight: 700;"
+            score_style = "color: #f43f5e !important; font-weight: 700;"
         else:
-            score_style = "color: #64748b; font-weight: 700;"
+            score_style = "color: #64748b !important; font-weight: 700;"
 
         thesis_text = asset.get("thesis") or "No active research record found."
         if len(thesis_text) > 55:
@@ -4782,33 +4787,33 @@ def render_hestys_table(assets_list: list, key_prefix: str) -> None:
 
         if is_unmapped:
             score_cell = (
-                f'<span class="hesty-row-click" data-action="{_action}" style="color: #a7f3d0; '
+                f'<span class="hesty-row-click" data-action="{_action}" style="color: #a7f3d0 !important; '
                 f'background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(52, 211, 153, 0.2); '
                 f'border-radius: 0.375rem; padding: 4px 10px; font-size: 11px; font-weight: 700; '
                 f'display: inline-block; vertical-align: middle;">\U0001F916 SCAN</span>'
             )
-            thesis_cell = '<span style="color: #475569; font-size: 13px;">No active research record found.</span>'
+            thesis_cell = '<span style="color: #475569 !important; font-size: 13px;">No active research record found.</span>'
             date_cell = "-"
             row_style = "opacity: 0.5;"
         else:
-            score_cell = f'<span style="{score_style} vertical-align: middle;">{score_val:.1f} / 10</span>' if score_val is not None else '<span style="color:#64748b;">-</span>'
-            thesis_cell = f'<span style="color: #cbd5e1; font-size: 13px; vertical-align: middle;">{thesis_text}</span>'
+            score_cell = f'<span style="{score_style} vertical-align: middle;">{score_val:.1f} / 10</span>' if score_val is not None else '<span style="color:#64748b !important;">-</span>'
+            thesis_cell = f'<span style="color: #cbd5e1 !important; font-size: 13px; vertical-align: middle;">{thesis_text}</span>'
             date_cell = asset.get("date") or "-"
             row_style = ""
 
         table_html += f"""
-        <tr style="border-bottom: 1px solid rgba(30, 41, 59, 0.5); {row_style}">
+        <tr style="border-bottom: 1px solid rgba(148,163,184,0.08); {row_style}">
             <td style="padding: 12px 0; vertical-align: middle; white-space: nowrap;">
                 <img src="{asset['logo_url']}" style="width:24px; height:24px; border-radius:50%; vertical-align: middle; margin-right: 10px; display: inline-block;">
-                <span class="hesty-row-click" data-action="{_action}" style="color: #ffffff; font-weight: 700; text-decoration: none; font-size: 13px; vertical-align: middle; display: inline-block;">{ticker}</span>
+                <span class="hesty-row-click" data-action="{_action}" style="color: #ffffff !important; font-weight: 700; text-decoration: none; font-size: 13px; vertical-align: middle; display: inline-block;">{ticker}</span>
             </td>
             <td style="padding: 12px 0; vertical-align: middle;">{score_cell}</td>
             <td style="padding: 12px 0; vertical-align: middle;">{thesis_cell}</td>
-            <td style="padding: 12px 0; vertical-align: middle; color: #64748b; font-size: 13px;">{date_cell}</td>
+            <td style="padding: 12px 0; vertical-align: middle; color: #64748b !important; font-size: 13px;">{date_cell}</td>
         </tr>
         """
 
-    table_html += "</tbody></table>"
+    table_html += "</tbody></table></div>"
     # KRITIEK: elke regel in de hierboven opgebouwde string heeft 4+
     # spaties inspringing (gewone Python-broncode-opmaak) -- Markdown
     # interpreteert dat als een CODE-BLOK, niet als HTML, waardoor de
