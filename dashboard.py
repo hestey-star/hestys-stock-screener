@@ -9495,6 +9495,12 @@ with st.sidebar:
     # de 'background'-shorthand gebruikt, die anders alsnog had kunnen
     # doorschemeren ondanks een background-color-override).
     _active_url_path = getattr(pg, "url_path", "")
+    # 'today_page' is de default-pagina (default=is_logged_in) -- Streamlit
+    # serveert een default-pagina op het 'kale' pad, waardoor pg.url_path
+    # dan een LEGE string teruggeeft i.p.v. 'today'. Zonder deze regel
+    # matchte de highlight-logica hieronder Today dus NOOIT.
+    if _active_url_path == "" and current_user.is_logged_in:
+        _active_url_path = "today"
     # 'Discover' en 'Signature Signals' wijzen naar DEZELFDE url (/discover)
     # -- een CSS-regel op basis van de href alleen kan ze dus NOOIT uit
     # elkaar houden (dat verklaarde de rare uitlijning/'snijdende balk').
@@ -9530,7 +9536,7 @@ with st.sidebar:
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
-        text-decoration: none !important; color: #8992A3 !important; margin: 0 !important;
+        text-decoration: none !important; color: #EAEDF1 !important; margin: 0 !important;
     }
     .st-key-nav_discover a:hover { background: rgba(255,255,255,0.04) !important; }
     /* Today/My Portfolio/Analyze/Support/Premium: nu ECHTE st.button()'s
@@ -9546,6 +9552,11 @@ with st.sidebar:
     .st-key-nav_support, .st-key-nav_premium {
         width: 100% !important;
     }
+    /* Iets meer ademruimte t.o.v. de Discover-subnav-groep erboven,
+       zonder de onderlinge afstand van Today t/m Premium te vergroten. */
+    .st-key-nav_today {
+        margin-top: 0.5rem !important;
+    }
     .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button,
     .st-key-nav_support button, .st-key-nav_premium button {
         display: flex !important; align-items: center !important; justify-content: flex-start !important;
@@ -9553,11 +9564,11 @@ with st.sidebar:
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
         background: transparent !important; border: none !important; box-shadow: none !important;
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
-        color: #8992A3 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
+        color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
     .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover,
     .st-key-nav_support button:hover, .st-key-nav_premium button:hover {
-        background: rgba(255,255,255,0.04) !important; color: #8992A3 !important; border: none !important;
+        background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
     }
     /* Discover-subpagina's -- eigen, gezamenlijke groep-container
        (.st-key-discover_subnav_group) met de inspringing op de
