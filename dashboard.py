@@ -9530,10 +9530,19 @@ with st.sidebar:
     .st-key-nav_analyze a, .st-key-nav_support a, .st-key-nav_premium a {
         display: flex !important; align-items: center !important; gap: 0.75rem !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        line-height: 1.2 !important; box-sizing: border-box !important;
-        padding: 0.4rem 0.9rem 0.4rem 0.75rem !important; border-radius: 8px !important;
+        box-sizing: border-box !important;
+        /* Vaste, harde hoogte i.p.v. padding-gedreven hoogte -- een
+           icoon (via icon=) kan een eigen, groter intrinsiek formaat
+           hebben dan de tekst, waardoor de <a>-box breder uitviel dan
+           de padding alleen deed vermoeden. Met een vaste height staat
+           dat vast, ongeacht wat er precies in de rij staat. */
+        height: 36px !important; padding: 0 0.9rem 0 0.75rem !important; border-radius: 8px !important;
         text-decoration: none !important; color: #8992A3 !important;
-        margin: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .st-key-nav_discover a *, .st-key-nav_today a *, .st-key-nav_portfolio a *,
+    .st-key-nav_analyze a *, .st-key-nav_support a *, .st-key-nav_premium a * {
+        max-height: 20px !important;
     }
     .st-key-nav_discover a:hover, .st-key-nav_today a:hover, .st-key-nav_portfolio a:hover,
     .st-key-nav_analyze a:hover, .st-key-nav_support a:hover, .st-key-nav_premium a:hover {
