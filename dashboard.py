@@ -4082,6 +4082,32 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows}
 
 
+def detect_broker_from_csv(file_bytes: bytes) -> str:
+    """
+    Herkent welke broker een 'Transactions'-CSV heeft opgeleverd, puur op
+    basis van de kolomkoppen -- geen bestandsnaam-gok (die kan de
+    gebruiker altijd wijzigen), maar de daadwerkelijke, unieke kolommen
+    die elke broker's export nu eenmaal heeft. Geeft 'degiro', 'robinhood'
+    of 'unknown' terug.
+    """
+    import io
+    try:
+        header_df = pd.read_csv(io.BytesIO(file_bytes), nrows=0)
+    except Exception:
+        return "unknown"
+    columns = set(header_df.columns)
+
+    # DEGIRO: eigen, Nederlandstalige kolomnamen -- 'Product'/'ISIN'/
+    # 'Koers'/'Datum' komen niet voor in een Robinhood-export.
+    if {"Product", "ISIN", "Koers", "Datum"}.issubset(columns):
+        return "degiro"
+    # Robinhood: 'Trans Code'/'Asset Code' zijn uniek voor Robinhood's
+    # eigen exportformaat.
+    if {"Trans Code", "Asset Code"}.issubset(columns):
+        return "robinhood"
+    return "unknown"
+
+
 def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
     """
     Parseert een Robinhood 'Account Activity'-export (CSV). Groepeert per
@@ -6938,17 +6964,41 @@ def render_portfolio():
             # deze (relatief nieuwe) parameter niet bestaat in de
             # geïnstalleerde Streamlit-versie.
             try:
-                degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
-                                               label_visibility="collapsed", width=320)
+                broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
+                                                  label_visibility="collapsed", width=320)
             except TypeError:
-                degiro_file = st.file_uploader("Transactions CSV", type=["csv"], key="degiro_upload",
-                                               label_visibility="collapsed")
+                broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
+                                                  label_visibility="collapsed")
             st.markdown(
                 '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
-                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here to import '
-                'your full buy/sell history in one go, instead of logging each one by hand.</div>',
+                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here -- Hesty\'s '
+                'automatically recognizes which broker it\'s from and imports your full buy/sell history in '
+                'one go, instead of logging each one by hand.</div>',
                 unsafe_allow_html=True,
             )
+
+            # 1 gedeeld upload-vak i.p.v. een apart vak per broker -- de
+            # daadwerkelijke herkenning gebeurt op de kolomkoppen van de
+            # CSV zelf (zie detect_broker_from_csv), niet op de
+            # bestandsnaam. degiro_file/robinhood_file blijven hieronder
+            # verder ongewijzigd bestaan -- de complexe, broker-specifieke
+            # verwerkingslogica hoeft dus niet aangepast te worden, alleen
+            # HOE deze twee variabelen gevuld worden.
+            degiro_file = None
+            robinhood_file = None
+            if broker_upload is not None:
+                detected_broker = detect_broker_from_csv(broker_upload.getvalue())
+                if detected_broker == "degiro":
+                    st.caption("\U0001F50D Detected: DEGIRO")
+                    degiro_file = broker_upload
+                elif detected_broker == "robinhood":
+                    st.caption("\U0001F50D Detected: Robinhood")
+                    robinhood_file = broker_upload
+                else:
+                    st.error(
+                        "Couldn't recognize this CSV's format -- make sure it's an unmodified "
+                        "'Transactions' export from a supported broker (see the list below)."
+                    )
 
             if hasattr(database, "get_last_csv_import"):
                 try:
@@ -7295,15 +7345,9 @@ def render_portfolio():
             # --- Robinhood: veel eenvoudiger dan DEGIRO -- de CSV geeft de
             # ticker al rechtstreeks mee ('Asset Code'), dus geen aparte
             # ticker-matching-stap nodig. Rechtstreeks parsen -> importeren.
-            st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
-            st.markdown("**Upload your Robinhood transactions**")
-            try:
-                robinhood_file = st.file_uploader("Robinhood transactions CSV", type=["csv"], key="robinhood_upload",
-                                                   label_visibility="collapsed", width=320)
-            except TypeError:
-                robinhood_file = st.file_uploader("Robinhood transactions CSV", type=["csv"], key="robinhood_upload",
-                                                   label_visibility="collapsed")
-
+            # robinhood_file wordt hierboven al gevuld via het gedeelde
+            # upload-vak + de automatische broker-herkenning -- geen eigen
+            # losse uploader meer nodig.
             already_imported_rh = st.session_state.get("robinhood_imported_filenames", set())
 
             if robinhood_file is not None and robinhood_file.name in already_imported_rh:
