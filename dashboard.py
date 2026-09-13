@@ -2922,27 +2922,15 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
     ticker_currency_symbol = _currency_symbol_for_ticker(version["ticker"])
 
-    snapshot_parts = []
+    # Alleen de prijs op het moment van deze deep-dive -- de rest
+    # (52wk-range, market cap, sector, dividend, sector rotation) was
+    # te veel info tegelijk gepropt en grotendeels overbodig; de prijs
+    # is het enige dat echt nuttig is om later, bij het terugkijken,
+    # nog te weten.
     if version.get("price_at_creation"):
-        snapshot_parts.append(f"Price: {ticker_currency_symbol}{version['price_at_creation']:.2f}")
-    if version.get("fifty_two_week_high_at_creation") and version.get("fifty_two_week_low_at_creation"):
-        snapshot_parts.append(
-            f"52wk: {ticker_currency_symbol}{version['fifty_two_week_low_at_creation']:.2f}-"
-            f"{ticker_currency_symbol}{version['fifty_two_week_high_at_creation']:.2f}"
-        )
-    if version.get("market_cap_at_creation"):
-        snapshot_parts.append(f"Market cap: {ticker_currency_symbol}{version['market_cap_at_creation'] / 1e9:.1f}B")
-    if version.get("sector_at_creation"):
-        snapshot_parts.append(f"Sector: {version['sector_at_creation']}")
-    if version.get("dividend_yield_at_creation"):
-        snapshot_parts.append(f"Dividend: {version['dividend_yield_at_creation']:.2f}%")
-    if version.get("in_own_signals_at_creation"):
-        snapshot_parts.append(f"In your own signals: {version['in_own_signals_at_creation']}")
-    if version.get("sector_rotation_pct_at_creation") is not None:
-        snapshot_parts.append(f"Sector rotation (1m): {version['sector_rotation_pct_at_creation']:+.1f}%")
-    if snapshot_parts:
         st.markdown(
-            f'<div style="color:#64748B; font-size:0.7rem; margin-top:0.3rem;">{" &middot; ".join(snapshot_parts)}</div>',
+            f'<div style="color:#64748B; font-size:0.7rem; margin-top:0.3rem;">'
+            f'Price at time of this deep-dive: {ticker_currency_symbol}{version["price_at_creation"]:.2f}</div>',
             unsafe_allow_html=True,
         )
 
@@ -3043,7 +3031,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 f'width:100% !important; background:rgba(2,6,23,0.8) !important; color:#a7f3d0 !important; '
                 f'border:1px solid rgba(16,185,129,0.2) !important; font-size:0.72rem !important; '
                 f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.15em !important; '
-                f'padding:0.75rem 0 !important; border-radius:12px !important; '
+                f'padding:0.75rem 1.5rem !important; border-radius:12px !important; '
                 f'box-shadow:0 8px 24px rgba(0,0,0,0.35) !important; transition:all 0.3s ease !important; }} '
                 f'.st-key-{_edit_ai_key} button:hover {{ background:rgba(15,23,42,0.9) !important; '
                 f'border-color:rgba(16,185,129,0.35) !important; }} '
