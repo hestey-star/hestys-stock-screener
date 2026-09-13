@@ -7212,23 +7212,32 @@ def render_portfolio():
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
             # de hoofdtaak zelf.
             st.markdown("**Upload your transactions**")
-            # width=320 i.p.v. de standaard 'stretch' -- zonder dit vult de
-            # uploader altijd de VOLLE breedte van de kaart, wat de brede,
-            # grijze balk gaf die je zag. Val terug op de oude aanroep als
-            # deze (relatief nieuwe) parameter niet bestaat in de
-            # geïnstalleerde Streamlit-versie.
-            try:
-                broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
-                                                  label_visibility="collapsed", width=320)
-            except TypeError:
-                broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
-                                                  label_visibility="collapsed")
+            # Toelichtingstekst nu BOVEN de uploader (tussen kop en widget)
+            # i.p.v. eronder -- betere leeshierarchie: eerst uitleggen wat
+            # je moet doen, dan pas de widget zelf.
             st.markdown(
                 '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
-                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here to import '
-                'your full buy/sell history in one go, instead of logging each one by hand.</div>',
+                'line-height:1.5; max-width:36rem; margin-bottom:1rem;">Export your broker\'s \'Transactions\' '
+                'CSV and upload it here to import your full buy/sell history in one go, instead of logging '
+                'each one by hand.</div>',
                 unsafe_allow_html=True,
             )
+            # width='stretch' i.p.v. een vaste 320px -- de uploader vult nu
+            # de volle breedte van de linkerkolom, strak doorlopend met de
+            # breedte van de sub-navigatie-knoppen erboven. Val terug op de
+            # oude, vaste-breedte-aanroep als deze (relatief nieuwe)
+            # parameter-waarde niet bestaat in de geïnstalleerde
+            # Streamlit-versie.
+            try:
+                broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
+                                                  label_visibility="collapsed", width="stretch")
+            except (TypeError, ValueError):
+                try:
+                    broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
+                                                      label_visibility="collapsed", width=320)
+                except TypeError:
+                    broker_upload = st.file_uploader("Transactions CSV", type=["csv"], key="broker_upload",
+                                                      label_visibility="collapsed")
 
             # Puur automatische herkenning op basis van de kolomkoppen in
             # de CSV zelf (zie detect_broker_from_csv) -- geen handmatige
@@ -7322,8 +7331,14 @@ def render_portfolio():
                 unsafe_allow_html=True,
             )
             st.markdown(
-                '<a href="/support" target="_self" class="inline-link" style="font-size:0.78rem; '
-                'text-transform:uppercase; letter-spacing:0.03em; font-weight:600;">Request a new broker &rarr;</a>',
+                '<style>'
+                '.hesty-request-broker-link { display:block; margin-top:2.5rem; font-size:10px; '
+                'font-weight:700; letter-spacing:0.12em; color:#64748B; text-transform:uppercase; '
+                'text-align:left; text-decoration:none; transition:color 0.2s ease; }'
+                '.hesty-request-broker-link:hover { color:#CBD5E1; }'
+                '</style>'
+                '<a href="/support" target="_self" class="hesty-request-broker-link">'
+                'Request a new broker &rarr;</a>',
                 unsafe_allow_html=True,
             )
 
