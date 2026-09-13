@@ -4857,7 +4857,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         # maar dat de hele tabel geforceerd tot de containerrand werd
         # uitgerekt terwijl de inhoud (logo/ticker/score/datum) daar
         # nooit voor bedoeld was.
-        f'.st-key-{_table_key} {{ overflow-x:hidden !important; max-width:640px !important; }} '
+        f'.st-key-{_table_key} {{ overflow-x:hidden !important; max-width:760px !important; }} '
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
@@ -5588,7 +5588,7 @@ def render_analyze():
         if not _drawer_open:
             st.markdown(
                 f'<style>'
-                f'.hesty-conviction-grid {{ display:grid; '
+                f'.hesty-conviction-grid {{ display:grid; max-width:760px; '
                 f'grid-template-columns:repeat(3, 1fr); gap:1rem; margin-bottom:0.75rem; }} '
                 f'.hesty-conviction-tile {{ border-radius:14px; padding:1rem; text-align:left; }} '
                 f'.hesty-conviction-tile-label {{ color:#8992A3; font-size:0.7rem; font-weight:700; '
