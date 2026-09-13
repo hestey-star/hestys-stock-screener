@@ -2928,9 +2928,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
     # is het enige dat echt nuttig is om later, bij het terugkijken,
     # nog te weten.
     if version.get("price_at_creation"):
+        _price_date = (version.get("created_at") or "")[:10]
+        _price_date_txt = f" (on {_price_date})" if _price_date else ""
         st.markdown(
             f'<div style="color:#64748B; font-size:0.7rem; margin-top:0.3rem;">'
-            f'Price at time of this deep-dive: {ticker_currency_symbol}{version["price_at_creation"]:.2f}</div>',
+            f'Price at time of this deep-dive: {ticker_currency_symbol}{version["price_at_creation"]:.2f}'
+            f'{_price_date_txt}</div>',
             unsafe_allow_html=True,
         )
 
