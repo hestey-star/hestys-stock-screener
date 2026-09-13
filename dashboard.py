@@ -4935,7 +4935,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         # Rijen-container: vaste hoogte (~10 rijen) met een eigen
         # verticale scrollbalk zodra er meer rijen zijn -- de koptekst
         # zelf blijft erboven staan, buiten dit scrollende vak.
-        f'.st-key-{_table_key}_rows {{ max-height:410px; overflow-y:auto; overflow-x:hidden; padding-right:4px; }} '
+        f'.st-key-{_table_key}_rows {{ max-height:620px; overflow-y:auto; overflow-x:hidden; padding-right:4px; }} '
         f'.st-key-{_table_key}_rows::-webkit-scrollbar {{ width:6px; }} '
         f'.st-key-{_table_key}_rows::-webkit-scrollbar-track {{ background:transparent; }} '
         f'.st-key-{_table_key}_rows::-webkit-scrollbar-thumb {{ background:rgba(148,163,184,0.25); border-radius:3px; }} '
