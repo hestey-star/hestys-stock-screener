@@ -4842,7 +4842,10 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
-    _col_ratios = [1.6, 1, 1, 0.5]
+    # Verhoudingen: Asset supercompact (~10%), Score compact (~13%),
+    # Last validated vult de rest (~72%, geeft de rustgevende ademruimte
+    # in het midden), Action smal en strak rechts (~5%).
+    _col_ratios = [10, 13, 72, 5]
     _table_key = f"{key_prefix}_table"
     st.markdown(
         f'<style>'
@@ -4853,6 +4856,13 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
+        # Asset/Score: geen tekst-terugloop, zodat ze echt strak/compact
+        # tegen elkaar aan blijven staan i.p.v. los te wrappen.
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(1), '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(2) {{ white-space:nowrap !important; }} '
+        # Action-kolom (potlood/sterretje): hard tegen de rechterrand.
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) {{ '
+        f'align-items:flex-end !important; padding-right:15px !important; }} '
         f'.st-key-{_table_key} button {{ '
         f'background:transparent !important; border:1px solid rgba(148,163,184,0.25) !important; '
         f'border-radius:6px !important; padding:2px 6px !important; box-shadow:none !important; '
@@ -4881,7 +4891,9 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
         head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
         head_cols[2].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
-        head_cols[3].markdown('<div class="hesty-conviction-thead">&nbsp;</div>', unsafe_allow_html=True)
+        head_cols[3].markdown(
+            '<div class="hesty-conviction-thead" style="text-align:right;">&nbsp;</div>', unsafe_allow_html=True
+        )
         st.markdown(
             '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
             unsafe_allow_html=True,
