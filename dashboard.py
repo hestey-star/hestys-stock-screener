@@ -3159,41 +3159,70 @@ def _render_deep_dive_version(version: dict, user_email: str):
         # hieronder pakt ze allemaal terug via de keys, niet via lokale
         # variabelen die alleen bestaan als hun tab net actief was.
         _ess = st.session_state
-        save_col, cancel_col = st.columns(2)
-        with save_col:
-            if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}", use_container_width=True):
-                database.update_deep_dive(
-                    version_id, user_email,
-                    business_overview=_ess.get(f"dd_edit_business_{version_id}") or None,
-                    investment_thesis=_ess.get(f"dd_edit_thesis_{version_id}") or None,
-                    management_assessment=_ess.get(f"dd_edit_management_{version_id}") or None,
-                    bear_case=_ess.get(f"dd_edit_bear_{version_id}") or None,
-                    valuation_view=_ess.get(f"dd_edit_valuation_{version_id}") or None,
-                    interested_price=_ess.get(f"dd_edit_price_{version_id}") or None,
-                    catalysts=_ess.get(f"dd_edit_catalysts_{version_id}") or None,
-                    position_sizing_plan=_ess.get(f"dd_edit_sizing_{version_id}") or None,
-                    sell_criteria=_ess.get(f"dd_edit_sell_{version_id}") or None,
-                    conclusion=_ess.get(f"dd_edit_conclusion_{version_id}", version.get("conclusion", "Watch")),
-                    sell_trigger_price=_ess.get(f"dd_edit_trigger_price_{version_id}") or None,
-                    sell_trigger_date=(
-                        _ess[f"dd_edit_trigger_date_{version_id}"].isoformat()
-                        if _ess.get(f"dd_edit_trigger_date_{version_id}") else None
-                    ),
-                    thesis_score=_ess.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)),
-                    management_score=_ess.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
-                    bear_case_score=_ess.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
-                    valuation_score=_ess.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
-                    catalysts_score=_ess.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
-                    technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
-                    technical_analysis_score=_ess.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
-                )
-                st.session_state[edit_key] = False
-                st.success("Version updated.")
-                st.rerun()
-        with cancel_col:
+        _edit_next_key = f"dd_edit_next_wrap_{version_id}"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_edit_next_key} {{ margin-top:1.5rem !important; }} '
+            f'.st-key-{_edit_next_key} button {{ '
+            f'width:100% !important; background:rgba(31,174,150,0.12) !important; color:#1FAE96 !important; '
+            f'border:1px solid rgba(31,174,150,0.3) !important; font-weight:700 !important; font-size:0.85rem !important; '
+            f'padding:0.7rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
+            f'.st-key-{_edit_next_key} button:hover {{ background:rgba(31,174,150,0.2) !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        if _edit_tab == "1-CLICK BRIEFING":
+            with st.container(key=_edit_next_key):
+                if st.button("Next: My Conviction (2/3) \u2192", key=f"dd_edit_next_conviction_{version_id}", use_container_width=True):
+                    st.session_state[_edit_tab_key] = "MY CONVICTION"
+                    st.rerun()
             if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
                 st.session_state[edit_key] = False
                 st.rerun()
+        elif _edit_tab == "MY CONVICTION":
+            with st.container(key=_edit_next_key):
+                if st.button("Next: Exit Matrix (3/3) \u2192", key=f"dd_edit_next_exit_{version_id}", use_container_width=True):
+                    st.session_state[_edit_tab_key] = "EXIT MATRIX"
+                    st.rerun()
+            if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            save_col, cancel_col = st.columns(2)
+            with save_col:
+                if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}", use_container_width=True):
+                    database.update_deep_dive(
+                        version_id, user_email,
+                        business_overview=_ess.get(f"dd_edit_business_{version_id}") or None,
+                        investment_thesis=_ess.get(f"dd_edit_thesis_{version_id}") or None,
+                        management_assessment=_ess.get(f"dd_edit_management_{version_id}") or None,
+                        bear_case=_ess.get(f"dd_edit_bear_{version_id}") or None,
+                        valuation_view=_ess.get(f"dd_edit_valuation_{version_id}") or None,
+                        interested_price=_ess.get(f"dd_edit_price_{version_id}") or None,
+                        catalysts=_ess.get(f"dd_edit_catalysts_{version_id}") or None,
+                        position_sizing_plan=_ess.get(f"dd_edit_sizing_{version_id}") or None,
+                        sell_criteria=_ess.get(f"dd_edit_sell_{version_id}") or None,
+                        conclusion=_ess.get(f"dd_edit_conclusion_{version_id}", version.get("conclusion", "Watch")),
+                        sell_trigger_price=_ess.get(f"dd_edit_trigger_price_{version_id}") or None,
+                        sell_trigger_date=(
+                            _ess[f"dd_edit_trigger_date_{version_id}"].isoformat()
+                            if _ess.get(f"dd_edit_trigger_date_{version_id}") else None
+                        ),
+                        thesis_score=_ess.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)),
+                        management_score=_ess.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
+                        bear_case_score=_ess.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
+                        valuation_score=_ess.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
+                        catalysts_score=_ess.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
+                        technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
+                        technical_analysis_score=_ess.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
+                    )
+                    st.session_state[edit_key] = False
+                    st.success("Version updated.")
+                    st.rerun()
+            with cancel_col:
+                if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
+                    st.session_state[edit_key] = False
+                    st.rerun()
 
     # Afbeeldingen uitsluitend onder 'My Conviction' tonen (voorheen
     # onvoorwaardelijk, op ELKE tab zichtbaar -- dat voelde willekeurig
@@ -5294,6 +5323,36 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         _dd_label("Sell by date")
         st.date_input("Sell by date", value=None, key="dd_sell_trigger_date", label_visibility="collapsed")
 
+    # --- Save-knop uitsluitend op 'Exit Matrix' -- op de andere 2 tabs
+    # staat in plaats daarvan een 'Next'-knop die naar de volgende stap
+    # doorschakelt (1/3 -> 2/3 -> 3/3), zodat het een logische wizard-
+    # flow wordt i.p.v. overal dezelfde save-actie te tonen.
+    _next_key = "dd_next_btn_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_next_key} {{ margin-top:1.5rem !important; }} '
+        f'.st-key-{_next_key} button {{ '
+        f'width:100% !important; background:rgba(31,174,150,0.12) !important; color:#1FAE96 !important; '
+        f'border:1px solid rgba(31,174,150,0.3) !important; font-weight:700 !important; font-size:0.85rem !important; '
+        f'padding:0.7rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
+        f'.st-key-{_next_key} button:hover {{ background:rgba(31,174,150,0.2) !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    if _dd_tab == "1-CLICK BRIEFING":
+        with st.container(key=_next_key):
+            if st.button("Next: My Conviction (2/3) \u2192", key="dd_next_to_conviction", use_container_width=True):
+                st.session_state["dd_active_subtab"] = "MY CONVICTION"
+                st.rerun()
+        return
+
+    if _dd_tab == "MY CONVICTION":
+        with st.container(key=_next_key):
+            if st.button("Next: Exit Matrix (3/3) \u2192", key="dd_next_to_exit", use_container_width=True):
+                st.session_state["dd_active_subtab"] = "EXIT MATRIX"
+                st.rerun()
+        return
+
     _save_key = "dd_save_btn_wrap"
     st.markdown(
         f'<style>'
@@ -5356,18 +5415,21 @@ def _render_analyze_drawer(user_email: str) -> None:
         f'<style>.st-key-{_drawer_key} {{ '
         f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
         f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
-        # Minimalistische all-caps metadata-link i.p.v. een geknopte
-        # '\u2715 Close' -- rustiger, past bij de rest van het platform
-        # (vergelijkbaar met 'Forgot password?' op de inlogpagina).
+        # Fancy, ronde '\u00d7'-knop rechtsboven i.p.v. een tekstregel
+        # bovenaan -- dat maakt meteen ruimte vrij zodat de kop van het
+        # formulier ('Add a new deep-dive') een stuk hoger kan beginnen.
+        f'.st-key-analyze_drawer_close {{ display:flex !important; justify-content:flex-end !important; '
+        f'margin-bottom:0.5rem !important; }} '
         f'.st-key-analyze_drawer_close button {{ '
-        f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; color:#64748B !important; font-size:0.68rem !important; font-weight:700 !important; '
-        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; '
-        f'transition:color 0.2s ease !important; }} '
-        f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
+        f'background:rgba(148,163,184,0.08) !important; border:1px solid rgba(148,163,184,0.15) !important; '
+        f'box-shadow:none !important; color:#94A3B8 !important; font-size:0.95rem !important; '
+        f'font-weight:400 !important; width:28px !important; height:28px !important; min-height:unset !important; '
+        f'padding:0 !important; border-radius:50% !important; transition:all 0.2s ease !important; }} '
+        f'.st-key-analyze_drawer_close button:hover {{ color:#F1F5F9 !important; '
+        f'background:rgba(148,163,184,0.16) !important; border-color:rgba(148,163,184,0.3) !important; }} '
         # 'Back to research overview' -- uitsluitend op mobiel zichtbaar
-        # (op desktop doet de bestaande '\u2715 Close' precies hetzelfde,
-        # geen dubbele knop nodig daar). Op mobiel juist een grote,
+        # (op desktop doet de bestaande '\u00d7' precies hetzelfde, geen
+        # dubbele knop nodig daar). Op mobiel juist een grote,
         # opvallende, volle-breedte knop bovenaan -- dat is de enige weg
         # terug nu de linkerkolom daar volledig verborgen is.
         f'.st-key-analyze_drawer_back_mobile {{ display:none; }} '
@@ -5391,7 +5453,7 @@ def _render_analyze_drawer(user_email: str) -> None:
                 st.session_state["selected_research"] = None
                 st.rerun()
         with st.container(key="analyze_drawer_close"):
-            if st.button("\u2715 Close", key="analyze_drawer_close_btn"):
+            if st.button("\u00d7", key="analyze_drawer_close_btn", help="Close"):
                 st.session_state["selected_research"] = None
                 st.rerun()
 
@@ -5399,7 +5461,8 @@ def _render_analyze_drawer(user_email: str) -> None:
         if selected == "__NEW__":
             st.markdown(
                 '<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
-                'letter-spacing:0.03em; margin-bottom:1rem;">Add a new deep-dive</div>',
+                'letter-spacing:0.03em; margin-bottom:1rem; display:flex; align-items:center; gap:0.4rem;">'
+                '<span style="color:#34D399;">&#10022;</span> Add a new deep-dive</div>',
                 unsafe_allow_html=True,
             )
             _render_deep_dive_add_form(user_email)
