@@ -9207,8 +9207,11 @@ def render_discover_earnings_surprises():
         _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
         unsafe_allow_html=True,
     )
-    st.caption("Notable earnings beats/misses among today's and this week's signals -- "
-               "only shown during earnings season (last 60 days).")
+    st.markdown(
+        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.12em; '
+        'text-transform:uppercase;">Data interval: recent 60-day active signal window.</div>',
+        unsafe_allow_html=True,
+    )
     surprises = get_earnings_surprises_from_signals(max_items=5)
     if surprises:
         cards_html = [
@@ -9234,7 +9237,11 @@ def render_discover_earnings_surprises():
                        f"{file_last_modified('supertrend_signals.csv')} (weekly). "
                        "⭐ = 15%+ surprise, in either direction.")
     else:
-        st.caption("No notable earnings surprises right now (or we're between earnings seasons).")
+        st.markdown(
+            '<div style="color:#94A3B8; font-size:0.75rem; font-weight:500; letter-spacing:0.03em; '
+            'text-transform:uppercase;">No active earnings surprises recorded for this period.</div>',
+            unsafe_allow_html=True,
+        )
 
 
 
