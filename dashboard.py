@@ -7211,10 +7211,7 @@ def render_portfolio():
             # Upload is nu de EERSTE, meest prominente actie -- geen
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
             # de hoofdtaak zelf.
-            st.markdown(
-                _uniform_section_header_html("Upload your transactions", "upload_file", is_first=False),
-                unsafe_allow_html=True,
-            )
+            st.markdown("**Upload your transactions**")
             # Toelichtingstekst nu BOVEN de uploader (tussen kop en widget)
             # i.p.v. eronder -- betere leeshierarchie: eerst uitleggen wat
             # je moet doen, dan pas de widget zelf.
@@ -7305,35 +7302,31 @@ def render_portfolio():
             # bedrijfslogo's bij deep-dives) i.p.v. een zelf-gehost, echt
             # DEGIRO-merklogo -- vermijdt trademark-issues.
             st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            st.markdown("**Supported brokers**")
             st.markdown(
-                _uniform_section_header_html("Supported brokers", "account_balance", is_first=False),
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                '<style>'
-                '.hesty-broker-name { color:#94A3B8; font-weight:600; text-transform:uppercase; '
-                'letter-spacing:0.025em; font-size:0.75rem; font-family:\'Inter\', sans-serif !important; }'
-                '@media (min-width:768px) { .hesty-broker-name { font-size:0.875rem; } }'
-                '</style>'
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=degiro.com&sz=32" '
                 'style="width:18px; height:18px; border-radius:4px;">'
-                '<span class="hesty-broker-name">DEGIRO</span>'
+                '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">DEGIRO</span>'
                 '</div>'
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=robinhood.com&sz=32" '
                 'style="width:18px; height:18px; border-radius:4px;">'
-                '<span class="hesty-broker-name">Robinhood</span>'
+                '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Robinhood</span>'
                 '</div>'
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=schwab.com&sz=32" '
                 'style="width:18px; height:18px; border-radius:4px;">'
-                '<span class="hesty-broker-name">Charles Schwab</span>'
+                '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Charles Schwab</span>'
                 '</div>'
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=traderepublic.com&sz=32" '
                 'style="width:18px; height:18px; border-radius:4px;">'
-                '<span class="hesty-broker-name">Trade Republic</span>'
+                '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Trade Republic</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
