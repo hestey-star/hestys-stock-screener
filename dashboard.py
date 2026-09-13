@@ -2960,30 +2960,52 @@ def _render_deep_dive_version(version: dict, user_email: str):
         )
 
     if not is_editing:
+        _view_tab_key = f"dd_view_active_subtab_{version_id}"
+        _view_tab = st.pills(
+            "Section", ["1-CLICK BRIEFING", "MY CONVICTION", "EXIT MATRIX"],
+            default="1-CLICK BRIEFING", key=_view_tab_key, label_visibility="collapsed",
+        )
+
         _dd_fields_html = ""
-        if version.get("business_overview"):
-            _dd_fields_html += _dd_field_html("Business overview", version["business_overview"])
-        if version.get("investment_thesis"):
-            _dd_fields_html += _dd_field_html("Investment thesis", version["investment_thesis"])
-        if version.get("management_assessment"):
-            _dd_fields_html += _dd_field_html("Management / CEO", version["management_assessment"])
-        if version.get("bear_case"):
-            _dd_fields_html += _dd_field_html("Bear case", version["bear_case"])
-        if version.get("valuation_view"):
-            _dd_fields_html += _dd_field_html("Valuation", version["valuation_view"])
-        if version.get("interested_price"):
-            _dd_fields_html += _dd_field_html("Interested from", f"{ticker_currency_symbol}{version['interested_price']:.2f}")
-        if version.get("technical_analysis"):
-            _dd_fields_html += _dd_field_html("Technical analysis", version["technical_analysis"])
-        if version.get("catalysts"):
-            _dd_fields_html += _dd_field_html("Catalysts", version["catalysts"])
-        if version.get("position_sizing_plan"):
-            _dd_fields_html += _dd_field_html("Position sizing plan", version["position_sizing_plan"])
-        if version.get("sell_criteria"):
-            _dd_fields_html += _dd_field_html("Sell criteria", version["sell_criteria"])
+        if _view_tab == "1-CLICK BRIEFING":
+            if version.get("business_overview"):
+                _dd_fields_html += _dd_field_html("Business overview", version["business_overview"])
+            if version.get("investment_thesis"):
+                _dd_fields_html += _dd_field_html("Investment thesis", version["investment_thesis"])
+            if version.get("bear_case"):
+                _dd_fields_html += _dd_field_html("Core risks", version["bear_case"])
+            if version.get("management_assessment"):
+                _dd_fields_html += _dd_field_html("Management check", version["management_assessment"])
+            if not _dd_fields_html:
+                _dd_fields_html = _dd_field_html("Briefing", "Nothing logged yet -- generate an AI briefing or add this via Edit.")
+        elif _view_tab == "MY CONVICTION":
+            if version.get("technical_analysis"):
+                _dd_fields_html += _dd_field_html("Technical notes", version["technical_analysis"])
+            if version.get("catalysts"):
+                _dd_fields_html += _dd_field_html("Catalysts notes", version["catalysts"])
+            if version.get("position_sizing_plan"):
+                _dd_fields_html += _dd_field_html("Position sizing plan", version["position_sizing_plan"])
+            if version.get("management_score") is not None:
+                _dd_fields_html += _dd_field_html("Management conviction", f"{version['management_score']:.1f} / 10")
+            if version.get("bear_case_score") is not None:
+                _dd_fields_html += _dd_field_html("Risk manageability", f"{version['bear_case_score']:.1f} / 10")
+            if not _dd_fields_html:
+                _dd_fields_html = _dd_field_html("Conviction", "Nothing logged yet -- add this via Edit.")
+        elif _view_tab == "EXIT MATRIX":
+            if version.get("thesis_score") is not None:
+                _dd_fields_html += _dd_field_html("Conclusion score", f"{version['thesis_score']:.1f} / 10")
+            if version.get("valuation_view"):
+                _dd_fields_html += _dd_field_html("Valuation notes", version["valuation_view"])
+            if version.get("valuation_score") is not None:
+                _dd_fields_html += _dd_field_html("Valuation score", f"{version['valuation_score']:.1f} / 10")
+            if version.get("interested_price"):
+                _dd_fields_html += _dd_field_html("Interested from", f"{ticker_currency_symbol}{version['interested_price']:.2f}")
+            _dd_fields_html += _dd_field_html("Status", version.get("conclusion", "Watch").upper())
+            if version.get("sell_criteria"):
+                _dd_fields_html += _dd_field_html("Sell criteria", version["sell_criteria"])
         st.markdown(_dd_fields_html, unsafe_allow_html=True)
 
-        if version.get("sell_trigger_price") or version.get("sell_trigger_date"):
+        if _view_tab == "EXIT MATRIX" and (version.get("sell_trigger_price") or version.get("sell_trigger_date")):
             trigger_parts = []
             if version.get("sell_trigger_price"):
                 trigger_parts.append(f"at {ticker_currency_symbol}{version['sell_trigger_price']:.2f}")
@@ -2997,11 +3019,11 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
         edit_col, delete_col = st.columns(2)
         with edit_col:
-            if st.button("Edit", key=f"dd_edit_btn_{version_id}"):
+            if st.button("Edit", key=f"dd_edit_btn_{version_id}", use_container_width=True):
                 st.session_state[edit_key] = True
                 st.rerun()
         with delete_col:
-            if st.button("Delete", key=f"dd_delete_{version_id}"):
+            if st.button("Delete", key=f"dd_delete_{version_id}", use_container_width=True):
                 database.delete_deep_dive(version_id, user_email)
                 st.success("Version deleted.")
                 st.rerun()
