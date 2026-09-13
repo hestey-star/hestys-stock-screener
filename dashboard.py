@@ -4778,8 +4778,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         # optelsom weer precies op 100% uit.
         f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0 !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
-        f'min-width:0 !important; width:auto !important; padding:0 !important; box-sizing:border-box !important; '
-        f'overflow:hidden !important; }} '
+        f'min-width:0 !important; width:auto !important; padding:0 !important; box-sizing:border-box !important; }} '
         f'.st-key-{_table_key} img {{ width:18px !important; height:18px !important; }} '
         f'.st-key-{_table_key} button {{ padding:1px 5px !important; font-size:0.72rem !important; }} '
         f'.hesty-conviction-thead {{ font-size:0.58rem !important; }} '
