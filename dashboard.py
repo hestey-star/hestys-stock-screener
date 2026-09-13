@@ -8777,16 +8777,16 @@ def render_discover_signals():
                     border: 1px solid rgba(15,23,42,0.6); border-radius: 14px;
                     padding: 1.25rem; margin: 0.5rem 0 0.75rem 0;">
             <span style="color:#64748B; font-size:0.68rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:1rem; display:block;">
-                HESTY'S SIGNATURE SIGNALS &mdash; 3 SPECIALLY-BUILT SIGNALS, EACH WITH ITS OWN INVESTING STYLE. THIS IS THE CORE OF HESTY'S.
+                3 specially-built signals, each with its own investing style. This is the core of Hesty's.
             </span>
             <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128225; MOMENTOCRATS:</span> IDENTIFIES HIGH-QUALITY STOCKS TRADING BULLISH TODAY.
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128225; Momentocrats:</span> Identifies high-quality stocks trading bullish today.
             </p>
             <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#127811; SNOWBALLERS:</span> FINDS PREMIUM, COMPOUNDING ASSETS AT AN ATTRACTIVE DISCOUNT.
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#127811; Snowballers:</span> Finds premium, compounding assets at an attractive discount.
             </p>
             <p class="signature-signals-line" style="margin:0; padding:0; color:#94A3B8; line-height:1.9;">
-                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128640; ROCKET LIST:</span> SPOTS ACCELERATING REVENUE GROWTH FOR HIGH-CONVICTION BETS.
+                <span style="color:#F1F5F9; font-weight:700; text-transform:uppercase;">&#128640; Rocket List:</span> Spots accelerating revenue growth for high-conviction bets.
             </p>
         </div>
         """,
