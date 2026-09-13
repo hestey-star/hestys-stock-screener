@@ -5033,40 +5033,39 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
     return True
 
 
+def _dd_label(text: str) -> None:
+    """Compacte, gedempte ALL-CAPS metadata-subkop -- vervangt de eerdere
+    lange, informele '**Label** -- uitleg'-subteksten volledig."""
+    st.markdown(
+        f'<span style="font-size:11px; font-weight:700; letter-spacing:0.05em; color:#64748B; '
+        f'text-transform:uppercase; margin-bottom:0.35rem; display:block;">{text}</span>',
+        unsafe_allow_html=True,
+    )
+
+
+def _dd_slider_value_html(key: str, default: float = 5.0) -> None:
+    """Toont de huidige slider-waarde groot, in text-emerald-400, VLAK
+    boven de slider zelf (i.p.v. Streamlit's eigen, ongestylede getal)."""
+    _val = st.session_state.get(key, default)
+    st.markdown(
+        f'<span style="color:#34D399; font-weight:800; font-size:1.1rem;">{_val:.1f}</span>'
+        f'<span style="color:#64748B; font-size:0.7rem;"> / 10</span>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_deep_dive_add_form(user_email: str) -> None:
     """
     Formulier om een nieuwe deep-dive (of een bijgewerkte versie) te
-    loggen -- verhuisd vanaf de hoofdpagina naar de side-drawer, zodat
-    de hoofdpagina van Analyze altijd clean en overzichtelijk blijft.
+    loggen -- verhuisd vanaf de hoofdpagina naar de side-drawer. Nu
+    opgedeeld in 3 interne sub-tabs (1-Click Briefing / My Conviction /
+    Exit Matrix) i.p.v. 1 lange, kilometerslange lijst -- alle velden
+    blijven gewoon in session_state staan ongeacht welke tab actief is,
+    dus wisselen van tab verliest nooit ingevoerde data.
     """
     import database
 
-    # AI-copilot-knop: bereidt de drawer voor op de daadwerkelijke AI-
-    # koppeling (nog niet gebouwd) -- klikken laat dat nu eerlijk weten
-    # i.p.v. te doen alsof er al een AI-briefing wordt gegenereerd.
     _ai_btn_key = "dd_ai_briefing_btn_wrap"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
-        f'.st-key-{_ai_btn_key} button {{ '
-        f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
-        f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
-        f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
-        f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
-        f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_ai_btn_key):
-        if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
-            _briefing_ticker = (st.session_state.get("dd_ticker_input") or "").strip().upper()
-            _briefing_naam = st.session_state.get("dd_naam_input") or _briefing_ticker
-            if not _briefing_ticker:
-                st.error("Fill in a ticker above first, then generate the briefing.")
-            else:
-                if _run_ai_cockpit_briefing(_briefing_ticker, _briefing_naam, user_email):
-                    st.session_state["selected_research"] = _briefing_ticker
-                    st.rerun()
 
     dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
 
@@ -5083,91 +5082,150 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
     dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
 
-    st.markdown("**Business overview** -- what does the company do, in your own words")
-    dd_business = st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=80)
-
-    st.markdown("**Investment thesis** -- why this could be a good investment")
-    dd_thesis = st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=80)
-    dd_thesis_score = st.slider("How compelling is the thesis?", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score")
-
-    st.markdown("**Management/CEO** -- assess the management and the CEO")
-    dd_management = st.text_area("Management/CEO", label_visibility="collapsed", key="dd_management", height=80)
-    dd_management_score = st.slider("How much confidence in management?", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score")
-
-    st.markdown("**Bear case / risks** -- what could go wrong")
-    dd_bear = st.text_area("Bear case", label_visibility="collapsed", key="dd_bear", height=80)
-    dd_bear_score = st.slider(
-        "How manageable are the risks?", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score",
-        help="Higher = the risks are limited/well understood, not 'the risks are severe' -- keeps the scale consistent with the other sliders (higher is always more favorable).",
+    # --- Interne sub-tab-schakelaar -- st.pills, vlakke/minimalistische
+    # stijl matchend met de rest van het platform. ---
+    st.markdown(
+        f'<style>'
+        f'[data-testid="stPills"] {{ margin-bottom:0.75rem !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    _dd_tab = st.pills(
+        "Section", ["1-CLICK BRIEFING", "MY CONVICTION", "EXIT MATRIX"],
+        default="1-CLICK BRIEFING", key="dd_active_subtab", label_visibility="collapsed",
     )
 
-    st.markdown("**Valuation** -- do you think the current price is reasonable, and why")
-    dd_valuation = st.text_area("Valuation", label_visibility="collapsed", key="dd_valuation", height=80)
-    dd_valuation_score = st.slider("How attractive is the valuation?", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score")
-    dd_interested_price = st.number_input(
-        f"Interested from price ({dd_currency_symbol.strip()}, optional)", min_value=0.0, step=0.01, key="dd_interested_price",
-        help="If filled in, and your conclusion is 'Buy', we'll later check this automatically on Today.",
+    if _dd_tab == "1-CLICK BRIEFING":
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
+            f'.st-key-{_ai_btn_key} button {{ '
+            f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
+            f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
+            f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
+            f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
+            f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_ai_btn_key):
+            if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
+                _briefing_ticker = dd_ticker
+                _briefing_naam = dd_naam or _briefing_ticker
+                if not _briefing_ticker:
+                    st.error("Fill in a ticker above first, then generate the briefing.")
+                else:
+                    if _run_ai_cockpit_briefing(_briefing_ticker, _briefing_naam, user_email):
+                        st.session_state["selected_research"] = _briefing_ticker
+                        st.rerun()
+
+        _dd_label("Business overview")
+        st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=90)
+
+        _dd_label("Investment thesis")
+        st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=90)
+
+        _dd_label("Core risks")
+        st.text_area("Core risks", label_visibility="collapsed", key="dd_bear", height=90)
+
+        _dd_label("Management check")
+        st.text_area("Management check", label_visibility="collapsed", key="dd_management", height=90)
+
+    elif _dd_tab == "MY CONVICTION":
+        _dd_label("Technical notes")
+        st.text_area("Technical notes", label_visibility="collapsed", key="dd_technical_analysis", height=90)
+        _dd_slider_value_html("dd_technical_analysis_score")
+        st.slider("Technical score", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score", label_visibility="collapsed")
+
+        _dd_label("Catalysts notes")
+        st.text_area("Catalysts notes", label_visibility="collapsed", key="dd_catalysts", height=90)
+        _dd_slider_value_html("dd_catalysts_score")
+        st.slider("Catalysts score", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score", label_visibility="collapsed")
+
+        _dd_label("Position sizing plan")
+        st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=90)
+
+        # Thesis-, management- en bear case-scores horen inhoudelijk bij
+        # de tekstvelden op tab 1, maar die tab toont bewust geen sliders
+        # (jouw indeling) -- ze blijven hier verzameld zodat ze nog wel
+        # ergens instelbaar zijn en niet stilzwijgend op 5.0 blijven
+        # staan.
+        _dd_label("Thesis conviction")
+        _dd_slider_value_html("dd_thesis_score")
+        st.slider("Thesis score", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score", label_visibility="collapsed")
+
+        _dd_label("Management conviction")
+        _dd_slider_value_html("dd_management_score")
+        st.slider("Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed")
+
+        _dd_label("Risk manageability")
+        _dd_slider_value_html("dd_bear_score")
+        st.slider("Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed")
+
+    elif _dd_tab == "EXIT MATRIX":
+        _dd_label("Valuation notes")
+        st.text_area("Valuation notes", label_visibility="collapsed", key="dd_valuation", height=90)
+        _dd_slider_value_html("dd_valuation_score")
+        st.slider("Valuation score", 1.0, 10.0, 5.0, step=0.5, key="dd_valuation_score", label_visibility="collapsed")
+
+        _dd_label(f"Interested from price ({dd_currency_symbol.strip()})")
+        st.number_input(f"Interested from price", min_value=0.0, step=0.01, key="dd_interested_price", label_visibility="collapsed")
+
+        _dd_label("Conclusion")
+        st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion", label_visibility="collapsed")
+
+        _dd_label("Sell criteria")
+        st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=90)
+
+        _dd_label(f"Sell trigger price ({dd_currency_symbol.strip()})")
+        st.number_input("Sell trigger price", min_value=0.0, step=0.01, key="dd_sell_trigger_price", label_visibility="collapsed")
+
+        _dd_label("Sell by date")
+        st.date_input("Sell by date", value=None, key="dd_sell_trigger_date", label_visibility="collapsed")
+
+    _save_key = "dd_save_btn_wrap"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_save_key} {{ margin-top:1.5rem !important; }} '
+        f'.st-key-{_save_key} button {{ '
+        f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
+        f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
+        f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+        f'.st-key-{_save_key} button:hover {{ background:#059669 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
     )
-
-    st.markdown("**Technical analysis** -- what does the chart say (trend, support/resistance, momentum) "
-                "-- separate from Valuation, which is about the price vs. the FUNDAMENTALS")
-    dd_technical_analysis = st.text_area("Technical analysis", label_visibility="collapsed", key="dd_technical_analysis", height=80)
-    dd_technical_analysis_score = st.slider("How favorable is the technical setup?", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score")
-
-    st.markdown("**Catalysts** -- what upcoming events could move the price")
-    dd_catalysts = st.text_area("Catalysts", label_visibility="collapsed", key="dd_catalysts", height=80)
-    dd_catalysts_score = st.slider("How strong are the catalysts?", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score")
-
-    st.markdown("**Position sizing plan** -- how big a position, and why")
-    dd_sizing = st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=80)
-
-    st.markdown("**Sell criteria** -- under what conditions do you exit "
-                "(this is also where a specific triggering EVENT belongs, e.g. "
-                "'if they miss 2 consecutive quarters' -- we can't check that "
-                "automatically, so it stays a reminder here on this page)")
-    dd_sell_criteria = st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=80)
-
-    st.markdown("**Sell trigger (optional)** -- get a heads-up on Today when this is reached")
-    dd_sell_trigger_price = st.number_input(
-        f"Sell at price ({dd_currency_symbol.strip()})", min_value=0.0, step=0.01, key="dd_sell_trigger_price",
-        help="Works both ways: a target above today's price is treated as a profit "
-             "target, below it as a stop-loss.",
-    )
-    dd_sell_trigger_date = st.date_input(
-        "Sell by date", value=None, key="dd_sell_trigger_date",
-        help="A hard deadline to reconsider this position, regardless of price.",
-    )
-
-    dd_conclusion = st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion")
-
-    if st.button("Save this version", type="primary", key="dd_save_btn"):
+    with st.container(key=_save_key):
+        _save_clicked = st.button("Save this version", key="dd_save_btn")
+    if _save_clicked:
         if not dd_ticker or not dd_naam:
             st.error("Please fill in at least a ticker and name.")
         else:
             with st.spinner("Fetching market data..."):
                 market_snapshot = get_deep_dive_market_snapshot(dd_ticker)
+            _ss = st.session_state
             database.add_deep_dive(
                 user_email, dd_ticker, dd_naam,
-                business_overview=dd_business or None,
-                investment_thesis=dd_thesis or None,
-                management_assessment=dd_management or None,
-                bear_case=dd_bear or None,
-                valuation_view=dd_valuation or None,
-                interested_price=dd_interested_price or None,
-                catalysts=dd_catalysts or None,
-                position_sizing_plan=dd_sizing or None,
-                sell_criteria=dd_sell_criteria or None,
-                conclusion=dd_conclusion,
+                business_overview=_ss.get("dd_business") or None,
+                investment_thesis=_ss.get("dd_thesis") or None,
+                management_assessment=_ss.get("dd_management") or None,
+                bear_case=_ss.get("dd_bear") or None,
+                valuation_view=_ss.get("dd_valuation") or None,
+                interested_price=_ss.get("dd_interested_price") or None,
+                catalysts=_ss.get("dd_catalysts") or None,
+                position_sizing_plan=_ss.get("dd_sizing") or None,
+                sell_criteria=_ss.get("dd_sell_criteria") or None,
+                conclusion=_ss.get("dd_conclusion", "Watch"),
                 market_snapshot=market_snapshot,
-                sell_trigger_price=dd_sell_trigger_price or None,
-                sell_trigger_date=dd_sell_trigger_date.isoformat() if dd_sell_trigger_date else None,
-                thesis_score=dd_thesis_score,
-                management_score=dd_management_score,
-                bear_case_score=dd_bear_score,
-                valuation_score=dd_valuation_score,
-                catalysts_score=dd_catalysts_score,
-                technical_analysis=dd_technical_analysis or None,
-                technical_analysis_score=dd_technical_analysis_score,
+                sell_trigger_price=_ss.get("dd_sell_trigger_price") or None,
+                sell_trigger_date=_ss["dd_sell_trigger_date"].isoformat() if _ss.get("dd_sell_trigger_date") else None,
+                thesis_score=_ss.get("dd_thesis_score", 5.0),
+                management_score=_ss.get("dd_management_score", 5.0),
+                bear_case_score=_ss.get("dd_bear_score", 5.0),
+                valuation_score=_ss.get("dd_valuation_score", 5.0),
+                catalysts_score=_ss.get("dd_catalysts_score", 5.0),
+                technical_analysis=_ss.get("dd_technical_analysis") or None,
+                technical_analysis_score=_ss.get("dd_technical_analysis_score", 5.0),
             )
             st.success(f"New version for {dd_ticker} saved!")
             st.session_state["selected_research"] = None
