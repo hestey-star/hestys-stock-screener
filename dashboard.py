@@ -9209,7 +9209,7 @@ def render_discover_earnings_surprises():
     )
     st.markdown(
         '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.12em; '
-        'text-transform:uppercase;">Data interval: recent 60-day active signal window.</div>',
+        'text-transform:uppercase; margin-bottom:0.75rem;">Data interval: recent 60-day active signal window.</div>',
         unsafe_allow_html=True,
     )
     surprises = get_earnings_surprises_from_signals(max_items=5)
