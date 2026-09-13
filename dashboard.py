@@ -3050,16 +3050,18 @@ def _render_deep_dive_version(version: dict, user_email: str):
             edit_bear = st.text_area("Core risks", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_bear_score_{version_id}")
             edit_bear_score = st.slider(
-                "Risk score", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5,
-                key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
+                "Risk score", 1.0, 10.0,
+                st.session_state.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
+                step=0.5, key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
             )
             st.session_state[f"dd_edit_bear_score_committed_{version_id}"] = edit_bear_score
 
             edit_management = st.text_area("Management check", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
             edit_management_score = st.slider(
-                "Management score", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5,
-                key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
+                "Management score", 1.0, 10.0,
+                st.session_state.get(f"dd_edit_management_score_committed_{version_id}", float(version.get("management_score") or 5)),
+                step=0.5, key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
             )
             st.session_state[f"dd_edit_management_score_committed_{version_id}"] = edit_management_score
 
@@ -3069,16 +3071,18 @@ def _render_deep_dive_version(version: dict, user_email: str):
             )
             _dd_slider_value_html(f"dd_edit_ta_score_{version_id}")
             edit_technical_analysis_score = st.slider(
-                "Technical score", 1.0, 10.0, float(version.get("technical_analysis_score") or 5), step=0.5,
-                key=f"dd_edit_ta_score_{version_id}", label_visibility="collapsed",
+                "Technical score", 1.0, 10.0,
+                st.session_state.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
+                step=0.5, key=f"dd_edit_ta_score_{version_id}", label_visibility="collapsed",
             )
             st.session_state[f"dd_edit_ta_score_committed_{version_id}"] = edit_technical_analysis_score
 
             edit_catalysts = st.text_area("Catalysts notes", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_catalysts_score_{version_id}")
             edit_catalysts_score = st.slider(
-                "Catalysts score", 1.0, 10.0, float(version.get("catalysts_score") or 5), step=0.5,
-                key=f"dd_edit_catalysts_score_{version_id}", label_visibility="collapsed",
+                "Catalysts score", 1.0, 10.0,
+                st.session_state.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
+                step=0.5, key=f"dd_edit_catalysts_score_{version_id}", label_visibility="collapsed",
             )
             st.session_state[f"dd_edit_catalysts_score_committed_{version_id}"] = edit_catalysts_score
 
@@ -3093,7 +3097,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
             _edit_conclusion_inputs = [
                 st.session_state.get(f"dd_edit_management_score_committed_{version_id}", float(version.get("management_score") or 5)),
                 st.session_state.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
-                st.session_state.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
+                st.session_state.get(f"dd_edit_valuation_score_committed_{version_id}", float(version.get("valuation_score") or 5)),
                 st.session_state.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
                 st.session_state.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
             ]
@@ -3111,9 +3115,11 @@ def _render_deep_dive_version(version: dict, user_email: str):
             edit_valuation = st.text_area("Valuation notes", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_valuation_score_{version_id}")
             edit_valuation_score = st.slider(
-                "Valuation score", 1.0, 10.0, float(version.get("valuation_score") or 5), step=0.5,
-                key=f"dd_edit_valuation_score_{version_id}", label_visibility="collapsed",
+                "Valuation score", 1.0, 10.0,
+                st.session_state.get(f"dd_edit_valuation_score_committed_{version_id}", float(version.get("valuation_score") or 5)),
+                step=0.5, key=f"dd_edit_valuation_score_{version_id}", label_visibility="collapsed",
             )
+            st.session_state[f"dd_edit_valuation_score_committed_{version_id}"] = edit_valuation_score
 
             _dd_label(f"Interested from price ({ticker_currency_symbol.strip()})")
             edit_interested_price = st.number_input(
@@ -3220,7 +3226,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                         thesis_score=_ess.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)),
                         management_score=_ess.get(f"dd_edit_management_score_committed_{version_id}", float(version.get("management_score") or 5)),
                         bear_case_score=_ess.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
-                        valuation_score=_ess.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
+                        valuation_score=_ess.get(f"dd_edit_valuation_score_committed_{version_id}", float(version.get("valuation_score") or 5)),
                         catalysts_score=_ess.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
                         technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
                         technical_analysis_score=_ess.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
