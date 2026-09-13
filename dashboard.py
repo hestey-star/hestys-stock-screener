@@ -4089,32 +4089,39 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
     gebruiker altijd wijzigen), maar de daadwerkelijke, unieke kolommen
     die elke broker's export nu eenmaal heeft. Geeft 'degiro', 'robinhood',
     'schwab', 'trade_republic' of 'unknown' terug.
-    """
-    import io
-    try:
-        header_df = pd.read_csv(io.BytesIO(file_bytes), nrows=0)
-    except Exception:
-        return "unknown"
-    columns = set(header_df.columns)
 
-    # DEGIRO: eigen, Nederlandstalige kolomnamen -- 'Product'/'ISIN'/
-    # 'Koers'/'Datum' komen niet voor in een Robinhood-export.
-    if {"Product", "ISIN", "Koers", "Datum"}.issubset(columns):
-        return "degiro"
-    # Robinhood: 'Trans Code'/'Asset Code' zijn uniek voor Robinhood's
-    # eigen exportformaat.
-    if {"Trans Code", "Asset Code"}.issubset(columns):
-        return "robinhood"
-    # Charles Schwab: 'Fees & Comm' is een vrij unieke kolomnaam.
-    if {"Action", "Fees & Comm", "Symbol"}.issubset(columns):
-        return "schwab"
-    # Trade Republic: kent GEEN eigen, unieke kolomnaam (simpel/generiek
-    # formaat: Date/Symbol/Type/Quantity/Price/Amount) -- daarom pas als
-    # ALLERLAATSTE check, nadat de specifiekere formaten hierboven al
-    # zijn uitgesloten, om te voorkomen dat dit per ongeluk een ANDER,
-    # nog-te-bouwen formaat met soortgelijke kolomnamen inpikt.
-    if {"Date", "Symbol", "Type", "Quantity", "Price", "Amount"}.issubset(columns):
-        return "trade_republic"
+    Sommige exports (met name Schwab) beginnen met 1 of meer losse tekst-
+    regels VOOR de daadwerkelijke koptekst (bv. een accountnaam-regel) --
+    als we alleen regel 1 zouden checken, zou de herkenning daar altijd
+    op stuklopen. We scannen daarom de eerste ~15 regels stuk voor stuk
+    op een kolomkoppen-match, i.p.v. blind aan te nemen dat regel 1 al
+    de koptekst is.
+    """
+    text = file_bytes.decode("utf-8", errors="replace")
+    lines = text.splitlines()[:15]
+
+    for line in lines:
+        columns = {c.strip().strip('"') for c in line.split(",")}
+
+        # DEGIRO: eigen, Nederlandstalige kolomnamen -- 'Product'/'ISIN'/
+        # 'Koers'/'Datum' komen niet voor in een Robinhood-export.
+        if {"Product", "ISIN", "Koers", "Datum"}.issubset(columns):
+            return "degiro"
+        # Robinhood: 'Trans Code'/'Asset Code' zijn uniek voor Robinhood's
+        # eigen exportformaat.
+        if {"Trans Code", "Asset Code"}.issubset(columns):
+            return "robinhood"
+        # Charles Schwab: 'Fees & Comm' is een vrij unieke kolomnaam.
+        if {"Action", "Fees & Comm", "Symbol"}.issubset(columns):
+            return "schwab"
+        # Trade Republic: kent GEEN eigen, unieke kolomnaam (simpel/generiek
+        # formaat: Date/Symbol/Type/Quantity/Price/Amount) -- daarom pas als
+        # ALLERLAATSTE check, nadat de specifiekere formaten hierboven al
+        # zijn uitgesloten, om te voorkomen dat dit per ongeluk een ANDER,
+        # nog-te-bouwen formaat met soortgelijke kolomnamen inpikt.
+        if {"Date", "Symbol", "Type", "Quantity", "Price", "Amount"}.issubset(columns):
+            return "trade_republic"
+
     return "unknown"
 
 
@@ -4288,6 +4295,24 @@ def parse_schwab_transactions_csv(file_bytes: bytes) -> dict:
             return float(str(val).strip().replace("$", "").replace(",", ""))
         except (TypeError, ValueError):
             return None
+
+    # Schwab-exports beginnen vaak met 1 of meer losse tekst-regels vóór
+    # de daadwerkelijke koptekst (bv. een accountnaam/datum-regel) -- als
+    # we die gewoon aan pd.read_csv() geven, ziet pandas die EERSTE regel
+    # aan voor de koptekst (met maar 1 kolom), en gooit vervolgens de
+    # ECHTE koptekst + ALLE transactieregels weg als 'foutieve regels'
+    # (die hebben immers 8 kolommen i.p.v. 1). We zoeken daarom EERST
+    # zelf de regel op die er daadwerkelijk als koptekst uitziet (bevat
+    # 'Date' EN 'Action' EN 'Symbol'), en lezen pas vanaf DIE regel in.
+    text = file_bytes.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    header_idx = None
+    for i, line in enumerate(lines):
+        if "Date" in line and "Action" in line and "Symbol" in line:
+            header_idx = i
+            break
+    if header_idx is not None:
+        file_bytes = "\n".join(lines[header_idx:]).encode("utf-8")
 
     try:
         df = pd.read_csv(io.BytesIO(file_bytes), on_bad_lines="skip")
