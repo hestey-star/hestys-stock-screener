@@ -6982,9 +6982,8 @@ def render_portfolio():
                                                   label_visibility="collapsed")
             st.markdown(
                 '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
-                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here -- Hesty\'s '
-                'automatically recognizes which broker it\'s from and imports your full buy/sell history in '
-                'one go, instead of logging each one by hand.</div>',
+                'line-height:1.5;">Export your broker\'s \'Transactions\' CSV and upload it here to import '
+                'your full buy/sell history in one go, instead of logging each one by hand.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -8170,17 +8169,6 @@ def render_portfolio():
                         database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
                         st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
                         st.rerun()
-
-    st.markdown(
-        '<div style="font-size:0.75rem; color:#64748B; font-family:\'Inter\', sans-serif !important; '
-        'line-height:1.5;">Manage email preferences and cash amount under Settings. '
-        'You\'ll also automatically receive a weekly email with this update, '
-        'at the address you\'re logged in with.</div>',
-        unsafe_allow_html=True,
-    )
-
-
-
 
 def _render_unlock_premium_button(context_key: str, label: str = "Unlock all premium weekly signals \u2192") -> None:
     """
