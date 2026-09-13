@@ -8755,8 +8755,6 @@ def render_discover_signals():
             '<div class="discover-hero-buttons">'
             '<a href="#activate-signals" target="_self" class="discover-hero-btn discover-hero-btn-primary">'
             'Start free, in seconds &rarr;</a>'
-            '<a href="#signals" target="_self" class="discover-hero-btn discover-hero-btn-secondary">'
-            'Browse today\'s signals</a>'
             '</div>'
             '</div>',
             unsafe_allow_html=True,
