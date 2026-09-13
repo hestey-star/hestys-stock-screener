@@ -4842,17 +4842,22 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
-    # Verhoudingen: Asset supercompact (~10%), Score compact (~13%),
-    # Last validated vult de rest (~72%, geeft de rustgevende ademruimte
-    # in het midden), Action smal en strak rechts (~5%).
-    _col_ratios = [10, 13, 72, 5]
+    # Verhoudingen naar echte content-breedte (logo+ticker / score /
+    # datum), niet naar "vult de rest van het scherm" -- dat laatste
+    # gaf op een brede pagina juist een enorm, leeg ogend Last
+    # Validated-vak. De tabel als GEHEEL wordt nu ook smaller gehouden
+    # (max-width hieronder) i.p.v. altijd de volle containerbreedte
+    # op te eisen.
+    _col_ratios = [1.7, 1.1, 1, 0.45]
     _table_key = f"{key_prefix}_table"
     st.markdown(
         f'<style>'
-        # Vangnet: welke resterende paar pixels overflow er ook nog
-        # ergens vandaan mochten komen, dit voorkomt dat de HELE pagina
-        # daardoor horizontaal scrollbaar wordt.
-        f'.st-key-{_table_key} {{ overflow-x:hidden !important; max-width:100% !important; }} '
+        # Tabel als geheel smaller dan de volle breedte -- de daadwerke-
+        # lijke oorzaak van de lege ruimte was niet de kolomverdeling,
+        # maar dat de hele tabel geforceerd tot de containerrand werd
+        # uitgerekt terwijl de inhoud (logo/ticker/score/datum) daar
+        # nooit voor bedoeld was.
+        f'.st-key-{_table_key} {{ overflow-x:hidden !important; max-width:640px !important; }} '
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
