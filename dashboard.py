@@ -5437,19 +5437,14 @@ def _render_analyze_drawer(user_email: str) -> None:
         f'<style>.st-key-{_drawer_key} {{ '
         f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
         f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
-        # Fancy, ronde '\u00d7'-knop rechtsboven i.p.v. een tekstregel
-        # bovenaan -- dat maakt meteen ruimte vrij zodat de kop van het
-        # formulier ('Add a new deep-dive') een stuk hoger kan beginnen.
+        # Fancy, ronde '\u00d7'-knop -- nu op DEZELFDE regel als de kop
+        # ('Add a new deep-dive' / ticker-naam) getrokken via een
+        # negatieve margin-top, exact hetzelfde bewezen patroon als de
+        # '+ ADD NEW'-knop bovenaan de hoofdpagina (die stond altijd al
+        # correct rechts uitgelijnd). De vorige losse-regel-aanpak
+        # boven de kop bleef om onduidelijke reden links hangen.
         f'.st-key-analyze_drawer_close {{ display:flex !important; justify-content:flex-end !important; '
-        f'margin-bottom:0.5rem !important; }} '
-        # De knop-WRAPPER (niet de knop zelf) vult standaard de volle
-        # breedte van de rij -- daardoor had justify-content:flex-end op
-        # de ouder geen zichtbaar effect (er was toch geen ruimte meer
-        # om de knop binnen te verschuiven). width:auto op de wrapper
-        # laat 'm precies zo breed als de knop zelf zijn, waardoor de
-        # rechts-uitlijning nu wel degelijk zichtbaar wordt.
-        f'.st-key-analyze_drawer_close [data-testid="stElementContainer"], '
-        f'.st-key-analyze_drawer_close [data-testid="stButton"] {{ width:auto !important; }} '
+        f'margin-top:-2.6rem !important; margin-bottom:0.75rem !important; position:relative !important; z-index:2 !important; }} '
         f'.st-key-analyze_drawer_close button {{ '
         f'background:rgba(148,163,184,0.08) !important; border:1px solid rgba(148,163,184,0.15) !important; '
         f'box-shadow:none !important; color:#94A3B8 !important; font-size:0.95rem !important; '
@@ -5477,13 +5472,16 @@ def _render_analyze_drawer(user_email: str) -> None:
         f'</style>',
         unsafe_allow_html=True,
     )
+
+    def _render_drawer_close_button() -> None:
+        with st.container(key="analyze_drawer_close"):
+            if st.button("\u00d7", key="analyze_drawer_close_btn", help="Close"):
+                st.session_state["selected_research"] = None
+                st.rerun()
+
     with st.container(key=_drawer_key):
         with st.container(key="analyze_drawer_back_mobile"):
             if st.button("\u2190 Back to Research Overview", key="analyze_drawer_back_mobile_btn"):
-                st.session_state["selected_research"] = None
-                st.rerun()
-        with st.container(key="analyze_drawer_close"):
-            if st.button("\u00d7", key="analyze_drawer_close_btn", help="Close"):
                 st.session_state["selected_research"] = None
                 st.rerun()
 
@@ -5495,10 +5493,12 @@ def _render_analyze_drawer(user_email: str) -> None:
                 '<span style="color:#34D399;">&#10022;</span> Add a new deep-dive</div>',
                 unsafe_allow_html=True,
             )
+            _render_drawer_close_button()
             _render_deep_dive_add_form(user_email)
         else:
             history = database.get_deep_dives_for_ticker(user_email, selected)
             if not history:
+                _render_drawer_close_button()
                 st.caption("No research found for this ticker.")
                 return
             latest = history[0]
@@ -5507,6 +5507,7 @@ def _render_analyze_drawer(user_email: str) -> None:
                 f'letter-spacing:0.03em; margin-bottom:0.35rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
                 unsafe_allow_html=True,
             )
+            _render_drawer_close_button()
             # Investment thesis nu direct bovenin de drawer i.p.v. in de
             # tabel (waar 'ie was afgekapt op 60 tekens) -- de Core
             # Thesis-kolom bestaat niet meer in de tabel zelf.
