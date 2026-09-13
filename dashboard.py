@@ -3065,6 +3065,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 "Risk score", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5,
                 key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
             )
+            st.session_state[f"dd_edit_bear_score_committed_{version_id}"] = edit_bear_score
 
             edit_management = st.text_area("Management check", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
@@ -3072,6 +3073,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 "Management score", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5,
                 key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
             )
+            st.session_state[f"dd_edit_management_score_committed_{version_id}"] = edit_management_score
 
         elif _edit_tab == "MY CONVICTION":
             edit_technical_analysis = st.text_area(
@@ -3082,6 +3084,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 "Technical score", 1.0, 10.0, float(version.get("technical_analysis_score") or 5), step=0.5,
                 key=f"dd_edit_ta_score_{version_id}", label_visibility="collapsed",
             )
+            st.session_state[f"dd_edit_ta_score_committed_{version_id}"] = edit_technical_analysis_score
 
             edit_catalysts = st.text_area("Catalysts notes", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}", height=90)
             _dd_slider_value_html(f"dd_edit_catalysts_score_{version_id}")
@@ -3089,6 +3092,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 "Catalysts score", 1.0, 10.0, float(version.get("catalysts_score") or 5), step=0.5,
                 key=f"dd_edit_catalysts_score_{version_id}", label_visibility="collapsed",
             )
+            st.session_state[f"dd_edit_catalysts_score_committed_{version_id}"] = edit_catalysts_score
 
             edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}", height=90)
 
@@ -3099,11 +3103,11 @@ def _render_deep_dive_version(version: dict, user_email: str):
             # verschuiven, niet rechtstreeks. Zelfde 'thesis_score'-veld
             # onder water, hier groot gepresenteerd.
             _edit_conclusion_inputs = [
-                st.session_state.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
-                st.session_state.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
+                st.session_state.get(f"dd_edit_management_score_committed_{version_id}", float(version.get("management_score") or 5)),
+                st.session_state.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
                 st.session_state.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
-                st.session_state.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
-                st.session_state.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
+                st.session_state.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
+                st.session_state.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
             ]
             edit_thesis_score = sum(_edit_conclusion_inputs) / len(_edit_conclusion_inputs)
             st.session_state[f"dd_edit_thesis_score_{version_id}"] = edit_thesis_score
@@ -3226,12 +3230,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
                             if _ess.get(f"dd_edit_trigger_date_{version_id}") else None
                         ),
                         thesis_score=_ess.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)),
-                        management_score=_ess.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
-                        bear_case_score=_ess.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
+                        management_score=_ess.get(f"dd_edit_management_score_committed_{version_id}", float(version.get("management_score") or 5)),
+                        bear_case_score=_ess.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
                         valuation_score=_ess.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
-                        catalysts_score=_ess.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
+                        catalysts_score=_ess.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
                         technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
-                        technical_analysis_score=_ess.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
+                        technical_analysis_score=_ess.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
                     )
                     st.session_state[edit_key] = False
                     st.success("Version updated.")
@@ -5281,23 +5285,31 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         _dd_label("Core risks")
         st.text_area("Core risks", label_visibility="collapsed", key="dd_bear", height=90)
         _dd_slider_value_html("dd_bear_score")
-        st.slider("Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed")
+        st.session_state["dd_bear_score_committed"] = st.slider(
+            "Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed",
+        )
 
         _dd_label("Management check")
         st.text_area("Management check", label_visibility="collapsed", key="dd_management", height=90)
         _dd_slider_value_html("dd_management_score")
-        st.slider("Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed")
+        st.session_state["dd_management_score_committed"] = st.slider(
+            "Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed",
+        )
 
     elif _dd_tab == "MY CONVICTION":
         _dd_label("Technical notes")
         st.text_area("Technical notes", label_visibility="collapsed", key="dd_technical_analysis", height=90)
         _dd_slider_value_html("dd_technical_analysis_score")
-        st.slider("Technical score", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score", label_visibility="collapsed")
+        st.session_state["dd_technical_analysis_score_committed"] = st.slider(
+            "Technical score", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score", label_visibility="collapsed",
+        )
 
         _dd_label("Catalysts notes")
         st.text_area("Catalysts notes", label_visibility="collapsed", key="dd_catalysts", height=90)
         _dd_slider_value_html("dd_catalysts_score")
-        st.slider("Catalysts score", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score", label_visibility="collapsed")
+        st.session_state["dd_catalysts_score_committed"] = st.slider(
+            "Catalysts score", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score", label_visibility="collapsed",
+        )
 
         _dd_label("Position sizing plan")
         st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=90)
@@ -5319,11 +5331,11 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         # veld (voor compatibiliteit met de conviction-tegels/tabellen
         # elders, die allemaal op de 6 bestaande score-velden rekenen).
         _conclusion_inputs = [
-            st.session_state.get("dd_management_score", 5.0),
-            st.session_state.get("dd_bear_score", 5.0),
+            st.session_state.get("dd_management_score_committed", 5.0),
+            st.session_state.get("dd_bear_score_committed", 5.0),
             st.session_state.get("dd_valuation_score", 5.0),
-            st.session_state.get("dd_catalysts_score", 5.0),
-            st.session_state.get("dd_technical_analysis_score", 5.0),
+            st.session_state.get("dd_catalysts_score_committed", 5.0),
+            st.session_state.get("dd_technical_analysis_score_committed", 5.0),
         ]
         _conclusion_score = sum(_conclusion_inputs) / len(_conclusion_inputs)
         st.session_state["dd_thesis_score"] = _conclusion_score
@@ -5434,12 +5446,12 @@ def _render_deep_dive_add_form(user_email: str) -> None:
                 sell_trigger_price=_ss.get("dd_sell_trigger_price") or None,
                 sell_trigger_date=_ss["dd_sell_trigger_date"].isoformat() if _ss.get("dd_sell_trigger_date") else None,
                 thesis_score=_ss.get("dd_thesis_score", 5.0),
-                management_score=_ss.get("dd_management_score", 5.0),
-                bear_case_score=_ss.get("dd_bear_score", 5.0),
+                management_score=_ss.get("dd_management_score_committed", 5.0),
+                bear_case_score=_ss.get("dd_bear_score_committed", 5.0),
                 valuation_score=_ss.get("dd_valuation_score", 5.0),
-                catalysts_score=_ss.get("dd_catalysts_score", 5.0),
+                catalysts_score=_ss.get("dd_catalysts_score_committed", 5.0),
                 technical_analysis=_ss.get("dd_technical_analysis") or None,
-                technical_analysis_score=_ss.get("dd_technical_analysis_score", 5.0),
+                technical_analysis_score=_ss.get("dd_technical_analysis_score_committed", 5.0),
             )
             st.success(f"New version for {dd_ticker} saved!")
             st.session_state["selected_research"] = None
