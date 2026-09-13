@@ -4892,6 +4892,23 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
+    # Eerste 10 rijen standaard zichtbaar; bij meer dan 10 rijen totaal
+    # verschijnt een slider om verder te bladeren (t/m alles tonen).
+    # 'entries' (bezeten, met research) krijgt voorrang op 'unmapped'
+    # -- dat vult de resterende ruimte van de gekozen limiet.
+    _unmapped = unmapped or []
+    _total_rows = len(entries) + len(_unmapped)
+    if _total_rows > 10:
+        _row_limit = st.slider(
+            "Rows to show", min_value=10, max_value=_total_rows, value=10, step=1,
+            key=f"{key_prefix}_row_limit",
+        )
+    else:
+        _row_limit = _total_rows
+    entries = entries[:_row_limit]
+    _unmapped = _unmapped[: max(0, _row_limit - len(entries))]
+    unmapped = _unmapped
+
     # Verhoudingen naar echte content-breedte (logo+ticker / score /
     # datum), niet naar "vult de rest van het scherm" -- dat laatste
     # gaf op een brede pagina juist een enorm, leeg ogend Last
