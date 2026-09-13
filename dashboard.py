@@ -4903,13 +4903,19 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     unsafe_allow_html=True,
                 )
             with row_cols[1]:
-                st.markdown('<span style="color:#64748B; font-size:0.82rem;">-</span>', unsafe_allow_html=True)
+                st.markdown(
+                    '<span style="color:#a7f3d0; background-color:rgba(16,185,129,0.1); '
+                    'border:1px solid rgba(52,211,153,0.2); border-radius:0.375rem; padding:2px 8px; '
+                    'font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+                    'display:inline-block;">\u2726 AI Ready</span>',
+                    unsafe_allow_html=True,
+                )
             with row_cols[2]:
                 st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
             with row_cols[3]:
                 st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
             with row_cols[4]:
-                if st.button("\U0001F916", key=f"scan_{key_prefix}_{u_ticker}", help=f"Scan {u_ticker}"):
+                if st.button("\u2726", key=f"scan_{key_prefix}_{u_ticker}", help=f"Run AI scan on {u_ticker}"):
                     st.session_state["dd_ticker_input"] = u_ticker
                     st.session_state["dd_naam_input"] = u_naam
                     st.session_state["selected_research"] = "__NEW__"
@@ -5098,18 +5104,20 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     if _dd_tab == "1-CLICK BRIEFING":
         st.markdown(
             f'<style>'
-            f'.st-key-{_ai_btn_key} {{ margin-bottom:1rem !important; }} '
+            f'.st-key-{_ai_btn_key} {{ margin-top:0.5rem !important; margin-bottom:1.5rem !important; }} '
             f'.st-key-{_ai_btn_key} button {{ '
-            f'width:100% !important; background:rgba(6,78,59,0.4) !important; color:#34D399 !important; '
-            f'border:1px solid rgba(16,185,129,0.3) !important; font-size:0.72rem !important; '
-            f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.03em !important; '
-            f'padding:0.5rem 0 !important; border-radius:12px !important; box-shadow:none !important; }} '
-            f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(6,95,70,0.4) !important; }} '
+            f'width:100% !important; background:rgba(2,6,23,0.8) !important; color:#a7f3d0 !important; '
+            f'border:1px solid rgba(16,185,129,0.2) !important; font-size:0.72rem !important; '
+            f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.15em !important; '
+            f'padding:0.75rem 0 !important; border-radius:12px !important; '
+            f'box-shadow:0 8px 24px rgba(0,0,0,0.35) !important; transition:all 0.3s ease !important; }} '
+            f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(15,23,42,0.9) !important; '
+            f'border-color:rgba(16,185,129,0.35) !important; }} '
             f'</style>',
             unsafe_allow_html=True,
         )
         with st.container(key=_ai_btn_key):
-            if st.button("\U0001F916 Generate 1-Click AI Cockpit Briefing", key="dd_ai_briefing_btn"):
+            if st.button("\u2726 Generate Anthropic Intelligence Briefing", key="dd_ai_briefing_btn"):
                 _briefing_ticker = dd_ticker
                 _briefing_naam = dd_naam or _briefing_ticker
                 if not _briefing_ticker:
@@ -5145,15 +5153,13 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         _dd_label("Position sizing plan")
         st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=90)
 
-        # Thesis-, management- en bear case-scores horen inhoudelijk bij
-        # de tekstvelden op tab 1, maar die tab toont bewust geen sliders
+        # Management- en bear case-scores horen inhoudelijk bij de
+        # tekstvelden op tab 1, maar die tab toont bewust geen sliders
         # (jouw indeling) -- ze blijven hier verzameld zodat ze nog wel
         # ergens instelbaar zijn en niet stilzwijgend op 5.0 blijven
-        # staan.
-        _dd_label("Thesis conviction")
-        _dd_slider_value_html("dd_thesis_score")
-        st.slider("Thesis score", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score", label_visibility="collapsed")
-
+        # staan. De Thesis-score is verhuisd naar de grote CONCLUSION-
+        # slider op Exit Matrix (zie hieronder) -- geen losse 'Thesis
+        # conviction'-slider hier meer, dat was de overbodige dubbele.
         _dd_label("Management conviction")
         _dd_slider_value_html("dd_management_score")
         st.slider("Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed")
@@ -5163,6 +5169,22 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         st.slider("Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed")
 
     elif _dd_tab == "EXIT MATRIX":
+        # De ENIGE hoofdscore van de hele deep-dive -- de overkoepelende
+        # overtuiging die uiteindelijk de doorslag geeft. Gebruikt onder
+        # water nog steeds het bestaande 'thesis_score'-veld (voor
+        # compatibiliteit met de conviction-tegels/tabellen elders, die
+        # allemaal op de 6 bestaande score-velden rekenen), alleen hier
+        # nu groot en prominent als 'Conclusion' gepresenteerd.
+        _dd_label("Conclusion")
+        st.markdown(
+            f'<div style="text-align:center; margin-bottom:0.25rem;">'
+            f'<span style="color:#34D399; font-weight:800; font-size:2.2rem;">'
+            f'{st.session_state.get("dd_thesis_score", 5.0):.1f}</span>'
+            f'<span style="color:#64748B; font-size:0.85rem;"> / 10</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.slider("Conclusion score", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score", label_visibility="collapsed")
+
         _dd_label("Valuation notes")
         st.text_area("Valuation notes", label_visibility="collapsed", key="dd_valuation", height=90)
         _dd_slider_value_html("dd_valuation_score")
@@ -5171,8 +5193,8 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         _dd_label(f"Interested from price ({dd_currency_symbol.strip()})")
         st.number_input(f"Interested from price", min_value=0.0, step=0.01, key="dd_interested_price", label_visibility="collapsed")
 
-        _dd_label("Conclusion")
-        st.selectbox("Conclusion", ["Watch", "Buy", "Pass"], key="dd_conclusion", label_visibility="collapsed")
+        _dd_label("Watch / Buy / Pass status")
+        st.selectbox("Status", ["Watch", "Buy", "Pass"], key="dd_conclusion", label_visibility="collapsed")
 
         _dd_label("Sell criteria")
         st.text_area("Sell criteria", label_visibility="collapsed", key="dd_sell_criteria", height=90)
@@ -5196,7 +5218,7 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         unsafe_allow_html=True,
     )
     with st.container(key=_save_key):
-        _save_clicked = st.button("Save this version", key="dd_save_btn")
+        _save_clicked = st.button("Save this version", key="dd_save_btn", use_container_width=True)
     if _save_clicked:
         if not dd_ticker or not dd_naam:
             st.error("Please fill in at least a ticker and name.")
@@ -5365,6 +5387,16 @@ def render_analyze():
         if st.button("+ Add New", key="analyze_add_new_btn"):
             st.session_state["selected_research"] = "__NEW__"
             st.rerun()
+
+    # Marketing-indicator: maakt zichtbaar dat er een AI-copilot achter
+    # het platform zit -- rechtsboven, direct onder de '+ Add New'-knop.
+    st.markdown(
+        '<div style="display:flex; justify-content:flex-end; margin-top:-0.75rem; margin-bottom:1.25rem;">'
+        '<span style="font-size:10px; font-weight:700; letter-spacing:0.1em; color:#64748B; '
+        'text-transform:uppercase;">&#9889; Cognitive co-pilot powered by Anthropic Claude&trade;</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
     total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
