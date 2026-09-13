@@ -4934,8 +4934,13 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             with row_cols[0]:
                 st.markdown(
                     f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
-                    f'<span style="color:#ffffff; font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
-                    f'text-transform:uppercase;">{ticker}</span></div>',
+                    f'<div style="min-width:0;">'
+                    f'<div style="color:#ffffff; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
+                    f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
+                    f'text-overflow:ellipsis;">{ticker}</div>'
+                    f'<div style="color:#8992A3; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
+                    f'overflow:hidden; text-overflow:ellipsis;">{naam}</div>'
+                    f'</div></div>',
                     unsafe_allow_html=True,
                 )
             with row_cols[1]:
@@ -4975,8 +4980,13 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             with row_cols[0]:
                 st.markdown(
                     f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
-                    f'<span style="color:#94A3B8; font-weight:700; font-size:0.875rem; letter-spacing:0.05em; '
-                    f'text-transform:uppercase;">{u_ticker}</span></div>',
+                    f'<div style="min-width:0;">'
+                    f'<div style="color:#94A3B8; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
+                    f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
+                    f'text-overflow:ellipsis;">{u_ticker}</div>'
+                    f'<div style="color:#64748B; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
+                    f'overflow:hidden; text-overflow:ellipsis;">{u_naam}</div>'
+                    f'</div></div>',
                     unsafe_allow_html=True,
                 )
             with row_cols[1]:
@@ -5505,7 +5515,9 @@ def render_analyze():
     # het overzicht de volledige breedte. ---
     _drawer_open = st.session_state["selected_research"] is not None
     if _drawer_open:
-        _main_outer, drawer_col = st.columns([2, 1], gap="large")
+        # Iets bredere drawer nu de tabel zelf smaller/compacter is
+        # geworden (max-width:640px) -- er is rechts genoeg lucht voor.
+        _main_outer, drawer_col = st.columns([1.4, 1], gap="large")
         # main_col wordt nu een GENESTE container MET eigen key, i.p.v.
         # de kolom zelf -- zo hoeft de grote, bestaande 'with main_col:'-
         # content hieronder niet opnieuw ingesprongen te worden, en kan
