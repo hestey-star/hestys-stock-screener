@@ -4711,18 +4711,14 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
     """1 van de 3 conviction-tegels bovenaan Analyze -- totaal portfolio-gewicht per score-bucket."""
     border = "rgba(217,119,6,0.5)" if warn else "rgba(30,41,59,0.4)"
     warn_html = (
-        '<div style="color:#D97706; font-size:0.68rem; font-weight:700; margin-top:6px; '
-        'text-transform:uppercase; letter-spacing:0.03em;">&#128680; Exceeds safe limit</div>'
+        '<div class="hesty-conviction-tile-warn">&#128680; Exceeds safe limit</div>'
         if warn else ""
     )
     return (
-        f'<div style="background:rgba(15,23,42,0.3); border:1px solid {border}; border-radius:14px; '
-        f'padding:1rem; text-align:left;">'
-        f'<div style="color:#8992A3; font-size:0.7rem; font-weight:700; text-transform:uppercase; '
-        f'letter-spacing:0.05em;">{icon} {label}</div>'
-        f'<div style="color:#F1F5F9; font-size:1.6rem; font-weight:800; margin-top:6px;">'
-        f'{weight_pct:.0f}% <span style="font-size:0.7rem; font-weight:600; color:#64748B; '
-        f'text-transform:uppercase;">of portfolio</span></div>'
+        f'<div class="hesty-conviction-tile" style="background:rgba(15,23,42,0.3); border:1px solid {border};">'
+        f'<div class="hesty-conviction-tile-label">{icon} {label}</div>'
+        f'<div class="hesty-conviction-tile-value">'
+        f'{weight_pct:.0f}% <span class="hesty-conviction-tile-suffix">of portfolio</span></div>'
         f'{warn_html}'
         f'</div>'
     )
@@ -4789,6 +4785,21 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) span {{ '
         f'overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; '
         f'display:block !important; max-width:100% !important; }} '
+        # Core thesis (3e) en Last validated (4e) volledig verbergen op
+        # mobiel -- niet alleen afkappen, echt weg, zodat Asset/Score/
+        # Action de vrijgekomen ruimte krijgen en de tabel niet meer
+        # overvol oogt. De overige kolommen krijgen hun breedte hard
+        # herverdeeld (Streamlit's eigen flex-basis houdt anders een
+        # lege 'jas' aan van de verborgen kolommen).
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(3), '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) {{ '
+        f'display:none !important; }} '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(1) {{ '
+        f'flex:0 0 55% !important; width:55% !important; max-width:55% !important; }} '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(2) {{ '
+        f'flex:0 0 25% !important; width:25% !important; max-width:25% !important; }} '
+        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(5) {{ '
+        f'flex:0 0 20% !important; width:20% !important; max-width:20% !important; }} '
         f'}} '
         f'</style>',
         unsafe_allow_html=True,
@@ -5171,10 +5182,31 @@ def _render_analyze_drawer(user_email: str) -> None:
         f'padding:0 !important; color:#64748B !important; font-size:0.7rem !important; font-weight:700 !important; '
         f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; }} '
         f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
+        # 'Back to research overview' -- uitsluitend op mobiel zichtbaar
+        # (op desktop doet de bestaande '\u2715 Close' precies hetzelfde,
+        # geen dubbele knop nodig daar). Op mobiel juist een grote,
+        # opvallende, volle-breedte knop bovenaan -- dat is de enige weg
+        # terug nu de linkerkolom daar volledig verborgen is.
+        f'.st-key-analyze_drawer_back_mobile {{ display:none; }} '
+        f'@media (max-width:768px) {{ '
+        f'.st-key-{_drawer_key} {{ border-left:none !important; border-radius:14px !important; }} '
+        f'.st-key-analyze_drawer_close {{ display:none !important; }} '
+        f'.st-key-analyze_drawer_back_mobile {{ display:block !important; margin-bottom:1rem !important; }} '
+        f'.st-key-analyze_drawer_back_mobile button {{ '
+        f'width:100% !important; background:rgba(31,174,150,0.1) !important; '
+        f'border:1px solid rgba(31,174,150,0.3) !important; color:#1FAE96 !important; '
+        f'font-weight:700 !important; font-size:0.78rem !important; letter-spacing:0.04em !important; '
+        f'text-transform:uppercase !important; padding:0.6rem 0 !important; border-radius:10px !important; '
+        f'box-shadow:none !important; }} '
+        f'}} '
         f'</style>',
         unsafe_allow_html=True,
     )
     with st.container(key=_drawer_key):
+        with st.container(key="analyze_drawer_back_mobile"):
+            if st.button("\u2190 Back to Research Overview", key="analyze_drawer_back_mobile_btn"):
+                st.session_state["selected_research"] = None
+                st.rerun()
         with st.container(key="analyze_drawer_close"):
             if st.button("\u2715 Close", key="analyze_drawer_close_btn"):
                 st.session_state["selected_research"] = None
@@ -5265,7 +5297,33 @@ def render_analyze():
     # het overzicht de volledige breedte. ---
     _drawer_open = st.session_state["selected_research"] is not None
     if _drawer_open:
-        main_col, drawer_col = st.columns([2, 1], gap="large")
+        _main_outer, drawer_col = st.columns([2, 1], gap="large")
+        # main_col wordt nu een GENESTE container MET eigen key, i.p.v.
+        # de kolom zelf -- zo hoeft de grote, bestaande 'with main_col:'-
+        # content hieronder niet opnieuw ingesprongen te worden, en kan
+        # de CSS hierboven 'm toch precies raken.
+        with _main_outer:
+            main_col = st.container(key="analyze_main_mobile_wrap")
+        # Mobiel (<768px): st.columns() stapelt van zichzelf al verticaal,
+        # maar we willen niet dat de tabellen dan nog BOVEN de drawer
+        # meerenderen (dat gaf het 'formulier opent onzichtbaar
+        # helemaal onderaan'-probleem). CSS-only 'scherm-switch': de
+        # linkerkolom-inhoud krijgt een eigen container-key en wordt op
+        # mobiel volledig verborgen; de drawer-kolom vult dan de volle
+        # breedte. Geen JS/schermbreedte-detectie in Python nodig --
+        # we weten al server-side of de drawer open is, en CSS regelt de
+        # rest puur op basis van viewport-breedte.
+        st.markdown(
+            """
+            <style>
+            @media (max-width:768px) {
+                .st-key-analyze_main_mobile_wrap { display:none !important; }
+                .st-key-analyze_drawer { width:100% !important; }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         main_col, drawer_col = st.container(), None
 
@@ -5302,9 +5360,29 @@ def render_analyze():
             + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
         )
         st.markdown(
-            f'<style>.hesty-conviction-grid {{ display:grid; '
+            f'<style>'
+            f'.hesty-conviction-grid {{ display:grid; '
             f'grid-template-columns:{"1fr" if _drawer_open else "repeat(3, 1fr)"}; gap:1rem; margin-bottom:0.75rem; }} '
-            f'@media (max-width:768px) {{ .hesty-conviction-grid {{ grid-template-columns:1fr; }} }}</style>'
+            f'.hesty-conviction-tile {{ border-radius:14px; padding:1rem; text-align:left; }} '
+            f'.hesty-conviction-tile-label {{ color:#8992A3; font-size:0.7rem; font-weight:700; '
+            f'text-transform:uppercase; letter-spacing:0.05em; }} '
+            f'.hesty-conviction-tile-value {{ color:#F1F5F9; font-size:1.6rem; font-weight:800; margin-top:6px; }} '
+            f'.hesty-conviction-tile-suffix {{ font-size:0.7rem; font-weight:600; color:#64748B; text-transform:uppercase; }} '
+            f'.hesty-conviction-tile-warn {{ color:#D97706; font-size:0.68rem; font-weight:700; margin-top:6px; '
+            f'text-transform:uppercase; letter-spacing:0.03em; }} '
+            # Mobiel: de 3 tegels blijven NAAST elkaar staan (geen volle
+            # stapeling meer) maar worden supercompacte mini-balkjes --
+            # veel minder padding, kleinere tekst, geen 'of portfolio'-
+            # bijschrift (dat kost verhoudingsgewijs de meeste ruimte).
+            f'@media (max-width:768px) {{ '
+            f'.hesty-conviction-grid {{ grid-template-columns:repeat(3, 1fr) !important; gap:0.4rem !important; }} '
+            f'.hesty-conviction-tile {{ padding:0.5rem !important; border-radius:10px !important; }} '
+            f'.hesty-conviction-tile-label {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
+            f'.hesty-conviction-tile-value {{ font-size:1.05rem !important; margin-top:2px !important; }} '
+            f'.hesty-conviction-tile-suffix {{ display:none !important; }} '
+            f'.hesty-conviction-tile-warn {{ font-size:0.55rem !important; }} '
+            f'}} '
+            f'</style>'
             f'<div class="hesty-conviction-grid">{tiles_html}</div>',
             unsafe_allow_html=True,
         )
