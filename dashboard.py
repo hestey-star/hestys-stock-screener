@@ -3006,48 +3006,121 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 st.success("Version deleted.")
                 st.rerun()
     else:
-        edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}")
-        edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}")
-        edit_thesis_score = st.columns([1, 1])[0].slider(
-            "How compelling is the thesis?", 1.0, 10.0, float(version.get("thesis_score") or 5), step=0.5, key=f"dd_edit_thesis_score_{version_id}"
+        _edit_tab_key = f"dd_edit_active_subtab_{version_id}"
+        _edit_tab = st.pills(
+            "Section", ["1-CLICK BRIEFING", "MY CONVICTION", "EXIT MATRIX"],
+            default="1-CLICK BRIEFING", key=_edit_tab_key, label_visibility="collapsed",
         )
-        edit_management = st.text_area("Management/CEO", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}")
-        edit_management_score = st.columns([1, 1])[0].slider(
-            "How much confidence in management?", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5, key=f"dd_edit_management_score_{version_id}"
-        )
-        edit_bear = st.text_area("Bear case", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}")
-        edit_bear_score = st.columns([1, 1])[0].slider(
-            "How manageable are the risks?", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5, key=f"dd_edit_bear_score_{version_id}",
-            help="Higher = the risks are limited/well understood, not 'the risks are severe'.",
-        )
-        edit_valuation = st.text_area("Valuation", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}")
-        edit_valuation_score = st.columns([1, 1])[0].slider(
-            "How attractive is the valuation?", 1.0, 10.0, float(version.get("valuation_score") or 5), step=0.5, key=f"dd_edit_valuation_score_{version_id}"
-        )
-        edit_interested_price = st.number_input(
-            f"Interested from price ({ticker_currency_symbol.strip()})", min_value=0.0, step=0.01,
-            value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
-        )
-        edit_technical_analysis = st.text_area(
-            "Technical analysis", value=version.get("technical_analysis") or "", key=f"dd_edit_ta_{version_id}"
-        )
-        edit_technical_analysis_score = st.columns([1, 1])[0].slider(
-            "How favorable is the technical setup?", 1.0, 10.0, float(version.get("technical_analysis_score") or 5), step=0.5, key=f"dd_edit_ta_score_{version_id}"
-        )
-        edit_catalysts = st.text_area("Catalysts", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}")
-        edit_catalysts_score = st.columns([1, 1])[0].slider(
-            "How strong are the catalysts?", 1.0, 10.0, float(version.get("catalysts_score") or 5), step=0.5, key=f"dd_edit_catalysts_score_{version_id}"
-        )
-        edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}")
-        edit_sell_criteria = st.text_area("Sell criteria", value=version.get("sell_criteria") or "", key=f"dd_edit_sell_{version_id}")
 
-        edit_trigger_cols = st.columns(2)
-        with edit_trigger_cols[0]:
-            edit_sell_trigger_price = st.number_input(
-                f"Sell at price ({ticker_currency_symbol.strip()})", min_value=0.0, step=0.01,
-                value=float(version.get("sell_trigger_price") or 0.0), key=f"dd_edit_trigger_price_{version_id}",
+        if _edit_tab == "1-CLICK BRIEFING":
+            _edit_ai_key = f"dd_edit_ai_briefing_wrap_{version_id}"
+            st.markdown(
+                f'<style>'
+                f'.st-key-{_edit_ai_key} {{ margin-top:0.5rem !important; margin-bottom:1.5rem !important; }} '
+                f'.st-key-{_edit_ai_key} button {{ '
+                f'width:100% !important; background:rgba(2,6,23,0.8) !important; color:#a7f3d0 !important; '
+                f'border:1px solid rgba(16,185,129,0.2) !important; font-size:0.72rem !important; '
+                f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.15em !important; '
+                f'padding:0.75rem 0 !important; border-radius:12px !important; '
+                f'box-shadow:0 8px 24px rgba(0,0,0,0.35) !important; transition:all 0.3s ease !important; }} '
+                f'.st-key-{_edit_ai_key} button:hover {{ background:rgba(15,23,42,0.9) !important; '
+                f'border-color:rgba(16,185,129,0.35) !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
             )
-        with edit_trigger_cols[1]:
+            with st.container(key=_edit_ai_key):
+                if st.button("\u2726 Generate Anthropic Intelligence Briefing", key=f"dd_edit_ai_briefing_btn_{version_id}"):
+                    if _run_ai_cockpit_briefing(version["ticker"], version.get("naam", version["ticker"]), user_email):
+                        st.session_state[edit_key] = False
+                        st.rerun()
+
+            edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}", height=90)
+            edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}", height=90)
+            edit_bear = st.text_area("Core risks", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}", height=90)
+            edit_management = st.text_area("Management check", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}", height=90)
+
+        elif _edit_tab == "MY CONVICTION":
+            edit_technical_analysis = st.text_area(
+                "Technical notes", value=version.get("technical_analysis") or "", key=f"dd_edit_ta_{version_id}", height=90,
+            )
+            _dd_slider_value_html(f"dd_edit_ta_score_{version_id}")
+            edit_technical_analysis_score = st.slider(
+                "Technical score", 1.0, 10.0, float(version.get("technical_analysis_score") or 5), step=0.5,
+                key=f"dd_edit_ta_score_{version_id}", label_visibility="collapsed",
+            )
+
+            edit_catalysts = st.text_area("Catalysts notes", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}", height=90)
+            _dd_slider_value_html(f"dd_edit_catalysts_score_{version_id}")
+            edit_catalysts_score = st.slider(
+                "Catalysts score", 1.0, 10.0, float(version.get("catalysts_score") or 5), step=0.5,
+                key=f"dd_edit_catalysts_score_{version_id}", label_visibility="collapsed",
+            )
+
+            edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}", height=90)
+
+            _dd_label("Management conviction")
+            _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
+            edit_management_score = st.slider(
+                "Management score", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5,
+                key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
+            )
+
+            _dd_label("Risk manageability")
+            _dd_slider_value_html(f"dd_edit_bear_score_{version_id}")
+            edit_bear_score = st.slider(
+                "Risk score", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5,
+                key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
+            )
+
+        elif _edit_tab == "EXIT MATRIX":
+            # De ENIGE hoofdscore -- zelfde 'thesis_score'-veld onder
+            # water, hier groot als 'Conclusion score' gepresenteerd.
+            _dd_label("Conclusion score")
+            st.markdown(
+                f'<div style="text-align:center; margin-bottom:0.25rem;">'
+                f'<span style="color:#34D399; font-weight:800; font-size:2.2rem;">'
+                f'{st.session_state.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)):.1f}</span>'
+                f'<span style="color:#64748B; font-size:0.85rem;"> / 10</span></div>',
+                unsafe_allow_html=True,
+            )
+            edit_thesis_score = st.slider(
+                "Conclusion score", 1.0, 10.0, float(version.get("thesis_score") or 5), step=0.5,
+                key=f"dd_edit_thesis_score_{version_id}", label_visibility="collapsed",
+            )
+
+            edit_valuation = st.text_area("Valuation notes", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}", height=90)
+            _dd_slider_value_html(f"dd_edit_valuation_score_{version_id}")
+            edit_valuation_score = st.slider(
+                "Valuation score", 1.0, 10.0, float(version.get("valuation_score") or 5), step=0.5,
+                key=f"dd_edit_valuation_score_{version_id}", label_visibility="collapsed",
+            )
+
+            _dd_label(f"Interested from price ({ticker_currency_symbol.strip()})")
+            edit_interested_price = st.number_input(
+                "Interested from price", min_value=0.0, step=0.01,
+                value=float(version.get("interested_price") or 0.0), key=f"dd_edit_price_{version_id}",
+                label_visibility="collapsed",
+            )
+
+            _dd_label("Watch / Buy / Pass status")
+            conclusion_options = ["Watch", "Buy", "Pass"]
+            current_conclusion_index = (
+                conclusion_options.index(version["conclusion"]) if version.get("conclusion") in conclusion_options else 0
+            )
+            edit_conclusion = st.selectbox(
+                "Conclusion", conclusion_options, index=current_conclusion_index,
+                key=f"dd_edit_conclusion_{version_id}", label_visibility="collapsed",
+            )
+
+            edit_sell_criteria = st.text_area("Sell criteria", value=version.get("sell_criteria") or "", key=f"dd_edit_sell_{version_id}", height=90)
+
+            _dd_label(f"Sell trigger price ({ticker_currency_symbol.strip()})")
+            edit_sell_trigger_price = st.number_input(
+                "Sell trigger price", min_value=0.0, step=0.01,
+                value=float(version.get("sell_trigger_price") or 0.0), key=f"dd_edit_trigger_price_{version_id}",
+                label_visibility="collapsed",
+            )
+            _dd_label("Sell by date")
             existing_trigger_date = version.get("sell_trigger_date")
             if existing_trigger_date and isinstance(existing_trigger_date, str):
                 try:
@@ -3056,46 +3129,47 @@ def _render_deep_dive_version(version: dict, user_email: str):
                     existing_trigger_date = None
             edit_sell_trigger_date = st.date_input(
                 "Sell by date", value=existing_trigger_date, key=f"dd_edit_trigger_date_{version_id}",
+                label_visibility="collapsed",
             )
 
-        conclusion_options = ["Watch", "Buy", "Pass"]
-        current_conclusion_index = (
-            conclusion_options.index(version["conclusion"]) if version.get("conclusion") in conclusion_options else 0
-        )
-        edit_conclusion = st.selectbox(
-            "Conclusion", conclusion_options, index=current_conclusion_index, key=f"dd_edit_conclusion_{version_id}"
-        )
-
+        # Alle velden leven in session_state ongeacht welke tab actief
+        # is (zelfde principe als het Add New-formulier), dus de save
+        # hieronder pakt ze allemaal terug via de keys, niet via lokale
+        # variabelen die alleen bestaan als hun tab net actief was.
+        _ess = st.session_state
         save_col, cancel_col = st.columns(2)
         with save_col:
-            if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}"):
+            if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}", use_container_width=True):
                 database.update_deep_dive(
                     version_id, user_email,
-                    business_overview=edit_business or None,
-                    investment_thesis=edit_thesis or None,
-                    management_assessment=edit_management or None,
-                    bear_case=edit_bear or None,
-                    valuation_view=edit_valuation or None,
-                    interested_price=edit_interested_price or None,
-                    catalysts=edit_catalysts or None,
-                    position_sizing_plan=edit_sizing or None,
-                    sell_criteria=edit_sell_criteria or None,
-                    conclusion=edit_conclusion,
-                    sell_trigger_price=edit_sell_trigger_price or None,
-                    sell_trigger_date=edit_sell_trigger_date.isoformat() if edit_sell_trigger_date else None,
-                    thesis_score=edit_thesis_score,
-                    management_score=edit_management_score,
-                    bear_case_score=edit_bear_score,
-                    valuation_score=edit_valuation_score,
-                    catalysts_score=edit_catalysts_score,
-                    technical_analysis=edit_technical_analysis or None,
-                    technical_analysis_score=edit_technical_analysis_score,
+                    business_overview=_ess.get(f"dd_edit_business_{version_id}") or None,
+                    investment_thesis=_ess.get(f"dd_edit_thesis_{version_id}") or None,
+                    management_assessment=_ess.get(f"dd_edit_management_{version_id}") or None,
+                    bear_case=_ess.get(f"dd_edit_bear_{version_id}") or None,
+                    valuation_view=_ess.get(f"dd_edit_valuation_{version_id}") or None,
+                    interested_price=_ess.get(f"dd_edit_price_{version_id}") or None,
+                    catalysts=_ess.get(f"dd_edit_catalysts_{version_id}") or None,
+                    position_sizing_plan=_ess.get(f"dd_edit_sizing_{version_id}") or None,
+                    sell_criteria=_ess.get(f"dd_edit_sell_{version_id}") or None,
+                    conclusion=_ess.get(f"dd_edit_conclusion_{version_id}", version.get("conclusion", "Watch")),
+                    sell_trigger_price=_ess.get(f"dd_edit_trigger_price_{version_id}") or None,
+                    sell_trigger_date=(
+                        _ess[f"dd_edit_trigger_date_{version_id}"].isoformat()
+                        if _ess.get(f"dd_edit_trigger_date_{version_id}") else None
+                    ),
+                    thesis_score=_ess.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)),
+                    management_score=_ess.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
+                    bear_case_score=_ess.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
+                    valuation_score=_ess.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
+                    catalysts_score=_ess.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
+                    technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
+                    technical_analysis_score=_ess.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
                 )
                 st.session_state[edit_key] = False
                 st.success("Version updated.")
                 st.rerun()
         with cancel_col:
-            if st.button("Cancel", key=f"dd_cancel_edit_{version_id}"):
+            if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
                 st.session_state[edit_key] = False
                 st.rerun()
 
