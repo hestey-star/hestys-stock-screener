@@ -3058,8 +3058,20 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
             edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}", height=90)
             edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}", height=90)
+
             edit_bear = st.text_area("Core risks", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}", height=90)
+            _dd_slider_value_html(f"dd_edit_bear_score_{version_id}")
+            edit_bear_score = st.slider(
+                "Risk score", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5,
+                key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
+            )
+
             edit_management = st.text_area("Management check", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}", height=90)
+            _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
+            edit_management_score = st.slider(
+                "Management score", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5,
+                key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
+            )
 
         elif _edit_tab == "MY CONVICTION":
             edit_technical_analysis = st.text_area(
@@ -3080,34 +3092,28 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
             edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}", height=90)
 
-            _dd_label("Management conviction")
-            _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
-            edit_management_score = st.slider(
-                "Management score", 1.0, 10.0, float(version.get("management_score") or 5), step=0.5,
-                key=f"dd_edit_management_score_{version_id}", label_visibility="collapsed",
-            )
-
-            _dd_label("Risk manageability")
-            _dd_slider_value_html(f"dd_edit_bear_score_{version_id}")
-            edit_bear_score = st.slider(
-                "Risk score", 1.0, 10.0, float(version.get("bear_case_score") or 5), step=0.5,
-                key=f"dd_edit_bear_score_{version_id}", label_visibility="collapsed",
-            )
-
         elif _edit_tab == "EXIT MATRIX":
-            # De ENIGE hoofdscore -- zelfde 'thesis_score'-veld onder
-            # water, hier groot als 'Conclusion score' gepresenteerd.
-            _dd_label("Conclusion score")
+            # Conclusion is nu een NIET-aanpasbare, live berekende score
+            # -- het gemiddelde van de 5 andere schuifjes. Alleen
+            # indirect te veranderen door die andere schuifjes te
+            # verschuiven, niet rechtstreeks. Zelfde 'thesis_score'-veld
+            # onder water, hier groot gepresenteerd.
+            _edit_conclusion_inputs = [
+                st.session_state.get(f"dd_edit_management_score_{version_id}", float(version.get("management_score") or 5)),
+                st.session_state.get(f"dd_edit_bear_score_{version_id}", float(version.get("bear_case_score") or 5)),
+                st.session_state.get(f"dd_edit_valuation_score_{version_id}", float(version.get("valuation_score") or 5)),
+                st.session_state.get(f"dd_edit_catalysts_score_{version_id}", float(version.get("catalysts_score") or 5)),
+                st.session_state.get(f"dd_edit_ta_score_{version_id}", float(version.get("technical_analysis_score") or 5)),
+            ]
+            edit_thesis_score = sum(_edit_conclusion_inputs) / len(_edit_conclusion_inputs)
+            st.session_state[f"dd_edit_thesis_score_{version_id}"] = edit_thesis_score
+            _dd_label("Conclusion (average of all scores)")
             st.markdown(
-                f'<div style="text-align:center; margin-bottom:0.25rem;">'
+                f'<div style="text-align:center; margin-bottom:1rem;">'
                 f'<span style="color:#34D399; font-weight:800; font-size:2.2rem;">'
-                f'{st.session_state.get(f"dd_edit_thesis_score_{version_id}", float(version.get("thesis_score") or 5)):.1f}</span>'
+                f'{edit_thesis_score:.1f}</span>'
                 f'<span style="color:#64748B; font-size:0.85rem;"> / 10</span></div>',
                 unsafe_allow_html=True,
-            )
-            edit_thesis_score = st.slider(
-                "Conclusion score", 1.0, 10.0, float(version.get("thesis_score") or 5), step=0.5,
-                key=f"dd_edit_thesis_score_{version_id}", label_visibility="collapsed",
             )
 
             edit_valuation = st.text_area("Valuation notes", value=version.get("valuation_view") or "", key=f"dd_edit_valuation_{version_id}", height=90)
@@ -5099,7 +5105,7 @@ def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
 - "investment_thesis" (string): the bull case for a long-term position
 - "bear_case" (string): the biggest fundamental risks
 - "management_assessment" (string): a quick evaluation of the CEO and governance
-- "thesis_score", "management_score", "bear_case_score", "valuation_score", "catalysts_score" (numbers, 1.0-10.0): your rating of each dimension, higher always meaning more favorable for a buy decision
+- "management_score", "bear_case_score", "valuation_score", "catalysts_score" (numbers, 0.0-10.0, half-point increments like 6.5 or 7.0 allowed): your rating of each dimension, higher always meaning more favorable for a buy decision. These become the DEFAULT position of the corresponding sliders in the app -- the user can still drag them to a different value afterwards.
 
 Respond with ONLY the JSON object, starting with {{ and ending with }}."""
 
@@ -5137,6 +5143,16 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
             except (TypeError, ValueError):
                 return 5.0
 
+        _management_score = _safe_score("management_score")
+        _bear_case_score = _safe_score("bear_case_score")
+        _valuation_score = _safe_score("valuation_score")
+        _catalysts_score = _safe_score("catalysts_score")
+        # Conclusion is geen los AI-geraden getal meer, maar het
+        # gemiddelde van de 4 echte AI-scores + een neutrale 5.0 voor
+        # Technical (die vraagt live chart-data die de AI niet heeft) --
+        # zelfde berekening als de 'Conclusion'-weergave in de drawer.
+        _thesis_score = (_management_score + _bear_case_score + _valuation_score + _catalysts_score + 5.0) / 5
+
         database.add_deep_dive(
             user_email, ticker.upper(), naam,
             business_overview=ai_data.get("business_overview") or None,
@@ -5152,11 +5168,11 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
             market_snapshot=market_snapshot,
             sell_trigger_price=None,
             sell_trigger_date=None,
-            thesis_score=_safe_score("thesis_score"),
-            management_score=_safe_score("management_score"),
-            bear_case_score=_safe_score("bear_case_score"),
-            valuation_score=_safe_score("valuation_score"),
-            catalysts_score=_safe_score("catalysts_score"),
+            thesis_score=_thesis_score,
+            management_score=_management_score,
+            bear_case_score=_bear_case_score,
+            valuation_score=_valuation_score,
+            catalysts_score=_catalysts_score,
             technical_analysis=None,
             technical_analysis_score=None,
         )
@@ -5264,9 +5280,13 @@ def _render_deep_dive_add_form(user_email: str) -> None:
 
         _dd_label("Core risks")
         st.text_area("Core risks", label_visibility="collapsed", key="dd_bear", height=90)
+        _dd_slider_value_html("dd_bear_score")
+        st.slider("Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed")
 
         _dd_label("Management check")
         st.text_area("Management check", label_visibility="collapsed", key="dd_management", height=90)
+        _dd_slider_value_html("dd_management_score")
+        st.slider("Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed")
 
     elif _dd_tab == "MY CONVICTION":
         _dd_label("Technical notes")
@@ -5282,37 +5302,39 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         _dd_label("Position sizing plan")
         st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=90)
 
-        # Management- en bear case-scores horen inhoudelijk bij de
-        # tekstvelden op tab 1, maar die tab toont bewust geen sliders
-        # (jouw indeling) -- ze blijven hier verzameld zodat ze nog wel
-        # ergens instelbaar zijn en niet stilzwijgend op 5.0 blijven
-        # staan. De Thesis-score is verhuisd naar de grote CONCLUSION-
-        # slider op Exit Matrix (zie hieronder) -- geen losse 'Thesis
-        # conviction'-slider hier meer, dat was de overbodige dubbele.
-        _dd_label("Management conviction")
-        _dd_slider_value_html("dd_management_score")
-        st.slider("Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed")
-
-        _dd_label("Risk manageability")
-        _dd_slider_value_html("dd_bear_score")
-        st.slider("Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed")
+        # Afbeeldingen (charts/screenshots) kunnen pas geupload worden
+        # NADAT deze deep-dive minstens 1x is opgeslagen -- een upload
+        # is gekoppeld aan een version_id in de database, die nog niet
+        # bestaat zolang je nog in dit 'nieuwe deep-dive'-formulier zit.
+        # Sla eerst op (via Exit Matrix); daarna verschijnt de upload
+        # hier vanzelf, zodra je deze ticker opnieuw opent.
+        st.caption("Save this deep-dive first to unlock image uploads here.")
 
     elif _dd_tab == "EXIT MATRIX":
-        # De ENIGE hoofdscore van de hele deep-dive -- de overkoepelende
-        # overtuiging die uiteindelijk de doorslag geeft. Gebruikt onder
-        # water nog steeds het bestaande 'thesis_score'-veld (voor
-        # compatibiliteit met de conviction-tegels/tabellen elders, die
-        # allemaal op de 6 bestaande score-velden rekenen), alleen hier
-        # nu groot en prominent als 'Conclusion' gepresenteerd.
-        _dd_label("Conclusion")
+        # Conclusion is nu een NIET-aanpasbare, live berekende score --
+        # het gemiddelde van de 5 andere schuifjes (Management/Risk/
+        # Valuation/Catalysts/Technical). Alleen indirect te veranderen
+        # door die andere schuifjes te verschuiven, niet rechtstreeks.
+        # Gebruikt onder water nog steeds het bestaande 'thesis_score'-
+        # veld (voor compatibiliteit met de conviction-tegels/tabellen
+        # elders, die allemaal op de 6 bestaande score-velden rekenen).
+        _conclusion_inputs = [
+            st.session_state.get("dd_management_score", 5.0),
+            st.session_state.get("dd_bear_score", 5.0),
+            st.session_state.get("dd_valuation_score", 5.0),
+            st.session_state.get("dd_catalysts_score", 5.0),
+            st.session_state.get("dd_technical_analysis_score", 5.0),
+        ]
+        _conclusion_score = sum(_conclusion_inputs) / len(_conclusion_inputs)
+        st.session_state["dd_thesis_score"] = _conclusion_score
+        _dd_label("Conclusion (average of all scores)")
         st.markdown(
-            f'<div style="text-align:center; margin-bottom:0.25rem;">'
+            f'<div style="text-align:center; margin-bottom:1rem;">'
             f'<span style="color:#34D399; font-weight:800; font-size:2.2rem;">'
-            f'{st.session_state.get("dd_thesis_score", 5.0):.1f}</span>'
+            f'{_conclusion_score:.1f}</span>'
             f'<span style="color:#64748B; font-size:0.85rem;"> / 10</span></div>',
             unsafe_allow_html=True,
         )
-        st.slider("Conclusion score", 1.0, 10.0, 5.0, step=0.5, key="dd_thesis_score", label_visibility="collapsed")
 
         _dd_label("Valuation notes")
         st.text_area("Valuation notes", label_visibility="collapsed", key="dd_valuation", height=90)
