@@ -4082,6 +4082,121 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows}
 
 
+def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert een Robinhood 'Account Activity'-export (CSV). Groepeert per
+    ticker ('Asset Code' -- Robinhood geeft, anders dan DEGIRO, de ticker
+    al rechtstreeks mee, dus er is GEEN losse ticker-matching-stap nodig
+    zoals bij DEGIRO).
+
+    Bewuste keuzes:
+    - Alleen 'BUY' en 'SELL' worden als positie-transacties meegenomen.
+      Overige cashflows (zoals 'ACH' stortingen/opnames) tellen NIET mee
+      als positie en worden overgeslagen.
+    - 'DIV' (dividend) wordt NIET overgeslagen als ongeldige rij, maar
+      ook niet als buy/sell-transactie geimporteerd -- onze transactie-
+      structuur (en die van DEGIRO) kent alleen 'buy'/'sell', geen
+      aparte dividend-transactie. DIV-rijen komen daarom apart terug in
+      'dividend_rows', zodat de UI eerlijk kan laten zien hoeveel
+      dividend-rijen gevonden zijn i.p.v. ze stilzwijgend te negeren OF
+      ze foutief als een 'buy' te importeren (wat het aantal shares
+      onterecht zou ophogen).
+    - 'Asset Code' wordt gebruikt als ticker, met een eventuele '-USD'-
+      extensie (crypto-notatie, bv. 'BTC-USD') gestript tot 'BTC' --
+      voor consistentie met hoe onze database crypto-tickers al opslaat
+      (zonder valuta-achtervoegsel).
+    - Robinhood handelt uitsluitend in USD -- geen aparte valuta-
+      conversie nodig zoals bij DEGIRO (dat wel meerdere valuta's kent).
+    - Fee wordt afgeleid uit het verschil tussen 'Amount' en
+      Quantity*Price (Robinhood's eigen exports hebben geen aparte fee-
+      kolom; bij de meeste courtagevrije trades is dit verschil 0).
+    """
+    import io
+
+    def _to_float(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            return float(str(val).strip().replace("$", "").replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    df = pd.read_csv(io.BytesIO(file_bytes))
+
+    grouped: dict = {}
+    skipped_rows: list = []
+    dividend_rows: list = []
+
+    for idx, row in df.iterrows():
+        trans_code = str(row.get("Trans Code") or "").strip().upper()
+
+        if trans_code == "DIV":
+            dividend_rows.append({
+                "asset_code": row.get("Asset Code"),
+                "amount": _to_float(row.get("Amount")),
+                "date": row.get("Activity Date"),
+            })
+            continue
+
+        if trans_code not in ("BUY", "SELL"):
+            # Overige cashflows (ACH, etc.) -- geen positie, dus geen
+            # 'skipped'-melding nodig (dat is geen fout, gewoon terecht
+            # genegeerd).
+            continue
+
+        asset_code = row.get("Asset Code")
+        activity_date = row.get("Activity Date")
+        quantity = _to_float(row.get("Quantity"))
+        price = _to_float(row.get("Price"))
+        amount = _to_float(row.get("Amount"))
+
+        if pd.isna(asset_code) or pd.isna(activity_date):
+            skipped_rows.append((idx, "Missing asset code or date"))
+            continue
+        if quantity is None or price is None or quantity == 0:
+            skipped_rows.append((idx, f"{asset_code}: missing or zero quantity/price"))
+            continue
+
+        try:
+            parsed_date = pd.to_datetime(activity_date).date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{asset_code}: could not parse date '{activity_date}'"))
+            continue
+
+        # '-USD'-extensie strippen (crypto-notatie, bv. 'BTC-USD' -> 'BTC')
+        # voor consistentie met hoe onze database crypto-tickers opslaat.
+        ticker = str(asset_code).strip().upper()
+        if ticker.endswith("-USD"):
+            ticker = ticker[:-4]
+
+        # Fee = het verschil tussen het opgegeven Amount en de rauwe
+        # Quantity*Price -- bij courtagevrije trades (de meeste
+        # Robinhood-transacties) is dit 0.
+        fee = None
+        if amount is not None:
+            fee = round(abs(abs(amount) - abs(quantity * price)), 2)
+            if fee < 0.01:
+                fee = 0.0
+
+        if ticker not in grouped:
+            grouped[ticker] = {
+                "product": row.get("Description") or ticker,
+                "ticker": ticker,
+                "transactions": [],
+            }
+
+        grouped[ticker]["transactions"].append({
+            "transaction_type": "buy" if trans_code == "BUY" else "sell",
+            "shares": round(abs(quantity), 6),
+            "price": round(abs(price), 4),
+            "fee": fee or 0.0,
+            "transaction_date": parsed_date,
+            "currency": "USD",
+        })
+
+    return {"grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows}
+
+
 def filter_active_holdings(holdings: list) -> list:
     """
     Verbergt posities die op 0 shares staan (volledig verkocht, bv. via
@@ -6862,6 +6977,12 @@ def render_portfolio():
                 'style="width:18px; height:18px; border-radius:4px;">'
                 '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
                 'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">DEGIRO</span>'
+                '</div>'
+                '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                '<img src="https://www.google.com/s2/favicons?domain=robinhood.com&sz=32" '
+                'style="width:18px; height:18px; border-radius:4px;">'
+                '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Robinhood</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -7168,6 +7289,116 @@ def render_portfolio():
                             pass  # het loggen van dit tijdstip mag de daadwerkelijke import nooit blokkeren
                     for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
                                        "degiro_ticker_matches", "degiro_ticker_candidates"]:
+                        st.session_state.pop(state_key, None)
+                    st.rerun()
+
+            # --- Robinhood: veel eenvoudiger dan DEGIRO -- de CSV geeft de
+            # ticker al rechtstreeks mee ('Asset Code'), dus geen aparte
+            # ticker-matching-stap nodig. Rechtstreeks parsen -> importeren.
+            st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+            st.markdown("**Upload your Robinhood transactions**")
+            try:
+                robinhood_file = st.file_uploader("Robinhood transactions CSV", type=["csv"], key="robinhood_upload",
+                                                   label_visibility="collapsed", width=320)
+            except TypeError:
+                robinhood_file = st.file_uploader("Robinhood transactions CSV", type=["csv"], key="robinhood_upload",
+                                                   label_visibility="collapsed")
+
+            already_imported_rh = st.session_state.get("robinhood_imported_filenames", set())
+
+            if robinhood_file is not None and robinhood_file.name in already_imported_rh:
+                st.success(f"'{robinhood_file.name}' was already imported.", icon=":material/check_circle:")
+                if st.button("Process this file again anyway", key="robinhood_reimport_btn"):
+                    already_imported_rh.discard(robinhood_file.name)
+                    st.session_state["robinhood_imported_filenames"] = already_imported_rh
+                    st.session_state.pop("robinhood_parsed_filename", None)
+                    st.rerun()
+            elif robinhood_file is not None:
+                if st.session_state.get("robinhood_parsed_filename") != robinhood_file.name:
+                    with st.spinner("Reading your file..."):
+                        rh_parse_result = parse_robinhood_transactions_csv(robinhood_file.getvalue())
+                    st.session_state["robinhood_parsed_filename"] = robinhood_file.name
+                    st.session_state["robinhood_grouped"] = rh_parse_result["grouped"]
+                    st.session_state["robinhood_skipped"] = rh_parse_result["skipped_rows"]
+                    st.session_state["robinhood_dividends"] = rh_parse_result["dividend_rows"]
+
+                rh_grouped = st.session_state["robinhood_grouped"]
+                rh_skipped = st.session_state["robinhood_skipped"]
+                rh_dividends = st.session_state["robinhood_dividends"]
+
+                total_rh_tx = sum(len(g["transactions"]) for g in rh_grouped.values())
+                st.success(f"Found {len(rh_grouped)} securities, {total_rh_tx} buy/sell transaction(s).")
+                if rh_dividends:
+                    st.caption(
+                        f"{len(rh_dividends)} dividend row(s) found but not imported -- Hesty's doesn't "
+                        f"track dividend income as a separate transaction type yet."
+                    )
+                if rh_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in rh_skipped[:5])
+                    more = "..." if len(rh_skipped) > 5 else ""
+                    st.caption(f"{len(rh_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                if rh_grouped and st.button("Import these transactions", key="robinhood_import_btn", type="primary"):
+                    all_holdings_rh = database.get_user_holdings(user_email)
+                    rh_progress = st.progress(0.0)
+                    rh_status = st.empty()
+                    rh_imported_tx = 0
+                    rh_imported_pos = 0
+                    rh_dup_skipped = 0
+
+                    for i, (ticker, group) in enumerate(rh_grouped.items()):
+                        rh_status.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(rh_grouped)})")
+                        existing = next((h for h in all_holdings_rh if h["ticker"] == ticker), None)
+                        if existing:
+                            holding_id = existing["id"]
+                        else:
+                            holding_id = database.add_holding(
+                                user_email, group["product"], ticker, shares=None,
+                                value_currency="USD",
+                            )
+                            rh_imported_pos += 1
+
+                        already_logged_rh = database.get_transactions_for_holding(user_email, holding_id)
+
+                        def _is_duplicate_rh(new_tx, existing_list):
+                            # Zelfde 1%-prijstolerantie-logica als bij DEGIRO
+                            # (zie de uitgebreide toelichting daar).
+                            for existing_tx in existing_list:
+                                if existing_tx["transaction_type"] != new_tx["transaction_type"]:
+                                    continue
+                                if existing_tx["transaction_date"] != new_tx["transaction_date"]:
+                                    continue
+                                if abs(existing_tx["shares"] - new_tx["shares"]) >= 0.0001:
+                                    continue
+                                price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
+                                if abs(existing_tx["price"] - new_tx["price"]) <= price_tolerance:
+                                    return True
+                            return False
+
+                        for t in group["transactions"]:
+                            if _is_duplicate_rh(t, already_logged_rh):
+                                rh_dup_skipped += 1
+                                continue
+                            database.add_transaction(
+                                user_email, holding_id, t["transaction_type"],
+                                shares=t["shares"], price=t["price"], fee=t["fee"],
+                                transaction_date=t["transaction_date"], currency=t["currency"],
+                            )
+                            rh_imported_tx += 1
+
+                        sync_holding_shares_from_transactions(holding_id, user_email)
+                        rh_progress.progress((i + 1) / len(rh_grouped))
+
+                    rh_status.empty()
+                    rh_progress.empty()
+                    dup_txt_rh = f" ({rh_dup_skipped} already-imported duplicates skipped)" if rh_dup_skipped else ""
+                    st.success(f"Imported {rh_imported_tx} transactions across "
+                               f"{rh_imported_pos} new position(s)!{dup_txt_rh}")
+                    already_imported_rh.add(robinhood_file.name)
+                    st.session_state["robinhood_imported_filenames"] = already_imported_rh
+                    for state_key in ["robinhood_parsed_filename", "robinhood_grouped",
+                                       "robinhood_skipped", "robinhood_dividends"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
