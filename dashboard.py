@@ -3159,6 +3159,15 @@ def _render_deep_dive_version(version: dict, user_email: str):
         # hieronder pakt ze allemaal terug via de keys, niet via lokale
         # variabelen die alleen bestaan als hun tab net actief was.
         _ess = st.session_state
+
+        def _dd_edit_goto_tab(tab_name: str) -> None:
+            # Zelfde reden als bij het Add New-formulier: rechtstreeks
+            # session_state[_edit_tab_key] zetten NA het tekenen van de
+            # st.pills()-widget in dezelfde run geeft een
+            # StreamlitWidgetAlreadyInstantiatedError -- via on_click
+            # draait dit veilig, voor de volgende widgets worden getekend.
+            st.session_state[_edit_tab_key] = tab_name
+
         _edit_next_key = f"dd_edit_next_wrap_{version_id}"
         st.markdown(
             f'<style>'
@@ -3173,17 +3182,19 @@ def _render_deep_dive_version(version: dict, user_email: str):
         )
         if _edit_tab == "1-CLICK BRIEFING":
             with st.container(key=_edit_next_key):
-                if st.button("Next: My Conviction (2/3) \u2192", key=f"dd_edit_next_conviction_{version_id}", use_container_width=True):
-                    st.session_state[_edit_tab_key] = "MY CONVICTION"
-                    st.rerun()
+                st.button(
+                    "Next: My Conviction (2/3) \u2192", key=f"dd_edit_next_conviction_{version_id}",
+                    use_container_width=True, on_click=_dd_edit_goto_tab, args=("MY CONVICTION",),
+                )
             if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
                 st.session_state[edit_key] = False
                 st.rerun()
         elif _edit_tab == "MY CONVICTION":
             with st.container(key=_edit_next_key):
-                if st.button("Next: Exit Matrix (3/3) \u2192", key=f"dd_edit_next_exit_{version_id}", use_container_width=True):
-                    st.session_state[_edit_tab_key] = "EXIT MATRIX"
-                    st.rerun()
+                st.button(
+                    "Next: Exit Matrix (3/3) \u2192", key=f"dd_edit_next_exit_{version_id}",
+                    use_container_width=True, on_click=_dd_edit_goto_tab, args=("EXIT MATRIX",),
+                )
             if st.button("Cancel", key=f"dd_cancel_edit_{version_id}", use_container_width=True):
                 st.session_state[edit_key] = False
                 st.rerun()
@@ -5327,6 +5338,15 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     # staat in plaats daarvan een 'Next'-knop die naar de volgende stap
     # doorschakelt (1/3 -> 2/3 -> 3/3), zodat het een logische wizard-
     # flow wordt i.p.v. overal dezelfde save-actie te tonen.
+    def _dd_goto_tab(tab_name: str) -> None:
+        # Moet via on_click i.p.v. een gewone if-knop-klik: Streamlit
+        # verbiedt het overschrijven van session_state[key] voor een
+        # widget die in DEZELFDE run al getekend is (StreamlitWidget
+        # AlreadyInstantiatedError) -- een on_click-callback draait
+        # WEL veilig, want die wordt uitgevoerd voordat de widgets van
+        # de volgende run worden opgebouwd.
+        st.session_state["dd_active_subtab"] = tab_name
+
     _next_key = "dd_next_btn_wrap"
     st.markdown(
         f'<style>'
@@ -5341,16 +5361,18 @@ def _render_deep_dive_add_form(user_email: str) -> None:
     )
     if _dd_tab == "1-CLICK BRIEFING":
         with st.container(key=_next_key):
-            if st.button("Next: My Conviction (2/3) \u2192", key="dd_next_to_conviction", use_container_width=True):
-                st.session_state["dd_active_subtab"] = "MY CONVICTION"
-                st.rerun()
+            st.button(
+                "Next: My Conviction (2/3) \u2192", key="dd_next_to_conviction", use_container_width=True,
+                on_click=_dd_goto_tab, args=("MY CONVICTION",),
+            )
         return
 
     if _dd_tab == "MY CONVICTION":
         with st.container(key=_next_key):
-            if st.button("Next: Exit Matrix (3/3) \u2192", key="dd_next_to_exit", use_container_width=True):
-                st.session_state["dd_active_subtab"] = "EXIT MATRIX"
-                st.rerun()
+            st.button(
+                "Next: Exit Matrix (3/3) \u2192", key="dd_next_to_exit", use_container_width=True,
+                on_click=_dd_goto_tab, args=("EXIT MATRIX",),
+            )
         return
 
     _save_key = "dd_save_btn_wrap"
