@@ -5222,7 +5222,8 @@ def _render_deep_dive_add_form(user_email: str) -> None:
 
     _ai_btn_key = "dd_ai_briefing_btn_wrap"
 
-    dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input").strip().upper()
+    _dd_label("Ticker")
+    dd_ticker = st.text_input("Ticker", placeholder="e.g. TSLA", key="dd_ticker_input", label_visibility="collapsed").strip().upper()
 
     if dd_ticker and dd_ticker != st.session_state.get("dd_last_looked_up_ticker"):
         st.session_state["dd_last_looked_up_ticker"] = dd_ticker
@@ -5234,7 +5235,8 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         except Exception:
             pass
 
-    dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input")
+    _dd_label("Name")
+    dd_naam = st.text_input("Name", placeholder="e.g. Tesla Inc.", key="dd_naam_input", label_visibility="collapsed")
     dd_currency_symbol = _currency_symbol_for_ticker(dd_ticker) if dd_ticker else "\u20ac"
 
     # --- Interne sub-tab-schakelaar -- st.pills, vlakke/minimalistische
@@ -5258,7 +5260,7 @@ def _render_deep_dive_add_form(user_email: str) -> None:
             f'width:100% !important; background:rgba(2,6,23,0.8) !important; color:#a7f3d0 !important; '
             f'border:1px solid rgba(16,185,129,0.2) !important; font-size:0.72rem !important; '
             f'font-weight:700 !important; text-transform:uppercase !important; letter-spacing:0.15em !important; '
-            f'padding:0.75rem 0 !important; border-radius:12px !important; '
+            f'padding:0.75rem 1.5rem !important; border-radius:12px !important; '
             f'box-shadow:0 8px 24px rgba(0,0,0,0.35) !important; transition:all 0.3s ease !important; }} '
             f'.st-key-{_ai_btn_key} button:hover {{ background:rgba(15,23,42,0.9) !important; '
             f'border-color:rgba(16,185,129,0.35) !important; }} '
