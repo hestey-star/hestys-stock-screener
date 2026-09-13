@@ -5442,6 +5442,14 @@ def _render_analyze_drawer(user_email: str) -> None:
         # formulier ('Add a new deep-dive') een stuk hoger kan beginnen.
         f'.st-key-analyze_drawer_close {{ display:flex !important; justify-content:flex-end !important; '
         f'margin-bottom:0.5rem !important; }} '
+        # De knop-WRAPPER (niet de knop zelf) vult standaard de volle
+        # breedte van de rij -- daardoor had justify-content:flex-end op
+        # de ouder geen zichtbaar effect (er was toch geen ruimte meer
+        # om de knop binnen te verschuiven). width:auto op de wrapper
+        # laat 'm precies zo breed als de knop zelf zijn, waardoor de
+        # rechts-uitlijning nu wel degelijk zichtbaar wordt.
+        f'.st-key-analyze_drawer_close [data-testid="stElementContainer"], '
+        f'.st-key-analyze_drawer_close [data-testid="stButton"] {{ width:auto !important; }} '
         f'.st-key-analyze_drawer_close button {{ '
         f'background:rgba(148,163,184,0.08) !important; border:1px solid rgba(148,163,184,0.15) !important; '
         f'box-shadow:none !important; color:#94A3B8 !important; font-size:0.95rem !important; '
