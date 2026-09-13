@@ -4152,6 +4152,15 @@ def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
     grouped: dict = {}
     skipped_rows: list = []
     dividend_rows: list = []
+    # Bekende, bewust-genegeerde cashflow-codes (geen positie, dus geen
+    # melding nodig -- ACH is de bekende). Alles WAT NIET hierin staat
+    # EN niet BUY/SELL/DIV is, komt terecht in 'other_ignored_codes'
+    # zodat de gebruiker zichtbaar krijgt hoeveel rijen met een
+    # onbekend codewoord genegeerd zijn, i.p.v. dat zoiets spoorloos
+    # verdwijnt als Robinhood ooit een ander/nieuw codewoord gebruikt
+    # voor iets wat wel relevant zou kunnen zijn.
+    known_ignorable_codes = {"ACH", "ACATI", "ACATO", "GOLD", "INT"}
+    other_ignored_codes: dict = {}
 
     for idx, row in df.iterrows():
         trans_code = str(row.get("Trans Code") or "").strip().upper()
@@ -4165,9 +4174,8 @@ def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
             continue
 
         if trans_code not in ("BUY", "SELL"):
-            # Overige cashflows (ACH, etc.) -- geen positie, dus geen
-            # 'skipped'-melding nodig (dat is geen fout, gewoon terecht
-            # genegeerd).
+            if trans_code and trans_code not in known_ignorable_codes:
+                other_ignored_codes[trans_code] = other_ignored_codes.get(trans_code, 0) + 1
             continue
 
         asset_code = row.get("Asset Code")
@@ -4220,7 +4228,10 @@ def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
             "currency": "USD",
         })
 
-    return {"grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows}
+    return {
+        "grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows,
+        "other_ignored_codes": other_ignored_codes,
+    }
 
 
 def filter_active_holdings(holdings: list) -> list:
@@ -7365,10 +7376,12 @@ def render_portfolio():
                     st.session_state["robinhood_grouped"] = rh_parse_result["grouped"]
                     st.session_state["robinhood_skipped"] = rh_parse_result["skipped_rows"]
                     st.session_state["robinhood_dividends"] = rh_parse_result["dividend_rows"]
+                    st.session_state["robinhood_other_ignored"] = rh_parse_result["other_ignored_codes"]
 
                 rh_grouped = st.session_state["robinhood_grouped"]
                 rh_skipped = st.session_state["robinhood_skipped"]
                 rh_dividends = st.session_state["robinhood_dividends"]
+                rh_other_ignored = st.session_state.get("robinhood_other_ignored", {})
 
                 total_rh_tx = sum(len(g["transactions"]) for g in rh_grouped.values())
                 st.success(f"Found {len(rh_grouped)} securities, {total_rh_tx} buy/sell transaction(s).")
@@ -7377,6 +7390,12 @@ def render_portfolio():
                         f"{len(rh_dividends)} dividend row(s) found but not imported -- Hesty's doesn't "
                         f"track dividend income as a separate transaction type yet."
                     )
+                if rh_other_ignored:
+                    # Transparant maken WELKE onherkende codewoorden er waren
+                    # (i.p.v. ze stilzwijgend te negeren) -- zodat je zelf kunt
+                    # beoordelen of daar iets relevants tussen zat.
+                    codes_summary = ", ".join(f"{code} ({count}x)" for code, count in rh_other_ignored.items())
+                    st.caption(f"Ignored other row type(s) not tracked as positions: {codes_summary}")
                 if rh_skipped:
                     reasons_preview = "; ".join(reason for _, reason in rh_skipped[:5])
                     more = "..." if len(rh_skipped) > 5 else ""
@@ -7442,7 +7461,7 @@ def render_portfolio():
                     already_imported_rh.add(robinhood_file.name)
                     st.session_state["robinhood_imported_filenames"] = already_imported_rh
                     for state_key in ["robinhood_parsed_filename", "robinhood_grouped",
-                                       "robinhood_skipped", "robinhood_dividends"]:
+                                       "robinhood_skipped", "robinhood_dividends", "robinhood_other_ignored"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
