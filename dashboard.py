@@ -4748,6 +4748,10 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
     _table_key = f"{key_prefix}_table"
     st.markdown(
         f'<style>'
+        # Vangnet: welke resterende paar pixels overflow er ook nog
+        # ergens vandaan mochten komen, dit voorkomt dat de HELE pagina
+        # daardoor horizontaal scrollbaar wordt.
+        f'.st-key-{_table_key} {{ overflow-x:hidden !important; max-width:100% !important; }} '
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
@@ -4766,9 +4770,16 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         # flex-force op sommige mobiele browsers toch niet aanslaan.
         f'@media (max-width:640px) {{ '
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ '
-        f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0.35rem !important; }} '
+        # gap:0 i.p.v. 0.35rem -- de 3 zichtbare kolommen hieronder zijn
+        # al hard op 55%+25%+20%=100% gezet; elke gap daarbovenop laat
+        # de rij net te breed worden voor het scherm, wat de HELE pagina
+        # horizontaal scrollbaar maakte (de overflow lekte door tot
+        # buiten de tabel). Zonder gap tussen de 3 kolommen komt de
+        # optelsom weer precies op 100% uit.
+        f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0 !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
-        f'min-width:0 !important; width:auto !important; padding:0 !important; }} '
+        f'min-width:0 !important; width:auto !important; padding:0 !important; box-sizing:border-box !important; '
+        f'overflow:hidden !important; }} '
         f'.st-key-{_table_key} img {{ width:18px !important; height:18px !important; }} '
         f'.st-key-{_table_key} button {{ padding:1px 5px !important; font-size:0.72rem !important; }} '
         f'.hesty-conviction-thead {{ font-size:0.58rem !important; }} '
@@ -4795,11 +4806,11 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) {{ '
         f'display:none !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(1) {{ '
-        f'flex:0 0 55% !important; width:55% !important; max-width:55% !important; }} '
+        f'flex:0 0 48% !important; width:48% !important; max-width:48% !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(2) {{ '
-        f'flex:0 0 25% !important; width:25% !important; max-width:25% !important; }} '
+        f'flex:0 0 28% !important; width:28% !important; max-width:28% !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(5) {{ '
-        f'flex:0 0 20% !important; width:20% !important; max-width:20% !important; }} '
+        f'flex:0 0 16% !important; width:16% !important; max-width:16% !important; }} '
         f'}} '
         f'</style>',
         unsafe_allow_html=True,
@@ -5256,6 +5267,22 @@ def render_analyze():
     if "selected_research" not in st.session_state:
         st.session_state["selected_research"] = None
 
+    # Vangnet tegen elke horizontale overflow op mobiel (welke bron dan
+    # ook) die de HELE pagina schuifbaar zou maken i.p.v. alleen intern
+    # netjes af te kappen.
+    st.markdown(
+        """
+        <style>
+        @media (max-width:768px) {
+            [data-testid="stAppViewContainer"], [data-testid="stMain"], body {
+                overflow-x: hidden !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
         unsafe_allow_html=True,
@@ -5376,11 +5403,18 @@ def render_analyze():
             # bijschrift (dat kost verhoudingsgewijs de meeste ruimte).
             f'@media (max-width:768px) {{ '
             f'.hesty-conviction-grid {{ grid-template-columns:repeat(3, 1fr) !important; gap:0.4rem !important; }} '
-            f'.hesty-conviction-tile {{ padding:0.5rem !important; border-radius:10px !important; }} '
+            # min-width:0 is de sleutel: grid-/flex-items hebben
+            # standaard min-width:auto, wat betekent dat lange tekst
+            # (zoals het label) ze NOOIT kleiner dan hun eigen inhoud
+            # laat worden -- ondanks white-space:nowrap + ellipsis. Dat
+            # duwde de tegel breder dan z'n toegewezen 1fr-aandeel, en
+            # daarmee de hele pagina breder dan het scherm (de horizontale
+            # scrollbar). min-width:0 laat 'm wel degelijk krimpen.
+            f'.hesty-conviction-tile {{ padding:0.5rem !important; border-radius:10px !important; min-width:0 !important; overflow:hidden !important; }} '
             f'.hesty-conviction-tile-label {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
             f'.hesty-conviction-tile-value {{ font-size:1.05rem !important; margin-top:2px !important; }} '
             f'.hesty-conviction-tile-suffix {{ display:none !important; }} '
-            f'.hesty-conviction-tile-warn {{ font-size:0.55rem !important; }} '
+            f'.hesty-conviction-tile-warn {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
             f'}} '
             f'</style>'
             f'<div class="hesty-conviction-grid">{tiles_html}</div>',
