@@ -7332,10 +7332,13 @@ def render_portfolio():
             )
             st.markdown(
                 '<style>'
-                '.hesty-request-broker-link { display:block; margin-top:2.5rem; font-size:10px; '
-                'font-weight:700; letter-spacing:0.12em; color:#64748B; text-transform:uppercase; '
-                'text-align:left; text-decoration:none; transition:color 0.2s ease; }'
-                '.hesty-request-broker-link:hover { color:#CBD5E1; }'
+                '.hesty-request-broker-link { display:block !important; margin-top:2.5rem !important; '
+                'font-size:10px !important; font-weight:700 !important; letter-spacing:0.12em !important; '
+                'color:#64748B !important; text-transform:uppercase !important; text-align:left !important; '
+                'text-decoration:none !important; transition:color 0.2s ease !important; }'
+                '.hesty-request-broker-link:visited { color:#64748B !important; text-decoration:none !important; }'
+                '.hesty-request-broker-link:hover, .hesty-request-broker-link:focus, '
+                '.hesty-request-broker-link:active { color:#CBD5E1 !important; text-decoration:none !important; }'
                 '</style>'
                 '<a href="/support" target="_self" class="hesty-request-broker-link">'
                 'Request a new broker &rarr;</a>',
