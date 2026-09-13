@@ -4892,22 +4892,12 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
-    # Eerste 10 rijen standaard zichtbaar; bij meer dan 10 rijen totaal
-    # verschijnt een slider om verder te bladeren (t/m alles tonen).
-    # 'entries' (bezeten, met research) krijgt voorrang op 'unmapped'
-    # -- dat vult de resterende ruimte van de gekozen limiet.
+    # Eerste ~10 rijen zichtbaar, de rest bereikbaar via een normale
+    # verticale scrollbalk (geen apart slider-element) -- alleen de
+    # RIJEN zelf scrollen, de koptekst blijft gewoon zichtbaar.
     _unmapped = unmapped or []
     _total_rows = len(entries) + len(_unmapped)
-    if _total_rows > 10:
-        _row_limit = st.slider(
-            "Rows to show", min_value=10, max_value=_total_rows, value=10, step=1,
-            key=f"{key_prefix}_row_limit",
-        )
-    else:
-        _row_limit = _total_rows
-    entries = entries[:_row_limit]
-    _unmapped = _unmapped[: max(0, _row_limit - len(entries))]
-    unmapped = _unmapped
+    _scroll_rows = _total_rows > 10
 
     # Verhoudingen naar echte content-breedte (logo+ticker / score /
     # datum), niet naar "vult de rest van het scherm" -- dat laatste
@@ -4942,6 +4932,14 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} button:hover {{ border-color:rgba(31,174,150,0.5) !important; background:rgba(31,174,150,0.08) !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
+        # Rijen-container: vaste hoogte (~10 rijen) met een eigen
+        # verticale scrollbalk zodra er meer rijen zijn -- de koptekst
+        # zelf blijft erboven staan, buiten dit scrollende vak.
+        f'.st-key-{_table_key}_rows {{ max-height:410px; overflow-y:auto; overflow-x:hidden; padding-right:4px; }} '
+        f'.st-key-{_table_key}_rows::-webkit-scrollbar {{ width:6px; }} '
+        f'.st-key-{_table_key}_rows::-webkit-scrollbar-track {{ background:transparent; }} '
+        f'.st-key-{_table_key}_rows::-webkit-scrollbar-thumb {{ background:rgba(148,163,184,0.25); border-radius:3px; }} '
+        f'.st-key-{_table_key}_rows::-webkit-scrollbar-thumb:hover {{ background:rgba(148,163,184,0.4); }} '
         # Mobiel (<640px): st.columns() stapelt van zichzelf verticaal --
         # forceer de rij hard terug naar 1 horizontale lijn, en maak
         # alles compacter als extra vangnet.
@@ -4971,116 +4969,117 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             unsafe_allow_html=True,
         )
 
-        for entry in entries:
-            ticker = entry.get("ticker", "")
-            naam = entry.get("naam", ticker)
-            score = _compute_deep_dive_overall_score(entry)
-            if score is not None:
-                if score >= 8:
-                    _score_color = "#34D399"
-                elif score >= 5:
-                    _score_color = "#FBBF24"
+        with st.container(key=f"{_table_key}_rows"):
+            for entry in entries:
+                ticker = entry.get("ticker", "")
+                naam = entry.get("naam", ticker)
+                score = _compute_deep_dive_overall_score(entry)
+                if score is not None:
+                    if score >= 8:
+                        _score_color = "#34D399"
+                    elif score >= 5:
+                        _score_color = "#FBBF24"
+                    else:
+                        _score_color = "#FB7185"
+                    score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem;">{score:.1f} / 10</span>'
                 else:
-                    _score_color = "#FB7185"
-                score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem;">{score:.1f} / 10</span>'
-            else:
-                score_html = '<span style="color:#64748B; font-size:0.82rem;">-</span>'
-            last_validated = (entry.get("created_at") or "")[:10] or "-"
-            logo_url = get_company_logo_url(ticker, naam)
-            logo_html = (
-                f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-                f'background:#fff; vertical-align:middle;" />'
-                if logo_url else
-                f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
-                f'background:rgba(137,146,163,0.15); align-items:center; justify-content:center; '
-                f'vertical-align:middle;"><span style="color:#8992A3; font-weight:700; '
-                f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
-            )
+                    score_html = '<span style="color:#64748B; font-size:0.82rem;">-</span>'
+                last_validated = (entry.get("created_at") or "")[:10] or "-"
+                logo_url = get_company_logo_url(ticker, naam)
+                logo_html = (
+                    f'<img src="{logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
+                    f'background:#fff; vertical-align:middle;" />'
+                    if logo_url else
+                    f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
+                    f'background:rgba(137,146,163,0.15); align-items:center; justify-content:center; '
+                    f'vertical-align:middle;"><span style="color:#8992A3; font-weight:700; '
+                    f'font-size:0.62rem;">{(ticker[:1] or "?").upper()}</span></span>'
+                )
 
-            row_cols = st.columns(_col_ratios, gap="small")
-            with row_cols[0]:
+                row_cols = st.columns(_col_ratios, gap="small")
+                with row_cols[0]:
+                    st.markdown(
+                        f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
+                        f'<div style="min-width:0;">'
+                        f'<div style="color:#ffffff; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
+                        f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
+                        f'text-overflow:ellipsis;">{ticker}</div>'
+                        f'<div style="color:#8992A3; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
+                        f'overflow:hidden; text-overflow:ellipsis;">{naam}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with row_cols[1]:
+                    st.markdown(score_html, unsafe_allow_html=True)
+                with row_cols[2]:
+                    st.markdown(f'<span style="color:#64748B; font-size:0.75rem;">{last_validated}</span>', unsafe_allow_html=True)
+                with row_cols[3]:
+                    if st.button("\u270F\uFE0F", key=f"edit_{key_prefix}_{ticker}", help=f"Open {ticker}"):
+                        st.session_state["selected_research"] = ticker
+                        # Schone start: reset de sub-tab-keuze in de drawer
+                        # naar de eerste tab, zodat je nooit op een tab
+                        # belandt die van een eerdere, andere ticker
+                        # over is blijven staan in session_state.
+                        st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
+                        st.session_state[f"dd_view_active_subtab_{ticker}"] = "1-CLICK BRIEFING"
+                        st.rerun()
                 st.markdown(
-                    f'<div style="display:flex; align-items:center; gap:0.5rem;">{logo_html}'
-                    f'<div style="min-width:0;">'
-                    f'<div style="color:#ffffff; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
-                    f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
-                    f'text-overflow:ellipsis;">{ticker}</div>'
-                    f'<div style="color:#8992A3; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
-                    f'overflow:hidden; text-overflow:ellipsis;">{naam}</div>'
-                    f'</div></div>',
+                    '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
                     unsafe_allow_html=True,
                 )
-            with row_cols[1]:
-                st.markdown(score_html, unsafe_allow_html=True)
-            with row_cols[2]:
-                st.markdown(f'<span style="color:#64748B; font-size:0.75rem;">{last_validated}</span>', unsafe_allow_html=True)
-            with row_cols[3]:
-                if st.button("\u270F\uFE0F", key=f"edit_{key_prefix}_{ticker}", help=f"Open {ticker}"):
-                    st.session_state["selected_research"] = ticker
-                    # Schone start: reset de sub-tab-keuze in de drawer
-                    # naar de eerste tab, zodat je nooit op een tab
-                    # belandt die van een eerdere, andere ticker
-                    # over is blijven staan in session_state.
-                    st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
-                    st.session_state[f"dd_view_active_subtab_{ticker}"] = "1-CLICK BRIEFING"
-                    st.rerun()
-            st.markdown(
-                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-                unsafe_allow_html=True,
-            )
 
-        for u in (unmapped or []):
-            u_ticker = u.get("ticker", "")
-            u_naam = u.get("naam", u_ticker)
-            u_logo_url = get_company_logo_url(u_ticker, u_naam)
-            u_logo_html = (
-                f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
-                f'background:#fff; vertical-align:middle;" />'
-                if u_logo_url else
-                f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
-                f'background:rgba(137,146,163,0.1); align-items:center; justify-content:center; '
-                f'vertical-align:middle;"><span style="color:#64748B; font-weight:700; '
-                f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
-            )
+            for u in (unmapped or []):
+                u_ticker = u.get("ticker", "")
+                u_naam = u.get("naam", u_ticker)
+                u_logo_url = get_company_logo_url(u_ticker, u_naam)
+                u_logo_html = (
+                    f'<img src="{u_logo_url}" style="width:24px; height:24px; border-radius:50%; object-fit:contain; '
+                    f'background:#fff; vertical-align:middle;" />'
+                    if u_logo_url else
+                    f'<span style="display:inline-flex; width:24px; height:24px; border-radius:50%; '
+                    f'background:rgba(137,146,163,0.1); align-items:center; justify-content:center; '
+                    f'vertical-align:middle;"><span style="color:#64748B; font-weight:700; '
+                    f'font-size:0.62rem;">{(u_ticker[:1] or "?").upper()}</span></span>'
+                )
 
-            row_cols = st.columns(_col_ratios, gap="small")
-            with row_cols[0]:
+                row_cols = st.columns(_col_ratios, gap="small")
+                with row_cols[0]:
+                    st.markdown(
+                        f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
+                        f'<div style="min-width:0;">'
+                        f'<div style="color:#94A3B8; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
+                        f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
+                        f'text-overflow:ellipsis;">{u_ticker}</div>'
+                        f'<div style="color:#64748B; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
+                        f'overflow:hidden; text-overflow:ellipsis;">{u_naam}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                with row_cols[1]:
+                    st.markdown(
+                        '<span style="color:#a7f3d0; background-color:rgba(16,185,129,0.1); '
+                        'border:1px solid rgba(52,211,153,0.2); border-radius:0.375rem; padding:2px 8px; '
+                        'font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+                        'display:inline-block;">\u2726 AI Ready</span>',
+                        unsafe_allow_html=True,
+                    )
+                with row_cols[2]:
+                    st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
+                with row_cols[3]:
+                    if st.button("\u2726", key=f"scan_{key_prefix}_{u_ticker}", help=f"Run AI scan on {u_ticker}"):
+                        st.session_state["dd_ticker_input"] = u_ticker
+                        st.session_state["dd_naam_input"] = u_naam
+                        st.session_state["selected_research"] = "__NEW__"
+                        # Zelfde schone-start-reset als bij een bestaande
+                        # ticker: de drawer opent gegarandeerd op '1-Click
+                        # Briefing', nooit op een tab die nog van een eerdere
+                        # sessie over was.
+                        st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
+                        st.rerun()
                 st.markdown(
-                    f'<div style="display:flex; align-items:center; gap:0.5rem;">{u_logo_html}'
-                    f'<div style="min-width:0;">'
-                    f'<div style="color:#94A3B8; font-weight:700; font-size:0.85rem; letter-spacing:0.03em; '
-                    f'text-transform:uppercase; line-height:1.2; white-space:nowrap; overflow:hidden; '
-                    f'text-overflow:ellipsis;">{u_ticker}</div>'
-                    f'<div style="color:#64748B; font-size:0.68rem; line-height:1.2; white-space:nowrap; '
-                    f'overflow:hidden; text-overflow:ellipsis;">{u_naam}</div>'
-                    f'</div></div>',
+                    '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
                     unsafe_allow_html=True,
                 )
-            with row_cols[1]:
-                st.markdown(
-                    '<span style="color:#a7f3d0; background-color:rgba(16,185,129,0.1); '
-                    'border:1px solid rgba(52,211,153,0.2); border-radius:0.375rem; padding:2px 8px; '
-                    'font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
-                    'display:inline-block;">\u2726 AI Ready</span>',
-                    unsafe_allow_html=True,
-                )
-            with row_cols[2]:
-                st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
-            with row_cols[3]:
-                if st.button("\u2726", key=f"scan_{key_prefix}_{u_ticker}", help=f"Run AI scan on {u_ticker}"):
-                    st.session_state["dd_ticker_input"] = u_ticker
-                    st.session_state["dd_naam_input"] = u_naam
-                    st.session_state["selected_research"] = "__NEW__"
-                    # Zelfde schone-start-reset als bij een bestaande
-                    # ticker: de drawer opent gegarandeerd op '1-Click
-                    # Briefing', nooit op een tab die nog van een eerdere
-                    # sessie over was.
-                    st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
-                    st.rerun()
-            st.markdown(
-                '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
-                unsafe_allow_html=True,
-            )
 
 def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
     """
