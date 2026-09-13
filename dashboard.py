@@ -3195,30 +3195,35 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 st.session_state[edit_key] = False
                 st.rerun()
 
-    st.markdown("**Images**")
-    existing_images = database.get_deep_dive_images(version_id)
-    if existing_images:
-        img_cols = st.columns(min(len(existing_images), 3))
-        for i, img in enumerate(existing_images):
-            with img_cols[i % len(img_cols)]:
-                st.image(img["image_url"], caption=img.get("caption") or None)
-                if st.button("Remove image", key=f"dd_img_delete_{img['id']}"):
-                    database.delete_deep_dive_image(img["id"], user_email)
-                    st.rerun()
+    # Afbeeldingen uitsluitend onder 'My Conviction' tonen (voorheen
+    # onvoorwaardelijk, op ELKE tab zichtbaar -- dat voelde willekeurig
+    # en rommelig los van de rest van de indeling).
+    _active_subtab_key = f"dd_edit_active_subtab_{version_id}" if is_editing else f"dd_view_active_subtab_{version_id}"
+    if st.session_state.get(_active_subtab_key) == "MY CONVICTION":
+        st.markdown("**Images**")
+        existing_images = database.get_deep_dive_images(version_id)
+        if existing_images:
+            img_cols = st.columns(min(len(existing_images), 3))
+            for i, img in enumerate(existing_images):
+                with img_cols[i % len(img_cols)]:
+                    st.image(img["image_url"], caption=img.get("caption") or None)
+                    if st.button("Remove image", key=f"dd_img_delete_{img['id']}"):
+                        database.delete_deep_dive_image(img["id"], user_email)
+                        st.rerun()
 
-    uploaded_image = st.file_uploader(
-        "Add an image (chart, screenshot, etc.)", type=["png", "jpg", "jpeg"],
-        key=f"dd_img_upload_{version_id}",
-    )
-    if uploaded_image is not None:
-        image_caption = st.text_input("Caption (optional)", key=f"dd_img_caption_{version_id}")
-        if st.button("Upload image", key=f"dd_img_upload_btn_{version_id}"):
-            database.upload_deep_dive_image(
-                user_email, version_id, uploaded_image.getvalue(), uploaded_image.name,
-                uploaded_image.type, image_caption or None,
-            )
-            st.success("Image uploaded!")
-            st.rerun()
+        uploaded_image = st.file_uploader(
+            "Add an image (chart, screenshot, etc.)", type=["png", "jpg", "jpeg"],
+            key=f"dd_img_upload_{version_id}",
+        )
+        if uploaded_image is not None:
+            image_caption = st.text_input("Caption (optional)", key=f"dd_img_caption_{version_id}")
+            if st.button("Upload image", key=f"dd_img_upload_btn_{version_id}"):
+                database.upload_deep_dive_image(
+                    user_email, version_id, uploaded_image.getvalue(), uploaded_image.name,
+                    uploaded_image.type, image_caption or None,
+                )
+                st.success("Image uploaded!")
+                st.rerun()
 
     st.divider()
 
@@ -4822,16 +4827,13 @@ def _conviction_tile_html(icon: str, label: str, weight_pct: float, warn: bool =
 
 def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = None) -> None:
     """
-    Tabel opgebouwd met NATIVE st.columns() -- maar nu met de klikbare
-    actie geisoleerd in een EIGEN, smalle 5e kolom (potlood-icoon om
-    bestaande research te openen, scan-icoon voor unmapped assets).
-    Asset/Score/Core thesis/Last validated zijn nu PUUR platte
-    st.markdown()-tekst zonder enige widget erin -- exact de cellen die
-    altijd al feilloos uitlijnden. Alleen de combinatie 'knop + andere
-    content in dezelfde cel' gaf eerder de uitlijnings- en klik-ellende;
-    door de knop een eigen, geisoleerde kolom te geven (niets anders
-    erin) vermijden we dat probleem volledig, en is de klik weer een
-    ECHTE st.button() -- geen JS-relay meer nodig.
+    Tabel opgebouwd met NATIVE st.columns() -- 4 kolommen (Asset/Score/
+    Last validated/Action). De Core Thesis-kolom is verwijderd; die
+    tekst leeft nu bovenin de geopende drawer i.p.v. afgekapt in de
+    tabel. De klikbare actie blijft geisoleerd in een EIGEN, smalle
+    kolom (potlood-icoon om bestaande research te openen, sterretje
+    voor unmapped assets) -- puur platte st.markdown()-tekst voor de
+    rest, exact de cellen die altijd al feilloos uitlijnden.
     """
     if not entries and not unmapped:
         st.markdown(
@@ -4840,7 +4842,7 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         )
         return
 
-    _col_ratios = [1.3, 1, 3.3, 1, 0.5]
+    _col_ratios = [1.6, 1, 1, 0.5]
     _table_key = f"{key_prefix}_table"
     st.markdown(
         f'<style>'
@@ -4858,54 +4860,18 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         f'.st-key-{_table_key} button:hover {{ border-color:rgba(31,174,150,0.5) !important; background:rgba(31,174,150,0.08) !important; }} '
         f'.hesty-conviction-thead {{ color:#64748B; font-size:0.65rem; font-weight:700; text-transform:uppercase; '
         f'letter-spacing:0.05em; }} '
-        # Mobiel (<640px): st.columns() stapelt van zichzelf verticaal
-        # (elke kolom wordt een eigen, los, volle-breedte blok) -- dat
-        # gaf de 'enorme lijst met grote vakken'. Forceer de rij hard
-        # terug naar 1 horizontale lijn, EN maak sowieso alles compacter
-        # (kleinere tekst/padding/gap) als extra vangnet mocht de
-        # flex-force op sommige mobiele browsers toch niet aanslaan.
+        # Mobiel (<640px): st.columns() stapelt van zichzelf verticaal --
+        # forceer de rij hard terug naar 1 horizontale lijn, en maak
+        # alles compacter als extra vangnet.
         f'@media (max-width:640px) {{ '
         f'.st-key-{_table_key} [data-testid="stHorizontalBlock"] {{ '
-        # gap:0 i.p.v. 0.35rem -- de 3 zichtbare kolommen hieronder zijn
-        # al hard op 55%+25%+20%=100% gezet; elke gap daarbovenop laat
-        # de rij net te breed worden voor het scherm, wat de HELE pagina
-        # horizontaal scrollbaar maakte (de overflow lekte door tot
-        # buiten de tabel). Zonder gap tussen de 3 kolommen komt de
-        # optelsom weer precies op 100% uit.
-        f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0 !important; }} '
+        f'flex-direction:row !important; flex-wrap:nowrap !important; gap:0.35rem !important; }} '
         f'.st-key-{_table_key} [data-testid="stColumn"] {{ '
         f'min-width:0 !important; width:auto !important; padding:0 !important; box-sizing:border-box !important; }} '
         f'.st-key-{_table_key} img {{ width:18px !important; height:18px !important; }} '
         f'.st-key-{_table_key} button {{ padding:1px 5px !important; font-size:0.72rem !important; }} '
         f'.hesty-conviction-thead {{ font-size:0.58rem !important; }} '
-        # Alle overige inline tekstgroottes (score/ticker/thesis/datum)
-        # staan hardcoded op desktop-formaat -- die kunnen inline styles
-        # niet zelf op basis van schermbreedte aanpassen, dus hier hard
-        # overschrijven met !important.
         f'.st-key-{_table_key} span {{ font-size:0.68rem !important; }} '
-        # Voorkom horizontale overflow op smalle schermen -- alleen de
-        # Thesis-kolom (3e) en Last validated-kolom (4e) knippen we af,
-        # NIET de Asset-kolom (logo+ticker in een flex-rij zou door
-        # dezelfde regel juist verstoord raken).
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(3) span, '
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) span {{ '
-        f'overflow:hidden !important; text-overflow:ellipsis !important; white-space:nowrap !important; '
-        f'display:block !important; max-width:100% !important; }} '
-        # Core thesis (3e) en Last validated (4e) volledig verbergen op
-        # mobiel -- niet alleen afkappen, echt weg, zodat Asset/Score/
-        # Action de vrijgekomen ruimte krijgen en de tabel niet meer
-        # overvol oogt. De overige kolommen krijgen hun breedte hard
-        # herverdeeld (Streamlit's eigen flex-basis houdt anders een
-        # lege 'jas' aan van de verborgen kolommen).
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(3), '
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(4) {{ '
-        f'display:none !important; }} '
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(1) {{ '
-        f'flex:0 0 48% !important; width:48% !important; max-width:48% !important; }} '
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(2) {{ '
-        f'flex:0 0 28% !important; width:28% !important; max-width:28% !important; }} '
-        f'.st-key-{_table_key} [data-testid="stColumn"]:nth-of-type(5) {{ '
-        f'flex:0 0 16% !important; width:16% !important; max-width:16% !important; }} '
         f'}} '
         f'</style>',
         unsafe_allow_html=True,
@@ -4914,9 +4880,8 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
         head_cols = st.columns(_col_ratios, gap="small")
         head_cols[0].markdown('<div class="hesty-conviction-thead">Asset</div>', unsafe_allow_html=True)
         head_cols[1].markdown('<div class="hesty-conviction-thead">Score</div>', unsafe_allow_html=True)
-        head_cols[2].markdown('<div class="hesty-conviction-thead">Core thesis</div>', unsafe_allow_html=True)
-        head_cols[3].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
-        head_cols[4].markdown('<div class="hesty-conviction-thead">&nbsp;</div>', unsafe_allow_html=True)
+        head_cols[2].markdown('<div class="hesty-conviction-thead">Last validated</div>', unsafe_allow_html=True)
+        head_cols[3].markdown('<div class="hesty-conviction-thead">&nbsp;</div>', unsafe_allow_html=True)
         st.markdown(
             '<div style="width:100%; height:1px; background-color:#334155; margin:0.4rem 0 0.3rem 0;"></div>',
             unsafe_allow_html=True,
@@ -4936,11 +4901,6 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 score_html = f'<span style="color:{_score_color}; font-weight:700; font-size:0.82rem;">{score:.1f} / 10</span>'
             else:
                 score_html = '<span style="color:#64748B; font-size:0.82rem;">-</span>'
-            thesis_full = (entry.get("investment_thesis") or "").strip()
-            thesis_line = thesis_full.split("\n")[0].split(". ")[0].strip()
-            if len(thesis_line) > 60:
-                thesis_line = thesis_line[:60] + "..."
-            thesis_text = thesis_line or "No thesis logged yet"
             last_validated = (entry.get("created_at") or "")[:10] or "-"
             logo_url = get_company_logo_url(ticker, naam)
             logo_html = (
@@ -4964,12 +4924,16 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
             with row_cols[1]:
                 st.markdown(score_html, unsafe_allow_html=True)
             with row_cols[2]:
-                st.markdown(f'<span style="color:#F1F5F9; font-size:0.82rem;">{thesis_text}</span>', unsafe_allow_html=True)
-            with row_cols[3]:
                 st.markdown(f'<span style="color:#64748B; font-size:0.75rem;">{last_validated}</span>', unsafe_allow_html=True)
-            with row_cols[4]:
+            with row_cols[3]:
                 if st.button("\u270F\uFE0F", key=f"edit_{key_prefix}_{ticker}", help=f"Open {ticker}"):
                     st.session_state["selected_research"] = ticker
+                    # Schone start: reset de sub-tab-keuze in de drawer
+                    # naar de eerste tab, zodat je nooit op een tab
+                    # belandt die van een eerdere, andere ticker
+                    # over is blijven staan in session_state.
+                    st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
+                    st.session_state[f"dd_view_active_subtab_{ticker}"] = "1-CLICK BRIEFING"
                     st.rerun()
             st.markdown(
                 '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
@@ -5007,20 +4971,22 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     unsafe_allow_html=True,
                 )
             with row_cols[2]:
-                st.markdown('<span style="color:#64748B; font-size:0.82rem;">No active research record found.</span>', unsafe_allow_html=True)
-            with row_cols[3]:
                 st.markdown('<span style="color:#64748B; font-size:0.75rem;">-</span>', unsafe_allow_html=True)
-            with row_cols[4]:
+            with row_cols[3]:
                 if st.button("\u2726", key=f"scan_{key_prefix}_{u_ticker}", help=f"Run AI scan on {u_ticker}"):
                     st.session_state["dd_ticker_input"] = u_ticker
                     st.session_state["dd_naam_input"] = u_naam
                     st.session_state["selected_research"] = "__NEW__"
+                    # Zelfde schone-start-reset als bij een bestaande
+                    # ticker: de drawer opent gegarandeerd op '1-Click
+                    # Briefing', nooit op een tab die nog van een eerdere
+                    # sessie over was.
+                    st.session_state["dd_active_subtab"] = "1-CLICK BRIEFING"
                     st.rerun()
             st.markdown(
                 '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.3rem 0;"></div>',
                 unsafe_allow_html=True,
             )
-
 
 def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
     """
@@ -5307,14 +5273,14 @@ def _render_deep_dive_add_form(user_email: str) -> None:
         f'.st-key-{_save_key} {{ margin-top:1.5rem !important; }} '
         f'.st-key-{_save_key} button {{ '
         f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
-        f'font-weight:700 !important; font-size:0.9rem !important; padding:0.65rem 0 !important; '
+        f'font-weight:700 !important; font-size:0.9rem !important; padding:0.75rem 0 !important; '
         f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
         f'.st-key-{_save_key} button:hover {{ background:#059669 !important; }} '
         f'</style>',
         unsafe_allow_html=True,
     )
     with st.container(key=_save_key):
-        _save_clicked = st.button("Save this version", key="dd_save_btn", use_container_width=True)
+        _save_clicked = st.button("Save Complete Deep-Dive \u2192", key="dd_save_btn", use_container_width=True)
     if _save_clicked:
         if not dd_ticker or not dd_naam:
             st.error("Please fill in at least a ticker and name.")
@@ -5363,10 +5329,14 @@ def _render_analyze_drawer(user_email: str) -> None:
         f'<style>.st-key-{_drawer_key} {{ '
         f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
         f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
+        # Minimalistische all-caps metadata-link i.p.v. een geknopte
+        # '\u2715 Close' -- rustiger, past bij de rest van het platform
+        # (vergelijkbaar met 'Forgot password?' op de inlogpagina).
         f'.st-key-analyze_drawer_close button {{ '
         f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; color:#64748B !important; font-size:0.7rem !important; font-weight:700 !important; '
-        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; }} '
+        f'padding:0 !important; color:#64748B !important; font-size:0.68rem !important; font-weight:700 !important; '
+        f'letter-spacing:0.06em !important; text-transform:uppercase !important; margin-bottom:1rem !important; '
+        f'transition:color 0.2s ease !important; }} '
         f'.st-key-analyze_drawer_close button:hover {{ color:#CBD5E1 !important; }} '
         # 'Back to research overview' -- uitsluitend op mobiel zichtbaar
         # (op desktop doet de bestaande '\u2715 Close' precies hetzelfde,
@@ -5414,9 +5384,18 @@ def _render_analyze_drawer(user_email: str) -> None:
             latest = history[0]
             st.markdown(
                 f'<div style="color:#1FAE96; font-weight:700; font-size:0.85rem; text-transform:uppercase; '
-                f'letter-spacing:0.03em; margin-bottom:1rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
+                f'letter-spacing:0.03em; margin-bottom:0.35rem;">{selected} &middot; {latest.get("naam", selected)}</div>',
                 unsafe_allow_html=True,
             )
+            # Investment thesis nu direct bovenin de drawer i.p.v. in de
+            # tabel (waar 'ie was afgekapt op 60 tekens) -- de Core
+            # Thesis-kolom bestaat niet meer in de tabel zelf.
+            if latest.get("investment_thesis"):
+                st.markdown(
+                    f'<div style="color:#F1F5F9; font-weight:700; font-size:0.78rem; text-transform:uppercase; '
+                    f'letter-spacing:0.02em; line-height:1.5; margin-bottom:1rem;">{latest["investment_thesis"]}</div>',
+                    unsafe_allow_html=True,
+                )
             st.caption(f"{len(history)} version(s) logged, most recent first.")
             for version in history:
                 _render_deep_dive_version(version, user_email)
@@ -5571,50 +5550,57 @@ def render_analyze():
             + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
             + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
         )
-        st.markdown(
-            f'<style>'
-            f'.hesty-conviction-grid {{ display:grid; '
-            f'grid-template-columns:{"1fr" if _drawer_open else "repeat(3, 1fr)"}; gap:1rem; margin-bottom:0.75rem; }} '
-            f'.hesty-conviction-tile {{ border-radius:14px; padding:1rem; text-align:left; }} '
-            f'.hesty-conviction-tile-label {{ color:#8992A3; font-size:0.7rem; font-weight:700; '
-            f'text-transform:uppercase; letter-spacing:0.05em; }} '
-            f'.hesty-conviction-tile-value {{ color:#F1F5F9; font-size:1.6rem; font-weight:800; margin-top:6px; }} '
-            f'.hesty-conviction-tile-suffix {{ font-size:0.7rem; font-weight:600; color:#64748B; text-transform:uppercase; }} '
-            f'.hesty-conviction-tile-warn {{ color:#D97706; font-size:0.68rem; font-weight:700; margin-top:6px; '
-            f'text-transform:uppercase; letter-spacing:0.03em; }} '
-            # Mobiel: de 3 tegels blijven NAAST elkaar staan (geen volle
-            # stapeling meer) maar worden supercompacte mini-balkjes --
-            # veel minder padding, kleinere tekst, geen 'of portfolio'-
-            # bijschrift (dat kost verhoudingsgewijs de meeste ruimte).
-            f'@media (max-width:768px) {{ '
-            f'.hesty-conviction-grid {{ grid-template-columns:repeat(3, 1fr) !important; gap:0.4rem !important; }} '
-            # min-width:0 is de sleutel: grid-/flex-items hebben
-            # standaard min-width:auto, wat betekent dat lange tekst
-            # (zoals het label) ze NOOIT kleiner dan hun eigen inhoud
-            # laat worden -- ondanks white-space:nowrap + ellipsis. Dat
-            # duwde de tegel breder dan z'n toegewezen 1fr-aandeel, en
-            # daarmee de hele pagina breder dan het scherm (de horizontale
-            # scrollbar). min-width:0 laat 'm wel degelijk krimpen.
-            f'.hesty-conviction-tile {{ padding:0.5rem !important; border-radius:10px !important; min-width:0 !important; overflow:hidden !important; }} '
-            f'.hesty-conviction-tile-label {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
-            f'.hesty-conviction-tile-value {{ font-size:1.05rem !important; margin-top:2px !important; }} '
-            f'.hesty-conviction-tile-suffix {{ display:none !important; }} '
-            f'.hesty-conviction-tile-warn {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
-            f'}} '
-            f'</style>'
-            f'<div class="hesty-conviction-grid">{tiles_html}</div>',
-            unsafe_allow_html=True,
-        )
-        if unmapped_weight > 0.5:
+        # De 3 tegels (en de waarschuwingsbalk) verdwijnen VOLLEDIG zodra
+        # de drawer open staat -- eerder werden ze alleen smaller
+        # gemaakt (1 kolom i.p.v. 3), wat ze onder elkaar propte in de
+        # al krappe linkerkolom. Nu is er simpelweg geen ruimte-conflict
+        # meer: ze komen pas weer terug, over de volle breedte, zodra de
+        # drawer weer dicht is.
+        if not _drawer_open:
             st.markdown(
-                f'<div style="color:#94A3B8; font-size:0.78rem; margin-bottom:2rem;">'
-                f'<span style="color:#D97706; font-weight:700;">\u26A0\uFE0F UNMAPPED ASSETS:</span> '
-                f'{unmapped_weight:.0f}% OF PORTFOLIO HAS NO ACTIVE RESEARCH. RUN A QUICK SCAN TO '
-                f'CATEGORIZE THEM.</div>',
+                f'<style>'
+                f'.hesty-conviction-grid {{ display:grid; '
+                f'grid-template-columns:repeat(3, 1fr); gap:1rem; margin-bottom:0.75rem; }} '
+                f'.hesty-conviction-tile {{ border-radius:14px; padding:1rem; text-align:left; }} '
+                f'.hesty-conviction-tile-label {{ color:#8992A3; font-size:0.7rem; font-weight:700; '
+                f'text-transform:uppercase; letter-spacing:0.05em; }} '
+                f'.hesty-conviction-tile-value {{ color:#F1F5F9; font-size:1.6rem; font-weight:800; margin-top:6px; }} '
+                f'.hesty-conviction-tile-suffix {{ font-size:0.7rem; font-weight:600; color:#64748B; text-transform:uppercase; }} '
+                f'.hesty-conviction-tile-warn {{ color:#D97706; font-size:0.68rem; font-weight:700; margin-top:6px; '
+                f'text-transform:uppercase; letter-spacing:0.03em; }} '
+                # Mobiel: de 3 tegels blijven NAAST elkaar staan (geen volle
+                # stapeling meer) maar worden supercompacte mini-balkjes --
+                # veel minder padding, kleinere tekst, geen 'of portfolio'-
+                # bijschrift (dat kost verhoudingsgewijs de meeste ruimte).
+                f'@media (max-width:768px) {{ '
+                f'.hesty-conviction-grid {{ grid-template-columns:repeat(3, 1fr) !important; gap:0.4rem !important; }} '
+                # min-width:0 is de sleutel: grid-/flex-items hebben
+                # standaard min-width:auto, wat betekent dat lange tekst
+                # (zoals het label) ze NOOIT kleiner dan hun eigen inhoud
+                # laat worden -- ondanks white-space:nowrap + ellipsis. Dat
+                # duwde de tegel breder dan z'n toegewezen 1fr-aandeel, en
+                # daarmee de hele pagina breder dan het scherm (de horizontale
+                # scrollbar). min-width:0 laat 'm wel degelijk krimpen.
+                f'.hesty-conviction-tile {{ padding:0.5rem !important; border-radius:10px !important; min-width:0 !important; overflow:hidden !important; }} '
+                f'.hesty-conviction-tile-label {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
+                f'.hesty-conviction-tile-value {{ font-size:1.05rem !important; margin-top:2px !important; }} '
+                f'.hesty-conviction-tile-suffix {{ display:none !important; }} '
+                f'.hesty-conviction-tile-warn {{ font-size:0.55rem !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }} '
+                f'}} '
+                f'</style>'
+                f'<div class="hesty-conviction-grid">{tiles_html}</div>',
                 unsafe_allow_html=True,
             )
-        else:
-            st.markdown('<div style="margin-bottom:1.25rem;"></div>', unsafe_allow_html=True)
+            if unmapped_weight > 0.5:
+                st.markdown(
+                    f'<div style="color:#94A3B8; font-size:0.78rem; margin-bottom:2rem;">'
+                    f'<span style="color:#D97706; font-weight:700;">\u26A0\uFE0F UNMAPPED ASSETS:</span> '
+                    f'{unmapped_weight:.0f}% OF PORTFOLIO HAS NO ACTIVE RESEARCH. RUN A QUICK SCAN TO '
+                    f'CATEGORIZE THEM.</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown('<div style="margin-bottom:1.25rem;"></div>', unsafe_allow_html=True)
 
         # --- 2. Sectie A: Active Portfolio Conviction -- inclusief de
         # unmapped assets, die onderaan instromen (gedempt, met een
