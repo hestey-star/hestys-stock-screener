@@ -5436,15 +5436,15 @@ def _render_analyze_drawer(user_email: str) -> None:
     st.markdown(
         f'<style>.st-key-{_drawer_key} {{ '
         f'background:rgba(15,23,42,0.2) !important; border-left:1px solid rgba(30,41,59,0.6) !important; '
-        f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; }} '
-        # Fancy, ronde '\u00d7'-knop -- nu op DEZELFDE regel als de kop
-        # ('Add a new deep-dive' / ticker-naam) getrokken via een
-        # negatieve margin-top, exact hetzelfde bewezen patroon als de
-        # '+ ADD NEW'-knop bovenaan de hoofdpagina (die stond altijd al
-        # correct rechts uitgelijnd). De vorige losse-regel-aanpak
-        # boven de kop bleef om onduidelijke reden links hangen.
-        f'.st-key-analyze_drawer_close {{ display:flex !important; justify-content:flex-end !important; '
-        f'margin-top:-2.6rem !important; margin-bottom:0.75rem !important; position:relative !important; z-index:2 !important; }} '
+        f'padding:1.25rem !important; border-radius:0 14px 14px 0 !important; box-sizing:border-box !important; '
+        f'position:relative !important; }} '
+        # Definitieve fix: ABSOLUTE positionering t.o.v. de drawer zelf
+        # i.p.v. flex/negatieve-marge-gefriemel -- dat bleef ondanks 2
+        # pogingen ergens links vastlopen. Dit pint de knop letterlijk
+        # vast aan de rechterbovenhoek van de drawer-box, los van
+        # waar de kop-tekst zelf staat of hoe die precies stroomt.
+        f'.st-key-analyze_drawer_close {{ position:absolute !important; top:1.25rem !important; '
+        f'right:1.25rem !important; z-index:10 !important; width:auto !important; }} '
         f'.st-key-analyze_drawer_close button {{ '
         f'background:rgba(148,163,184,0.08) !important; border:1px solid rgba(148,163,184,0.15) !important; '
         f'box-shadow:none !important; color:#94A3B8 !important; font-size:0.95rem !important; '
