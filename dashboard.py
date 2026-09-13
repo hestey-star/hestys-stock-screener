@@ -7183,19 +7183,6 @@ def render_portfolio():
         # de achtergrond, net als de rest van de vernieuwde pagina.
         with st.container(border=False):
             # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
-            # Selectie-pills bovenaan: met nu 4 brokers (waarvan Trade
-            # Republic's kolomkoppen vrij generiek zijn) is een expliciete
-            # keuze betrouwbaarder dan blind op auto-detectie vertrouwen --
-            # de detectie hieronder blijft wel actief, als vriendelijke
-            # waarschuwing mocht je gekozen broker niet overeenkomen met
-            # wat er in het bestand zelf herkend wordt.
-            st.markdown("**Which broker?**")
-            broker_choice = st.pills(
-                "Broker", ["DEGIRO", "ROBINHOOD", "CHARLES SCHWAB", "TRADE REPUBLIC"],
-                default="DEGIRO", key="broker_choice", label_visibility="collapsed",
-            )
-            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-
             # Upload is nu de EERSTE, meest prominente actie -- geen
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
             # de hoofdtaak zelf.
@@ -7218,36 +7205,34 @@ def render_portfolio():
                 unsafe_allow_html=True,
             )
 
-            # De pills-keuze hierboven bepaalt WELKE parser wordt
-            # aangeroepen (leidend) -- de kolomkop-detectie blijft ernaast
-            # draaien, puur als vriendelijke sanity-check-waarschuwing als
-            # die twee niet overeenkomen (bv. je koos 'DEGIRO' maar
-            # uploadde per ongeluk een Robinhood-bestand).
+            # Puur automatische herkenning op basis van de kolomkoppen in
+            # de CSV zelf (zie detect_broker_from_csv) -- geen handmatige
+            # keuze meer nodig.
             degiro_file = None
             robinhood_file = None
             schwab_file = None
             trade_republic_file = None
-            _broker_choice_to_key = {
-                "DEGIRO": "degiro", "ROBINHOOD": "robinhood",
-                "CHARLES SCHWAB": "schwab", "TRADE REPUBLIC": "trade_republic",
-            }
             if broker_upload is not None:
                 detected_broker = detect_broker_from_csv(broker_upload.getvalue())
-                chosen_key = _broker_choice_to_key.get(broker_choice, "degiro")
-                if detected_broker != "unknown" and detected_broker != chosen_key:
-                    _detected_label = {v: k for k, v in _broker_choice_to_key.items()}.get(detected_broker, detected_broker)
-                    st.warning(
-                        f"This file looks like a **{_detected_label}** export, but you've selected "
-                        f"**{broker_choice}** above -- double-check you picked the right broker."
-                    )
-                if chosen_key == "degiro":
+                _detected_labels = {
+                    "degiro": "DEGIRO", "robinhood": "Robinhood",
+                    "schwab": "Charles Schwab", "trade_republic": "Trade Republic",
+                }
+                if detected_broker in _detected_labels:
+                    st.caption(f"\U0001F50D Detected: {_detected_labels[detected_broker]}")
+                if detected_broker == "degiro":
                     degiro_file = broker_upload
-                elif chosen_key == "robinhood":
+                elif detected_broker == "robinhood":
                     robinhood_file = broker_upload
-                elif chosen_key == "schwab":
+                elif detected_broker == "schwab":
                     schwab_file = broker_upload
-                elif chosen_key == "trade_republic":
+                elif detected_broker == "trade_republic":
                     trade_republic_file = broker_upload
+                else:
+                    st.error(
+                        "Couldn't recognize this CSV's format -- make sure it's an unmodified "
+                        "'Transactions' export from a supported broker (see the list below)."
+                    )
 
             # Trade Republic hergebruikt de VOLLEDIGE, bestaande DEGIRO-
             # ticker-matching-UI hieronder (zelfde 'grouped per ISIN'-vorm,
