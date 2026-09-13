@@ -4087,8 +4087,8 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
     Herkent welke broker een 'Transactions'-CSV heeft opgeleverd, puur op
     basis van de kolomkoppen -- geen bestandsnaam-gok (die kan de
     gebruiker altijd wijzigen), maar de daadwerkelijke, unieke kolommen
-    die elke broker's export nu eenmaal heeft. Geeft 'degiro', 'robinhood'
-    of 'unknown' terug.
+    die elke broker's export nu eenmaal heeft. Geeft 'degiro', 'robinhood',
+    'schwab', 'trade_republic' of 'unknown' terug.
     """
     import io
     try:
@@ -4105,6 +4105,16 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
     # eigen exportformaat.
     if {"Trans Code", "Asset Code"}.issubset(columns):
         return "robinhood"
+    # Charles Schwab: 'Fees & Comm' is een vrij unieke kolomnaam.
+    if {"Action", "Fees & Comm", "Symbol"}.issubset(columns):
+        return "schwab"
+    # Trade Republic: kent GEEN eigen, unieke kolomnaam (simpel/generiek
+    # formaat: Date/Symbol/Type/Quantity/Price/Amount) -- daarom pas als
+    # ALLERLAATSTE check, nadat de specifiekere formaten hierboven al
+    # zijn uitgesloten, om te voorkomen dat dit per ongeluk een ANDER,
+    # nog-te-bouwen formaat met soortgelijke kolomnamen inpikt.
+    if {"Date", "Symbol", "Type", "Quantity", "Price", "Amount"}.issubset(columns):
+        return "trade_republic"
     return "unknown"
 
 
@@ -4232,6 +4242,214 @@ def parse_robinhood_transactions_csv(file_bytes: bytes) -> dict:
         "grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows,
         "other_ignored_codes": other_ignored_codes,
     }
+
+
+def parse_schwab_transactions_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert een Charles Schwab 'Transactions'-export (CSV). Schwab-
+    exports beginnen/eindigen vaak met losse tekst-regels (bv. een
+    accountnaam-header of een disclaimer-footer) die GEEN geldige CSV-
+    rijen zijn -- die worden via 'on_bad_lines' overgeslagen i.p.v. de
+    hele import te laten crashen.
+
+    Bewuste keuzes:
+    - 'Action' wordt gefilterd op 'Buy'/'Sell' (Schwab's eigen exacte
+      labels) -- alle varianten van dividend-acties (Schwab gebruikt
+      meerdere labels, zoals 'Qual Dividend', 'Cash Dividend', 'Non-Qual
+      Div') worden herkend via een 'DIVIDEND' substring-match, niet een
+      exacte match, en komen in dividend_rows terecht (niet als buy/sell
+      geimporteerd -- zelfde reden als bij Robinhood: onze transactie-
+      structuur kent geen apart dividend-type).
+    - 'Amount' wordt hard schoongemaakt ('$' en '-' gestript) voor de
+      float-conversie -- de richting (buy=geld eruit, sell=geld erin)
+      wordt sowieso al afgeleid uit 'Action', niet uit het teken van
+      Amount zelf.
+    - Ticker komt rechtstreeks uit 'Symbol' -- geen ISIN-matching nodig.
+    - Valuta: Schwab is een Amerikaanse broker, dus altijd USD.
+    - Fee komt rechtstreeks uit 'Fees & Comm' (Schwab heeft, anders dan
+      Robinhood, wel een eigen fee-kolom -- geen aflezing via het
+      Amount-verschil nodig).
+    """
+    import io
+
+    def _clean_amount(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            cleaned = str(val).strip().replace("$", "").replace(",", "").replace("-", "")
+            return float(cleaned) if cleaned else None
+        except (TypeError, ValueError):
+            return None
+
+    def _to_float(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            return float(str(val).strip().replace("$", "").replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        df = pd.read_csv(io.BytesIO(file_bytes), on_bad_lines="skip")
+    except TypeError:
+        # oudere pandas-versies kennen 'on_bad_lines' nog niet -- terugval
+        # op het oudere 'error_bad_lines=False'.
+        df = pd.read_csv(io.BytesIO(file_bytes), error_bad_lines=False)
+
+    grouped: dict = {}
+    skipped_rows: list = []
+    dividend_rows: list = []
+
+    for idx, row in df.iterrows():
+        action = str(row.get("Action") or "").strip()
+        action_upper = action.upper()
+
+        if "DIVIDEND" in action_upper or action_upper in ("DIV",):
+            dividend_rows.append({
+                "asset_code": row.get("Symbol"),
+                "amount": _clean_amount(row.get("Amount")),
+                "date": row.get("Date"),
+            })
+            continue
+
+        if action_upper not in ("BUY", "SELL"):
+            continue
+
+        symbol = row.get("Symbol")
+        date_val = row.get("Date")
+        quantity = _to_float(row.get("Quantity"))
+        price = _to_float(row.get("Price"))
+        fee = _clean_amount(row.get("Fees & Comm")) or 0.0
+
+        if pd.isna(symbol) or not str(symbol).strip() or pd.isna(date_val):
+            skipped_rows.append((idx, "Missing symbol or date"))
+            continue
+        if quantity is None or price is None or quantity == 0:
+            skipped_rows.append((idx, f"{symbol}: missing or zero quantity/price"))
+            continue
+
+        try:
+            parsed_date = pd.to_datetime(date_val).date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{symbol}: could not parse date '{date_val}'"))
+            continue
+
+        ticker = str(symbol).strip().upper()
+
+        if ticker not in grouped:
+            grouped[ticker] = {
+                "product": row.get("Description") or ticker,
+                "ticker": ticker,
+                "transactions": [],
+            }
+
+        grouped[ticker]["transactions"].append({
+            "transaction_type": "buy" if action_upper == "BUY" else "sell",
+            "shares": round(abs(quantity), 6),
+            "price": round(abs(price), 4),
+            "fee": round(fee, 2),
+            "transaction_date": parsed_date,
+            "currency": "USD",
+        })
+
+    return {
+        "grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows,
+        "other_ignored_codes": {},
+    }
+
+
+def parse_trade_republic_transactions_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert een Trade Republic 'Transactions'-export (CSV). Anders dan
+    Robinhood/Schwab geeft Trade Republic GEEN ticker rechtstreeks mee,
+    alleen een ISIN ('Symbol'-kolom bevat de ISIN) -- daarom groeperen
+    we hier, EXACT als bij DEGIRO, per ISIN i.p.v. per ticker, en levert
+    dit dezelfde 'grouped'-vorm op als parse_degiro_transactions_csv().
+    Dat is bewust: zo kan de bestaande ISIN-naar-ticker-matching-UI (die
+    de gebruiker laat kiezen/bevestigen welke ticker bij welke ISIN
+    hoort, zie de DEGIRO-import) VOLLEDIG HERGEBRUIKT worden voor Trade
+    Republic, i.p.v. een hele nieuwe matching-UI te bouwen -- 'naadloos
+    synchroniseren met onze actieve portfolio-tabellen' loopt zo via
+    dezelfde, al beproefde weg als DEGIRO.
+
+    Bewuste keuzes:
+    - 'Type' wordt gefilterd op BUY/SELL; DIVIDEND komt in dividend_rows
+      terecht (zelfde reden als bij Robinhood/Schwab: geen apart
+      dividend-transactietype in onze structuur).
+    - Trade Republic is een Duitse/Europese broker en handelt in EUR --
+      price_is_native=True met koers_currency='EUR', zodat de bestaande
+      DEGIRO-import-loop geen extra FX-conversie probeert te doen (die
+      is alleen nodig als de valuta AFWIJKT van EUR).
+    """
+    import io
+
+    def _to_float(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        try:
+            return float(str(val).strip().replace("€", "").replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    df = pd.read_csv(io.BytesIO(file_bytes))
+
+    grouped: dict = {}
+    skipped_rows: list = []
+    dividend_rows: list = []
+
+    for idx, row in df.iterrows():
+        tx_type = str(row.get("Type") or "").strip().upper()
+
+        if tx_type == "DIVIDEND":
+            dividend_rows.append({
+                "asset_code": row.get("Symbol"),
+                "amount": _to_float(row.get("Amount")),
+                "date": row.get("Date"),
+            })
+            continue
+
+        if tx_type not in ("BUY", "SELL"):
+            continue
+
+        isin = row.get("Symbol")
+        date_val = row.get("Date")
+        quantity = _to_float(row.get("Quantity"))
+        price = _to_float(row.get("Price"))
+
+        if pd.isna(isin) or not str(isin).strip() or pd.isna(date_val):
+            skipped_rows.append((idx, "Missing ISIN or date"))
+            continue
+        if quantity is None or price is None or quantity == 0:
+            skipped_rows.append((idx, f"{isin}: missing or zero quantity/price"))
+            continue
+
+        try:
+            parsed_date = pd.to_datetime(date_val).date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{isin}: could not parse date '{date_val}'"))
+            continue
+
+        isin_clean = str(isin).strip().upper()
+
+        if isin_clean not in grouped:
+            grouped[isin_clean] = {
+                "product": isin_clean,  # Trade Republic geeft geen productnaam mee, alleen de ISIN zelf
+                "isin": isin_clean,
+                "transactions": [],
+            }
+
+        grouped[isin_clean]["transactions"].append({
+            "transaction_type": "buy" if tx_type == "BUY" else "sell",
+            "shares": round(abs(quantity), 6),
+            "price": round(abs(price), 4),
+            "price_is_native": True,
+            "fee_eur": 0.0,
+            "transaction_date": parsed_date,
+            "historical_fx_rate": None,
+            "koers_currency": "EUR",
+        })
+
+    return {"grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows}
 
 
 def filter_active_holdings(holdings: list) -> list:
@@ -6965,6 +7183,19 @@ def render_portfolio():
         # de achtergrond, net als de rest van de vernieuwde pagina.
         with st.container(border=False):
             # --- Import from a broker -- bulk-importeren i.p.v. 1-voor-1 loggen ---
+            # Selectie-pills bovenaan: met nu 4 brokers (waarvan Trade
+            # Republic's kolomkoppen vrij generiek zijn) is een expliciete
+            # keuze betrouwbaarder dan blind op auto-detectie vertrouwen --
+            # de detectie hieronder blijft wel actief, als vriendelijke
+            # waarschuwing mocht je gekozen broker niet overeenkomen met
+            # wat er in het bestand zelf herkend wordt.
+            st.markdown("**Which broker?**")
+            broker_choice = st.pills(
+                "Broker", ["DEGIRO", "ROBINHOOD", "CHARLES SCHWAB", "TRADE REPUBLIC"],
+                default="DEGIRO", key="broker_choice", label_visibility="collapsed",
+            )
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+
             # Upload is nu de EERSTE, meest prominente actie -- geen
             # badge/uitleg-tekst meer ervoor die de aandacht wegtrekt van
             # de hoofdtaak zelf.
@@ -6987,28 +7218,50 @@ def render_portfolio():
                 unsafe_allow_html=True,
             )
 
-            # 1 gedeeld upload-vak i.p.v. een apart vak per broker -- de
-            # daadwerkelijke herkenning gebeurt op de kolomkoppen van de
-            # CSV zelf (zie detect_broker_from_csv), niet op de
-            # bestandsnaam. degiro_file/robinhood_file blijven hieronder
-            # verder ongewijzigd bestaan -- de complexe, broker-specifieke
-            # verwerkingslogica hoeft dus niet aangepast te worden, alleen
-            # HOE deze twee variabelen gevuld worden.
+            # De pills-keuze hierboven bepaalt WELKE parser wordt
+            # aangeroepen (leidend) -- de kolomkop-detectie blijft ernaast
+            # draaien, puur als vriendelijke sanity-check-waarschuwing als
+            # die twee niet overeenkomen (bv. je koos 'DEGIRO' maar
+            # uploadde per ongeluk een Robinhood-bestand).
             degiro_file = None
             robinhood_file = None
+            schwab_file = None
+            trade_republic_file = None
+            _broker_choice_to_key = {
+                "DEGIRO": "degiro", "ROBINHOOD": "robinhood",
+                "CHARLES SCHWAB": "schwab", "TRADE REPUBLIC": "trade_republic",
+            }
             if broker_upload is not None:
                 detected_broker = detect_broker_from_csv(broker_upload.getvalue())
-                if detected_broker == "degiro":
-                    st.caption("\U0001F50D Detected: DEGIRO")
-                    degiro_file = broker_upload
-                elif detected_broker == "robinhood":
-                    st.caption("\U0001F50D Detected: Robinhood")
-                    robinhood_file = broker_upload
-                else:
-                    st.error(
-                        "Couldn't recognize this CSV's format -- make sure it's an unmodified "
-                        "'Transactions' export from a supported broker (see the list below)."
+                chosen_key = _broker_choice_to_key.get(broker_choice, "degiro")
+                if detected_broker != "unknown" and detected_broker != chosen_key:
+                    _detected_label = {v: k for k, v in _broker_choice_to_key.items()}.get(detected_broker, detected_broker)
+                    st.warning(
+                        f"This file looks like a **{_detected_label}** export, but you've selected "
+                        f"**{broker_choice}** above -- double-check you picked the right broker."
                     )
+                if chosen_key == "degiro":
+                    degiro_file = broker_upload
+                elif chosen_key == "robinhood":
+                    robinhood_file = broker_upload
+                elif chosen_key == "schwab":
+                    schwab_file = broker_upload
+                elif chosen_key == "trade_republic":
+                    trade_republic_file = broker_upload
+
+            # Trade Republic hergebruikt de VOLLEDIGE, bestaande DEGIRO-
+            # ticker-matching-UI hieronder (zelfde 'grouped per ISIN'-vorm,
+            # zie parse_trade_republic_transactions_csv) -- door 'm hier
+            # aan degiro_file toe te wijzen (met een apart vlaggetje om te
+            # onthouden welke parser daadwerkelijk moet draaien) hoeft die
+            # hele, complexe matching-UI verderop geen letter te wijzigen.
+            is_trade_republic_import = trade_republic_file is not None
+            if is_trade_republic_import:
+                degiro_file = trade_republic_file
+            _active_broker_parser = (
+                parse_trade_republic_transactions_csv if is_trade_republic_import
+                else parse_degiro_transactions_csv
+            )
 
             if hasattr(database, "get_last_csv_import"):
                 try:
@@ -7043,6 +7296,18 @@ def render_portfolio():
                 'style="width:18px; height:18px; border-radius:4px;">'
                 '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
                 'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Robinhood</span>'
+                '</div>'
+                '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                '<img src="https://www.google.com/s2/favicons?domain=schwab.com&sz=32" '
+                'style="width:18px; height:18px; border-radius:4px;">'
+                '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Charles Schwab</span>'
+                '</div>'
+                '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                '<img src="https://www.google.com/s2/favicons?domain=traderepublic.com&sz=32" '
+                'style="width:18px; height:18px; border-radius:4px;">'
+                '<span style="color:#EAEDF1; font-size:0.78rem; font-weight:700; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Trade Republic</span>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -7065,7 +7330,7 @@ def render_portfolio():
                 if st.session_state.get("degiro_parsed_filename") != degiro_file.name:
                     # Nieuw bestand -- opnieuw parsen en de matches resetten
                     with st.spinner("Reading your file..."):
-                        parse_result = parse_degiro_transactions_csv(degiro_file.getvalue())
+                        parse_result = _active_broker_parser(degiro_file.getvalue())
                     st.session_state["degiro_parsed_filename"] = degiro_file.name
                     st.session_state["degiro_grouped"] = parse_result["grouped"]
                     st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
@@ -7461,6 +7726,107 @@ def render_portfolio():
                     st.session_state["robinhood_imported_filenames"] = already_imported_rh
                     for state_key in ["robinhood_parsed_filename", "robinhood_grouped",
                                        "robinhood_skipped", "robinhood_dividends", "robinhood_other_ignored"]:
+                        st.session_state.pop(state_key, None)
+                    st.rerun()
+
+            # --- Charles Schwab: zelfde eenvoudige route als Robinhood --
+            # de CSV geeft de ticker al rechtstreeks mee ('Symbol'), dus
+            # geen aparte ticker-matching-stap nodig.
+            already_imported_sw = st.session_state.get("schwab_imported_filenames", set())
+
+            if schwab_file is not None and schwab_file.name in already_imported_sw:
+                st.success(f"'{schwab_file.name}' was already imported.", icon=":material/check_circle:")
+                if st.button("Process this file again anyway", key="schwab_reimport_btn"):
+                    already_imported_sw.discard(schwab_file.name)
+                    st.session_state["schwab_imported_filenames"] = already_imported_sw
+                    st.session_state.pop("schwab_parsed_filename", None)
+                    st.rerun()
+            elif schwab_file is not None:
+                if st.session_state.get("schwab_parsed_filename") != schwab_file.name:
+                    with st.spinner("Reading your file..."):
+                        sw_parse_result = parse_schwab_transactions_csv(schwab_file.getvalue())
+                    st.session_state["schwab_parsed_filename"] = schwab_file.name
+                    st.session_state["schwab_grouped"] = sw_parse_result["grouped"]
+                    st.session_state["schwab_skipped"] = sw_parse_result["skipped_rows"]
+                    st.session_state["schwab_dividends"] = sw_parse_result["dividend_rows"]
+
+                sw_grouped = st.session_state["schwab_grouped"]
+                sw_skipped = st.session_state["schwab_skipped"]
+                sw_dividends = st.session_state["schwab_dividends"]
+
+                total_sw_tx = sum(len(g["transactions"]) for g in sw_grouped.values())
+                st.success(f"Found {len(sw_grouped)} securities, {total_sw_tx} buy/sell transaction(s).")
+                if sw_dividends:
+                    st.caption(
+                        f"{len(sw_dividends)} dividend row(s) found but not imported -- Hesty's doesn't "
+                        f"track dividend income as a separate transaction type yet."
+                    )
+                if sw_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in sw_skipped[:5])
+                    more = "..." if len(sw_skipped) > 5 else ""
+                    st.caption(f"{len(sw_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                if sw_grouped and st.button("Import these transactions", key="schwab_import_btn", type="primary"):
+                    all_holdings_sw = database.get_user_holdings(user_email)
+                    sw_progress = st.progress(0.0)
+                    sw_status = st.empty()
+                    sw_imported_tx = 0
+                    sw_imported_pos = 0
+                    sw_dup_skipped = 0
+
+                    for i, (ticker, group) in enumerate(sw_grouped.items()):
+                        sw_status.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(sw_grouped)})")
+                        existing = next((h for h in all_holdings_sw if h["ticker"] == ticker), None)
+                        if existing:
+                            holding_id = existing["id"]
+                        else:
+                            holding_id = database.add_holding(
+                                user_email, group["product"], ticker, shares=None,
+                                value_currency="USD",
+                            )
+                            sw_imported_pos += 1
+
+                        already_logged_sw = database.get_transactions_for_holding(user_email, holding_id)
+
+                        def _is_duplicate_sw(new_tx, existing_list):
+                            # Zelfde 1%-prijstolerantie-logica als bij DEGIRO/
+                            # Robinhood (zie de uitgebreide toelichting bij DEGIRO).
+                            for existing_tx in existing_list:
+                                if existing_tx["transaction_type"] != new_tx["transaction_type"]:
+                                    continue
+                                if existing_tx["transaction_date"] != new_tx["transaction_date"]:
+                                    continue
+                                if abs(existing_tx["shares"] - new_tx["shares"]) >= 0.0001:
+                                    continue
+                                price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
+                                if abs(existing_tx["price"] - new_tx["price"]) <= price_tolerance:
+                                    return True
+                            return False
+
+                        for t in group["transactions"]:
+                            if _is_duplicate_sw(t, already_logged_sw):
+                                sw_dup_skipped += 1
+                                continue
+                            database.add_transaction(
+                                user_email, holding_id, t["transaction_type"],
+                                shares=t["shares"], price=t["price"], fee=t["fee"],
+                                transaction_date=t["transaction_date"], currency=t["currency"],
+                            )
+                            sw_imported_tx += 1
+
+                        sync_holding_shares_from_transactions(holding_id, user_email)
+                        sw_progress.progress((i + 1) / len(sw_grouped))
+
+                    sw_status.empty()
+                    sw_progress.empty()
+                    dup_txt_sw = f" ({sw_dup_skipped} already-imported duplicates skipped)" if sw_dup_skipped else ""
+                    st.success(f"Imported {sw_imported_tx} transactions across "
+                               f"{sw_imported_pos} new position(s)!{dup_txt_sw}")
+                    already_imported_sw.add(schwab_file.name)
+                    st.session_state["schwab_imported_filenames"] = already_imported_sw
+                    for state_key in ["schwab_parsed_filename", "schwab_grouped",
+                                       "schwab_skipped", "schwab_dividends"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
