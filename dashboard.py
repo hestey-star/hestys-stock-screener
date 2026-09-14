@@ -10842,35 +10842,21 @@ with st.sidebar:
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
         gap: 0.2rem !important;
     }
-    /* Discover blijft st.page_link() (subnav-highlight-logica hangt
-       daarvan af) -- basisstijl hier gescoped, GEEN vaste-hoogte-
-       gevecht meer nodig aangezien dat item niet het gerapporteerde
-       overlap-probleem had. */
-    .st-key-nav_discover a {
-        display: flex !important; align-items: center !important; gap: 0.75rem !important;
-        font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
-        padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
-        text-decoration: none !important; color: #EAEDF1 !important; margin: 0 !important;
-    }
-    .st-key-nav_discover a:hover { background: rgba(255,255,255,0.04) !important; }
-    /* Today/My Portfolio/Analyze: nu ECHTE st.button()'s i.p.v.
-       st.page_link() -- st.page_link() rendert een
+    /* Today/My Portfolio/Analyze/Discover: allemaal ECHTE st.button()'s
+       i.p.v. st.page_link() -- st.page_link() rendert een
        <a data-testid="stPageLink-NavLink"> met Streamlit's eigen,
        automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs met
        !important niet naar een vaste, kleine hoogte te dwingen bleken
-       (de hover-achtergrond bleef over de buurknop heen lopen). Een
+       (de hover-achtergrond bleef over de buurknop heen lopen, EN de
+       icoon-positionering week net iets af van een <button>). Een
        st.button() hebben we elders in dit project (login-knop, close-
        knop) al herhaaldelijk volledig kunnen herstijlen, dus dat is de
-       betrouwbaardere route. */
-    .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze {
+       betrouwbaardere route -- nu voor ALLE 4 hoofdknoppen consequent
+       hetzelfde widget-type, dus gegarandeerd identieke uitlijning. */
+    .st-key-nav_discover, .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze {
         width: 100% !important;
     }
-    /* Iets meer ademruimte t.o.v. de Discover-subnav-groep erboven,
-       zonder de onderlinge afstand van Today t/m Analyze te vergroten. */
-    .st-key-nav_today {
-        margin-top: 0.5rem !important;
-    }
-    .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button {
+    .st-key-nav_discover button, .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button {
         display: flex !important; align-items: center !important; justify-content: flex-start !important;
         gap: 0.75rem !important; width: 100% !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
@@ -10878,7 +10864,7 @@ with st.sidebar:
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
-    .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover {
+    .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover {
         background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
     }
     /* Support/Premium: verhuisd naar onderaan de sidebar, als kleinere,
@@ -10901,20 +10887,39 @@ with st.sidebar:
         background: transparent !important; color: #CBD5E1 !important; border: none !important;
     }
     /* Support/Premium verankerd aan de ONDERKANT van de sidebar via
-       flexbox (margin-top:auto) i.p.v. gewoon achteraan de normale
-       document-flow te hangen -- dat laatste plakte ze net onder
-       Analyze vast in plaats van daadwerkelijk beneden te laten
-       zweven. Meerdere testid-varianten geraakt als vangnet, want
-       Streamlit's exacte sidebar-wrapper-naam verschilt weleens per
-       versie. */
-    [data-testid="stSidebarContent"], [data-testid="stSidebarUserContent"],
-    section[data-testid="stSidebar"] > div:first-child {
+       flexbox. Via de Inspect-HTML die je aanleverde bleek de ECHTE
+       structuur dieper genest te zijn dan mijn vorige poging aannam:
+       stSidebarUserContent > kale <div> (geen testid) > EEN grote
+       stVerticalBlock die ALLE nav-items als broertjes bevat (elk
+       gewikkeld in een <div data-testid="stLayoutWrapper">). Mijn
+       vorige CSS zette display:flex alleen op stSidebarUserContent
+       zelf -- die heeft maar 1 kind (die kale wrapper-div), dus er was
+       geen echte flex-verdeling mogelijk tussen de navigatie-items.
+       Nu alle 3 lagen expliciet flex gemaakt, en margin-top:auto op de
+       stLayoutWrapper die de utilities-container bevat (met :has(),
+       want margin:auto moet op de ECHTE flex-item staan, niet op een
+       kind daarbinnen). */
+    [data-testid="stSidebarUserContent"] {
         display: flex !important;
         flex-direction: column !important;
         min-height: 100vh !important;
     }
-    .st-key-hestys_utilities_container {
+    [data-testid="stSidebarUserContent"] > div {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+    }
+    [data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+    }
+    div[data-testid="stLayoutWrapper"]:has(.st-key-hestys_utilities_container) {
         margin-top: auto !important;
+    }
+    .st-key-hestys_utilities_container {
         padding-top: 15px !important;
         border-top: 1px solid rgba(255,255,255,0.05) !important;
         margin-bottom: 20px !important;
@@ -10967,16 +10972,17 @@ with st.sidebar:
     # subtiele, professionele lijn-stijl hebben -- veel dichter bij de
     # oorspronkelijke iconen dan emoji, en betrouwbaar (geen CSS-truc nodig).
     #
-    # 'Discover' is nu een st.page_link() naar dezelfde pagina als
-    # 'Signature Signals' (beide /discover) -- GEEN apart st.button() meer,
-    # want een <button> rendert Streamlit intern altijd net anders dan een
-    # <a> (andere padding/icoon-uitlijning), wat de eerdere scheve
-    # uitlijning verklaarde. Nu 100% hetzelfde widget-type als Today/My
-    # Portfolio/etc., dus gegarandeerd identieke opbouw. Elk item zit in
-    # een EIGEN container-key (i.p.v. CSS op de href te baseren, want
-    # Discover en Signature Signals delen toevallig dezelfde url).
+    # 'Discover' was tot nu toe nog een st.page_link() (de reden was
+    # gedeelde URL met de subpagina's-in-de-sidebar) -- die subpagina's
+    # staan er niet meer, dus die reden vervalt. Nu ECHT hetzelfde
+    # widget-type als Today/My Portfolio/Analyze (st.button() +
+    # st.switch_page()), wat de scheve uitlijning definitief oplost --
+    # st.page_link() en st.button() renderen intern nu eenmaal net
+    # anders (andere padding/icoon-positionering), ongeacht hoe
+    # identiek de CSS eromheen is.
     with st.container(key="nav_discover"):
-        st.page_link(discover_page, label="DISCOVER", icon=":material/search:")
+        if st.button("DISCOVER", key="navbtn_discover", icon=":material/search:"):
+            st.switch_page(discover_page)
     # Subpagina's staan NERGENS meer los in de sidebar -- niet voor
     # ingelogde gebruikers (die krijgen de horizontale pills-balk
     # bovenaan de Discover-pagina zelf) en ook niet voor niet-ingelogde
