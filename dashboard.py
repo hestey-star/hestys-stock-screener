@@ -10900,80 +10900,53 @@ with st.sidebar:
     .st-key-nav_support button:hover, .st-key-nav_premium button:hover {
         background: transparent !important; color: #CBD5E1 !important; border: none !important;
     }
-    /* Discover-subpagina's -- eigen, gezamenlijke groep-container
-       (.st-key-discover_subnav_group) met de inspringing op de
-       CONTAINER zelf (niet op de losse <a>-tags) -- een simpele
-       padding-left op een gewone <div> wint altijd, i.p.v. te vechten
-       tegen Streamlit's eigen interne padding op elke st.page_link()
-       afzonderlijk. GEEN icoontjes, klein/gedempt tekst-only, ALL-CAPS.
-       gap:0.15rem op de eigen stVerticalBlock hieronder is de ECHTE
-       sleutel voor de compactheid -- elk van de 3 sub-items zit in z'n
-       EIGEN st.container(), en Streamlit's standaard tussenruimte tussen
-       zulke gestapelde containers (~1rem) was de daadwerkelijke bron van
-       de 'losse ruimte', niet de margin op de <a>-tags zelf. */
-    .st-key-discover_subnav_group {
-        padding-left: 2.25rem !important;
-        margin-top: 0.85rem !important;
-        box-sizing: border-box !important;
+    /* Support/Premium verankerd aan de ONDERKANT van de sidebar via
+       flexbox (margin-top:auto) i.p.v. gewoon achteraan de normale
+       document-flow te hangen -- dat laatste plakte ze net onder
+       Analyze vast in plaats van daadwerkelijk beneden te laten
+       zweven. Meerdere testid-varianten geraakt als vangnet, want
+       Streamlit's exacte sidebar-wrapper-naam verschilt weleens per
+       versie. */
+    [data-testid="stSidebarContent"], [data-testid="stSidebarUserContent"],
+    section[data-testid="stSidebar"] > div:first-child {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 100vh !important;
     }
-    .st-key-discover_subnav_group [data-testid="stVerticalBlock"] {
-        gap: 0.15rem !important;
-    }
-    .st-key-discover_subnav_group a {
-        display: inline-flex !important; align-items: center !important;
-        font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 600 !important;
-        text-transform: uppercase !important; letter-spacing: 0.06em !important;
-        padding: 0.3rem 0.6rem !important; border-radius: 8px !important;
-        text-decoration: none !important; color: #64748B !important;
-        margin: 0 !important; width: auto !important;
-    }
-    .st-key-discover_subnav_group a * {
-        text-transform: uppercase !important;
-        font-size: 11px !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.06em !important;
-        color: inherit !important;
-    }
-    .st-key-discover_subnav_group a:hover {
-        background: rgba(255,255,255,0.04) !important;
-        color: #94A3B8 !important;
-    }
-    /* Mobiel (<768px): iets minder inspringing (pl-7) en een messcherpe,
-       kleinere letter (text-[10px]) -- garandeert dat de langste tekst
-       (EARNINGS SURPRISES) nooit van de smalle mobiele sidebar afloopt. */
-    @media (max-width: 767px) {
-        .st-key-discover_subnav_group {
-            padding-left: 1.75rem !important;
-        }
-        .st-key-discover_subnav_group a {
-            font-size: 10px !important;
-            padding: 0.3rem 0.4rem !important;
-        }
-        .st-key-discover_subnav_group a * {
-            font-size: 10px !important;
-        }
+    .st-key-hestys_utilities_container {
+        margin-top: auto !important;
+        padding-top: 15px !important;
+        border-top: 1px solid rgba(255,255,255,0.05) !important;
+        margin-bottom: 20px !important;
     }
     """]
     # Container-key -> url_path-mapping, voor de actieve-status-highlight.
-    # 'nav_discover' licht op zodra je op ÉÉN van de 3 Discover-subpagina's
-    # zit (niet alleen exact /discover) -- de subpagina's hebben elk hun
-    # EIGEN, aparte key (discover_sub_signals/sectors/earnings), dus geen
-    # enkele overlap/verwarring meer met de hoofdknop.
+    # 'nav_discover' licht op zodra je op ÉÉN van de 3 Discover-detail-
+    # pagina's zit (niet alleen exact /discover) -- die pagina's hebben
+    # geen eigen sidebar-item meer, dus lichten ze allemaal hetzelfde
+    # ene 'Discover'-item op.
     _main_key_by_path = {
         "today": "nav_today", "portfolio": "nav_portfolio", "analyze": "nav_analyze",
         "support": "nav_support", "premium": "nav_premium",
-    }
-    _discover_subpaths = {
-        "discover": "discover_sub_signals",
-        "discover-sectors-themes": "discover_sub_sectors",
-        "discover-earnings-surprises": "discover_sub_earnings",
+        # Discover EN z'n 2 losse detail-pagina's (nog steeds bereikbaar
+        # via een directe URL, ook al staan ze niet meer als aparte
+        # items in de sidebar) lichten allemaal hetzelfde ene
+        # 'Discover'-item in de sidebar op -- er is nu geen aparte
+        # sub-item-highlight meer nodig.
+        "discover": "nav_discover", "discover-sectors-themes": "nav_discover",
+        "discover-earnings-surprises": "nav_discover",
     }
     if _active_url_path in _main_key_by_path:
         # 'De Bloomberg-wet': geen groot, afgerond groenblauw blok meer
         # achter de actieve knop -- uitsluitend heldere witte tekst plus
-        # een flinterdun, oplichtend streepje aan de linkerrand.
+        # een flinterdun, oplichtend streepje aan de linkerrand. Zowel
+        # 'button' (Today/My Portfolio/Analyze/Support/Premium) als 'a'
+        # (Discover, die nog st.page_link() gebruikt) worden hier
+        # geraakt -- exact dezelfde uitlijning/padding-compensatie voor
+        # allebei, dus Discover lijnt kaarsrecht uit met de rest.
         _nav_css_parts.append(f"""
-    .st-key-{_main_key_by_path[_active_url_path]} button {{
+    .st-key-{_main_key_by_path[_active_url_path]} button,
+    .st-key-{_main_key_by_path[_active_url_path]} a {{
         color: #FFFFFF !important;
         font-weight: 700 !important;
         background: transparent !important;
@@ -10981,23 +10954,7 @@ with st.sidebar:
         border-left: 2px solid #34D399 !important;
         padding-left: calc(0.75rem - 2px) !important;
     }}
-    """)
-    elif _active_url_path in _discover_subpaths:
-        # 'Discover' zelf licht mee op (subtiel, geen achtergrond -- puur
-        # de tekstkleur) zodra je ergens onder Discover zit.
-        _nav_css_parts.append("""
-    .st-key-nav_discover a {
-        color: #EAEDF1 !important;
-    }
-    """)
-        _active_sub_key = _discover_subpaths[_active_url_path]
-        _nav_css_parts.append(f"""
-    .st-key-{_active_sub_key} a {{
-        color: #F1F5F9 !important;
-        font-weight: 700 !important;
-        background: rgba(15,23,42,0.4) !important;
-    }}
-    .st-key-{_active_sub_key} a * {{
+    .st-key-{_main_key_by_path[_active_url_path]} a * {{
         font-weight: 700 !important;
     }}
     """)
@@ -11020,19 +10977,12 @@ with st.sidebar:
     # Discover en Signature Signals delen toevallig dezelfde url).
     with st.container(key="nav_discover"):
         st.page_link(discover_page, label="DISCOVER", icon=":material/search:")
-    # Subpagina's blijven uitsluitend zichtbaar voor NIET-ingelogde
-    # bezoekers -- voor ingelogde gebruikers verplaatst deze navigatie
-    # naar een horizontale pills-balk bovenaan de Discover-pagina zelf
-    # (80/20-wet: de sidebar blijft strak, de sectie-keuze leeft waar
-    # de content ook daadwerkelijk staat).
-    if not current_user.is_logged_in:
-        with st.container(key="discover_subnav_group"):
-            with st.container(key="discover_sub_signals"):
-                st.page_link(discover_page, label="SIGNATURE SIGNALS")
-            with st.container(key="discover_sub_sectors"):
-                st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES")
-            with st.container(key="discover_sub_earnings"):
-                st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES")
+    # Subpagina's staan NERGENS meer los in de sidebar -- niet voor
+    # ingelogde gebruikers (die krijgen de horizontale pills-balk
+    # bovenaan de Discover-pagina zelf) en ook niet voor niet-ingelogde
+    # bezoekers (die zien uitsluitend: Discover, Today, My Portfolio,
+    # Analyze, Log in -- een harde, ondubbelzinnige lijst zonder
+    # uitzondering).
     # Today/My Portfolio/Analyze: overgestapt van st.page_link() naar
     # st.button() + st.switch_page(). st.page_link() rendert een
     # <a data-testid="stPageLink-NavLink"> met Streamlit's eigen,
@@ -11051,18 +11001,17 @@ with st.sidebar:
     with st.container(key="nav_analyze"):
         if st.button("ANALYZE", key="navbtn_analyze", icon=":material/bar_chart:"):
             st.switch_page(analyze_page)
-    # Support/Premium verhuisd naar onderaan de sidebar, strak boven de
-    # profielnaam -- een kleinere, gedempte 'utility'-stijl (zie de
-    # aparte CSS hieronder) i.p.v. dezelfde nadruk als de 3 hoofdknoppen
-    # hierboven.
-    st.markdown('<div style="height:1px; background-color:rgba(148,163,184,0.15); margin:0.6rem 0.75rem;"></div>', unsafe_allow_html=True)
-    with st.container(key="nav_support"):
-        if st.button("SUPPORT", key="navbtn_support", icon=":material/support_agent:"):
-            st.switch_page(support_page)
-    with st.container(key="nav_premium"):
-        if st.button("PREMIUM", key="navbtn_premium", icon=":material/star:"):
-            st.switch_page(premium_page)
-    st.divider()
+    # Support/Premium hard naar de onderkant van de sidebar verankerd via
+    # flexbox (margin-top:auto), i.p.v. gewoon 'volgend in de rij' te
+    # staan -- dat laatste plakte ze namelijk gewoon direct onder Analyze
+    # i.p.v. daadwerkelijk onderaan te laten zweven.
+    with st.container(key="hestys_utilities_container"):
+        with st.container(key="nav_support"):
+            if st.button("SUPPORT", key="navbtn_support", icon=":material/support_agent:"):
+                st.switch_page(support_page)
+        with st.container(key="nav_premium"):
+            if st.button("PREMIUM", key="navbtn_premium", icon=":material/star:"):
+                st.switch_page(premium_page)
     if current_user.is_logged_in:
         import database as _database_for_identity
         _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
