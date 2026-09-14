@@ -6038,6 +6038,31 @@ def render_analyze():
         unsafe_allow_html=True,
     )
 
+    # Horizontale pills-navigatie i.p.v. losse sidebar-sub-items --
+    # 'Conviction Tracker' is de bestaande, volledig uitgewerkte inhoud
+    # van deze pagina; 'Wealth Engine' en 'Stress-Test' zijn nieuwe
+    # secties die nog gebouwd moeten worden (eerlijke placeholder i.p.v.
+    # doen alsof er al functionaliteit achter zit).
+    if "active_sub_section_analyze" not in st.session_state:
+        st.session_state["active_sub_section_analyze"] = "CONVICTION TRACKER"
+    _analyze_sub_choice = st.pills(
+        "Analyze section",
+        ["CONVICTION TRACKER", "WEALTH ENGINE", "STRESS-TEST"],
+        key="active_sub_section_analyze", label_visibility="collapsed",
+    )
+    st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
+
+    if _analyze_sub_choice in ("WEALTH ENGINE", "STRESS-TEST"):
+        st.markdown(
+            f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            f'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
+            f'<div style="font-size:0.7rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.5rem;">{_analyze_sub_choice}</div>'
+            f'Coming soon -- this section isn\'t built yet.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
     total_portfolio_value = sum(h.get("position_value") or 0 for h in holdings)
     held_tickers = {h["ticker"] for h in holdings if h.get("ticker")}
@@ -8714,6 +8739,41 @@ def _render_discover_signup_form() -> None:
             st.success("Almost there! Check your inbox to confirm your subscription.")
 
 
+def render_discover_dispatcher():
+    """
+    Router voor de Discover-pagina. Niet-ingelogde bezoekers behouden de
+    volledige, ongewijzigde scrollende storytelling-flow (render_discover_
+    signals() zelf regelt daar alles al voor -- geen pills, geen frictie).
+    Ingelogde gebruikers krijgen in plaats daarvan een horizontale pills-
+    balk direct onder de hoofdsectiekop, die flitsloos (puur via
+    session_state, geen st.switch_page/page-reload) tussen de 3 secties
+    wisselt.
+    """
+    if not current_user.is_logged_in:
+        render_discover_signals()
+        return
+
+    st.markdown(
+        _uniform_section_header_html("Discover", "search", is_first=True),
+        unsafe_allow_html=True,
+    )
+    if "active_sub_section_discover" not in st.session_state:
+        st.session_state["active_sub_section_discover"] = "SIGNATURE SIGNALS"
+    sub_choice = st.pills(
+        "Discover section",
+        ["SIGNATURE SIGNALS", "SECTORS & THEMES", "EARNINGS SURPRISES"],
+        key="active_sub_section_discover", label_visibility="collapsed",
+    )
+    st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
+
+    if sub_choice == "SECTORS & THEMES":
+        render_discover_sectors_themes(render_own_header=False)
+    elif sub_choice == "EARNINGS SURPRISES":
+        render_discover_earnings_surprises(render_own_header=False)
+    else:
+        render_discover_signals()
+
+
 def render_discover_signals():
     # --- Marketing-first opening: GEEN 'Discover'-sectiekop meer bovenaan --
     # de grote titel hieronder ("Your Investing Edge, Built Around You.")
@@ -9058,15 +9118,16 @@ def render_discover_signals():
 
 
 
-def render_discover_sectors_themes():
+def render_discover_sectors_themes(render_own_header: bool = True):
     # --- Sector rotation -- geen expander meer: content staat gewoon
     # altijd zichtbaar op de pagina (scrollend), zoals moderne sites
     # dit doen -- een accordion voegde hier geen overzicht toe, het
     # verstopte 'm juist onnodig achter een klik.
-    st.markdown(
-        _uniform_section_header_html("Sectors & Themes", "sync", is_first=True),
-        unsafe_allow_html=True,
-    )
+    if render_own_header:
+        st.markdown(
+            _uniform_section_header_html("Sectors & Themes", "sync", is_first=True),
+            unsafe_allow_html=True,
+        )
     st.caption("Which sectors are relatively strong or weak right now (1-month trailing).")
     region = st.segmented_control(
         "Region", options=["US", "EU"], selection_mode="single",
@@ -9200,11 +9261,12 @@ def render_discover_sectors_themes():
 
 
 
-def render_discover_earnings_surprises():
-    st.markdown(
-        _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
-        unsafe_allow_html=True,
-    )
+def render_discover_earnings_surprises(render_own_header: bool = True):
+    if render_own_header:
+        st.markdown(
+            _uniform_section_header_html("Earnings surprises", "payments", is_first=True),
+            unsafe_allow_html=True,
+        )
     st.markdown(
         '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.12em; '
         'text-transform:uppercase; margin-bottom:0.75rem;">Data interval: recent 60-day active signal window.</div>',
@@ -10686,7 +10748,7 @@ def render_privacy():
 # als pagina's geregistreerd.
 # ============================================================
 today_page = st.Page(render_today, title="Today", url_path="today", default=current_user.is_logged_in)
-discover_page = st.Page(render_discover_signals, title="Discover", url_path="discover", default=not current_user.is_logged_in)
+discover_page = st.Page(render_discover_dispatcher, title="Discover", url_path="discover", default=not current_user.is_logged_in)
 discover_sectors_themes_page = st.Page(
     render_discover_sectors_themes, title="Sectors & Themes", url_path="discover-sectors-themes",
 )
@@ -10791,8 +10853,8 @@ with st.sidebar:
         text-decoration: none !important; color: #EAEDF1 !important; margin: 0 !important;
     }
     .st-key-nav_discover a:hover { background: rgba(255,255,255,0.04) !important; }
-    /* Today/My Portfolio/Analyze/Support/Premium: nu ECHTE st.button()'s
-       i.p.v. st.page_link() -- st.page_link() rendert een
+    /* Today/My Portfolio/Analyze: nu ECHTE st.button()'s i.p.v.
+       st.page_link() -- st.page_link() rendert een
        <a data-testid="stPageLink-NavLink"> met Streamlit's eigen,
        automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs met
        !important niet naar een vaste, kleine hoogte te dwingen bleken
@@ -10800,17 +10862,15 @@ with st.sidebar:
        st.button() hebben we elders in dit project (login-knop, close-
        knop) al herhaaldelijk volledig kunnen herstijlen, dus dat is de
        betrouwbaardere route. */
-    .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze,
-    .st-key-nav_support, .st-key-nav_premium {
+    .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze {
         width: 100% !important;
     }
     /* Iets meer ademruimte t.o.v. de Discover-subnav-groep erboven,
-       zonder de onderlinge afstand van Today t/m Premium te vergroten. */
+       zonder de onderlinge afstand van Today t/m Analyze te vergroten. */
     .st-key-nav_today {
         margin-top: 0.5rem !important;
     }
-    .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button,
-    .st-key-nav_support button, .st-key-nav_premium button {
+    .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button {
         display: flex !important; align-items: center !important; justify-content: flex-start !important;
         gap: 0.75rem !important; width: 100% !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
@@ -10818,9 +10878,27 @@ with st.sidebar:
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
-    .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover,
-    .st-key-nav_support button:hover, .st-key-nav_premium button:hover {
+    .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover {
         background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
+    }
+    /* Support/Premium: verhuisd naar onderaan de sidebar, als kleinere,
+       gedempte 'utility'-knoppen i.p.v. dezelfde nadruk als de 3
+       hoofdknoppen hierboven. */
+    .st-key-nav_support, .st-key-nav_premium {
+        width: 100% !important;
+    }
+    .st-key-nav_support button, .st-key-nav_premium button {
+        display: flex !important; align-items: center !important; justify-content: flex-start !important;
+        gap: 0.6rem !important; width: 100% !important;
+        font-family: 'Inter', sans-serif !important; font-size: 11px !important; font-weight: 700 !important;
+        letter-spacing: 0.06em !important; text-transform: uppercase !important;
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        padding: 0.3rem 0.75rem !important; border-radius: 8px !important;
+        color: #64748B !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
+        transition: color 0.2s ease !important;
+    }
+    .st-key-nav_support button:hover, .st-key-nav_premium button:hover {
+        background: transparent !important; color: #CBD5E1 !important; border: none !important;
     }
     /* Discover-subpagina's -- eigen, gezamenlijke groep-container
        (.st-key-discover_subnav_group) met de inspringing op de
@@ -10891,11 +10969,17 @@ with st.sidebar:
         "discover-earnings-surprises": "discover_sub_earnings",
     }
     if _active_url_path in _main_key_by_path:
+        # 'De Bloomberg-wet': geen groot, afgerond groenblauw blok meer
+        # achter de actieve knop -- uitsluitend heldere witte tekst plus
+        # een flinterdun, oplichtend streepje aan de linkerrand.
         _nav_css_parts.append(f"""
     .st-key-{_main_key_by_path[_active_url_path]} button {{
-        color: #1FAE96 !important;
-        background: rgba(31,174,150,0.15) !important;
-        border-radius: 8px !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        background: transparent !important;
+        border-radius: 0 !important;
+        border-left: 2px solid #34D399 !important;
+        padding-left: calc(0.75rem - 2px) !important;
     }}
     """)
     elif _active_url_path in _discover_subpaths:
@@ -10936,21 +11020,23 @@ with st.sidebar:
     # Discover en Signature Signals delen toevallig dezelfde url).
     with st.container(key="nav_discover"):
         st.page_link(discover_page, label="DISCOVER", icon=":material/search:")
-    # Subpagina's: eigen groep-container voor de gedeelde inspringing
-    # (padding-left op de CONTAINER, niet op de losse links -- zie CSS
-    # hierboven), en ELK item ALSNOG een eigen key eromheen voor de
-    # actieve-status-highlight. GEEN icoon-parameter -- volledig icoonvrij.
-    with st.container(key="discover_subnav_group"):
-        with st.container(key="discover_sub_signals"):
-            st.page_link(discover_page, label="SIGNATURE SIGNALS")
-        with st.container(key="discover_sub_sectors"):
-            st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES")
-        with st.container(key="discover_sub_earnings"):
-            st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES")
-    # Today/My Portfolio/Analyze/Support/Premium: overgestapt van
-    # st.page_link() naar st.button() + st.switch_page(). st.page_link()
-    # rendert een <a data-testid="stPageLink-NavLink"> met Streamlit's
-    # eigen, automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs
+    # Subpagina's blijven uitsluitend zichtbaar voor NIET-ingelogde
+    # bezoekers -- voor ingelogde gebruikers verplaatst deze navigatie
+    # naar een horizontale pills-balk bovenaan de Discover-pagina zelf
+    # (80/20-wet: de sidebar blijft strak, de sectie-keuze leeft waar
+    # de content ook daadwerkelijk staat).
+    if not current_user.is_logged_in:
+        with st.container(key="discover_subnav_group"):
+            with st.container(key="discover_sub_signals"):
+                st.page_link(discover_page, label="SIGNATURE SIGNALS")
+            with st.container(key="discover_sub_sectors"):
+                st.page_link(discover_sectors_themes_page, label="SECTORS & THEMES")
+            with st.container(key="discover_sub_earnings"):
+                st.page_link(discover_earnings_surprises_page, label="EARNINGS SURPRISES")
+    # Today/My Portfolio/Analyze: overgestapt van st.page_link() naar
+    # st.button() + st.switch_page(). st.page_link() rendert een
+    # <a data-testid="stPageLink-NavLink"> met Streamlit's eigen,
+    # automatisch gegenereerde 'emotion'-CSS-klassen, die zelfs
     # met !important niet naar een vaste, kleine hoogte te dwingen
     # bleken -- de hover-achtergrond bleef daardoor over de buurknop
     # heen lopen. st.button() hebben we elders in dit project (login-
@@ -10965,6 +11051,11 @@ with st.sidebar:
     with st.container(key="nav_analyze"):
         if st.button("ANALYZE", key="navbtn_analyze", icon=":material/bar_chart:"):
             st.switch_page(analyze_page)
+    # Support/Premium verhuisd naar onderaan de sidebar, strak boven de
+    # profielnaam -- een kleinere, gedempte 'utility'-stijl (zie de
+    # aparte CSS hieronder) i.p.v. dezelfde nadruk als de 3 hoofdknoppen
+    # hierboven.
+    st.markdown('<div style="height:1px; background-color:rgba(148,163,184,0.15); margin:0.6rem 0.75rem;"></div>', unsafe_allow_html=True)
     with st.container(key="nav_support"):
         if st.button("SUPPORT", key="navbtn_support", icon=":material/support_agent:"):
             st.switch_page(support_page)
