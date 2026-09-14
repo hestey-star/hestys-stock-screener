@@ -8750,7 +8750,18 @@ def render_discover_dispatcher():
     wisselt.
     """
     if not current_user.is_logged_in:
+        # Volledige, vloeiend scrollende storytelling-flow: alle 3
+        # secties op DEZELFDE pagina, direct onder elkaar -- geen pills,
+        # geen navigatie-frictie. render_discover_sectors_themes() en
+        # render_discover_earnings_surprises() regelen zelf al hun eigen
+        # soft-lock/blur-gedrag voor niet-ingelogde bezoekers (dat
+        # bestond al), dus die kunnen hier gewoon 1-op-1 hergebruikt
+        # worden mét hun eigen kop (render_own_header=True, de default).
         render_discover_signals()
+        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
+        render_discover_sectors_themes()
+        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
+        render_discover_earnings_surprises()
         return
 
     st.markdown(
@@ -11018,30 +11029,69 @@ with st.sidebar:
         with st.container(key="nav_premium"):
             if st.button("PREMIUM", key="navbtn_premium", icon=":material/star:"):
                 st.switch_page(premium_page)
+    # Profielnaam + Log out/Log in: minimalistische all-caps links i.p.v.
+    # de zware, grijze native Streamlit-knop -- exact dezelfde 11px/
+    # font-bold/tracking-wider-stijl als Support/Premium, met voldoende
+    # verticale ademruimte (margin-top >= 12px) tussen naam, scheidings-
+    # lijn en de actie zelf, zodat het niet meer tegen elkaar aan plakt.
+    st.markdown(
+        f'<style>'
+        f'.st-key-sidebar_profile_link a {{ '
+        f'display: flex !important; align-items: center !important; gap: 0.6rem !important; '
+        f'font-family: \'Inter\', sans-serif !important; font-size: 0.85rem !important; font-weight: 600 !important; '
+        f'color: #EAEDF1 !important; text-decoration: none !important; padding: 0.3rem 0.75rem !important; '
+        f'border-radius: 8px !important; margin: 0 !important; }} '
+        f'.st-key-sidebar_profile_link a:hover {{ background: rgba(255,255,255,0.04) !important; }} '
+        f'.st-key-sidebar_logout_link {{ margin-top: 14px !important; }} '
+        f'.st-key-sidebar_logout_link button {{ '
+        f'background: transparent !important; border: none !important; box-shadow: none !important; '
+        f'padding: 0.3rem 0.75rem !important; width: 100% !important; text-align: left !important; '
+        f'font-family: \'Inter\', sans-serif !important; font-size: 11px !important; font-weight: 700 !important; '
+        f'letter-spacing: 0.06em !important; text-transform: uppercase !important; '
+        f'color: #64748B !important; height: auto !important; min-height: 0 !important; '
+        f'transition: color 0.2s ease !important; }} '
+        f'.st-key-sidebar_logout_link button:hover {{ background: transparent !important; color: #FB7185 !important; }} '
+        f'.st-key-sidebar_login_link {{ margin-top: 14px !important; }} '
+        f'.st-key-sidebar_login_link a {{ '
+        f'display: block !important; padding: 0.3rem 0.75rem !important; '
+        f'font-family: \'Inter\', sans-serif !important; font-size: 11px !important; font-weight: 700 !important; '
+        f'letter-spacing: 0.06em !important; text-transform: uppercase !important; '
+        f'color: #64748B !important; text-decoration: none !important; transition: color 0.2s ease !important; }} '
+        f'.st-key-sidebar_login_link a:hover {{ color: #34D399 !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
     if current_user.is_logged_in:
         import database as _database_for_identity
         _database_for_identity.ensure_user_identity(current_user.email, current_user.name)
-        st.page_link(settings_page, label=current_user.name, icon=":material/settings:")
-        if st.user.is_logged_in:
-            # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
-            st.button("LOG OUT", on_click=st.logout, key="header_logout")
-        else:
-            # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
-            # (st.logout() is specifiek voor Google, raakt deze sessie niet).
-            # Ook de sessie-token uit de database EN de cookie zelf
-            # verwijderen -- anders zou een oude cookie na 'uitloggen'
-            # je alsnog weer inloggen bij de volgende paginaverversing.
-            def _password_logout():
-                import database as _database_for_logout
-                _old_token = _cookie_controller.get("hestys_session_token")
-                if _old_token:
-                    _database_for_logout.delete_session_token(_old_token)
-                    _cookie_controller.remove("hestys_session_token")
-                st.session_state.pop("password_auth_email", None)
-                st.session_state.pop("password_auth_name", None)
-            st.button("LOG OUT", on_click=_password_logout, key="header_logout_password")
+        with st.container(key="sidebar_profile_link"):
+            st.page_link(settings_page, label=current_user.name, icon=":material/settings:")
+        st.markdown(
+            '<div style="height:1px; background-color:rgba(148,163,184,0.1); margin:12px 0.75rem 0;"></div>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key="sidebar_logout_link"):
+            if st.user.is_logged_in:
+                # Ingelogd via Google -- Streamlit's eigen logout-mechanisme.
+                st.button("LOG OUT", on_click=st.logout, key="header_logout")
+            else:
+                # Ingelogd via e-mail+wachtwoord -- eigen sessie opruimen
+                # (st.logout() is specifiek voor Google, raakt deze sessie niet).
+                # Ook de sessie-token uit de database EN de cookie zelf
+                # verwijderen -- anders zou een oude cookie na 'uitloggen'
+                # je alsnog weer inloggen bij de volgende paginaverversing.
+                def _password_logout():
+                    import database as _database_for_logout
+                    _old_token = _cookie_controller.get("hestys_session_token")
+                    if _old_token:
+                        _database_for_logout.delete_session_token(_old_token)
+                        _cookie_controller.remove("hestys_session_token")
+                    st.session_state.pop("password_auth_email", None)
+                    st.session_state.pop("password_auth_name", None)
+                st.button("LOG OUT", on_click=_password_logout, key="header_logout_password")
     else:
-        st.page_link(login_page, label="LOG IN")
+        with st.container(key="sidebar_login_link"):
+            st.page_link(login_page, label="LOG IN")
 
 
 pg.run()
