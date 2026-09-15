@@ -593,6 +593,24 @@ def get_file_last_commit_date(path: str) -> str:
         return None
 
 
+def _signal_status_line_html(caption_intro: str, csv_path: str, extra: str = "") -> str:
+    """
+    Vervangt de informele '-- showing the top 3 of 6 matches, updated...'-
+    zin door een ijskoude, minimalistische systeemstatus-regel. Geen
+    liggende streepjes, geen pratende toon -- puur platte metadata,
+    all-caps, gescheiden door een pipe.
+    """
+    status_text = caption_intro.upper()
+    updated_text = f"SIGNAL UPDATED {file_last_modified(csv_path).upper()}"
+    parts = f"STATUS: {status_text} | {updated_text}"
+    if extra:
+        parts += f" | {extra.upper()}"
+    return (
+        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+        f'text-transform:uppercase; margin:0.3rem 0 0.75rem;">{parts}</div>'
+    )
+
+
 def file_last_modified(path: str) -> str:
     """
     Geeft het tijdstip terug waarop dit bestand voor het laatst is
@@ -8995,7 +9013,7 @@ def render_discover_signals():
                     unsafe_allow_html=True,
                 )
         else:
-            st.caption(f"{caption_intro}, updated {file_last_modified(csv_file)}.")
+            st.markdown(_signal_status_line_html(caption_intro, csv_file), unsafe_allow_html=True)
             if _signal_display_limit is not None and total_matching > _signal_display_limit and not _is_premium_discover:
                 st.info(f"Showing the top {_signal_display_limit} of {total_matching} matching signals. "
                         f"Upgrade to Premium to see all {total_matching}.", icon=":material/lock:")
@@ -9005,8 +9023,12 @@ def render_discover_signals():
         _uniform_section_header_html("Snowballers", "savings", is_first=False),
         unsafe_allow_html=True,
     )
-    st.caption("Quality companies trading below fair value, with low volatility. For the "
-               "long-term investor -- no fresh trend flip required.")
+    st.markdown(
+        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.08em; '
+        'text-transform:uppercase; margin-bottom:0.75rem;">Quality companies trading below fair '
+        'value, with low volatility.</div>',
+        unsafe_allow_html=True,
+    )
     if os.path.exists("snowball_signals.csv"):
         df_snowball = pd.read_csv("snowball_signals.csv")
         if not df_snowball.empty:
@@ -9051,7 +9073,10 @@ def render_discover_signals():
                 if _remaining_snowballers > 0:
                     _render_unlock_premium_button("snowballers")
             else:
-                st.caption(f"{snowball_caption_intro}, updated {file_last_modified('snowball_signals.csv')}.")
+                st.markdown(
+                    _signal_status_line_html(snowball_caption_intro, "snowball_signals.csv"),
+                    unsafe_allow_html=True,
+                )
                 if _signal_display_limit is not None and total_snowball > _signal_display_limit and not _is_premium_discover:
                     st.info(f"Showing the top {_signal_display_limit} of {total_snowball} matching stocks. "
                             f"Upgrade to Premium to see all {total_snowball}.", icon=":material/lock:")
@@ -9103,8 +9128,13 @@ def render_discover_signals():
                 if _remaining_rocket > 0:
                     _render_unlock_premium_button("rocket_list")
             else:
-                st.caption(f"{rocket_caption_intro}, updated {file_last_modified('rocket_list_signals.csv')}. "
-                           f"Next update: {_next_weekly_scan_time()}.")
+                st.markdown(
+                    _signal_status_line_html(
+                        rocket_caption_intro, "rocket_list_signals.csv",
+                        extra=f"Next update: {_next_weekly_scan_time()}",
+                    ),
+                    unsafe_allow_html=True,
+                )
                 if _signal_display_limit is not None and total_rocket > _signal_display_limit and not _is_premium_discover:
                     st.info(f"Showing the top {_signal_display_limit} of {total_rocket} matching stocks. "
                             f"Upgrade to Premium to see all {total_rocket}.", icon=":material/lock:")
