@@ -7949,8 +7949,12 @@ def render_portfolio():
             # --- Log a transaction (werkt ook zonder bestaande posities -- een
             # nieuwe positie kan direct via een eerste 'Log a buy' worden
             # aangemaakt) ---
-            st.caption("Log your actual buys and sells to see your real return under Analyze. "
-                       "Optional -- positions without transactions logged just won't show a return.")
+            st.markdown(
+                '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+                'text-transform:uppercase; margin-bottom:1.5rem;">Note: positions without logged '
+                'transactions will not account for realized return under Analyze.</div>',
+                unsafe_allow_html=True,
+            )
 
             position_mode_options = (
                 ["Existing position", "New position"] if holdings else ["New position"]
@@ -8050,16 +8054,18 @@ def render_portfolio():
 
             _save_tx_key = "log_tx_save_btn_wrap"
             st.markdown(
-                f'<style>.st-key-{_save_tx_key} button {{ '
-                f'background:transparent !important; border:1px solid rgba(31,174,150,0.35) !important; '
-                f'color:#1FAE96 !important; font-weight:600 !important; padding:0.3rem 0.9rem !important; '
-                f'border-radius:6px !important; }} '
-                f'.st-key-{_save_tx_key} button:hover {{ background:rgba(31,174,150,0.12) !important; }} '
+                f'<style>'
+                f'.st-key-{_save_tx_key} {{ margin-top:1rem !important; }} '
+                f'.st-key-{_save_tx_key} button {{ '
+                f'width:100% !important; background:#10B981 !important; color:#020617 !important; '
+                f'font-weight:700 !important; font-size:0.9rem !important; padding:0.75rem 0 !important; '
+                f'border-radius:12px !important; border:none !important; box-shadow:0 4px 12px rgba(16,185,129,0.25) !important; }} '
+                f'.st-key-{_save_tx_key} button:hover {{ background:#059669 !important; }} '
                 f'</style>',
                 unsafe_allow_html=True,
             )
             with st.container(key=_save_tx_key):
-                save_tx_clicked = can_save and st.button("Save transaction")
+                save_tx_clicked = can_save and st.button("Save transaction", use_container_width=True)
 
             if save_tx_clicked:
                 if tx_shares <= 0 or tx_price <= 0:
@@ -8147,34 +8153,61 @@ def render_portfolio():
                             key=f"show_tx_history_{tx_holding['id']}",
                         )
                     if show_tx_history_checked:
-                        for t in tx_history:
-                            hcol1, hcol2 = st.columns([5, 1])
-                            with hcol1:
+                        _tx_hist_table_key = f"tx_history_table_{tx_holding['id']}"
+                        st.markdown(
+                            f'<style>'
+                            f'.st-key-{_tx_hist_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
+                            f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"] {{ '
+                            f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
+                            f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"]:last-of-type {{ '
+                            f'align-items:flex-end !important; }} '
+                            f'.st-key-{_tx_hist_table_key} button {{ '
+                            f'background:transparent !important; border:none !important; box-shadow:none !important; '
+                            f'color:#64748B !important; padding:0 !important; min-height:unset !important; height:auto !important; }} '
+                            f'.st-key-{_tx_hist_table_key} button:hover {{ color:#E5484D !important; }} '
+                            f'</style>',
+                            unsafe_allow_html=True,
+                        )
+                        with st.container(key=_tx_hist_table_key):
+                            for t in tx_history:
+                                hcol1, hcol2, hcol3 = st.columns([2, 5, 0.5], gap="small")
                                 is_buy = t["transaction_type"] == "buy"
                                 type_icon = "add_circle" if is_buy else "remove_circle"
                                 type_color = "#1FAE96" if is_buy else "#E5484D"
                                 tx_hist_symbol = "€" if t.get("currency") == "EUR" else ("$" if t.get("currency") == "USD" else (t.get("currency") or "EUR") + " ")
+                                with hcol1:
+                                    st.markdown(
+                                        f'<span style="display:inline-flex; align-items:center; gap:0.3rem; '
+                                        f'font-size:0.8rem; color:#8992A3;">'
+                                        f'{_icon_span(type_icon, size_px=14, color=type_color)}'
+                                        f'{t["transaction_date"]}</span>',
+                                        unsafe_allow_html=True,
+                                    )
+                                with hcol2:
+                                    st.markdown(
+                                        f'<span style="font-size:0.8rem; color:#8992A3;">'
+                                        f'{t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
+                                        f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
+                                        unsafe_allow_html=True,
+                                    )
+                                with hcol3:
+                                    if st.button("\u2715", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
+                                        database.delete_transaction(t["id"], user_email)
+                                        remaining = [x for x in tx_history if x["id"] != t["id"]]
+                                        if not remaining:
+                                            # Geen transacties meer over voor deze positie -- voorkomt een
+                                            # 'verweesde' positie zonder shares en zonder geschiedenis.
+                                            database.delete_holding(tx_holding["id"], user_email)
+                                            st.success("Transaction deleted -- this position had no other "
+                                                       "transactions left, so it was removed too.")
+                                        else:
+                                            sync_holding_shares_from_transactions(tx_holding["id"], user_email)
+                                            st.success("Transaction deleted.")
+                                        st.rerun()
                                 st.markdown(
-                                    f'<span style="display:inline-flex; align-items:center; gap:0.3rem; font-size:0.85rem; color:#8992A3;">'
-                                    f'{_icon_span(type_icon, size_px=14, color=type_color)}'
-                                    f'{t["transaction_date"]}: {t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
-                                    f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
+                                    '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.2rem 0;"></div>',
                                     unsafe_allow_html=True,
                                 )
-                            with hcol2:
-                                if st.button("✕", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
-                                    database.delete_transaction(t["id"], user_email)
-                                    remaining = [x for x in tx_history if x["id"] != t["id"]]
-                                    if not remaining:
-                                        # Geen transacties meer over voor deze positie -- voorkomt een
-                                        # 'verweesde' positie zonder shares en zonder geschiedenis.
-                                        database.delete_holding(tx_holding["id"], user_email)
-                                        st.success("Transaction deleted -- this position had no other "
-                                                   "transactions left, so it was removed too.")
-                                    else:
-                                        sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-                                        st.success("Transaction deleted.")
-                                    st.rerun()
 
                         # Alles-in-1x wissen -- handig om oude, minder-precieze
                         # transacties (bv. van vóór een CSV-parser-verbetering)
@@ -8220,21 +8253,25 @@ def render_portfolio():
             # gehouden (i.p.v. een eigen, volle kaart) -- zelfde, simpele
             # 2-staps-bevestiging (klik -> waarschuwing -> bevestig) als de
             # per-positie-versie hierboven, i.p.v. tekst moeten typen.
-            st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
             if not st.session_state.get("confirm_reset_all_holdings", False):
                 _reset_all_btn_key = "reset_all_holdings_btn_wrap"
                 st.markdown(
-                    f'<style>.st-key-{_reset_all_btn_key} button {{ '
-                    f'font-size:0.75rem !important; color:#64748B !important; '
-                    f'background:transparent !important; border:none !important; box-shadow:none !important; }} '
-                    f'.st-key-{_reset_all_btn_key} button:hover {{ color:#94A3B8 !important; }} '
+                    f'<style>'
+                    f'.st-key-{_reset_all_btn_key} {{ margin-top:3rem !important; }} '
+                    f'.st-key-{_reset_all_btn_key} button {{ '
+                    f'display:block !important; text-align:left !important; '
+                    f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.12em !important; '
+                    f'color:#475569 !important; text-transform:uppercase !important; '
+                    f'background:transparent !important; border:none !important; box-shadow:none !important; '
+                    f'padding:0 !important; height:auto !important; min-height:0 !important; '
+                    f'text-decoration:none !important; transition:color 0.2s ease !important; }} '
+                    f'.st-key-{_reset_all_btn_key} button:hover {{ color:#FB7185 !important; background:transparent !important; }} '
                     f'</style>',
                     unsafe_allow_html=True,
                 )
                 with st.container(key=_reset_all_btn_key):
                     reset_all_clicked = st.button(
-                        "Start over: delete all my positions",
-                        icon=":material/delete_forever:", key="reset_all_holdings_btn",
+                        "Start over: delete all my positions", key="reset_all_holdings_btn",
                     )
                 if reset_all_clicked:
                     st.session_state["confirm_reset_all_holdings"] = True
