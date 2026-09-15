@@ -8238,8 +8238,12 @@ def render_portfolio():
             )
             with st.container(key=_watchlist_wrap_key):
                 # --- WATCHLIST -- volgen zonder eigendom, voor gepersonaliseerde info op Today ---
-                st.caption("Track tickers you don't own yet -- they'll show up with personalized "
-                           "signals and news on the Today page.")
+                st.markdown(
+                    '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+                    'text-transform:uppercase; margin-bottom:1rem;">Track tickers you don\'t own yet. '
+                    'They will show up with personalized signals and news on the Today page.</div>',
+                    unsafe_allow_html=True,
+                )
 
                 watchlist_items = database.get_user_holdings(user_email, is_watchlist=True)
 
