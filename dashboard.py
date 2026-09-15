@@ -6128,7 +6128,7 @@ def _render_wealth_engine(user_email: str) -> None:
         st.markdown(
             f'<div style="{_tile_style}">'
             f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual inleg (est.)</div>'
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual contribution (est.)</div>'
             f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{annual_contribution:,.0f} '
             f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
             f'</div>',
@@ -6238,10 +6238,11 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # --- 4. Snowball Milestones -- ÉÉN pure HTML-tabel, geen losse
-    # st.container()'s of grijze boxen meer. 3 kolommen: naam (wit,
-    # all-caps) / technische voorwaarde (gedempt, klein all-caps) /
-    # jaartal (rechts uitgelijnd).
+    # --- 4. Snowball Milestones -- st.columns()-rijen met een dunne
+    # scheidingslijn, zelfde bewezen patroon als de Analyze- en Log
+    # Transaction-tabellen elders in de app. GEEN raw <table> meer --
+    # die kreeg via Streamlit's eigen standaard-tabel-CSS ongewenste
+    # verticale kolomlijnen die we niet bewust hadden toegevoegd.
     st.markdown(
         _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
         unsafe_allow_html=True,
@@ -6278,13 +6279,13 @@ def _render_wealth_engine(user_email: str) -> None:
     milestone_rows = []
     if annual_contribution > 0:
         milestone_rows.append((
-            "Dividend covers 10% of inleg",
+            "Dividend covers 10% of contribution",
             f"REQ: &euro;{0.10 * annual_contribution:,.0f} / YEAR",
             _milestone_year_html(_milestone_10pct),
         ))
         milestone_rows.append((
             "The Crossover Event",
-            "CASHFLOW &gt; MANUAL INLEG",
+            "CASHFLOW &gt; ANNUAL CONTRIBUTION",
             _milestone_year_html(_milestone_crossover),
         ))
     milestone_rows.append((
@@ -6293,20 +6294,41 @@ def _render_wealth_engine(user_email: str) -> None:
         _milestone_year_html(_milestone_freedom),
     ))
 
-    _row_style = "border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:middle;"
-    _rows_html = "".join(
-        f'<tr style="{_row_style}">'
-        f'<td style="text-transform:uppercase; font-size:12px; font-weight:700; color:#ffffff; padding:14px 0;">{name}</td>'
-        f'<td style="text-transform:uppercase; font-size:10px; font-weight:600; color:#475569; padding:14px 0.75rem;">{condition}</td>'
-        f'<td style="text-align:right; font-size:12px; font-weight:700; color:#64748b; letter-spacing:0.05em; padding:14px 0;">{year_html}</td>'
-        f'</tr>'
-        for name, condition, year_html in milestone_rows
-    )
+    _milestones_key = "wealth_engine_milestones_table"
     st.markdown(
-        f'<table style="width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;">'
-        f'{_rows_html}</table>',
+        f'<style>'
+        f'.st-key-{_milestones_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
+        f'.st-key-{_milestones_key} [data-testid="stColumn"] {{ '
+        f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
+        f'.st-key-{_milestones_key} [data-testid="stColumn"]:last-of-type {{ align-items:flex-end !important; }} '
+        f'</style>',
         unsafe_allow_html=True,
     )
+    with st.container(key=_milestones_key):
+        for name, condition, year_html in milestone_rows:
+            mcol1, mcol2, mcol3 = st.columns([2.5, 3, 1], gap="small")
+            with mcol1:
+                st.markdown(
+                    f'<span style="text-transform:uppercase; font-size:0.78rem; font-weight:700; '
+                    f'color:#F1F5F9;">{name}</span>',
+                    unsafe_allow_html=True,
+                )
+            with mcol2:
+                st.markdown(
+                    f'<span style="text-transform:uppercase; font-size:0.68rem; font-weight:600; '
+                    f'color:#475569;">{condition}</span>',
+                    unsafe_allow_html=True,
+                )
+            with mcol3:
+                st.markdown(
+                    f'<span style="font-size:0.78rem; font-weight:700; color:#64748B; '
+                    f'letter-spacing:0.03em;">{year_html}</span>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown(
+                '<div style="width:100%; height:1px; background-color:rgba(255,255,255,0.05); margin:0.55rem 0;"></div>',
+                unsafe_allow_html=True,
+            )
 
 
 def render_analyze():
