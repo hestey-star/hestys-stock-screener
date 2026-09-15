@@ -10826,6 +10826,14 @@ with st.sidebar:
     # matchte de highlight-logica hieronder Today dus NOOIT.
     if _active_url_path == "" and current_user.is_logged_in:
         _active_url_path = "today"
+    # Discover is de default-pagina voor NIET-ingelogde bezoekers
+    # (default=not current_user.is_logged_in) -- exact dezelfde
+    # 'lege string op het kale pad'-eigenaardigheid als hierboven bij
+    # Today, alleen dan voor het uitgelogde geval. Zonder deze regel
+    # matchte de highlight-logica Discover dus nooit wanneer je
+    # uitgelogd was.
+    if _active_url_path == "" and not current_user.is_logged_in:
+        _active_url_path = "discover"
     # 'Discover' en 'Signature Signals' wijzen naar DEZELFDE url (/discover)
     # -- een CSS-regel op basis van de href alleen kan ze dus NOOIT uit
     # elkaar houden (dat verklaarde de rare uitlijning/'snijdende balk').
