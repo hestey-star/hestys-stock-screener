@@ -6194,22 +6194,8 @@ def _render_wealth_engine(user_email: str) -> None:
         dividend_income_by_year.append(_dividend)
 
     # --- 3. Wealth Acceleration chart -- visuele legenda met gekleurde
-    # lijntjes i.p.v. bullet-tekens, gevolgd door de gedempte simulatie-
-    # parameters. ---
-    _legend_line_style = (
-        'display:inline-block; width:14px; height:3px; border-radius:2px; '
-        'margin-right:6px; vertical-align:middle;'
-    )
-    st.markdown(
-        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-        f'text-transform:uppercase; margin-bottom:1.5rem; line-height:1.9;">'
-        f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
-        f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
-        f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
-        f'{yield_slider:.1f}% reinvested yield</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    # lijntjes i.p.v. bullet-tekens (nu ONDER de chart, gevolgd door de
+    # gedempte simulatie-parameters). ---
     wealth_fig = go.Figure()
     wealth_fig.add_trace(go.Scatter(
         x=years, y=net_deposits, name="Net Deposits", mode="lines",
@@ -6237,7 +6223,25 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     st.plotly_chart(wealth_fig, use_container_width=True, config={"displayModeBar": False})
 
-    # --- 4. Snowball Milestones ---
+    _legend_line_style = (
+        'display:inline-block; width:14px; height:3px; border-radius:2px; '
+        'margin-right:6px; vertical-align:middle;'
+    )
+    st.markdown(
+        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+        f'text-transform:uppercase; margin-top:0.75rem; margin-bottom:1.5rem; line-height:1.9;">'
+        f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
+        f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
+        f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
+        f'{yield_slider:.1f}% reinvested yield</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- 4. Snowball Milestones -- ÉÉN pure HTML-tabel, geen losse
+    # st.container()'s of grijze boxen meer. 3 kolommen: naam (wit,
+    # all-caps) / technische voorwaarde (gedempt, klein all-caps) /
+    # jaartal (rechts uitgelijnd).
     st.markdown(
         _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
         unsafe_allow_html=True,
@@ -6251,7 +6255,6 @@ def _render_wealth_engine(user_email: str) -> None:
 
     _milestone_10pct = None
     _milestone_crossover = None
-    _milestone_freedom = None
     if annual_contribution > 0:
         _milestone_10pct = _find_milestone_year(
             lambda idx: dividend_income_by_year[idx] >= 0.10 * annual_contribution
@@ -6259,37 +6262,49 @@ def _render_wealth_engine(user_email: str) -> None:
         _milestone_crossover = _find_milestone_year(
             lambda idx: dividend_income_by_year[idx] > annual_contribution
         )
-    else:
-        # Zonder inleg om tegen af te zetten, zijn 'dekt 10% van inleg' en
-        # 'crossover' niet zinvol te bepalen -- dan alleen Financial
-        # Freedom tonen.
-        pass
+    # Zonder inleg om tegen af te zetten, zijn 'dekt 10% van inleg' en
+    # 'crossover' niet zinvol te bepalen -- dan alleen Financial Freedom
+    # tonen (zie milestone_rows hieronder).
     _milestone_freedom = _find_milestone_year(
         lambda idx: (dividend_income_by_year[idx] / 12) >= 2500
     )
 
-    def _milestone_value_html(year_val):
+    def _milestone_year_html(year_val):
         if year_val is None:
-            return '<span style="color:#64748B; white-space:nowrap;">&gt; 30 YEARS</span>'
-        return f'<span style="color:#34D399; font-weight:700;">{year_val}</span>'
+            return '<span style="white-space:nowrap;">&gt; 30 YRS</span>'
+        return str(year_val)
 
+    # (naam, technische voorwaarde, jaartal)
     milestone_rows = []
     if annual_contribution > 0:
-        milestone_rows.append(("Dividend covers 10% of annual contribution", _milestone_value_html(_milestone_10pct)))
-        milestone_rows.append(("Crossover Event (dividend &gt; annual contribution)", _milestone_value_html(_milestone_crossover)))
-    milestone_rows.append(("Financial Freedom (&euro;2,500+ passive / month)", _milestone_value_html(_milestone_freedom)))
+        milestone_rows.append((
+            "Dividend covers 10% of inleg",
+            f"REQ: &euro;{0.10 * annual_contribution:,.0f} / YEAR",
+            _milestone_year_html(_milestone_10pct),
+        ))
+        milestone_rows.append((
+            "The Crossover Event",
+            "CASHFLOW &gt; MANUAL INLEG",
+            _milestone_year_html(_milestone_crossover),
+        ))
+    milestone_rows.append((
+        "Financial Freedom",
+        "TARGET: &euro;2,500 / MONTH",
+        _milestone_year_html(_milestone_freedom),
+    ))
 
+    _row_style = "border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:middle;"
     _rows_html = "".join(
-        f'<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; '
-        f'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); border-radius:10px; '
-        f'padding:0.7rem 1rem; margin-bottom:0.5rem;">'
-        f'<span style="color:#8992A3; font-size:0.8rem;">{label}</span>'
-        f'<span style="font-size:0.85rem; flex-shrink:0;">{value_html}</span>'
-        f'</div>'
-        for label, value_html in milestone_rows
+        f'<tr style="{_row_style}">'
+        f'<td style="text-transform:uppercase; font-size:12px; font-weight:700; color:#ffffff; padding:14px 0;">{name}</td>'
+        f'<td style="text-transform:uppercase; font-size:10px; font-weight:600; color:#475569; padding:14px 0.75rem;">{condition}</td>'
+        f'<td style="text-align:right; font-size:12px; font-weight:700; color:#64748b; letter-spacing:0.05em; padding:14px 0;">{year_html}</td>'
+        f'</tr>'
+        for name, condition, year_html in milestone_rows
     )
     st.markdown(
-        f'<div style="max-width:480px;">{_rows_html}</div>',
+        f'<table style="width:100%; border-collapse:collapse; text-align:left; font-family:sans-serif;">'
+        f'{_rows_html}</table>',
         unsafe_allow_html=True,
     )
 
