@@ -6024,32 +6024,14 @@ def render_analyze():
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
         unsafe_allow_html=True,
     )
-    # '+ ADD NEW' -- rechtsboven, dicht tegen de hoofdsectietitel aan
-    # getrokken via een negatieve margin-top. Een ECHTE st.button()
-    # i.p.v. een kale tekstlink -- die laatste kan niet rechtstreeks
-    # naar Python-state schrijven.
-    _add_new_key = "analyze_add_new_link"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_add_new_key} {{ display:flex !important; justify-content:flex-end !important; '
-        f'margin-top:-2.5rem !important; margin-bottom:1.25rem !important; }} '
-        f'.st-key-{_add_new_key} button {{ '
-        f'background:transparent !important; border:none !important; box-shadow:none !important; '
-        f'padding:0 !important; font-size:0.72rem !important; font-weight:700 !important; '
-        f'letter-spacing:0.05em !important; text-transform:uppercase !important; color:#1FAE96 !important; }} '
-        f'.st-key-{_add_new_key} button:hover {{ color:#24C7AB !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_add_new_key):
-        if st.button("+ Add New", key="analyze_add_new_btn"):
-            st.session_state["selected_research"] = "__NEW__"
-            st.rerun()
-
     # Marketing-indicator: maakt zichtbaar dat er een AI-copilot achter
-    # het platform zit -- rechtsboven, direct onder de '+ Add New'-knop.
+    # het platform zit -- rechtsboven, dicht tegen de hoofdsectietitel
+    # aan getrokken via een negatieve margin-top. '+ Add New' is
+    # verhuisd naar de Research Watchlist-sectie hieronder (dat is waar
+    # nieuwe research daadwerkelijk aan toegevoegd wordt), dus deze
+    # regel pakt nu zelf de -2.5rem-pull-up die eerder voor de knop was.
     st.markdown(
-        '<div style="display:flex; justify-content:flex-end; margin-top:-0.75rem; margin-bottom:1.25rem;">'
+        '<div style="display:flex; justify-content:flex-end; margin-top:-2.5rem; margin-bottom:1.25rem;">'
         '<span style="font-size:10px; font-weight:700; letter-spacing:0.1em; color:#64748B; '
         'text-transform:uppercase;">&#9889; Cognitive co-pilot powered by Anthropic Claude&trade;</span>'
         '</div>',
@@ -6229,6 +6211,29 @@ def render_analyze():
             _uniform_section_header_html("Research Watchlist", "visibility", is_first=False),
             unsafe_allow_html=True,
         )
+        # '+ ADD NEW' -- hier, niet bovenaan de pagina: dit IS de plek
+        # waar nieuwe research daadwerkelijk aan toegevoegd wordt.
+        # Rechtsboven, dicht tegen deze sectietitel aan getrokken via een
+        # negatieve margin-top. Een ECHTE st.button() i.p.v. een kale
+        # tekstlink -- die laatste kan niet rechtstreeks naar Python-
+        # state schrijven.
+        _add_new_key = "analyze_add_new_link"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_add_new_key} {{ display:flex !important; justify-content:flex-end !important; '
+            f'margin-top:-2.5rem !important; margin-bottom:1.25rem !important; }} '
+            f'.st-key-{_add_new_key} button {{ '
+            f'background:transparent !important; border:none !important; box-shadow:none !important; '
+            f'padding:0 !important; font-size:0.72rem !important; font-weight:700 !important; '
+            f'letter-spacing:0.05em !important; text-transform:uppercase !important; color:#1FAE96 !important; }} '
+            f'.st-key-{_add_new_key} button:hover {{ color:#24C7AB !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_add_new_key):
+            if st.button("+ Add New", key="analyze_add_new_btn"):
+                st.session_state["selected_research"] = "__NEW__"
+                st.rerun()
         watchlist_entries = [
             e for e in deep_dives
             if e.get("ticker") not in held_tickers and e.get("conclusion") in ("Watch", "Pass")
