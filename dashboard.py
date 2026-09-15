@@ -6298,21 +6298,28 @@ def _render_wealth_engine(user_email: str) -> None:
         f'</div>',
         unsafe_allow_html=True,
     )
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
     # --- Cashflow Velocity -- YoY-groei van het jaarlijkse dividend-
-    # inkomen over de eerstkomende 10 jaar. Puur afgeleid van dezelfde
-    # dividend_income_by_year-reeks die de 3 sliders hierboven al
-    # voeden, dus deze staafgrafiek versnelt vanzelf mee zodra je aan
-    # een slider schuift -- geen aparte herberekening nodig.
+    # inkomen. Het EERSTE berekende jaar staat wiskundig altijd vast op
+    # exact +0% (het dividend van 'over 1 jaar' is nog gebaseerd op je
+    # HUIDIGE bezit, dus identiek aan je huidige dividend -- financieel
+    # correct, maar oogt in de grafiek als een loze, lege balk). Die
+    # wordt daarom bewust overgeslagen: de grafiek toont de 10 jaren
+    # ERNA, waar de groei wel degelijk elk jaar varieert. Puur afgeleid
+    # van dezelfde dividend_income_by_year-reeks die de 3 sliders
+    # hierboven al voeden, dus deze staafgrafiek versnelt vanzelf mee
+    # zodra je aan een slider schuift -- geen aparte herberekening nodig.
     st.markdown(
-        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
-        'text-transform:uppercase; margin-bottom:0.75rem;">&#128202; Passive cashflow acceleration '
-        '(YoY growth)</div>',
+        '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
+        'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
+        'padding-bottom:8px; margin-bottom:15px;">&#128202; Passive Cashflow Acceleration '
+        '(YoY Growth)</div>',
         unsafe_allow_html=True,
     )
-    _velocity_years = years[1:11]
+    _velocity_years = years[2:12]
     _velocity_pct = []
-    for i in range(1, 11):
+    for i in range(2, 12):
         prev = dividend_income_by_year[i - 1]
         cur = dividend_income_by_year[i]
         pct = ((cur - prev) / prev * 100) if prev > 0 else 0.0
@@ -6338,7 +6345,7 @@ def _render_wealth_engine(user_email: str) -> None:
         hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
     )
     st.plotly_chart(velocity_fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
     # --- 4. Snowball Milestones -- echte <table> met expliciete border-
     # onderdrukking (zie verderop), 3 kolommen: Milestone / Required
