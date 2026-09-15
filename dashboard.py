@@ -5227,7 +5227,20 @@ from streamlit_cookies_controller import CookieController
 _cookie_controller = CookieController(key="hestys_cookie_controller")
 
 if "password_auth_email" not in st.session_state:
-    _session_token = _cookie_controller.get("hestys_session_token")
+    # De cookie-component kan bij de ALLEREERSTE run (met name direct na
+    # een verse deploy/cold start) z'n JS-round-trip naar de browser nog
+    # niet hebben afgerond -- intern is de cookie-store dan nog 'None',
+    # en .get() gooit daardoor een TypeError ('argument of type NoneType
+    # is not iterable') i.p.v. gewoon 'geen cookie gevonden' terug te
+    # geven. Behandel die specifieke situatie hetzelfde als 'geen
+    # sessie-token aanwezig' -- de gebruiker wordt dan simpelweg niet
+    # automatisch ingelogd op DEZE ene run (Streamlit rerendert vanzelf
+    # opnieuw zodra de component wel klaar is), i.p.v. de hele pagina te
+    # laten crashen.
+    try:
+        _session_token = _cookie_controller.get("hestys_session_token")
+    except TypeError:
+        _session_token = None
     if _session_token:
         import database as _database_for_session_restore
         _restored = _database_for_session_restore.get_user_from_session_token(_session_token)
