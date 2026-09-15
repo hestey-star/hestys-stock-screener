@@ -6070,11 +6070,28 @@ def _render_wealth_engine(user_email: str) -> None:
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
 
-    # Dividendgroei: geen historische per-jaar-dividenddata beschikbaar om
-    # dit daadwerkelijk uit te berekenen -- een vaste, in de sector
-    # gangbare default (5%), consistent met de aanname in de compounding-
-    # engine hieronder.
-    DIVIDEND_GROWTH_RATE = 0.05
+    # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
+    # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
+    # dat wel live opgehaald kan worden) -- daarom werken we hier met een
+    # eigen, GECUREERDE tabel met bekende dividendgroei-tempo's voor de
+    # tickers die we kennen (op basis van hun eigen track record), en 0%
+    # voor alles wat niet in die tabel staat. Het gewogen gemiddelde
+    # daarvan (naar positiegrootte, exact dezelfde methode als bij
+    # Average Portfolio Yield hierboven) wordt de DYNAMISCHE start-
+    # baseline, i.p.v. een vaste 5% voor iedereen.
+    _KNOWN_DIVIDEND_GROWTH_RATES = {
+        "TDIV": 0.05,
+        "KHC": 0.01,
+        "TMUS": 0.10,
+    }
+    _weighted_growth_sum = 0.0
+    for h in holdings:
+        ticker = (h.get("ticker") or "").upper()
+        value = h.get("position_value") or 0
+        if not ticker or value <= 0:
+            continue
+        _weighted_growth_sum += value * _KNOWN_DIVIDEND_GROWTH_RATES.get(ticker, 0.0)
+    DIVIDEND_GROWTH_RATE = (_weighted_growth_sum / total_value) if total_value else 0.0
 
     # --- Jaarlijkse inleg schatten uit netto buy-activiteit per jaar --
     # VOOR de tegels berekend (i.p.v. erna), want de 4e tegel toont 'm nu
