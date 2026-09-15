@@ -6261,13 +6261,18 @@ def _render_wealth_engine(user_email: str) -> None:
                 return yr
         return None
 
-    # Realistische, behapbare mijlpalen i.p.v. 3 verre, demotiverende
-    # doelen -- alle 3 nu vaste, herkenbare lifestyle-drempels i.p.v.
-    # abstracte transactiekosten of een crossover-vergelijking tegen de
-    # slider (dat concept is met deze herbenoeming vervallen).
-    _milestone_subs = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 240)
+    # Onwrikbare ladder van 6 universele, oplopende mijlpalen -- van een
+    # kopje koffie tot financial independence. Elke drempel is vast
+    # (dividend_income_by_year >= X), behalve The Crossover Event, die
+    # relatief blijft t.o.v. de SIMULEERBARE inleg-slider.
+    _milestone_espresso = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 60)
     _milestone_dinner = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 250)
     _milestone_travel = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
+    _milestone_baseline = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 5000)
+    _milestone_crossover = _find_milestone_year(
+        lambda idx: dividend_income_by_year[idx] > simulated_contribution
+    ) if simulated_contribution > 0 else None
+    _milestone_freedom = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 30000)
 
     def _milestone_year_html(year_val):
         if year_val is None:
@@ -6279,59 +6284,59 @@ def _render_wealth_engine(user_email: str) -> None:
         # Binnen de 30 jaar bereikt -- oplichtend Hestys-groen.
         return f'<span style="color:#34d399; font-weight:700;">{year_val}</span>'
 
-    # (naam, technische voorwaarde, jaartal)
+    # (naam, technische voorwaarde, jaartal-html)
     milestone_rows = [
-        (
-            "Digital subscriptions covered",
-            "REQ: &euro;240 / YEAR",
-            _milestone_year_html(_milestone_subs),
-        ),
-        (
-            "The Dinner Appreciation",
-            "REQ: &euro;250 / YEAR",
-            _milestone_year_html(_milestone_dinner),
-        ),
-        (
-            "The Concierge Travel",
-            "REQ: &euro;1,200 / YEAR",
-            _milestone_year_html(_milestone_travel),
-        ),
+        ("The Daily Espresso", "REQ: &euro;60 / YEAR", _milestone_year_html(_milestone_espresso)),
+        ("The Dinner Appreciation", "REQ: &euro;250 / YEAR", _milestone_year_html(_milestone_dinner)),
+        ("The Concierge Travel", "REQ: &euro;1,200 / YEAR", _milestone_year_html(_milestone_travel)),
+        ("The Baseline Cover", "REQ: &euro;5,000 / YEAR", _milestone_year_html(_milestone_baseline)),
+        ("The Crossover Event", "CASHFLOW &gt; SIMULATED CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
+        ("Financial Independence", "REQ: &euro;30,000 / YEAR", _milestone_year_html(_milestone_freedom)),
     ]
 
+    # Echte <table> met <thead>, deze keer met HARDE, expliciete
+    # onderdrukking van elke default-tabelrand (border:none !important op
+    # elke cel) -- de vorige poging met een raw <table> kreeg ongewenste
+    # verticale kolomlijnen via Streamlit's eigen basis-stylesheet, dat
+    # voorkomen we nu expliciet i.p.v. te vertrouwen op border-collapse
+    # alleen.
     _milestones_key = "wealth_engine_milestones_table"
+    _header_style = (
+        "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
+        "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
+        "border-top:none !important; border-left:none !important; border-right:none !important;"
+    )
+    _cell_base = (
+        "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
+        "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
+    )
+    _rows_html = "".join(
+        f'<tr>'
+        f'<td style="{_cell_base} width:40%; text-align:left; text-transform:uppercase; '
+        f'font-size:0.78rem; font-weight:700; color:#F1F5F9;">{name}</td>'
+        f'<td style="{_cell_base} width:40%; text-align:left; text-transform:uppercase; '
+        f'font-size:0.68rem; font-weight:600; color:#475569;">{condition}</td>'
+        f'<td style="{_cell_base} width:20%; text-align:right; font-size:0.78rem;">{year_html}</td>'
+        f'</tr>'
+        for name, condition, year_html in milestone_rows
+    )
     st.markdown(
-        f'<style>'
-        f'.st-key-{_milestones_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
-        f'.st-key-{_milestones_key} [data-testid="stColumn"] {{ '
-        f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
-        f'.st-key-{_milestones_key} [data-testid="stColumn"]:last-of-type {{ align-items:flex-end !important; }} '
-        f'</style>',
+        f'<style>.st-key-{_milestones_key} table {{ width:100%; border-collapse:collapse; }} '
+        f'.st-key-{_milestones_key} td, .st-key-{_milestones_key} th {{ border:none; }}</style>',
         unsafe_allow_html=True,
     )
     with st.container(key=_milestones_key):
-        for name, condition, year_html in milestone_rows:
-            mcol1, mcol2, mcol3 = st.columns([2.5, 3, 1], gap="small")
-            with mcol1:
-                st.markdown(
-                    f'<span style="text-transform:uppercase; font-size:0.78rem; font-weight:700; '
-                    f'color:#F1F5F9;">{name}</span>',
-                    unsafe_allow_html=True,
-                )
-            with mcol2:
-                st.markdown(
-                    f'<span style="text-transform:uppercase; font-size:0.68rem; font-weight:600; '
-                    f'color:#475569;">{condition}</span>',
-                    unsafe_allow_html=True,
-                )
-            with mcol3:
-                st.markdown(
-                    f'<span style="font-size:0.78rem;">{year_html}</span>',
-                    unsafe_allow_html=True,
-                )
-            st.markdown(
-                '<div style="width:100%; height:1px; background-color:rgba(255,255,255,0.05); margin:0.55rem 0;"></div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            f'<table style="width:100%; border-collapse:collapse;">'
+            f'<thead><tr>'
+            f'<th style="{_header_style} width:40%; text-align:left;">Milestone</th>'
+            f'<th style="{_header_style} width:40%; text-align:left;"></th>'
+            f'<th style="{_header_style} width:20%; text-align:right;">Target year</th>'
+            f'</tr></thead>'
+            f'<tbody>{_rows_html}</tbody>'
+            f'</table>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_analyze():
