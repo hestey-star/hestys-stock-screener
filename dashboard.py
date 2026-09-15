@@ -6152,7 +6152,7 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
     with st.container(key=_sim_key):
-        sim_col1, sim_col2 = st.columns(2, gap="medium")
+        sim_col1, sim_col2, sim_col3 = st.columns(3, gap="medium")
         with sim_col1:
             growth_slider = st.slider(
                 "Expected annual growth (price)", min_value=0.0, max_value=15.0,
@@ -6163,17 +6163,24 @@ def _render_wealth_engine(user_email: str) -> None:
                 "Simulated dividend yield", min_value=0.0, max_value=10.0,
                 value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
             )
+        with sim_col3:
+            contribution_slider = st.slider(
+                "Simulated annual contribution", min_value=0, max_value=50000,
+                value=int(round(annual_contribution)), step=500, key="wealth_contribution_slider",
+                format="\u20ac%d",
+            )
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     # --- Compounding-engine: 30-jarige projectie -- volledig gekoppeld
-    # aan de 2 sliders hierboven. Streamlit herrekent en hertekent de
+    # aan de 3 sliders hierboven. Streamlit herrekent en hertekent de
     # grafiek automatisch bij elke slider-beweging (gewone widget-
     # rerun), dus dit is al flitsloos/live zonder verdere aanpassingen.
     PROJECTION_YEARS = 30
     current_year = datetime.now().year
     simulated_price_growth = growth_slider / 100
     simulated_starting_cashflow = total_value * (yield_slider / 100)
+    simulated_contribution = float(contribution_slider)
 
     years = [current_year]
     net_deposits = [total_value]
@@ -6186,8 +6193,8 @@ def _render_wealth_engine(user_email: str) -> None:
     for i in range(1, PROJECTION_YEARS + 1):
         capital_growth = _wealth * simulated_price_growth
         _dividend = _dividend * (1 + DIVIDEND_GROWTH_RATE)
-        _wealth = _wealth + capital_growth + _dividend + annual_contribution
-        _deposits = _deposits + annual_contribution
+        _wealth = _wealth + capital_growth + _dividend + simulated_contribution
+        _deposits = _deposits + simulated_contribution
         years.append(current_year + i)
         net_deposits.append(_deposits)
         total_wealth.append(_wealth)
@@ -6229,7 +6236,7 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     st.markdown(
         f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-        f'text-transform:uppercase; margin-top:0.75rem; margin-bottom:1.5rem; line-height:1.9;">'
+        f'text-transform:uppercase; margin-top:15px; margin-bottom:1.5rem; line-height:1.9;">'
         f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
         f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
         f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
@@ -6254,45 +6261,45 @@ def _render_wealth_engine(user_email: str) -> None:
                 return yr
         return None
 
-    _milestone_10pct = None
-    _milestone_crossover = None
-    if annual_contribution > 0:
-        _milestone_10pct = _find_milestone_year(
-            lambda idx: dividend_income_by_year[idx] >= 0.10 * annual_contribution
-        )
-        _milestone_crossover = _find_milestone_year(
-            lambda idx: dividend_income_by_year[idx] > annual_contribution
-        )
-    # Zonder inleg om tegen af te zetten, zijn 'dekt 10% van inleg' en
-    # 'crossover' niet zinvol te bepalen -- dan alleen Financial Freedom
-    # tonen (zie milestone_rows hieronder).
-    _milestone_freedom = _find_milestone_year(
-        lambda idx: (dividend_income_by_year[idx] / 12) >= 2500
-    )
+    # Realistische, behapbare mijlpalen i.p.v. 3 verre, demotiverende
+    # doelen -- de eerste 2 zijn vaste, kleine drempels (herkenbaar,
+    # snel haalbaar), de 3e blijft het grote sneeuwbaleffect maar nu
+    # afgezet tegen de SIMULEERBARE inleg-slider i.p.v. de vaste,
+    # historische inleg.
+    _milestone_subs = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 240)
+    _milestone_bills = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
+    _milestone_crossover = _find_milestone_year(
+        lambda idx: dividend_income_by_year[idx] > simulated_contribution
+    ) if simulated_contribution > 0 else None
 
     def _milestone_year_html(year_val):
         if year_val is None:
-            return '<span style="white-space:nowrap;">&gt; 30 YRS</span>'
-        return str(year_val)
+            # Buiten de 30-jarige horizon -- gedempte rose/rode waarschuwings-
+            # kleur, i.p.v. dezelfde neutrale grijstint als een bereikte
+            # mijlpaal. Geeft meteen een visuele prikkel welke doelen nog
+            # niet binnen bereik liggen.
+            return '<span style="color:rgba(244,63,94,0.6); font-weight:700; letter-spacing:0.03em; white-space:nowrap;">&gt; 30 YRS</span>'
+        # Binnen de 30 jaar bereikt -- oplichtend Hestys-groen.
+        return f'<span style="color:#34d399; font-weight:700;">{year_val}</span>'
 
     # (naam, technische voorwaarde, jaartal)
-    milestone_rows = []
-    if annual_contribution > 0:
-        milestone_rows.append((
-            "Dividend covers 10% of contribution",
-            f"REQ: &euro;{0.10 * annual_contribution:,.0f} / YEAR",
-            _milestone_year_html(_milestone_10pct),
-        ))
-        milestone_rows.append((
+    milestone_rows = [
+        (
+            "Digital subscriptions covered",
+            "REQ: &euro;240 / YEAR",
+            _milestone_year_html(_milestone_subs),
+        ),
+        (
+            "Utilities &amp; bills covered",
+            "REQ: &euro;1,200 / YEAR",
+            _milestone_year_html(_milestone_bills),
+        ),
+        (
             "The Crossover Event",
-            "CASHFLOW &gt; ANNUAL CONTRIBUTION",
+            "CASHFLOW &gt; SIMULATED CONTRIBUTION",
             _milestone_year_html(_milestone_crossover),
-        ))
-    milestone_rows.append((
-        "Financial Freedom",
-        "TARGET: &euro;2,500 / MONTH",
-        _milestone_year_html(_milestone_freedom),
-    ))
+        ),
+    ]
 
     _milestones_key = "wealth_engine_milestones_table"
     st.markdown(
@@ -6321,8 +6328,7 @@ def _render_wealth_engine(user_email: str) -> None:
                 )
             with mcol3:
                 st.markdown(
-                    f'<span style="font-size:0.78rem; font-weight:700; color:#64748B; '
-                    f'letter-spacing:0.03em;">{year_html}</span>',
+                    f'<span style="font-size:0.78rem;">{year_html}</span>',
                     unsafe_allow_html=True,
                 )
             st.markdown(
