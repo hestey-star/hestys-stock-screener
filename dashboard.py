@@ -8521,7 +8521,11 @@ def render_portfolio():
                     st.caption("Your watchlist is empty.")
 
                 st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-                st.markdown("**Add to watchlist**")
+                st.markdown(
+                    '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.08em; '
+                    'text-transform:uppercase; margin-bottom:0.75rem;">Add to watchlist</div>',
+                    unsafe_allow_html=True,
+                )
                 # Zelfde flinterdunne, zachte rand + subtiele focus-state als
                 # de invoervelden bij Log Transaction -- geen zware omlijning
                 # meer op het zoekveld en de match-dropdown.
@@ -8544,8 +8548,10 @@ def render_portfolio():
                     unsafe_allow_html=True,
                 )
                 with st.container(key=_watchlist_search_key):
+                    _dd_label("Search for a company, crypto, commodity, or precious metal")
                     watchlist_search = st.text_input(
                         "Search for a company, crypto, commodity, or precious metal", key="watchlist_search",
+                        label_visibility="collapsed",
                     )
                     w_selected_symbol = None
                     w_selected_name = None
