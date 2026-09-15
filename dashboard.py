@@ -6981,41 +6981,119 @@ def render_portfolio():
                                 sorted_transactions if show_all_transactions
                                 else sorted_transactions[:DEFAULT_TRANSACTIONS_SHOWN]
                             )
-                            # Nette rijen i.p.v. een kale bullet-lijst -- zelfde
-                            # soort compacte kaart-stijl als de positierijen
-                            # zelf, i.p.v. losse st.markdown()-regels per
-                            # transactie.
-                            tx_rows_html = []
-                            for t in transactions_to_show:
-                                is_buy = t["transaction_type"] == "buy"
-                                type_color = TODAY_POSITIVE_TEXT if is_buy else TODAY_NEGATIVE_TEXT
-                                type_icon = "add_circle" if is_buy else "remove_circle"
-                                type_label = "Buy" if is_buy else "Sell"
-                                # Het symbool per transactie is gebaseerd op DIE
-                                # transactie's eigen, opgeslagen currency (niet
-                                # het algemene detail_currency_symbol) -- een
-                                # transactie kan in een andere valuta zijn
-                                # ingevoerd dan de holding's huidige weergave-
-                                # valuta, en de RUWE prijs hier getoond wordt
-                                # zoals ze daadwerkelijk is ingevoerd (geen
-                                # conversie, gewoon het juiste label).
-                                tx_own_currency = t.get("currency") or "EUR"
-                                tx_own_symbol = "€" if tx_own_currency == "EUR" else ("$" if tx_own_currency == "USD" else tx_own_currency + " ")
-                                tx_rows_html.append(
-                                    f'<div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; '
-                                    f'padding:0.5rem 0.15rem; border-bottom:1px solid rgba(137,146,163,0.12);">'
-                                    f'<div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">'
-                                    f'{_icon_span(type_icon, size_px=16, color=type_color)}'
-                                    f'<span style="font-weight:700; color:{type_color}; font-size:0.85rem; '
-                                    f'font-family:\'Inter\', sans-serif !important;">{type_label}</span>'
-                                    f'<span style="color:#EAEDF1; font-size:0.85rem; font-family:\'Inter\', sans-serif !important; '
-                                    f'font-variant-numeric: tabular-nums;">{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f}</span>'
-                                    f'</div>'
-                                    f'<span style="color:#64748B; font-size:0.68rem; white-space:nowrap; flex-shrink:0; '
-                                    f'font-family:\'Inter\', sans-serif !important;">{t["transaction_date"]}</span>'
-                                    f'</div>'
+                            # Nette, interactieve rijen i.p.v. een platte HTML-
+                            # string-lijst -- elke rij is nu individueel
+                            # deletable (rood kruisje rechts), zelfde patroon
+                            # als de tabel onder Log transaction. Dat maakt de
+                            # eerdere, aparte 'Show transaction history'-lijst
+                            # daar overbodig -- deze IS nu de ene, centrale
+                            # plek om transacties te bekijken en te wissen.
+                            _tx_hist_table_key = f"portfolio_tx_history_table_{selected_holding['id']}"
+                            st.markdown(
+                                f'<style>'
+                                f'.st-key-{_tx_hist_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
+                                f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"] {{ '
+                                f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
+                                f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"]:last-of-type {{ '
+                                f'align-items:flex-end !important; }} '
+                                f'.st-key-{_tx_hist_table_key} button {{ '
+                                f'background:transparent !important; border:none !important; box-shadow:none !important; '
+                                f'color:#64748B !important; padding:0 !important; min-height:unset !important; height:auto !important; }} '
+                                f'.st-key-{_tx_hist_table_key} button:hover {{ color:#E5484D !important; }} '
+                                f'</style>',
+                                unsafe_allow_html=True,
+                            )
+                            with st.container(key=_tx_hist_table_key):
+                                for t in transactions_to_show:
+                                    is_buy = t["transaction_type"] == "buy"
+                                    type_color = TODAY_POSITIVE_TEXT if is_buy else TODAY_NEGATIVE_TEXT
+                                    type_icon = "add_circle" if is_buy else "remove_circle"
+                                    type_label = "Buy" if is_buy else "Sell"
+                                    # Het symbool per transactie is gebaseerd op DIE
+                                    # transactie's eigen, opgeslagen currency (niet
+                                    # het algemene detail_currency_symbol) -- een
+                                    # transactie kan in een andere valuta zijn
+                                    # ingevoerd dan de holding's huidige weergave-
+                                    # valuta, en de RUWE prijs hier getoond wordt
+                                    # zoals ze daadwerkelijk is ingevoerd (geen
+                                    # conversie, gewoon het juiste label).
+                                    tx_own_currency = t.get("currency") or "EUR"
+                                    tx_own_symbol = "€" if tx_own_currency == "EUR" else ("$" if tx_own_currency == "USD" else tx_own_currency + " ")
+                                    pcol1, pcol2, pcol3 = st.columns([2.2, 5, 0.5], gap="small")
+                                    with pcol1:
+                                        st.markdown(
+                                            f'<span style="display:inline-flex; align-items:center; gap:0.4rem; '
+                                            f'font-size:0.8rem;">'
+                                            f'{_icon_span(type_icon, size_px=14, color=type_color)}'
+                                            f'<span style="font-weight:700; color:{type_color}; '
+                                            f'font-family:\'Inter\', sans-serif !important;">{type_label}</span></span>',
+                                            unsafe_allow_html=True,
+                                        )
+                                    with pcol2:
+                                        st.markdown(
+                                            f'<span style="font-size:0.8rem; color:#8992A3; '
+                                            f'font-family:\'Inter\', sans-serif !important; '
+                                            f'font-variant-numeric: tabular-nums;">'
+                                            f'{t["shares"]:g} @ {tx_own_symbol}{t["price"]:,.2f} &middot; {t["transaction_date"]}</span>',
+                                            unsafe_allow_html=True,
+                                        )
+                                    with pcol3:
+                                        if st.button("\u2715", key=f"portfolio_delete_tx_{t['id']}", help="Delete this transaction"):
+                                            database.delete_transaction(t["id"], user_email)
+                                            remaining = [x for x in transactions if x["id"] != t["id"]]
+                                            if not remaining:
+                                                # Geen transacties meer over voor deze positie -- voorkomt
+                                                # een 'verweesde' positie zonder shares en zonder
+                                                # geschiedenis.
+                                                database.delete_holding(selected_holding["id"], user_email)
+                                                st.success("Transaction deleted -- this position had no "
+                                                           "other transactions left, so it was removed too.")
+                                            else:
+                                                sync_holding_shares_from_transactions(selected_holding["id"], user_email)
+                                                st.success("Transaction deleted.")
+                                            st.rerun()
+                                    st.markdown(
+                                        '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.15rem 0;"></div>',
+                                        unsafe_allow_html=True,
+                                    )
+
+                            # Alles-in-1x wissen voor DEZE positie -- verhuisd
+                            # hierheen vanaf 'Log transaction' (stond daar
+                            # onder een nu-verwijderde, dubbele lijst). Handig
+                            # om oude, minder-precieze transacties (bv. van
+                            # vóór een CSV-parser-verbetering) op te schonen
+                            # vóór een schone herimport, i.p.v. ze 1-voor-1 te
+                            # moeten verwijderen. 2-staps-bevestiging
+                            # (destructieve actie).
+                            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+                            _delete_all_pos_confirm_key = f"confirm_delete_all_tx_{selected_holding['id']}"
+                            if not st.session_state.get(_delete_all_pos_confirm_key, False):
+                                if st.button(
+                                    "Delete all transactions for this position", icon=":material/delete_sweep:",
+                                    key=f"delete_all_tx_btn_{selected_holding['id']}",
+                                ):
+                                    st.session_state[_delete_all_pos_confirm_key] = True
+                                    st.rerun()
+                            else:
+                                st.warning(
+                                    f"This will permanently delete all {len(transactions)} transactions for "
+                                    f"{selected_holding['naam']} -- useful if you want to re-import this "
+                                    f"position cleanly (e.g. after a CSV-import precision fix). This cannot "
+                                    f"be undone."
                                 )
-                            st.markdown("".join(tx_rows_html), unsafe_allow_html=True)
+                                _pos_confirm_col1, _pos_confirm_col2 = st.columns(2)
+                                with _pos_confirm_col1:
+                                    if st.button("Yes, delete all", key=f"confirm_delete_all_tx_btn_{selected_holding['id']}", type="primary"):
+                                        database.delete_all_transactions_for_holding(selected_holding["id"], user_email)
+                                        database.delete_holding(selected_holding["id"], user_email)
+                                        st.session_state[_delete_all_pos_confirm_key] = False
+                                        st.success(f"All transactions for {selected_holding['naam']} deleted -- "
+                                                   f"you can now re-import it cleanly.")
+                                        st.rerun()
+                                with _pos_confirm_col2:
+                                    if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{selected_holding['id']}"):
+                                        st.session_state[_delete_all_pos_confirm_key] = False
+                                        st.rerun()
                         else:
                             st.caption("No transactions logged for this position yet -- log one under 'Manage' below.")
 
@@ -7212,6 +7290,7 @@ def render_portfolio():
         ":material/upload_file: Import from broker",
         ":material/receipt_long: Log transaction",
         ":material/visibility: Watchlist",
+        ":material/delete_forever: Delete portfolio",
     ]
     _manage_tabs_key = "manage_section_select_wrap"
     # Nog een keer versterkt -- raakt nu ook expliciet de BaseWeb
@@ -8138,163 +8217,6 @@ def render_portfolio():
                         st.success("Transaction saved!")
                         st.rerun()
 
-            if tx_holding is not None:
-                tx_history = database.get_transactions_for_holding(user_email, tx_holding["id"])
-                if tx_history:
-                    _tx_history_cb_key = f"show_tx_history_wrap_{tx_holding['id']}"
-                    st.markdown(
-                        f'<style>.st-key-{_tx_history_cb_key} [data-testid="stCheckbox"] p {{ '
-                        f'font-size:0.75rem !important; color:#64748B !important; }} </style>',
-                        unsafe_allow_html=True,
-                    )
-                    with st.container(key=_tx_history_cb_key):
-                        show_tx_history_checked = st.checkbox(
-                            f"Show transaction history ({len(tx_history)})",
-                            key=f"show_tx_history_{tx_holding['id']}",
-                        )
-                    if show_tx_history_checked:
-                        _tx_hist_table_key = f"tx_history_table_{tx_holding['id']}"
-                        st.markdown(
-                            f'<style>'
-                            f'.st-key-{_tx_hist_table_key} [data-testid="stHorizontalBlock"] {{ align-items:center !important; }} '
-                            f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"] {{ '
-                            f'display:flex !important; flex-direction:column !important; justify-content:center !important; }} '
-                            f'.st-key-{_tx_hist_table_key} [data-testid="stColumn"]:last-of-type {{ '
-                            f'align-items:flex-end !important; }} '
-                            f'.st-key-{_tx_hist_table_key} button {{ '
-                            f'background:transparent !important; border:none !important; box-shadow:none !important; '
-                            f'color:#64748B !important; padding:0 !important; min-height:unset !important; height:auto !important; }} '
-                            f'.st-key-{_tx_hist_table_key} button:hover {{ color:#E5484D !important; }} '
-                            f'</style>',
-                            unsafe_allow_html=True,
-                        )
-                        with st.container(key=_tx_hist_table_key):
-                            for t in tx_history:
-                                hcol1, hcol2, hcol3 = st.columns([2, 5, 0.5], gap="small")
-                                is_buy = t["transaction_type"] == "buy"
-                                type_icon = "add_circle" if is_buy else "remove_circle"
-                                type_color = "#1FAE96" if is_buy else "#E5484D"
-                                tx_hist_symbol = "€" if t.get("currency") == "EUR" else ("$" if t.get("currency") == "USD" else (t.get("currency") or "EUR") + " ")
-                                with hcol1:
-                                    st.markdown(
-                                        f'<span style="display:inline-flex; align-items:center; gap:0.3rem; '
-                                        f'font-size:0.8rem; color:#8992A3;">'
-                                        f'{_icon_span(type_icon, size_px=14, color=type_color)}'
-                                        f'{t["transaction_date"]}</span>',
-                                        unsafe_allow_html=True,
-                                    )
-                                with hcol2:
-                                    st.markdown(
-                                        f'<span style="font-size:0.8rem; color:#8992A3;">'
-                                        f'{t["shares"]:.2f} shares @ {tx_hist_symbol}{t["price"]:.2f} '
-                                        f'(fee: {tx_hist_symbol}{t["fee"]:.2f})</span>',
-                                        unsafe_allow_html=True,
-                                    )
-                                with hcol3:
-                                    if st.button("\u2715", key=f"delete_tx_{t['id']}", help="Delete this transaction"):
-                                        database.delete_transaction(t["id"], user_email)
-                                        remaining = [x for x in tx_history if x["id"] != t["id"]]
-                                        if not remaining:
-                                            # Geen transacties meer over voor deze positie -- voorkomt een
-                                            # 'verweesde' positie zonder shares en zonder geschiedenis.
-                                            database.delete_holding(tx_holding["id"], user_email)
-                                            st.success("Transaction deleted -- this position had no other "
-                                                       "transactions left, so it was removed too.")
-                                        else:
-                                            sync_holding_shares_from_transactions(tx_holding["id"], user_email)
-                                            st.success("Transaction deleted.")
-                                        st.rerun()
-                                st.markdown(
-                                    '<div style="width:100%; height:1px; background-color:#1E293B; margin:0.2rem 0;"></div>',
-                                    unsafe_allow_html=True,
-                                )
-
-                        # Alles-in-1x wissen -- handig om oude, minder-precieze
-                        # transacties (bv. van vóór een CSV-parser-verbetering)
-                        # op te schonen vóór een schone herimport, i.p.v. ze
-                        # 1-voor-1 te moeten verwijderen. 2-staps-bevestiging
-                        # (destructieve actie): 1e klik toont de waarschuwing,
-                        # 2e klik voert 'm daadwerkelijk uit.
-                        st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-                        delete_all_confirm_key = f"confirm_delete_all_tx_{tx_holding['id']}"
-                        if not st.session_state.get(delete_all_confirm_key, False):
-                            if st.button(
-                                "Delete all transactions for this position", icon=":material/delete_sweep:",
-                                key=f"delete_all_tx_btn_{tx_holding['id']}",
-                            ):
-                                st.session_state[delete_all_confirm_key] = True
-                                st.rerun()
-                        else:
-                            st.warning(
-                                f"This will permanently delete all {len(tx_history)} transactions for "
-                                f"{tx_holding['naam']} -- useful if you want to re-import this position "
-                                f"cleanly (e.g. after a CSV-import precision fix). This cannot be undone."
-                            )
-                            confirm_col1, confirm_col2 = st.columns(2)
-                            with confirm_col1:
-                                if st.button("Yes, delete all", key=f"confirm_delete_all_tx_btn_{tx_holding['id']}", type="primary"):
-                                    database.delete_all_transactions_for_holding(tx_holding["id"], user_email)
-                                    database.delete_holding(tx_holding["id"], user_email)
-                                    st.session_state[delete_all_confirm_key] = False
-                                    st.success(f"All transactions for {tx_holding['naam']} deleted -- "
-                                               f"you can now re-import it cleanly.")
-                                    st.rerun()
-                            with confirm_col2:
-                                if st.button("Cancel", key=f"cancel_delete_all_tx_btn_{tx_holding['id']}"):
-                                    st.session_state[delete_all_confirm_key] = False
-                                    st.rerun()
-
-            # 'Alles-in-1x wissen' -- de bredere versie van de per-positie
-            # bulk-delete-knop hierboven, voor als je NA een structurele
-            # CSV-parser-verbetering niet elke positie apart wilt
-            # opschonen. Hoort hier (bij transactiebeheer) thuis, niet bij
-            # 'Import from broker' -- het is een losse, zelden-gebruikte
-            # actie, geen onderdeel van het importeren zelf. BEWUST klein
-            # gehouden (i.p.v. een eigen, volle kaart) -- zelfde, simpele
-            # 2-staps-bevestiging (klik -> waarschuwing -> bevestig) als de
-            # per-positie-versie hierboven, i.p.v. tekst moeten typen.
-            if not st.session_state.get("confirm_reset_all_holdings", False):
-                _reset_all_btn_key = "reset_all_holdings_btn_wrap"
-                st.markdown(
-                    f'<style>'
-                    f'.st-key-{_reset_all_btn_key} {{ margin-top:3rem !important; }} '
-                    f'.st-key-{_reset_all_btn_key} button {{ '
-                    f'display:block !important; text-align:left !important; '
-                    f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.12em !important; '
-                    f'color:#475569 !important; text-transform:uppercase !important; '
-                    f'background:transparent !important; border:none !important; box-shadow:none !important; '
-                    f'padding:0 !important; height:auto !important; min-height:0 !important; '
-                    f'text-decoration:none !important; transition:color 0.2s ease !important; }} '
-                    f'.st-key-{_reset_all_btn_key} button:hover {{ color:#FB7185 !important; background:transparent !important; }} '
-                    f'</style>',
-                    unsafe_allow_html=True,
-                )
-                with st.container(key=_reset_all_btn_key):
-                    reset_all_clicked = st.button(
-                        "Start over: delete all my positions", key="reset_all_holdings_btn",
-                    )
-                if reset_all_clicked:
-                    st.session_state["confirm_reset_all_holdings"] = True
-                    st.rerun()
-            else:
-                st.warning(
-                    "This will permanently delete ALL your positions and their full "
-                    "transaction history -- useful if you want to cleanly re-import "
-                    "everything after a data-precision fix. Your watchlist is not affected. "
-                    "This cannot be undone."
-                )
-                reset_confirm_col1, reset_confirm_col2 = st.columns(2)
-                with reset_confirm_col1:
-                    if st.button("Yes, delete everything", key="confirm_reset_all_holdings_btn", type="primary"):
-                        database.delete_all_holdings_and_transactions(user_email)
-                        st.session_state["confirm_reset_all_holdings"] = False
-                        st.success("All positions and transactions deleted -- you can now re-import cleanly under Import from broker.")
-                        st.rerun()
-                with reset_confirm_col2:
-                    if st.button("Cancel", key="cancel_reset_all_holdings_btn"):
-                        st.session_state["confirm_reset_all_holdings"] = False
-                        st.rerun()
-
     elif manage_section == "Watchlist":
         try:
             watchlist_narrow_col = st.columns([1], width=900)[0]
@@ -8646,6 +8568,65 @@ def render_portfolio():
                         database.add_holding(user_email, w_selected_name, w_selected_symbol, is_watchlist=True)
                         st.success(f"{w_selected_name} ({w_selected_symbol}) added to watchlist!")
                         st.rerun()
+
+    elif manage_section == "Delete portfolio":
+        # Eigen, gelijkwaardig tabblad naast Import/Log transaction/
+        # Watchlist -- deze actie is portfolio-breed (raakt zowel
+        # geimporteerde als handmatig ingevoerde transacties), dus hoort
+        # niet thuis onder 1 specifieke sub-actie zoals 'Import from
+        # broker' of verstopt onder een checkbox bij 1 losse positie.
+        st.markdown(
+            _uniform_section_header_html("Delete portfolio", "delete_forever", is_first=True),
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+            'text-transform:uppercase; margin-bottom:1.5rem;">This permanently deletes every position '
+            'and its full transaction history, regardless of whether it was imported or logged '
+            'manually. Your watchlist is not affected.</div>',
+            unsafe_allow_html=True,
+        )
+        if not st.session_state.get("confirm_reset_all_holdings", False):
+            _reset_all_btn_key = "reset_all_holdings_btn_wrap"
+            st.markdown(
+                f'<style>'
+                f'.st-key-{_reset_all_btn_key} button {{ '
+                f'display:block !important; text-align:left !important; '
+                f'font-size:0.85rem !important; font-weight:700 !important; '
+                f'color:#F1F5F9 !important; background:rgba(229,72,77,0.1) !important; '
+                f'border:1px solid rgba(229,72,77,0.3) !important; border-radius:10px !important; '
+                f'padding:0.6rem 1.2rem !important; height:auto !important; min-height:0 !important; '
+                f'transition:all 0.2s ease !important; }} '
+                f'.st-key-{_reset_all_btn_key} button:hover {{ '
+                f'background:rgba(229,72,77,0.18) !important; border-color:rgba(229,72,77,0.5) !important; }} '
+                f'</style>',
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_reset_all_btn_key):
+                reset_all_clicked = st.button(
+                    "Delete all my positions", key="reset_all_holdings_btn",
+                )
+            if reset_all_clicked:
+                st.session_state["confirm_reset_all_holdings"] = True
+                st.rerun()
+        else:
+            st.warning(
+                "This will permanently delete ALL your positions and their full "
+                "transaction history -- useful if you want to cleanly re-import "
+                "everything after a data-precision fix. Your watchlist is not affected. "
+                "This cannot be undone."
+            )
+            reset_confirm_col1, reset_confirm_col2 = st.columns(2)
+            with reset_confirm_col1:
+                if st.button("Yes, delete everything", key="confirm_reset_all_holdings_btn", type="primary"):
+                    database.delete_all_holdings_and_transactions(user_email)
+                    st.session_state["confirm_reset_all_holdings"] = False
+                    st.success("All positions and transactions deleted -- you can now re-import cleanly under Import from broker.")
+                    st.rerun()
+            with reset_confirm_col2:
+                if st.button("Cancel", key="cancel_reset_all_holdings_btn"):
+                    st.session_state["confirm_reset_all_holdings"] = False
+                    st.rerun()
 
 def _render_unlock_premium_button(context_key: str, label: str = "Unlock all premium weekly signals \u2192") -> None:
     """
