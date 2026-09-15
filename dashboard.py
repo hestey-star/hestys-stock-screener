@@ -5984,6 +5984,244 @@ def _render_analyze_drawer(user_email: str) -> None:
                 _render_deep_dive_version(version, user_email)
 
 
+def _render_wealth_engine(user_email: str) -> None:
+    """
+    'Wealth Engine' -- rustgevende dividend- en vermogensprojector.
+    Volledig LOSSTAAND van de Conviction Tracker-logica in render_analyze():
+    eigen, verse database-aanroepen, geen gedeelde variabelen/state, dus
+    kan hier niets van de bestaande tabellen/drawer-logica raken.
+
+    Belangrijke, eerlijke aanname: onze database slaat GEEN losse
+    'DEPOSIT'/'ACH'-regels op (die worden bij elke broker-CSV-import
+    bewust overgeslagen, zie parse_degiro/robinhood/schwab/trade_republic
+    _transactions_csv -- onze transactiestructuur kent alleen buy/sell).
+    Er bestaat dus geen letterlijke stortingsgeschiedenis om uit te lezen.
+    In plaats daarvan wordt de gemiddelde jaarlijkse inleg GESCHAT uit de
+    netto buy-activiteit (aankopen min verkopen) per kalenderjaar -- de
+    meest eerlijke proxy die met de beschikbare data mogelijk is. Dat
+    wordt in de UI ook letterlijk zo benoemd, i.p.v. te doen alsof het
+    exacte, opgegeven stortingen zijn.
+    """
+    import database as _wealth_db
+
+    holdings = filter_active_holdings(_wealth_db.get_user_holdings(user_email))
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+
+    if total_value <= 0 or not holdings:
+        st.markdown(
+            '<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
+            'Add some positions first (see Conviction Tracker) to see your wealth projection.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # --- 1. Portfolio dividend-metrics ---
+    DEFAULT_YIELD = 0.03
+    _weighted_yield_sum = 0.0
+    for h in holdings:
+        ticker = h.get("ticker")
+        value = h.get("position_value") or 0
+        if not ticker or value <= 0:
+            continue
+        y = DEFAULT_YIELD
+        try:
+            info = get_cached_ticker_info(ticker)
+            raw_yield = info.get("dividendYield")
+            if raw_yield is not None:
+                y = float(raw_yield)
+                # yfinance geeft dividendYield soms als fractie (0.03) en
+                # soms al als percentage (3.05) -- afhankelijk van de
+                # yfinance-versie. Alles boven 1 wordt daarom als
+                # 'al-een-percentage' behandeld.
+                if y > 1:
+                    y = y / 100
+                if y <= 0:
+                    y = DEFAULT_YIELD
+        except Exception:
+            y = DEFAULT_YIELD
+        _weighted_yield_sum += value * y
+    avg_yield = (_weighted_yield_sum / total_value) if total_value else DEFAULT_YIELD
+    annual_cashflow = total_value * avg_yield
+
+    # Dividendgroei: geen historische per-jaar-dividenddata beschikbaar om
+    # dit daadwerkelijk uit te berekenen -- een vaste, in de sector
+    # gangbare default (5%), consistent met de aanname in de compounding-
+    # engine hieronder.
+    DIVIDEND_GROWTH_RATE = 0.05
+
+    tile_col1, tile_col2, tile_col3 = st.columns(3, gap="medium")
+    _tile_style = (
+        'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+        'border-radius:12px; padding:1rem; text-align:left;'
+    )
+    with tile_col1:
+        st.markdown(
+            f'<div style="{_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual passive cashflow</div>'
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{annual_cashflow:,.0f} '
+            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with tile_col2:
+        st.markdown(
+            f'<div style="{_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128200; Average portfolio yield</div>'
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{avg_yield * 100:.2f}% '
+            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">yield</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with tile_col3:
+        st.markdown(
+            f'<div style="{_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#8987; Dividend growth rate</div>'
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{DIVIDEND_GROWTH_RATE * 100:.1f}% '
+            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">CAGR (est.)</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    # --- 2. Jaarlijkse inleg schatten uit netto buy-activiteit per jaar ---
+    _yearly_net_buys = {}
+    for h in holdings:
+        txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
+        for t in txs:
+            try:
+                yr = int(t["transaction_date"][:4])
+            except (TypeError, ValueError, KeyError):
+                continue
+            amount = (t.get("shares") or 0) * (t.get("price") or 0) + (t.get("fee") or 0)
+            if t.get("transaction_type") == "buy":
+                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) + amount
+            else:
+                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) - amount
+
+    if _yearly_net_buys:
+        annual_contribution = max(sum(_yearly_net_buys.values()) / len(_yearly_net_buys), 0.0)
+    else:
+        annual_contribution = 0.0
+
+    st.markdown(
+        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+        f'text-transform:uppercase; margin-bottom:1rem;">Estimated annual contribution: '
+        f'&euro;{annual_contribution:,.0f} (based on your logged buy/sell activity -- we don\'t track '
+        f'separate deposit records).</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Compounding-engine: 30-jarige projectie ---
+    PRICE_GROWTH_RATE = 0.07
+    PROJECTION_YEARS = 30
+    current_year = datetime.now().year
+
+    years = [current_year]
+    net_deposits = [total_value]
+    total_wealth = [total_value]
+    dividend_income_by_year = [annual_cashflow]
+
+    _wealth = total_value
+    _deposits = total_value
+    _dividend = annual_cashflow
+    for i in range(1, PROJECTION_YEARS + 1):
+        capital_growth = _wealth * PRICE_GROWTH_RATE
+        _dividend = _dividend * (1 + DIVIDEND_GROWTH_RATE)
+        _wealth = _wealth + capital_growth + _dividend + annual_contribution
+        _deposits = _deposits + annual_contribution
+        years.append(current_year + i)
+        net_deposits.append(_deposits)
+        total_wealth.append(_wealth)
+        dividend_income_by_year.append(_dividend)
+
+    # --- 3. Wealth Acceleration chart ---
+    wealth_fig = go.Figure()
+    wealth_fig.add_trace(go.Scatter(
+        x=years, y=net_deposits, name="Net Deposits", mode="lines",
+        line=dict(color="rgba(148,163,184,0.55)", width=1.5),
+        fill="tozeroy", fillcolor="rgba(148,163,184,0.08)",
+        hovertemplate="%{x}: &euro;%{y:,.0f}<extra></extra>",
+    ))
+    wealth_fig.add_trace(go.Scatter(
+        x=years, y=total_wealth, name="Total Wealth", mode="lines",
+        line=dict(color="#34D399", width=2.5),
+        fill="tonexty", fillcolor="rgba(52,211,153,0.08)",
+        hovertemplate="%{x}: &euro;%{y:,.0f}<extra></extra>",
+    ))
+    wealth_fig.update_layout(
+        height=340,
+        margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                   tickprefix="\u20ac", tickformat=",.0f"),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+    )
+    st.plotly_chart(wealth_fig, use_container_width=True, config={"displayModeBar": False})
+
+    # --- 4. Snowball Milestones ---
+    st.markdown(
+        _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
+        unsafe_allow_html=True,
+    )
+
+    def _find_milestone_year(condition):
+        for idx, yr in enumerate(years):
+            if condition(idx):
+                return yr
+        return None
+
+    _milestone_10pct = None
+    _milestone_crossover = None
+    _milestone_freedom = None
+    if annual_contribution > 0:
+        _milestone_10pct = _find_milestone_year(
+            lambda idx: dividend_income_by_year[idx] >= 0.10 * annual_contribution
+        )
+        _milestone_crossover = _find_milestone_year(
+            lambda idx: dividend_income_by_year[idx] > annual_contribution
+        )
+    else:
+        # Zonder inleg om tegen af te zetten, zijn 'dekt 10% van inleg' en
+        # 'crossover' niet zinvol te bepalen -- dan alleen Financial
+        # Freedom tonen.
+        pass
+    _milestone_freedom = _find_milestone_year(
+        lambda idx: (dividend_income_by_year[idx] / 12) >= 2500
+    )
+
+    def _milestone_value_html(year_val):
+        if year_val is None:
+            return '<span style="color:#64748B;">Beyond 30-year horizon</span>'
+        return f'<span style="color:#34D399; font-weight:700;">{year_val}</span>'
+
+    milestone_rows = []
+    if annual_contribution > 0:
+        milestone_rows.append(("Dividend covers 10% of annual contribution", _milestone_value_html(_milestone_10pct)))
+        milestone_rows.append(("Crossover Event (dividend &gt; annual contribution)", _milestone_value_html(_milestone_crossover)))
+    milestone_rows.append(("Financial Freedom (&euro;2,500+ passive / month)", _milestone_value_html(_milestone_freedom)))
+
+    _rows_html = "".join(
+        f'<tr>'
+        f'<td style="padding:0.55rem 0.5rem 0.55rem 0; color:#8992A3; font-size:0.82rem; border-bottom:1px solid rgba(137,146,163,0.1);">{label}</td>'
+        f'<td style="padding:0.55rem 0 0.55rem 0.5rem; text-align:right; font-size:0.82rem; border-bottom:1px solid rgba(137,146,163,0.1);">{value_html}</td>'
+        f'</tr>'
+        for label, value_html in milestone_rows
+    )
+    st.markdown(
+        f'<table style="width:100%; border-collapse:collapse; margin-top:0.5rem;">{_rows_html}</table>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_analyze():
     if not current_user.is_logged_in:
         _render_landing_soft_lock(
@@ -6052,7 +6290,7 @@ def render_analyze():
     )
     st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
 
-    if _analyze_sub_choice in ("WEALTH ENGINE", "STRESS-TEST"):
+    if _analyze_sub_choice == "STRESS-TEST":
         st.markdown(
             f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
             f'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
@@ -6061,6 +6299,10 @@ def render_analyze():
             f'Coming soon -- this section isn\'t built yet.</div>',
             unsafe_allow_html=True,
         )
+        return
+
+    if _analyze_sub_choice == "WEALTH ENGINE":
+        _render_wealth_engine(user_email)
         return
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
