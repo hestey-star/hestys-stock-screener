@@ -8575,10 +8575,9 @@ def render_portfolio():
         # geimporteerde als handmatig ingevoerde transacties), dus hoort
         # niet thuis onder 1 specifieke sub-actie zoals 'Import from
         # broker' of verstopt onder een checkbox bij 1 losse positie.
-        st.markdown(
-            _uniform_section_header_html("Delete portfolio", "delete_forever", is_first=True),
-            unsafe_allow_html=True,
-        )
+        # Geen eigen sectiekop hier -- de andere tabs (Import from
+        # broker, Log transaction, Watchlist) hebben er ook geen; de
+        # pagina-hoofdkop + de tab-balk zelf geven al genoeg context.
         st.markdown(
             '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
             'text-transform:uppercase; margin-bottom:1.5rem;">This permanently deletes every position '
