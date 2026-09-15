@@ -8914,7 +8914,12 @@ def render_discover_signals():
         _uniform_section_header_html("Momentocrats", "sensors", is_first=False),
         unsafe_allow_html=True,
     )
-    st.caption("Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).")
+    st.markdown(
+        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.08em; '
+        'text-transform:uppercase; margin-bottom:0.75rem; font-family:\'Inter\', sans-serif !important;">'
+        'Technical momentum + fundamental quality, combined. Best for swing trades (days-weeks).</div>',
+        unsafe_allow_html=True,
+    )
 
     # st.segmented_control i.p.v. de eerdere URL-link-toggle -- die
     # laatste veroorzaakte een VOLLEDIGE paginaherlading (via
@@ -9090,8 +9095,13 @@ def render_discover_signals():
         _uniform_section_header_html("Rocket List", "rocket_launch", is_first=False),
         unsafe_allow_html=True,
     )
-    st.caption("Accelerating growth stocks with strong momentum. For investors comfortable "
-               "with more risk in exchange for growth potential.")
+    st.markdown(
+        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.08em; '
+        'text-transform:uppercase; margin-bottom:0.75rem; font-family:\'Inter\', sans-serif !important;">'
+        'Accelerating growth stocks with strong momentum. For investors comfortable with more risk '
+        'in exchange for growth potential.</div>',
+        unsafe_allow_html=True,
+    )
     if os.path.exists("rocket_list_signals.csv"):
         df_rocket = pd.read_csv("rocket_list_signals.csv")
         if not df_rocket.empty:
