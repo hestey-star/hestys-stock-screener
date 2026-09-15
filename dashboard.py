@@ -6063,7 +6063,33 @@ def _render_wealth_engine(user_email: str) -> None:
     # engine hieronder.
     DIVIDEND_GROWTH_RATE = 0.05
 
-    tile_col1, tile_col2, tile_col3 = st.columns(3, gap="medium")
+    # --- Jaarlijkse inleg schatten uit netto buy-activiteit per jaar --
+    # VOOR de tegels berekend (i.p.v. erna), want de 4e tegel toont 'm nu
+    # ook. Zelfde eerlijke aanname als eerder: onze database kent geen
+    # losse DEPOSIT/ACH-regels (die worden bij elke broker-CSV-import
+    # bewust overgeslagen), dus dit is de netto buy-activiteit als
+    # proxy, niet een letterlijke stortingshistorie.
+    _yearly_net_buys = {}
+    for h in holdings:
+        txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
+        for t in txs:
+            try:
+                yr = int(t["transaction_date"][:4])
+            except (TypeError, ValueError, KeyError):
+                continue
+            amount = (t.get("shares") or 0) * (t.get("price") or 0) + (t.get("fee") or 0)
+            if t.get("transaction_type") == "buy":
+                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) + amount
+            else:
+                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) - amount
+
+    if _yearly_net_buys:
+        annual_contribution = max(sum(_yearly_net_buys.values()) / len(_yearly_net_buys), 0.0)
+    else:
+        annual_contribution = 0.0
+
+    # --- Strak 4-koloms grid ---
+    tile_col1, tile_col2, tile_col3, tile_col4 = st.columns(4, gap="medium")
     _tile_style = (
         'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
         'border-radius:12px; padding:1rem; text-align:left;'
@@ -6098,36 +6124,18 @@ def _render_wealth_engine(user_email: str) -> None:
             f'</div>',
             unsafe_allow_html=True,
         )
+    with tile_col4:
+        st.markdown(
+            f'<div style="{_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual inleg (est.)</div>'
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{annual_contribution:,.0f} '
+            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
-
-    # --- 2. Jaarlijkse inleg schatten uit netto buy-activiteit per jaar ---
-    _yearly_net_buys = {}
-    for h in holdings:
-        txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
-        for t in txs:
-            try:
-                yr = int(t["transaction_date"][:4])
-            except (TypeError, ValueError, KeyError):
-                continue
-            amount = (t.get("shares") or 0) * (t.get("price") or 0) + (t.get("fee") or 0)
-            if t.get("transaction_type") == "buy":
-                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) + amount
-            else:
-                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) - amount
-
-    if _yearly_net_buys:
-        annual_contribution = max(sum(_yearly_net_buys.values()) / len(_yearly_net_buys), 0.0)
-    else:
-        annual_contribution = 0.0
-
-    st.markdown(
-        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
-        f'text-transform:uppercase; margin-bottom:1rem;">Estimated annual contribution: '
-        f'&euro;{annual_contribution:,.0f} (based on your logged buy/sell activity -- we don\'t track '
-        f'separate deposit records).</div>',
-        unsafe_allow_html=True,
-    )
 
     # --- 2. Simulation Control Panel -- supercompact, horizontaal, direct
     # boven de grafiek. Slider 2 start op de zojuist live berekende
@@ -6185,12 +6193,22 @@ def _render_wealth_engine(user_email: str) -> None:
         total_wealth.append(_wealth)
         dividend_income_by_year.append(_dividend)
 
-    # --- 3. Wealth Acceleration chart ---
+    # --- 3. Wealth Acceleration chart -- visuele legenda met gekleurde
+    # lijntjes i.p.v. bullet-tekens, gevolgd door de gedempte simulatie-
+    # parameters. ---
+    _legend_line_style = (
+        'display:inline-block; width:14px; height:3px; border-radius:2px; '
+        'margin-right:6px; vertical-align:middle;'
+    )
     st.markdown(
         f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-        f'text-transform:uppercase; margin-bottom:0.5rem;">'
-        f'&bull; Cumulative net deposits (gray) &nbsp;|&nbsp; &bull; Compounded total wealth (emerald) '
-        f'&nbsp;|&nbsp; Projected at {growth_slider:.1f}% growth + {yield_slider:.1f}% reinvested yield</div>',
+        f'text-transform:uppercase; margin-bottom:1.5rem;">'
+        f'<span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits'
+        f'&nbsp;&nbsp;&nbsp;'
+        f'<span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth'
+        f'&nbsp;&nbsp;|&nbsp;&nbsp;'
+        f'Projected at {growth_slider:.1f}% growth + {yield_slider:.1f}% reinvested yield'
+        f'</div>',
         unsafe_allow_html=True,
     )
     wealth_fig = go.Figure()
