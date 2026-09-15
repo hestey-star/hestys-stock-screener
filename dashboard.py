@@ -6213,18 +6213,29 @@ def _render_wealth_engine(user_email: str) -> None:
     total_wealth = [total_value]
     dividend_income_by_year = [simulated_starting_cashflow]
 
+    # Het dividendinkomen wordt nu berekend als (vermogen aan het BEGIN
+    # van het jaar) x (dividendrendement-per-aandeel) -- i.p.v. een
+    # dividendbedrag dat volledig LOSSTAAT van hoeveel vermogen er
+    # daadwerkelijk is opgebouwd. Zo werkt herbeleggen/compounding pas
+    # ECHT door: elk jaar extra ingelegd geld EN elk herbelegd dividend
+    # vergroot de vermogensbasis waarover het VOLGENDE jaar weer dividend
+    # wordt uitgekeerd. Het dividendrendement-per-aandeel zelf groeit nog
+    # steeds licht per jaar (effective_dividend_growth_rate, gekoppeld
+    # aan de groei-slider) -- dat simuleert dat bedrijven hun dividend
+    # per aandeel verhogen, los van hoeveel aandelen je bezit.
     _wealth = total_value
     _deposits = total_value
-    _dividend = simulated_starting_cashflow
+    _yield_rate = yield_slider / 100
     for i in range(1, PROJECTION_YEARS + 1):
+        _dividend_this_year = _wealth * _yield_rate
         capital_growth = _wealth * simulated_price_growth
-        _dividend = _dividend * (1 + effective_dividend_growth_rate)
-        _wealth = _wealth + capital_growth + _dividend + simulated_contribution
+        _wealth = _wealth + capital_growth + _dividend_this_year + simulated_contribution
         _deposits = _deposits + simulated_contribution
+        _yield_rate = _yield_rate * (1 + effective_dividend_growth_rate)
         years.append(current_year + i)
         net_deposits.append(_deposits)
         total_wealth.append(_wealth)
-        dividend_income_by_year.append(_dividend)
+        dividend_income_by_year.append(_dividend_this_year)
 
     # --- 3. Wealth Acceleration chart -- visuele legenda met gekleurde
     # lijntjes i.p.v. bullet-tekens (nu ONDER de chart, gevolgd door de
