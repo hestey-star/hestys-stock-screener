@@ -6182,6 +6182,19 @@ def _render_wealth_engine(user_email: str) -> None:
     simulated_starting_cashflow = total_value * (yield_slider / 100)
     simulated_contribution = float(contribution_slider)
 
+    # Dividend-groeitempo nu deels gekoppeld aan de EXPECTED ANNUAL
+    # GROWTH-slider i.p.v. een volledig losstaande, vaste 5% -- bedrijven
+    # met sterkere koersgroei verhogen doorgaans ook hun dividend sneller
+    # (aangedreven door dezelfde onderliggende winstgroei). 50%-doorwerking
+    # van elke afwijking t.o.v. de 7%-baseline, geclamped tussen 0% en 15%
+    # zodat het nooit een onrealistisch of negatief tempo oplevert. Zonder
+    # deze koppeling bleef het dividendinkomen (en dus de YoY-versnellings-
+    # grafiek hieronder) altijd vlak op +5,0% staan, ongeacht de sliders --
+    # dat leek eerder niet de bedoeling.
+    _baseline_price_growth = 0.07
+    effective_dividend_growth_rate = DIVIDEND_GROWTH_RATE + (simulated_price_growth - _baseline_price_growth) * 0.5
+    effective_dividend_growth_rate = max(0.0, min(0.15, effective_dividend_growth_rate))
+
     years = [current_year]
     net_deposits = [total_value]
     total_wealth = [total_value]
@@ -6192,7 +6205,7 @@ def _render_wealth_engine(user_email: str) -> None:
     _dividend = simulated_starting_cashflow
     for i in range(1, PROJECTION_YEARS + 1):
         capital_growth = _wealth * simulated_price_growth
-        _dividend = _dividend * (1 + DIVIDEND_GROWTH_RATE)
+        _dividend = _dividend * (1 + effective_dividend_growth_rate)
         _wealth = _wealth + capital_growth + _dividend + simulated_contribution
         _deposits = _deposits + simulated_contribution
         years.append(current_year + i)
@@ -6245,11 +6258,50 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # --- 4. Snowball Milestones -- st.columns()-rijen met een dunne
-    # scheidingslijn, zelfde bewezen patroon als de Analyze- en Log
-    # Transaction-tabellen elders in de app. GEEN raw <table> meer --
-    # die kreeg via Streamlit's eigen standaard-tabel-CSS ongewenste
-    # verticale kolomlijnen die we niet bewust hadden toegevoegd.
+    # --- Cashflow Velocity -- YoY-groei van het jaarlijkse dividend-
+    # inkomen over de eerstkomende 10 jaar. Puur afgeleid van dezelfde
+    # dividend_income_by_year-reeks die de 3 sliders hierboven al
+    # voeden, dus deze staafgrafiek versnelt vanzelf mee zodra je aan
+    # een slider schuift -- geen aparte herberekening nodig.
+    st.markdown(
+        '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+        'text-transform:uppercase; margin-bottom:0.75rem;">&#128202; Passive cashflow acceleration '
+        '(YoY growth)</div>',
+        unsafe_allow_html=True,
+    )
+    _velocity_years = years[1:11]
+    _velocity_pct = []
+    for i in range(1, 11):
+        prev = dividend_income_by_year[i - 1]
+        cur = dividend_income_by_year[i]
+        pct = ((cur - prev) / prev * 100) if prev > 0 else 0.0
+        _velocity_pct.append(pct)
+
+    velocity_fig = go.Figure()
+    velocity_fig.add_trace(go.Bar(
+        x=[str(y) for y in _velocity_years], y=_velocity_pct,
+        marker_color="#34D399",
+        text=[f"+{p:.0f}%" if p >= 0 else f"{p:.0f}%" for p in _velocity_pct],
+        textposition="outside",
+        textfont=dict(size=10, color="#94A3B8"),
+        hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+    ))
+    velocity_fig.update_layout(
+        height=180,
+        margin=dict(l=0, r=0, t=24, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+    )
+    st.plotly_chart(velocity_fig, use_container_width=True, config={"displayModeBar": False})
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # --- 4. Snowball Milestones -- echte <table> met expliciete border-
+    # onderdrukking (zie verderop), 3 kolommen: Milestone / Required
+    # Cashflow / Target Year.
     st.markdown(
         _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
         unsafe_allow_html=True,
