@@ -8973,7 +8973,7 @@ def render_discover_signals():
             # Geen enkele standout deze scan -- toch de top 3 tonen i.p.v.
             # de sectie helemaal leeg te laten ogen.
             filtered = df_screener.head(3)
-            caption_intro = f"No score-7.5+ standouts right now -- showing the top {len(filtered)} of {total_matching} matches"
+            caption_intro = f"No score-7.5+ standouts right now | showing the top {len(filtered)} of {total_matching} matches"
 
         # Kaarten i.p.v. een brede tabel (voorheen 13+ kolommen --
         # dat dwingt op mobiel dubbel scrollen af, verticaal EN
@@ -9042,10 +9042,10 @@ def render_discover_signals():
             snowball_standouts = df_snowball[df_snowball["afwijking_fair_value_pct"] <= -20.0]
             if not snowball_standouts.empty:
                 df_snowball = snowball_standouts.head(_STANDOUT_DISPLAY_CAP)
-                snowball_caption_intro = f"{len(df_snowball)} standout(s) (20%+ below fair value) of {total_snowball} total matches"
+                snowball_caption_intro = f"{len(df_snowball)} standouts over 20% below fair value | {total_snowball} total matches"
             else:
                 df_snowball = df_snowball.head(3)
-                snowball_caption_intro = f"No 20%+ standouts right now -- showing the top {len(df_snowball)} of {total_snowball} matches"
+                snowball_caption_intro = f"No 20%+ standouts right now | showing the top {len(df_snowball)} of {total_snowball} matches"
 
             # Kaarten i.p.v. tabel. Kleur BEWUST omgekeerd t.o.v. de
             # gebruikelijke +/- logica: een NEGATIEVE afwijking van
@@ -9104,10 +9104,10 @@ def render_discover_signals():
             rocket_standouts = df_rocket[df_rocket["groei_pct"] >= 25.0]
             if not rocket_standouts.empty:
                 df_rocket = rocket_standouts.head(_STANDOUT_DISPLAY_CAP)
-                rocket_caption_intro = f"{len(df_rocket)} standout(s) (25%+ growth) of {total_rocket} total matches"
+                rocket_caption_intro = f"{len(df_rocket)} standouts over 25% growth | {total_rocket} total matches"
             else:
                 df_rocket = df_rocket.head(3)
-                rocket_caption_intro = f"No 25%+ standouts right now -- showing the top {len(df_rocket)} of {total_rocket} matches"
+                rocket_caption_intro = f"No 25%+ standouts right now | showing the top {len(df_rocket)} of {total_rocket} matches"
 
             # Standout (ster) bij 25%+ groei -- de écht opvallende
             # versnellers.
