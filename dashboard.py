@@ -6262,15 +6262,12 @@ def _render_wealth_engine(user_email: str) -> None:
         return None
 
     # Realistische, behapbare mijlpalen i.p.v. 3 verre, demotiverende
-    # doelen -- de eerste 2 zijn vaste, kleine drempels (herkenbaar,
-    # snel haalbaar), de 3e blijft het grote sneeuwbaleffect maar nu
-    # afgezet tegen de SIMULEERBARE inleg-slider i.p.v. de vaste,
-    # historische inleg.
+    # doelen -- alle 3 nu vaste, herkenbare lifestyle-drempels i.p.v.
+    # abstracte transactiekosten of een crossover-vergelijking tegen de
+    # slider (dat concept is met deze herbenoeming vervallen).
     _milestone_subs = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 240)
-    _milestone_bills = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
-    _milestone_crossover = _find_milestone_year(
-        lambda idx: dividend_income_by_year[idx] > simulated_contribution
-    ) if simulated_contribution > 0 else None
+    _milestone_dinner = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 250)
+    _milestone_travel = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
 
     def _milestone_year_html(year_val):
         if year_val is None:
@@ -6290,14 +6287,14 @@ def _render_wealth_engine(user_email: str) -> None:
             _milestone_year_html(_milestone_subs),
         ),
         (
-            "Utilities &amp; bills covered",
-            "REQ: &euro;1,200 / YEAR",
-            _milestone_year_html(_milestone_bills),
+            "The Dinner Appreciation",
+            "REQ: &euro;250 / YEAR",
+            _milestone_year_html(_milestone_dinner),
         ),
         (
-            "The Crossover Event",
-            "CASHFLOW &gt; SIMULATED CONTRIBUTION",
-            _milestone_year_html(_milestone_crossover),
+            "The Concierge Travel",
+            "REQ: &euro;1,200 / YEAR",
+            _milestone_year_html(_milestone_travel),
         ),
     ]
 
