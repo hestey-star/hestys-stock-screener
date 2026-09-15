@@ -6016,19 +6016,29 @@ def _render_wealth_engine(user_email: str) -> None:
         )
         return
 
-    # --- 1. Portfolio dividend-metrics ---
-    DEFAULT_YIELD = 0.03
+    # --- 1. Portfolio dividend-metrics -- volledig live uit de Yahoo
+    # Finance-koppeling. Een asset zonder dividend (yfinance geeft dan
+    # 'None' terug, bv. HIMS/ASTS) weegt nu ECHT als 0% mee in het
+    # gewogen gemiddelde -- de eerdere 3%-fallback gold daar ten
+    # onrechte ook voor. Die fallback is nu uitsluitend nog een
+    # vangnet voor als de API-aanroep zelf faalt (netwerkfout/rate
+    # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
+    API_FALLBACK_YIELD = 0.03
     _weighted_yield_sum = 0.0
     for h in holdings:
         ticker = h.get("ticker")
         value = h.get("position_value") or 0
         if not ticker or value <= 0:
             continue
-        y = DEFAULT_YIELD
         try:
             info = get_cached_ticker_info(ticker)
             raw_yield = info.get("dividendYield")
-            if raw_yield is not None:
+            if raw_yield is None:
+                # Yahoo Finance heeft dit ticker's dividend-veld gewoon
+                # leeg -- meestal omdat de asset simpelweg geen dividend
+                # uitkeert. Telt dus terecht als 0%, geen fallback.
+                y = 0.0
+            else:
                 y = float(raw_yield)
                 # yfinance geeft dividendYield soms als fractie (0.03) en
                 # soms al als percentage (3.05) -- afhankelijk van de
@@ -6036,13 +6046,16 @@ def _render_wealth_engine(user_email: str) -> None:
                 # 'al-een-percentage' behandeld.
                 if y > 1:
                     y = y / 100
-                if y <= 0:
-                    y = DEFAULT_YIELD
+                if y < 0:
+                    y = 0.0
         except Exception:
-            y = DEFAULT_YIELD
+            # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
+            # dividend'-antwoord) -- hier WEL de fallback, want dit is
+            # echt ontbrekende data, geen bevestigd 0%-dividend.
+            y = API_FALLBACK_YIELD
         _weighted_yield_sum += value * y
-    avg_yield = (_weighted_yield_sum / total_value) if total_value else DEFAULT_YIELD
-    annual_cashflow = total_value * avg_yield
+    live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
+    annual_cashflow = total_value * live_avg_yield
 
     # Dividendgroei: geen historische per-jaar-dividenddata beschikbaar om
     # dit daadwerkelijk uit te berekenen -- een vaste, in de sector
@@ -6070,7 +6083,7 @@ def _render_wealth_engine(user_email: str) -> None:
             f'<div style="{_tile_style}">'
             f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
             f'color:#8992A3; margin-bottom:0.4rem;">&#128200; Average portfolio yield</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{avg_yield * 100:.2f}% '
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{live_avg_yield * 100:.2f}% '
             f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">yield</span></div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -6116,21 +6129,54 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # --- Compounding-engine: 30-jarige projectie ---
-    PRICE_GROWTH_RATE = 0.07
+    # --- 2. Simulation Control Panel -- supercompact, horizontaal, direct
+    # boven de grafiek. Slider 2 start op de zojuist live berekende
+    # portfolio-yield, maar is vrij versleepbaar om te simuleren wat
+    # extra dividend-inleg zou doen -- losstaand van de TEGEL hierboven,
+    # die altijd de echte, actuele live yield blijft tonen.
+    _sim_key = "wealth_engine_sim_panel"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_sim_key} label p {{ '
+        f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
+        f'text-transform:uppercase !important; color:#64748B !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_sim_key):
+        sim_col1, sim_col2 = st.columns(2, gap="medium")
+        with sim_col1:
+            growth_slider = st.slider(
+                "Expected annual growth (price)", min_value=0.0, max_value=15.0,
+                value=7.0, step=0.5, key="wealth_growth_slider", format="%.1f%%",
+            )
+        with sim_col2:
+            yield_slider = st.slider(
+                "Simulated dividend yield", min_value=0.0, max_value=10.0,
+                value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
+            )
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # --- Compounding-engine: 30-jarige projectie -- volledig gekoppeld
+    # aan de 2 sliders hierboven. Streamlit herrekent en hertekent de
+    # grafiek automatisch bij elke slider-beweging (gewone widget-
+    # rerun), dus dit is al flitsloos/live zonder verdere aanpassingen.
     PROJECTION_YEARS = 30
     current_year = datetime.now().year
+    simulated_price_growth = growth_slider / 100
+    simulated_starting_cashflow = total_value * (yield_slider / 100)
 
     years = [current_year]
     net_deposits = [total_value]
     total_wealth = [total_value]
-    dividend_income_by_year = [annual_cashflow]
+    dividend_income_by_year = [simulated_starting_cashflow]
 
     _wealth = total_value
     _deposits = total_value
-    _dividend = annual_cashflow
+    _dividend = simulated_starting_cashflow
     for i in range(1, PROJECTION_YEARS + 1):
-        capital_growth = _wealth * PRICE_GROWTH_RATE
+        capital_growth = _wealth * simulated_price_growth
         _dividend = _dividend * (1 + DIVIDEND_GROWTH_RATE)
         _wealth = _wealth + capital_growth + _dividend + annual_contribution
         _deposits = _deposits + annual_contribution
@@ -6140,6 +6186,13 @@ def _render_wealth_engine(user_email: str) -> None:
         dividend_income_by_year.append(_dividend)
 
     # --- 3. Wealth Acceleration chart ---
+    st.markdown(
+        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+        f'text-transform:uppercase; margin-bottom:0.5rem;">'
+        f'&bull; Cumulative net deposits (gray) &nbsp;|&nbsp; &bull; Compounded total wealth (emerald) '
+        f'&nbsp;|&nbsp; Projected at {growth_slider:.1f}% growth + {yield_slider:.1f}% reinvested yield</div>',
+        unsafe_allow_html=True,
+    )
     wealth_fig = go.Figure()
     wealth_fig.add_trace(go.Scatter(
         x=years, y=net_deposits, name="Net Deposits", mode="lines",
@@ -6200,7 +6253,7 @@ def _render_wealth_engine(user_email: str) -> None:
 
     def _milestone_value_html(year_val):
         if year_val is None:
-            return '<span style="color:#64748B;">Beyond 30-year horizon</span>'
+            return '<span style="color:#64748B; white-space:nowrap;">&gt; 30 YEARS</span>'
         return f'<span style="color:#34D399; font-weight:700;">{year_val}</span>'
 
     milestone_rows = []
