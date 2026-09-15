@@ -6286,20 +6286,22 @@ def _render_wealth_engine(user_email: str) -> None:
 
     # (naam, technische voorwaarde, jaartal-html)
     milestone_rows = [
-        ("The Daily Espresso", "REQ: &euro;60 / YEAR", _milestone_year_html(_milestone_espresso)),
-        ("The Dinner Appreciation", "REQ: &euro;250 / YEAR", _milestone_year_html(_milestone_dinner)),
-        ("The Concierge Travel", "REQ: &euro;1,200 / YEAR", _milestone_year_html(_milestone_travel)),
-        ("The Baseline Cover", "REQ: &euro;5,000 / YEAR", _milestone_year_html(_milestone_baseline)),
-        ("The Crossover Event", "CASHFLOW &gt; SIMULATED CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
-        ("Financial Independence", "REQ: &euro;30,000 / YEAR", _milestone_year_html(_milestone_freedom)),
+        ("The Daily Espresso", "&euro;60", _milestone_year_html(_milestone_espresso)),
+        ("The Dinner Appreciation", "&euro;250", _milestone_year_html(_milestone_dinner)),
+        ("The Concierge Travel", "&euro;1,200", _milestone_year_html(_milestone_travel)),
+        ("The Baseline Cover", "&euro;5,000", _milestone_year_html(_milestone_baseline)),
+        ("The Crossover Event", "CASHFLOW &gt; CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
+        ("Financial Independence", "&euro;30,000", _milestone_year_html(_milestone_freedom)),
     ]
 
     # Echte <table> met <thead>, deze keer met HARDE, expliciete
     # onderdrukking van elke default-tabelrand (border:none !important op
-    # elke cel) -- de vorige poging met een raw <table> kreeg ongewenste
+    # elke cel) -- een vorige poging met een raw <table> kreeg ongewenste
     # verticale kolomlijnen via Streamlit's eigen basis-stylesheet, dat
     # voorkomen we nu expliciet i.p.v. te vertrouwen op border-collapse
-    # alleen.
+    # alleen. Nu ook met een max-width-restrictie op de tabel zelf, zodat
+    # de data compact links/midden blijft i.p.v. tot de rand van het
+    # scherm uit te rekken.
     _milestones_key = "wealth_engine_milestones_table"
     _header_style = (
         "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
@@ -6312,13 +6314,13 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     _rows_html = "".join(
         f'<tr>'
-        f'<td style="{_cell_base} width:40%; text-align:left; text-transform:uppercase; '
+        f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
         f'font-size:0.78rem; font-weight:700; color:#F1F5F9;">{name}</td>'
-        f'<td style="{_cell_base} width:40%; text-align:left; text-transform:uppercase; '
-        f'font-size:0.68rem; font-weight:600; color:#475569;">{condition}</td>'
-        f'<td style="{_cell_base} width:20%; text-align:right; font-size:0.78rem;">{year_html}</td>'
+        f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
+        f'font-size:0.69rem; font-weight:600; color:#64748b;">{value}</td>'
+        f'<td style="{_cell_base} width:30%; text-align:right; font-size:0.78rem;">{year_html}</td>'
         f'</tr>'
-        for name, condition, year_html in milestone_rows
+        for name, value, year_html in milestone_rows
     )
     st.markdown(
         f'<style>.st-key-{_milestones_key} table {{ width:100%; border-collapse:collapse; }} '
@@ -6327,14 +6329,16 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     with st.container(key=_milestones_key):
         st.markdown(
+            f'<div style="max-width:640px;">'
             f'<table style="width:100%; border-collapse:collapse;">'
             f'<thead><tr>'
-            f'<th style="{_header_style} width:40%; text-align:left;">Milestone</th>'
-            f'<th style="{_header_style} width:40%; text-align:left;"></th>'
-            f'<th style="{_header_style} width:20%; text-align:right;">Target year</th>'
+            f'<th style="{_header_style} width:35%; text-align:left;">Milestone</th>'
+            f'<th style="{_header_style} width:35%; text-align:left;">Required cashflow</th>'
+            f'<th style="{_header_style} width:30%; text-align:right;">Target year</th>'
             f'</tr></thead>'
             f'<tbody>{_rows_html}</tbody>'
-            f'</table>',
+            f'</table>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
