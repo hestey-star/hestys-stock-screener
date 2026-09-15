@@ -6202,12 +6202,11 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     st.markdown(
         f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-        f'text-transform:uppercase; margin-bottom:1.5rem;">'
-        f'<span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits'
-        f'&nbsp;&nbsp;&nbsp;'
-        f'<span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth'
-        f'&nbsp;&nbsp;|&nbsp;&nbsp;'
-        f'Projected at {growth_slider:.1f}% growth + {yield_slider:.1f}% reinvested yield'
+        f'text-transform:uppercase; margin-bottom:1.5rem; line-height:1.9;">'
+        f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
+        f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
+        f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
+        f'{yield_slider:.1f}% reinvested yield</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -6216,13 +6215,13 @@ def _render_wealth_engine(user_email: str) -> None:
         x=years, y=net_deposits, name="Net Deposits", mode="lines",
         line=dict(color="rgba(148,163,184,0.55)", width=1.5),
         fill="tozeroy", fillcolor="rgba(148,163,184,0.08)",
-        hovertemplate="%{x}: &euro;%{y:,.0f}<extra></extra>",
+        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
     ))
     wealth_fig.add_trace(go.Scatter(
         x=years, y=total_wealth, name="Total Wealth", mode="lines",
         line=dict(color="#34D399", width=2.5),
         fill="tonexty", fillcolor="rgba(52,211,153,0.08)",
-        hovertemplate="%{x}: &euro;%{y:,.0f}<extra></extra>",
+        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
     ))
     wealth_fig.update_layout(
         height=340,
@@ -6281,14 +6280,16 @@ def _render_wealth_engine(user_email: str) -> None:
     milestone_rows.append(("Financial Freedom (&euro;2,500+ passive / month)", _milestone_value_html(_milestone_freedom)))
 
     _rows_html = "".join(
-        f'<tr>'
-        f'<td style="padding:0.55rem 0.5rem 0.55rem 0; color:#8992A3; font-size:0.82rem; border-bottom:1px solid rgba(137,146,163,0.1);">{label}</td>'
-        f'<td style="padding:0.55rem 0 0.55rem 0.5rem; text-align:right; font-size:0.82rem; border-bottom:1px solid rgba(137,146,163,0.1);">{value_html}</td>'
-        f'</tr>'
+        f'<div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; '
+        f'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); border-radius:10px; '
+        f'padding:0.7rem 1rem; margin-bottom:0.5rem;">'
+        f'<span style="color:#8992A3; font-size:0.8rem;">{label}</span>'
+        f'<span style="font-size:0.85rem; flex-shrink:0;">{value_html}</span>'
+        f'</div>'
         for label, value_html in milestone_rows
     )
     st.markdown(
-        f'<table style="width:100%; border-collapse:collapse; margin-top:0.5rem;">{_rows_html}</table>',
+        f'<div style="max-width:480px;">{_rows_html}</div>',
         unsafe_allow_html=True,
     )
 
