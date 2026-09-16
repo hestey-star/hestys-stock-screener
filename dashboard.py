@@ -6369,41 +6369,42 @@ def _render_wealth_engine(user_email: str) -> None:
     # jaarlijkse inleg, zie de projectie hierboven) voelden demotiverend
     # aan, terwijl het harde euro-bedrag zelf ieder jaar juist stevig
     # stijgt -- dat vliegwiel-effect komt hier nu rechtstreeks in beeld.
-    # 15 jaar vooruit (i.p.v. 10) voor een indrukwekkender resultaat.
-    # Puur afgeleid van dezelfde dividend_income_by_year-reeks die de 3
-    # sliders hierboven al voeden, dus deze staafgrafiek versnelt vanzelf
-    # mee zodra je aan een slider schuift -- geen aparte herberekening
-    # nodig.
+    # Geen st.bar_chart/plotly-staafgrafiek meer -- die paste met dikke,
+    # platte balken totaal niet bij Hestys' rustige, typografische stijl.
+    # Nu een pure HTML-datamatrix: 5 kolommen (komende 5 jaar), elk met
+    # jaartal / absoluut eurobedrag / YoY-versnelling eronder. Puur
+    # afgeleid van dezelfde dividend_income_by_year-reeks die de 3
+    # sliders hierboven al voeden, dus deze matrix herrekent vanzelf mee
+    # zodra je aan een slider schuift -- geen aparte logica nodig.
     st.markdown(
         '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
         'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
         'padding-bottom:8px; margin-bottom:15px;">&#128202; Passive Cashflow Acceleration '
-        '(Annual Absolute Inflow)</div>',
+        '(5-Year Velocity Matrix)</div>',
         unsafe_allow_html=True,
     )
-    _velocity_years = years[1:16]
-    _velocity_eur = dividend_income_by_year[1:16]
-
-    velocity_fig = go.Figure()
-    velocity_fig.add_trace(go.Bar(
-        x=[str(y) for y in _velocity_years], y=_velocity_eur,
-        marker_color="#34D399",
-        text=[f"\u20ac{v:,.0f}" for v in _velocity_eur],
-        textposition="outside",
-        textfont=dict(size=10, color="#94A3B8"),
-        hovertemplate="%{x}: \u20ac%{y:,.0f}<extra></extra>",
-    ))
-    velocity_fig.update_layout(
-        height=180,
-        margin=dict(l=0, r=0, t=24, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+    _matrix_cells_html = ""
+    for i in range(1, 6):
+        _yr = years[i]
+        _eur = dividend_income_by_year[i]
+        if i == 1:
+            _yoy_html = '<div style="font-size:11px; font-weight:700; color:#34d399;">BASELINE</div>'
+        else:
+            _prev = dividend_income_by_year[i - 1]
+            _pct = ((_eur - _prev) / _prev * 100) if _prev > 0 else 0.0
+            _yoy_html = f'<div style="font-size:11px; font-weight:700; color:#34d399;">+{_pct:.1f}% YOY</div>'
+        _matrix_cells_html += (
+            f'<div style="width:20%; text-align:center;">'
+            f'<div style="font-size:10px; font-weight:700; color:#475569; letter-spacing:0.05em; '
+            f'text-transform:uppercase;">{_yr}</div>'
+            f'<div style="font-size:16px; font-weight:700; color:#ffffff; padding:4px 0;">&euro;{_eur:,.0f}</div>'
+            f'{_yoy_html}'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div style="display:flex; width:100%;">{_matrix_cells_html}</div>',
+        unsafe_allow_html=True,
     )
-    st.plotly_chart(velocity_fig, use_container_width=True, config={"displayModeBar": False})
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
     # --- 4. Snowball Milestones -- echte <table> met expliciete border-
