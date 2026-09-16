@@ -6185,12 +6185,21 @@ def _render_wealth_engine(user_email: str) -> None:
         'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
         'border-radius:12px; padding:1rem; text-align:left;'
     )
+    # De tegel staat BOVEN de slider in de layout, maar moet er toch WEL
+    # van afhangen -- Streamlit's session_state voor een widget-key blijft
+    # bestaan tussen reruns, ook voordat die widget zelf verderop in DEZE
+    # run opnieuw getekend wordt. Zo kan de tegel de actuele sliderstand
+    # gebruiken zonder de hele layout te hoeven omgooien. Bij de
+    # allereerste render (slider nog nooit aangeraakt) valt dit terug op
+    # de live berekende yield, exact zoals de slider zelf ook default.
+    _active_yield_pct = st.session_state.get("wealth_yield_slider", round(live_avg_yield * 100, 1))
+    simulated_annual_cashflow = total_value * (_active_yield_pct / 100)
     with tile_col1:
         st.markdown(
             f'<div style="{_tile_style}">'
             f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
             f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual passive cashflow</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{annual_cashflow:,.0f} '
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{simulated_annual_cashflow:,.0f} '
             f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
             f'</div>',
             unsafe_allow_html=True,
