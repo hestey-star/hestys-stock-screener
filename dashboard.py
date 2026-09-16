@@ -6257,7 +6257,7 @@ def _render_wealth_engine(user_email: str) -> None:
             f'<div style="{_tile_style}">'
             f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
             f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual contribution (est.)</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{annual_contribution:,.0f} '
+            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{contribution_slider:,.0f} '
             f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
             f'</div>',
             unsafe_allow_html=True,
