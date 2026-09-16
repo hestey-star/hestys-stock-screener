@@ -6179,21 +6179,49 @@ def _render_wealth_engine(user_email: str) -> None:
     else:
         annual_contribution = 0.0
 
-    # --- Strak 4-koloms grid ---
+    # --- 2. Simulation Control Panel -- NU VOOR de tegels gerenderd
+    # (i.p.v. erna), zodat tegel 1 rechtstreeks de teruggegeven waarde
+    # van yield_slider kan gebruiken -- geen omweg via session_state
+    # meer nodig, dus geen enkele twijfel meer over of de koppeling
+    # daadwerkelijk elke rerun meebeweegt.
+    _sim_key = "wealth_engine_sim_panel"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_sim_key} label p {{ '
+        f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
+        f'text-transform:uppercase !important; color:#64748B !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_sim_key):
+        sim_col1, sim_col2, sim_col3 = st.columns(3, gap="medium")
+        with sim_col1:
+            growth_slider = st.slider(
+                "Expected annual growth (price)", min_value=0.0, max_value=15.0,
+                value=7.0, step=0.5, key="wealth_growth_slider", format="%.1f%%",
+            )
+        with sim_col2:
+            yield_slider = st.slider(
+                "Simulated dividend yield", min_value=0.0, max_value=10.0,
+                value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
+            )
+        with sim_col3:
+            contribution_slider = st.slider(
+                "Simulated annual contribution", min_value=0, max_value=50000,
+                value=int(round(annual_contribution)), step=500, key="wealth_contribution_slider",
+                format="\u20ac%d",
+            )
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    # --- Strak 4-koloms grid -- tegel 1 gebruikt nu rechtstreeks
+    # yield_slider (de teruggegeven waarde van de widget hierboven), dus
+    # gegarandeerd correct bij elke rerun/sleepbeweging.
     tile_col1, tile_col2, tile_col3, tile_col4 = st.columns(4, gap="medium")
     _tile_style = (
         'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
         'border-radius:12px; padding:1rem; text-align:left;'
     )
-    # De tegel staat BOVEN de slider in de layout, maar moet er toch WEL
-    # van afhangen -- Streamlit's session_state voor een widget-key blijft
-    # bestaan tussen reruns, ook voordat die widget zelf verderop in DEZE
-    # run opnieuw getekend wordt. Zo kan de tegel de actuele sliderstand
-    # gebruiken zonder de hele layout te hoeven omgooien. Bij de
-    # allereerste render (slider nog nooit aangeraakt) valt dit terug op
-    # de live berekende yield, exact zoals de slider zelf ook default.
-    _active_yield_pct = st.session_state.get("wealth_yield_slider", round(live_avg_yield * 100, 1))
-    simulated_annual_cashflow = total_value * (_active_yield_pct / 100)
+    simulated_annual_cashflow = total_value * (yield_slider / 100)
     with tile_col1:
         st.markdown(
             f'<div style="{_tile_style}">'
@@ -6236,41 +6264,6 @@ def _render_wealth_engine(user_email: str) -> None:
         )
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
-
-    # --- 2. Simulation Control Panel -- supercompact, horizontaal, direct
-    # boven de grafiek. Slider 2 start op de zojuist live berekende
-    # portfolio-yield, maar is vrij versleepbaar om te simuleren wat
-    # extra dividend-inleg zou doen -- losstaand van de TEGEL hierboven,
-    # die altijd de echte, actuele live yield blijft tonen.
-    _sim_key = "wealth_engine_sim_panel"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_sim_key} label p {{ '
-        f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
-        f'text-transform:uppercase !important; color:#64748B !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_sim_key):
-        sim_col1, sim_col2, sim_col3 = st.columns(3, gap="medium")
-        with sim_col1:
-            growth_slider = st.slider(
-                "Expected annual growth (price)", min_value=0.0, max_value=15.0,
-                value=7.0, step=0.5, key="wealth_growth_slider", format="%.1f%%",
-            )
-        with sim_col2:
-            yield_slider = st.slider(
-                "Simulated dividend yield", min_value=0.0, max_value=10.0,
-                value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
-            )
-        with sim_col3:
-            contribution_slider = st.slider(
-                "Simulated annual contribution", min_value=0, max_value=50000,
-                value=int(round(annual_contribution)), step=500, key="wealth_contribution_slider",
-                format="\u20ac%d",
-            )
-
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     # --- Compounding-engine: 30-jarige projectie -- volledig gekoppeld
     # aan de 3 sliders hierboven. Streamlit herrekent en hertekent de
