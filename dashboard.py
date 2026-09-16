@@ -6043,29 +6043,39 @@ def _render_wealth_engine(user_email: str) -> None:
         value = h.get("position_value") or 0
         if not ticker or value <= 0:
             continue
-        try:
-            info = get_cached_ticker_info(ticker)
-            raw_yield = info.get("dividendYield")
-            if raw_yield is None:
-                # Yahoo Finance heeft dit ticker's dividend-veld gewoon
-                # leeg -- meestal omdat de asset simpelweg geen dividend
-                # uitkeert. Telt dus terecht als 0%, geen fallback.
-                y = 0.0
-            else:
-                y = float(raw_yield)
-                # yfinance geeft dividendYield soms als fractie (0.03) en
-                # soms al als percentage (3.05) -- afhankelijk van de
-                # yfinance-versie. Alles boven 1 wordt daarom als
-                # 'al-een-percentage' behandeld.
-                if y > 1:
-                    y = y / 100
-                if y < 0:
+        _custom_cashflow = h.get("custom_annual_cashflow")
+        if _custom_cashflow is not None:
+            # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
+            # e.d.) -- geen echte ticker om bij Yahoo Finance op te
+            # zoeken, dus die stap slaan we hier bewust over. Het
+            # rendement wordt direct afgeleid uit de handmatig ingevoerde
+            # jaarlijkse cashflow t.o.v. de (eveneens handmatig
+            # ingevoerde) positiewaarde.
+            y = float(_custom_cashflow) / value
+        else:
+            try:
+                info = get_cached_ticker_info(ticker)
+                raw_yield = info.get("dividendYield")
+                if raw_yield is None:
+                    # Yahoo Finance heeft dit ticker's dividend-veld gewoon
+                    # leeg -- meestal omdat de asset simpelweg geen dividend
+                    # uitkeert. Telt dus terecht als 0%, geen fallback.
                     y = 0.0
-        except Exception:
-            # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
-            # dividend'-antwoord) -- hier WEL de fallback, want dit is
-            # echt ontbrekende data, geen bevestigd 0%-dividend.
-            y = API_FALLBACK_YIELD
+                else:
+                    y = float(raw_yield)
+                    # yfinance geeft dividendYield soms als fractie (0.03) en
+                    # soms al als percentage (3.05) -- afhankelijk van de
+                    # yfinance-versie. Alles boven 1 wordt daarom als
+                    # 'al-een-percentage' behandeld.
+                    if y > 1:
+                        y = y / 100
+                    if y < 0:
+                        y = 0.0
+            except Exception:
+                # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
+                # dividend'-antwoord) -- hier WEL de fallback, want dit is
+                # echt ontbrekende data, geen bevestigd 0%-dividend.
+                y = API_FALLBACK_YIELD
         _weighted_yield_sum += value * y
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
@@ -8533,69 +8543,113 @@ def render_portfolio():
             else:
                 # Nieuwe positie: altijd een koop (je kan niet iets verkopen dat je nog niet hebt)
                 is_buy = True
-                tx_search_query = st.text_input(
-                    "Search for the company/asset you bought", key="tx_search_query",
+                tx_is_custom_asset = st.checkbox(
+                    "\u2726 Log as custom yield asset (real estate, fixed income)",
+                    key="tx_is_custom_asset",
+                    help="For assets without a Yahoo Finance ticker -- fractional real estate, "
+                         "private fixed-income products, etc. You enter the cashflow yourself "
+                         "instead of it being looked up live.",
                 )
-                if tx_search_query:
-                    try:
-                        tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
-                    except Exception as exc:
-                        tx_search_results = []
-                        st.caption(f"Search failed: {exc}")
-                    if tx_search_results:
-                        tx_options = {}
-                        for r in tx_search_results:
-                            name = r.get("shortname") or r.get("longname") or r.get("symbol")
-                            label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
-                            tx_options[label] = r
-                        tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
-                        tx_chosen = tx_options[tx_chosen_label]
-                        new_position_symbol = tx_chosen.get("symbol")
-                        new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
-                    else:
-                        st.caption("No results found for this search -- try a different name.")
+                if tx_is_custom_asset:
+                    new_position_name = st.text_input(
+                        "Asset name", key="tx_custom_name",
+                        placeholder="e.g. Prop.com -- Lisbon apartment",
+                    )
+                    new_position_symbol = st.text_input(
+                        "Identifier", key="tx_custom_symbol",
+                        placeholder="e.g. PROP.COM or REALESTATE1",
+                        help="A short, unique label for this asset -- used instead of a ticker.",
+                    ).strip().upper()
+                else:
+                    tx_search_query = st.text_input(
+                        "Search for the company/asset you bought", key="tx_search_query",
+                    )
+                    if tx_search_query:
+                        try:
+                            tx_search_results = yf.Search(tx_search_query, max_results=8).quotes
+                        except Exception as exc:
+                            tx_search_results = []
+                            st.caption(f"Search failed: {exc}")
+                        if tx_search_results:
+                            tx_options = {}
+                            for r in tx_search_results:
+                                name = r.get("shortname") or r.get("longname") or r.get("symbol")
+                                label = f"{name} ({r.get('symbol')}) -- {r.get('exchange', '')}"
+                                tx_options[label] = r
+                            tx_chosen_label = st.selectbox("Choose the right match", list(tx_options.keys()), key="tx_new_match")
+                            tx_chosen = tx_options[tx_chosen_label]
+                            new_position_symbol = tx_chosen.get("symbol")
+                            new_position_name = tx_chosen.get("shortname") or tx_chosen.get("longname") or new_position_symbol
+                        else:
+                            st.caption("No results found for this search -- try a different name.")
 
-            trow1_col1, trow1_col2 = st.columns(2)
-            with trow1_col1:
-                tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
-            with trow1_col2:
-                tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
-            trow2_col1, trow2_col2 = st.columns(2)
-            with trow2_col1:
-                tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
-            with trow2_col2:
+            if tx_position_mode == "New position" and st.session_state.get("tx_is_custom_asset"):
+                # Custom yield asset: geen Shares/Price/Fee/Currency-keuze --
+                # gewoon het geinvesteerde bedrag en de verwachte jaarlijkse
+                # cashflow. Shares wordt straks bij het opslaan hard op 1
+                # gezet, Price op het totale investeringsbedrag (zie verderop).
+                custom_col1, custom_col2 = st.columns(2)
+                with custom_col1:
+                    tx_custom_capital = st.number_input(
+                        "Total capital invested (\u20ac)", min_value=0.0, step=50.0,
+                        key="tx_custom_capital",
+                    )
+                with custom_col2:
+                    tx_custom_cashflow = st.number_input(
+                        "Estimated annual cashflow (\u20ac)", min_value=0.0, step=10.0,
+                        key="tx_custom_cashflow",
+                    )
                 tx_date = st.date_input("Date", key="tx_date_input")
+                tx_shares, tx_price, tx_fee, tx_currency = 1.0, tx_custom_capital, 0.0, "EUR"
+                tx_target_weight = 0.0
+                if tx_position_mode == "New position":
+                    tx_target_weight = st.number_input(
+                        "Target allocation % (optional)", min_value=0.0, max_value=100.0, step=0.5,
+                        value=0.0, key="tx_target_weight_input",
+                        help="Optional -- the % of your portfolio you want this position to make up.",
+                    )
+            else:
+                trow1_col1, trow1_col2 = st.columns(2)
+                with trow1_col1:
+                    tx_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="tx_shares_input")
+                with trow1_col2:
+                    tx_price = st.number_input("Price per share", min_value=0.0, step=0.01, key="tx_price_input")
+                trow2_col1, trow2_col2 = st.columns(2)
+                with trow2_col1:
+                    tx_fee = st.number_input("Fee paid", min_value=0.0, step=0.01, value=0.0, key="tx_fee_input")
+                with trow2_col2:
+                    tx_date = st.date_input("Date", key="tx_date_input")
 
-            # Valuta expliciet vragen i.p.v. altijd EUR aan te nemen --
-            # was voorheen de bron van een echte, verwarrende bug: een
-            # Amerikaans aandeel gekocht in USD werd stilzwijgend als EUR
-            # behandeld, wat het rendement volledig verkeerd berekende.
-            # Slimme default: de native valuta van de gekozen ticker (zoals
-            # je die op je broker-overzicht zou zien), maar altijd
-            # aanpasbaar -- voor het geval je toch de EUR-equivalente
-            # prijs invoert (bv. van een DEGIRO-overzicht).
-            tx_ticker_for_currency = tx_holding["ticker"] if tx_holding else new_position_symbol
-            tx_default_currency = (
-                get_cached_ticker_currency(tx_ticker_for_currency) if tx_ticker_for_currency else "EUR"
-            )
-            tx_currency_options = ["EUR", "USD", "GBP", "CAD", "CHF", "SEK", "DKK", "NOK", "HKD", "JPY", "AUD"]
-            tx_currency_default_index = (
-                tx_currency_options.index(tx_default_currency) if tx_default_currency in tx_currency_options else 0
-            )
-            tx_currency = st.selectbox(
-                "Price currency", tx_currency_options, index=tx_currency_default_index, key="tx_currency_input",
-                help="The currency the price above is in -- usually the ticker's native trading currency.",
-            )
-
-            # Target weight ALLEEN vragen bij een NIEUWE positie -- eenmalig,
-            # bij aanmaak, i.p.v. een aparte lijst met ALLE posities achteraf.
-            tx_target_weight = 0.0
-            if tx_position_mode == "New position":
-                tx_target_weight = st.number_input(
-                    "Target allocation % (optional)", min_value=0.0, max_value=100.0, step=0.5,
-                    value=0.0, key="tx_target_weight_input",
-                    help="Optional -- the % of your portfolio you want this position to make up.",
+                # Valuta expliciet vragen i.p.v. altijd EUR aan te nemen --
+                # was voorheen de bron van een echte, verwarrende bug: een
+                # Amerikaans aandeel gekocht in USD werd stilzwijgend als EUR
+                # behandeld, wat het rendement volledig verkeerd berekende.
+                # Slimme default: de native valuta van de gekozen ticker (zoals
+                # je die op je broker-overzicht zou zien), maar altijd
+                # aanpasbaar -- voor het geval je toch de EUR-equivalente
+                # prijs invoert (bv. van een DEGIRO-overzicht).
+                tx_ticker_for_currency = tx_holding["ticker"] if tx_holding else new_position_symbol
+                tx_default_currency = (
+                    get_cached_ticker_currency(tx_ticker_for_currency) if tx_ticker_for_currency else "EUR"
                 )
+                tx_currency_options = ["EUR", "USD", "GBP", "CAD", "CHF", "SEK", "DKK", "NOK", "HKD", "JPY", "AUD"]
+                tx_currency_default_index = (
+                    tx_currency_options.index(tx_default_currency) if tx_default_currency in tx_currency_options else 0
+                )
+                tx_currency = st.selectbox(
+                    "Price currency", tx_currency_options, index=tx_currency_default_index, key="tx_currency_input",
+                    help="The currency the price above is in -- usually the ticker's native trading currency.",
+                )
+
+                # Target weight ALLEEN vragen bij een NIEUWE positie -- eenmalig,
+                # bij aanmaak, i.p.v. een aparte lijst met ALLE posities achteraf.
+                tx_target_weight = 0.0
+                if tx_position_mode == "New position":
+                    tx_target_weight = st.number_input(
+                        "Target allocation % (optional)", min_value=0.0, max_value=100.0, step=0.5,
+                        value=0.0, key="tx_target_weight_input",
+                        help="Optional -- the % of your portfolio you want this position to make up.",
+                    )
 
             can_save = (tx_holding is not None) or (new_position_symbol is not None)
 
@@ -8624,6 +8678,32 @@ def render_portfolio():
                                 "You've reached the free plan limit of 10 tracked positions. "
                                 "Upgrade to Premium for unlimited tracking."
                             )
+                        elif st.session_state.get("tx_is_custom_asset") and not new_position_symbol:
+                            st.error("Please fill in an identifier for this custom yield asset.")
+                        elif st.session_state.get("tx_is_custom_asset"):
+                            # Custom yield asset: geen Yahoo Finance-ticker om op te
+                            # zoeken, dus 'value_currency' hard op EUR i.p.v. via
+                            # get_cached_ticker_currency() (die zou voor een
+                            # fake ticker als 'PROP.COM' falen/onzin teruggeven).
+                            new_id = database.add_holding(
+                                user_email, new_position_name, new_position_symbol, shares=1,
+                                value_currency="EUR", custom_annual_cashflow=tx_custom_cashflow,
+                            )
+                            if tx_target_weight > 0:
+                                database.set_target_weight(new_id, user_email, tx_target_weight)
+                            database.add_transaction(
+                                user_email, new_id, "buy",
+                                shares=1, price=tx_custom_capital, fee=0.0,
+                                transaction_date=tx_date.isoformat(), currency="EUR",
+                            )
+                            # position_value moet HIER meteen gezet worden -- een
+                            # custom asset heeft geen live koers, dus de normale
+                            # prijs-ververs-stap zal 'm nooit vullen. Zonder deze
+                            # regel zou de positie overal (My Portfolio, Analyze,
+                            # Wealth Engine) als €0 meetellen.
+                            database.update_holding_value(new_id, user_email, tx_custom_capital, value_currency="EUR")
+                            st.success(f"{new_position_name} ({new_position_symbol}) added as a custom yield asset!")
+                            st.rerun()
                         else:
                             new_id = database.add_holding(
                                 user_email, new_position_name, new_position_symbol, shares=None,

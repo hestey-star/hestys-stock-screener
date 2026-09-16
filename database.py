@@ -85,7 +85,7 @@ def get_user_holdings(user_email: str, is_watchlist: bool = False) -> list[dict]
     return response.data
 
 
-def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False, isin: str = None, value_currency: str = None) -> int:
+def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, is_watchlist: bool = False, isin: str = None, value_currency: str = None, custom_annual_cashflow: float = None) -> int:
     """
     Voegt een nieuwe positie toe (eigen positie, of alleen watchlist als
     is_watchlist=True). Geeft de nieuwe id terug.
@@ -96,6 +96,13 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, i
     gehad) de VERKEERDE valutasymbool kunnen tonen naast een WEL al
     beschikbare, native prijs (bv. uit de gedeelde market_data-tabel) --
     een mismatch tussen het getoonde getal en het getoonde symbool.
+
+    'custom_annual_cashflow' -- voor 'Custom Yield Asset'-posities
+    (fractioneel vastgoed, vaste-inkomstenproducten e.d.) die geen
+    Yahoo Finance-ticker hebben: een handmatig ingevoerde, JAARLIJKSE
+    cashflow in euro's. Als dit gezet is, MOET de aanroepende code (zie
+    dashboard.py) de Yahoo Finance-prijs-/dividend-ophaalstap voor deze
+    positie overslaan -- er is geen echte ticker om op te zoeken.
     """
     client = get_supabase_client()
     insert_data = {
@@ -109,8 +116,17 @@ def add_holding(user_email: str, naam: str, ticker: str, shares: float = None, i
     }
     if value_currency:
         insert_data["value_currency"] = value_currency
+    if custom_annual_cashflow is not None:
+        insert_data["custom_annual_cashflow"] = custom_annual_cashflow
     response = client.table("portfolio_holdings").insert(insert_data).execute()
     return response.data[0]["id"]
+
+
+def update_holding_custom_cashflow(holding_id: int, user_email: str, custom_annual_cashflow: float) -> None:
+    """Wijzigt de handmatig ingevoerde jaarlijkse cashflow van een bestaande 'Custom Yield Asset'-positie."""
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"custom_annual_cashflow": custom_annual_cashflow}) \
+        .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
 def update_holding_shares(holding_id: int, user_email: str, shares: float) -> None:
