@@ -6363,39 +6363,35 @@ def _render_wealth_engine(user_email: str) -> None:
     )
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # --- Cashflow Velocity -- YoY-groei van het jaarlijkse dividend-
-    # inkomen. Het EERSTE berekende jaar staat wiskundig altijd vast op
-    # exact +0% (het dividend van 'over 1 jaar' is nog gebaseerd op je
-    # HUIDIGE bezit, dus identiek aan je huidige dividend -- financieel
-    # correct, maar oogt in de grafiek als een loze, lege balk). Die
-    # wordt daarom bewust overgeslagen: de grafiek toont de 10 jaren
-    # ERNA, waar de groei wel degelijk elk jaar varieert. Puur afgeleid
-    # van dezelfde dividend_income_by_year-reeks die de 3 sliders
-    # hierboven al voeden, dus deze staafgrafiek versnelt vanzelf mee
-    # zodra je aan een slider schuift -- geen aparte herberekening nodig.
+    # --- Cashflow Velocity -- absolute jaarlijkse passieve cashflow in
+    # euro's, i.p.v. procentuele YoY-groei. Dalende groei-percentages
+    # (het onvermijdelijke gevolg van compounding tegen een VASTE
+    # jaarlijkse inleg, zie de projectie hierboven) voelden demotiverend
+    # aan, terwijl het harde euro-bedrag zelf ieder jaar juist stevig
+    # stijgt -- dat vliegwiel-effect komt hier nu rechtstreeks in beeld.
+    # 15 jaar vooruit (i.p.v. 10) voor een indrukwekkender resultaat.
+    # Puur afgeleid van dezelfde dividend_income_by_year-reeks die de 3
+    # sliders hierboven al voeden, dus deze staafgrafiek versnelt vanzelf
+    # mee zodra je aan een slider schuift -- geen aparte herberekening
+    # nodig.
     st.markdown(
         '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
         'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
         'padding-bottom:8px; margin-bottom:15px;">&#128202; Passive Cashflow Acceleration '
-        '(YoY Growth)</div>',
+        '(Annual Absolute Inflow)</div>',
         unsafe_allow_html=True,
     )
-    _velocity_years = years[2:12]
-    _velocity_pct = []
-    for i in range(2, 12):
-        prev = dividend_income_by_year[i - 1]
-        cur = dividend_income_by_year[i]
-        pct = ((cur - prev) / prev * 100) if prev > 0 else 0.0
-        _velocity_pct.append(pct)
+    _velocity_years = years[1:16]
+    _velocity_eur = dividend_income_by_year[1:16]
 
     velocity_fig = go.Figure()
     velocity_fig.add_trace(go.Bar(
-        x=[str(y) for y in _velocity_years], y=_velocity_pct,
+        x=[str(y) for y in _velocity_years], y=_velocity_eur,
         marker_color="#34D399",
-        text=[f"+{p:.0f}%" if p >= 0 else f"{p:.0f}%" for p in _velocity_pct],
+        text=[f"\u20ac{v:,.0f}" for v in _velocity_eur],
         textposition="outside",
         textfont=dict(size=10, color="#94A3B8"),
-        hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+        hovertemplate="%{x}: \u20ac%{y:,.0f}<extra></extra>",
     ))
     velocity_fig.update_layout(
         height=180,
