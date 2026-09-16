@@ -862,6 +862,15 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
     for holding in holdings:
         if not holding.get("shares"):
             continue
+        if holding.get("custom_annual_cashflow") is not None:
+            # Custom yield asset -- geen echte ticker om bij Yahoo Finance
+            # op te zoeken (het huidige gedrag ZONDER deze check is ook al
+            # veilig, dankzij get_cached_ticker_info()'s eigen try/except
+            # die {} teruggeeft, waarna native_price None blijft en de
+            # holding hieronder alsnog wordt overgeslagen -- maar deze
+            # expliciete check bespaart een nutteloze API-poging en maakt
+            # de bedoeling duidelijk i.p.v. op toevallig gedrag te leunen).
+            continue
         try:
             # 'regularMarketPrice' (of 'currentPrice' als terugval-veldnaam)
             # uit yfinance's .info wordt EERST geprobeerd -- dit veld
