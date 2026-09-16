@@ -1,7 +1,8 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-CHRW,2026-09-14,0,35,157.31,157.31,0.0,False,^GSPC,-17.39,True,19.4,stijgend,5.6,True,2026-07-29,47,199.4,-21.1,6.62
-KR,2026-09-14,0,76,60.91,60.91,0.0,True,^GSPC,-3.49,True,5.2,dalend,3.6,True,2026-09-11,3,68.48,-11.0,6.09
-MO,2026-09-14,0,31,70.61,70.61,0.0,True,^GSPC,-0.29,False,50.9,stijgend,-1.2,False,2026-07-30,46,70.0,0.9,5.95
-IBM,2026-09-11,1,42,243.29,249.09,2.38,True,^GSPC,-7.07,True,11.2,stijgend,-0.1,False,2026-07-22,54,245.35,1.5,5.63
-ELV,2026-09-10,2,40,416.54,424.24,1.85,True,^GSPC,6.2,True,,onbekend,20.0,True,2026-07-15,61,450.05,-5.7,5.33
-HUM,2026-09-11,1,31,409.8,407.02,-0.68,True,^GSPC,10.01,False,,onbekend,8.8,True,2026-07-29,47,419.04,-2.9,5.22
+FFIV,2026-09-15,0,37,430.88,430.88,0.0,True,^GSPC,10.64,True,23.7,stijgend,18.2,True,2026-07-27,50,436.1,-1.2,7.7
+WST,2026-09-15,0,36,365.0,365.0,0.0,True,^GSPC,10.23,True,17.6,dalend,13.9,True,2026-07-23,54,405.38,-10.0,7.06
+KR,2026-09-14,1,76,60.91,62.25,2.2,True,^GSPC,9.58,True,5.2,dalend,3.6,True,2026-09-11,4,68.0,-8.5,6.08
+CHRW,2026-09-14,1,35,157.31,157.63,0.2,False,^GSPC,-15.58,True,19.4,stijgend,5.6,True,2026-07-29,48,199.4,-20.9,5.97
+MO,2026-09-14,1,31,69.5,69.81,0.45,True,^GSPC,1.48,False,50.9,stijgend,-1.2,False,2026-07-30,47,70.0,-0.3,5.35
+IBM,2026-09-11,2,42,243.29,248.37,2.09,True,^GSPC,-0.71,True,11.2,stijgend,-0.1,False,2026-07-22,55,245.35,1.2,5.29
+HUM,2026-09-11,2,31,409.8,396.62,-3.22,True,^GSPC,9.1,False,,onbekend,8.8,True,2026-07-29,48,419.04,-5.4,4.5
