@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import base64
 from datetime import datetime, timezone, timedelta, date
 
 import numpy as np
@@ -810,6 +811,26 @@ def get_cached_ticker_currency(ticker: str) -> str:
     return "USD"
 
 
+def _native_currency_for_holding(h: dict) -> str:
+    """
+    Zelfde doel als get_cached_ticker_currency(), maar HOLDING-bewust:
+    een Custom Yield Asset (fractioneel vastgoed e.d., h['custom_
+    annual_cashflow'] is dan niet None) heeft geen echte markt-notering
+    om een 'native handelsvaluta' voor op te zoeken -- get_cached_
+    ticker_currency() viel voor zo'n fake ticker (bv. 'PROP.COM') altijd
+    terug op de laatste 'return USD'-default, ongeacht in welke valuta
+    de gebruiker 'm daadwerkelijk invoerde. Dat veroorzaakte een echte
+    bug: overal waar native_currency != value_currency werd aangenomen
+    (Daily/All-time-weergave, 'Update portfolio value'), werd een
+    volledig overbodige EUR<->USD-FX-conversie op de waarde losgelaten.
+    Voor een custom asset IS de opgeslagen value_currency de enige juiste
+    valuta -- geen aparte 'markt'-valuta om ooit tegen te converteren.
+    """
+    if h.get("custom_annual_cashflow") is not None:
+        return h.get("value_currency") or "EUR"
+    return get_cached_ticker_currency(h["ticker"])
+
+
 def refresh_portfolio_values(holdings: list, user_email: str, display_currency: str = "EUR") -> tuple:
     """
     Haalt voor al je posities in 1x (via een gebatchte download) de
@@ -889,7 +910,7 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
                 native_price = _price_near_date(hist, today, tolerance_days=10) if hist is not None else None
             if native_price is None:
                 continue
-            native_currency = get_cached_ticker_currency(holding["ticker"])
+            native_currency = _native_currency_for_holding(holding)
 
             if native_currency not in fx_cache:
                 fx_cache[native_currency] = get_fx_rate(native_currency, display_currency)
@@ -3496,6 +3517,27 @@ def _guess_domain_from_name(name: str) -> str:
     if not cleaned:
         return None
     return f"{cleaned}.com"
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def custom_asset_logo_data_uri() -> str:
+    """
+    Vast, eigen 'logo' voor Custom Yield Assets (fractioneel vastgoed,
+    vaste-inkomstenproducten e.d.) -- deze hebben geen echt bedrijfs-
+    domein om een logo voor te gokken (get_company_logo_url() zou voor
+    zo'n fake ticker toch niks bruikbaars vinden). Een simpel huisje-
+    icoon, in Hestys' eigen emerald-kleur, als data-URI -- kan direct
+    als 'logo_url' meegegeven worden aan dezelfde <img>-rendering als
+    een echt logo, geen aparte weergave-tak nodig.
+    """
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">'
+        '<circle cx="12" cy="12" r="12" fill="#101825"/>'
+        '<path d="M12 5.5 L19 11 V18.5 H14.5 V13.5 H9.5 V18.5 H5 V11 Z" '
+        'fill="none" stroke="#34D399" stroke-width="1.6" stroke-linejoin="round"/>'
+        '</svg>'
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -7182,7 +7224,7 @@ def render_portfolio():
                 # we WEL de precieze, transactie-afgeleide valuta.
                 current_price_display = current_price_num
                 if current_price_num is not None:
-                    display_native_currency = get_cached_ticker_currency(h["ticker"])
+                    display_native_currency = _native_currency_for_holding(h)
                     display_row_currency = h.get("value_currency")
                     if display_native_currency and display_row_currency and display_native_currency != display_row_currency:
                         display_fx_rate = get_fx_rate(display_native_currency, display_row_currency)
@@ -7235,7 +7277,7 @@ def render_portfolio():
                     # om ELKE transactie correct naar dit doelwit om te
                     # rekenen -- ongeacht in welke valuta ze oorspronkelijk
                     # stonden.
-                    native_currency = get_cached_ticker_currency(h["ticker"])
+                    native_currency = _native_currency_for_holding(h)
                     # Elke transactie kan z'n EIGEN valuta hebben (CSV-import
                     # is altijd EUR, handmatige invoer kan elke valuta zijn,
                     # zoals de gebruiker die koos in het formulier) -- eerst
@@ -7270,7 +7312,10 @@ def render_portfolio():
                         h["ticker"], h["naam"], _format_value(h), _pct_of_portfolio(h),
                         portfolio_view_mode,
                         currency_symbol="€" if h.get("value_currency") == "EUR" else "$",
-                        logo_url=get_company_logo_url(h["ticker"], h.get("naam")),
+                        logo_url=(
+                            custom_asset_logo_data_uri() if h.get("custom_annual_cashflow") is not None
+                            else get_company_logo_url(h["ticker"], h.get("naam"))
+                        ),
                         day_change_pct=day_change_pct, day_change_value=day_change_value,
                         current_price=all_time_display_price, avg_cost=avg_cost,
                         all_time_pct=all_time_pct, all_time_pnl=all_time_pnl,
@@ -7405,7 +7450,7 @@ def render_portfolio():
                             detail_native_price = detail_market_row.get("current_price")
                             if detail_native_price is None and selected_holding.get("shares"):
                                 detail_native_price = (selected_holding.get("position_value") or 0) / selected_holding["shares"]
-                            detail_native_currency = get_cached_ticker_currency(selected_holding["ticker"])
+                            detail_native_currency = _native_currency_for_holding(selected_holding)
                             transactions_native = (
                                 _convert_transactions_to_currency(transactions, detail_native_currency)
                                 if detail_native_currency else transactions
@@ -8739,7 +8784,7 @@ def render_portfolio():
                             # historische aankoopprijs nog weet).
                             try:
                                 backfill_price = float(yf.Ticker(tx_holding["ticker"]).history(period="1d")["Close"].iloc[-1])
-                                backfill_currency = get_cached_ticker_currency(tx_holding["ticker"])
+                                backfill_currency = _native_currency_for_holding(tx_holding)
                             except Exception:
                                 backfill_price = tx_price  # fallback als de live prijs niet op te halen is
                                 backfill_currency = tx_currency
