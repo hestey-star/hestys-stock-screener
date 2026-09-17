@@ -6183,32 +6183,50 @@ def _render_stress_test(user_email: str) -> None:
         ("2008 Great Financial Crisis", -0.38),
         ("2020 Covid-19 Panic", -0.22),
     ]
+    _crash_header_style = (
+        "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
+        "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
+        "border-top:none !important; border-left:none !important; border-right:none !important;"
+    )
+    _crash_cell_base = (
+        "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
+        "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
+    )
     _crash_rows_html = ""
     for _label, _impact in _crash_scenarios:
         _loss_eur = total_value * _impact
         _crash_rows_html += (
             f'<tr>'
-            f'<td style="border-bottom:1px solid rgba(255,255,255,0.05); padding:12px 0; '
-            f'color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%)</td>'
-            f'<td style="border-bottom:1px solid rgba(255,255,255,0.05); padding:12px 0; '
-            f'text-align:right; color:rgba(244,63,94,0.7); font-weight:700; font-size:0.85rem;">'
-            f'-&euro;{abs(_loss_eur):,.0f}</td>'
+            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%)</td>'
+            f'<td style="{_crash_cell_base} text-align:right; color:rgba(244,63,94,0.7); '
+            f'font-weight:700; font-size:0.85rem;">-&euro;{abs(_loss_eur):,.0f}</td>'
             f'</tr>'
         )
+    # Zelfde patroon als Snowball Milestones (Wealth Engine): raw <table>
+    # binnen een EIGEN st.container(key=...) + expliciete CSS die de
+    # standaard-tabelranden hard onderdrukt. Zonder die CSS-override
+    # (die hier eerder ontbrak) tekent de browser/Streamlit's eigen
+    # basis-stylesheet alsnog lelijke verticale kolomlijnen, ongeacht de
+    # inline styles op de cellen zelf.
+    _crash_table_key = "stress_test_crash_table"
     st.markdown(
-        f'<table style="width:100%; border-collapse:collapse;">'
-        f'<thead><tr>'
-        f'<th style="text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; '
-        f'letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); '
-        f'text-align:left;">Historical scenario</th>'
-        f'<th style="text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; '
-        f'letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); '
-        f'text-align:right;">Projected impact (EUR)</th>'
-        f'</tr></thead>'
-        f'<tbody>{_crash_rows_html}</tbody>'
-        f'</table>',
+        f'<style>.st-key-{_crash_table_key} table {{ width:100%; border-collapse:collapse; }} '
+        f'.st-key-{_crash_table_key} td, .st-key-{_crash_table_key} th {{ border:none; }}</style>',
         unsafe_allow_html=True,
     )
+    with st.container(key=_crash_table_key):
+        st.markdown(
+            f'<div style="max-width:640px;">'
+            f'<table style="width:100%; border-collapse:collapse;">'
+            f'<thead><tr>'
+            f'<th style="{_crash_header_style} text-align:left;">Historical scenario</th>'
+            f'<th style="{_crash_header_style} text-align:right;">Projected impact (EUR)</th>'
+            f'</tr></thead>'
+            f'<tbody>{_crash_rows_html}</tbody>'
+            f'</table>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
