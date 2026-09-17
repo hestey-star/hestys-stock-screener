@@ -5605,7 +5605,7 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
 
     with st.spinner(f"Hestys AI is scanning {ticker}..."):
         try:
-            message = client.messages.create(
+            _api_kwargs = dict(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=1200,
                 temperature=0.2,
@@ -5618,6 +5618,21 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
                     {"role": "assistant", "content": "{"},
                 ],
             )
+            try:
+                message = client.messages.create(**_api_kwargs)
+            except TypeError as _te:
+                # Sommige (oudere/afwijkende) versies van het 'anthropic'-
+                # pakket accepteren 'temperature' niet als keyword-argument
+                # op messages.create(). I.p.v. de hele scan te laten
+                # crashen, proberen we het gewoon nog 1x ZONDER die
+                # parameter -- temperature is een fijne-afstelling, geen
+                # essentieel onderdeel; de scan werkt prima met de
+                # standaardwaarde van de SDK zelf.
+                if "temperature" in str(_te):
+                    _api_kwargs.pop("temperature", None)
+                    message = client.messages.create(**_api_kwargs)
+                else:
+                    raise
             raw_text = "{" + message.content[0].text
             ai_data = json.loads(raw_text)
         except json.JSONDecodeError:
