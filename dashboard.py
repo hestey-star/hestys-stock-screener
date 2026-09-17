@@ -6779,8 +6779,9 @@ def _render_wealth_engine(user_email: str) -> None:
         _hist_networth_values = [_hist_value_by_date.get(d) for d in _hist_dates]
 
         st.markdown(
-            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-            'text-transform:uppercase; margin-bottom:1rem;">&#128202; Historical Portfolio '
+            '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
+            'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
+            'padding-bottom:8px; margin-bottom:15px;">&#128202; Historical Portfolio '
             'Accumulation (TransVelocity Proxy)</div>',
             unsafe_allow_html=True,
         )
