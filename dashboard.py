@@ -6351,11 +6351,20 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
                     raise
             raw_text = "[" + message.content[0].text
             alerts_data = json.loads(raw_text)
-        except Exception:
-            # Stil falen -- dit paneel is een aanvulling, geen kernfunctie.
-            # De rest van de Stress-Test-pagina (tegels, crash-simulator)
-            # blijft gewoon werken; alleen dit blokje toont dan de nette
-            # 'No risk alerts available'-melding.
+            # Vangnet: sommige modellen verpakken de array toch in een
+            # object (bv. {"alerts": [...]} of {"clusters": [...]}),
+            # ondanks de expliciete instructie om een kale array terug te
+            # geven. Pak in dat geval de eerste list-waarde die erin zit.
+            if isinstance(alerts_data, dict):
+                _list_values = [v for v in alerts_data.values() if isinstance(v, list)]
+                alerts_data = _list_values[0] if _list_values else []
+        except Exception as _e:
+            # TIJDELIJK: laat de daadwerkelijke fout zien i.p.v. 'm
+            # volledig stil te slikken -- puur om nu te kunnen
+            # diagnosticeren waarom er geen alerts verschijnen. Zodra dit
+            # bevestigd stabiel werkt, halen we deze regel er weer uit
+            # (voor eindgebruikers moet dit straks weer stil falen).
+            st.caption(f"Debug -- risk alert generation failed: {_e}")
             return []
 
     results = []
