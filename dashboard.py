@@ -4850,6 +4850,67 @@ def compute_portfolio_value_over_time(holdings: list, user_email: str, history_b
     return series
 
 
+def compute_cumulative_contribution_over_time(holdings: list, user_email: str, num_points: int = 60) -> list:
+    """
+    Berekent de cumulatieve, ZELF-INGEBRACHTE kapitaal ('Net Capital
+    Invested') op dezelfde reeks datumpunten als compute_portfolio_value_
+    over_time() -- zodat beide lijnen (inleg vs. waarde) synchroon op
+    dezelfde tijdsas geplot kunnen worden. Onze database houdt GEEN
+    losse DEPOSIT/ACH-stortingsregels bij (die worden bij elke broker-
+    CSV-import bewust overgeslagen -- zie parse_degiro/robinhood/schwab/
+    trade_republic_transactions_csv), dus dit is een PROXY op basis van
+    de netto BUY/SELL-kasstroom, exact dezelfde aanname als de Wealth
+    Engine's jaarlijkse-inleg-schatting elders in deze functie.
+
+    BUY draagt +(shares*price + fee) bij (geld dat de deur uit ging).
+    SELL draagt -(shares*price - fee) bij (geld dat terugkwam, verminderd
+    met de fee -- de fee is een kostenpost, dus verlaagt hoeveel er
+    netto 'terugvloeide').
+    """
+    import database
+
+    all_transactions = {}
+    earliest = None
+    for h in holdings:
+        transactions = database.get_transactions_for_holding(user_email, h["id"])
+        all_transactions[h["ticker"]] = transactions
+        for t in transactions:
+            t_date = datetime.strptime(t["transaction_date"], "%Y-%m-%d").date()
+            if earliest is None or t_date < earliest:
+                earliest = t_date
+
+    if earliest is None:
+        return []
+
+    today = datetime.now().date()
+    total_days = (today - earliest).days
+    if total_days <= 0:
+        return []
+
+    points = [
+        earliest + timedelta(days=int(total_days * i / num_points))
+        for i in range(num_points + 1)
+    ]
+
+    series = []
+    for point_date in points:
+        net_invested = 0.0
+        for ticker, transactions in all_transactions.items():
+            for t in transactions:
+                t_date = datetime.strptime(t["transaction_date"], "%Y-%m-%d").date()
+                if t_date > point_date:
+                    continue
+                amount = (t.get("shares") or 0) * (t.get("price") or 0)
+                fee = t.get("fee") or 0
+                if t.get("transaction_type") == "buy":
+                    net_invested += amount + fee
+                else:
+                    net_invested -= (amount - fee)
+        series.append({"date": point_date, "value": net_invested})
+
+    return series
+
+
 def compute_personal_windowed_return(holdings: list, user_email: str, window_start, history_by_ticker: dict = None) -> dict:
     """
     Berekent je ECHTE, persoonlijke rendement over een specifieke periode
@@ -6693,6 +6754,78 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # --- Historical Portfolio Accumulation -- het VERLEDEN, direct onder
+    # de toekomstprojectie hierboven. Zelfde BUY/SELL-proxy-logica als de
+    # rest van de Wealth Engine (geen losse DEPOSIT/ACH-historie
+    # beschikbaar in onze database, zie compute_cumulative_contribution_
+    # over_time()). Losstaand van de 30-jarige projectie hierboven --
+    # eigen databronnen, geen gedeelde state, dus kan die projectie op
+    # geen enkele manier verstoren.
+    _hist_holdings_for_chart = holdings
+    _hist_capital_series = compute_cumulative_contribution_over_time(_hist_holdings_for_chart, user_email)
+    if _hist_capital_series:
+        _hist_history_by_ticker = get_shared_history_for_holdings(_hist_holdings_for_chart)
+        _hist_value_series = compute_portfolio_value_over_time(
+            _hist_holdings_for_chart, user_email, _hist_history_by_ticker,
+        )
+        # Beide reeksen kunnen een licht andere puntenset hebben (de
+        # waarde-reeks laat een punt weg als er nog geen geldige koers
+        # binnen bereik lag) -- op datum samenvoegen i.p.v. blind op
+        # index, zodat de 2 lijnen altijd kloppend uitgelijnd blijven.
+        _hist_value_by_date = {p["date"]: p["value"] for p in _hist_value_series}
+        _hist_dates = [p["date"] for p in _hist_capital_series]
+        _hist_capital_values = [p["value"] for p in _hist_capital_series]
+        _hist_networth_values = [_hist_value_by_date.get(d) for d in _hist_dates]
+
+        st.markdown(
+            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+            'text-transform:uppercase; margin-bottom:1rem;">&#128202; Historical Portfolio '
+            'Accumulation (TransVelocity Proxy)</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-bottom:1rem;">'
+            f'<span style="{_legend_line_style} background-color:#64748b;"></span>Cumulative Net Capital Invested '
+            f'&nbsp;&nbsp;|&nbsp;&nbsp; '
+            f'<span style="{_legend_line_style} background-color:#34d399;"></span>Historical Portfolio Value'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        hist_fig = go.Figure()
+        hist_fig.add_trace(go.Scatter(
+            x=_hist_dates, y=_hist_capital_values, name="Net Capital Invested", mode="lines",
+            line=dict(color="rgba(148,163,184,0.75)", width=1.5),
+            hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
+        ))
+        hist_fig.add_trace(go.Scatter(
+            x=_hist_dates, y=_hist_networth_values, name="Portfolio Value", mode="lines",
+            line=dict(color="#34D399", width=2.5),
+            connectgaps=True,
+            hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
+        ))
+        hist_fig.update_layout(
+            height=280,
+            margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+            xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+            yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                       tickprefix="\u20ac", tickformat=",.0f"),
+            hovermode="x unified",
+            hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+        )
+        st.plotly_chart(hist_fig, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            '<div style="color:#475569; font-size:9px; font-weight:400; letter-spacing:0.03em; '
+            'text-transform:uppercase; margin-top:0.25rem;">Notice: historical inflow is derived via '
+            'net transaction velocity (buy/sell volume) and serves as an empirical proxy, not a '
+            'literal bank deposit record.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
     # --- Cashflow Velocity -- absolute jaarlijkse passieve cashflow in
     # euro's, i.p.v. procentuele YoY-groei. Dalende groei-percentages
