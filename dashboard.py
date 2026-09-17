@@ -6230,10 +6230,10 @@ def _render_stress_test(user_email: str) -> None:
 
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
-    # --- 3. Live Anthropic Risk Alerts + Tactical Rebalancing Playbook
-    # (beide in 1 API-call, met de ECHTE, zojuist berekende blootstellings-
-    # percentages als context -- zodat de acties concrete, kloppende
-    # cijfers noemen i.p.v. verzonnen getallen).
+    # --- 3. Live Anthropic Risk Alerts -- puur informatief/observerend
+    # (welke concentratierisico's vallen op), UITDRUKKELIJK GEEN
+    # actie-adviezen of aanbevelingen. Dat zou feitelijk financieel
+    # advies zijn, en dat willen we bewust niet geven.
     st.markdown(
         _uniform_section_header_html("Portfolio Robustness Audit", "shield", is_first=False),
         unsafe_allow_html=True,
@@ -6244,7 +6244,7 @@ def _render_stress_test(user_email: str) -> None:
         "top_sector": _top_sector, "top_sector_pct": round(_top_sector_pct, 1),
         "top_currency": _top_currency, "top_currency_pct": round(_top_currency_pct, 1),
     }
-    _alerts, _actions = _run_ai_risk_alerts(_tickers_list, _exposure_context)
+    _alerts = _run_ai_risk_alerts(_tickers_list, _exposure_context)
     if _alerts:
         for _alert_type, _alert_text in _alerts:
             st.markdown(
@@ -6261,53 +6261,31 @@ def _render_stress_test(user_email: str) -> None:
             unsafe_allow_html=True,
         )
 
-    st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
 
-    # --- Hestys Action Layer -- Tactical Rebalancing Playbook ---
-    st.markdown(
-        '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
-        'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
-        'padding-bottom:8px; margin-bottom:15px;">&#9881;&#65039; Tactical Rebalancing Playbook</div>',
-        unsafe_allow_html=True,
-    )
-    if _actions:
-        for _action_type, _action_text in _actions:
-            st.markdown(
-                f'<div style="font-size:11px; color:#94A3B8; font-weight:500; letter-spacing:0.02em; '
-                f'margin-bottom:0.75rem; display:block;">&#128073; '
-                f'<span style="font-weight:700; color:#34D399;">{_action_type.upper()}</span> '
-                f'| {_action_text.upper()}</div>',
-                unsafe_allow_html=True,
-            )
-    else:
-        st.markdown(
-            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
-            'text-transform:uppercase;">No playbook actions available right now.</div>',
-            unsafe_allow_html=True,
-        )
-
-
-def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> tuple:
+def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
     """
-    Live Claude Haiku-aanroep: vraagt in EEN aanroep zowel 2-3 ijskoude
-    risico-waarschuwingen ALS 2 concrete, tactische mitigation-acties.
-    Krijgt de al-berekende, ECHTE blootstellings-percentages (land/sector/
-    valuta) mee als context, zodat de acties kloppende cijfers noemen
-    i.p.v. verzonnen getallen. Geeft (alerts, actions) terug -- elk een
-    lijst van (type, tekst)-tuples, leeg bij een mislukte/niet-
-    geconfigureerde aanroep. ROEPT NOOIT st.error() aan: dit paneel is een
-    aanvulling, geen kernfunctie -- een mislukte aanroep hoort de rest van
-    de Stress-Test-pagina (tegels, crash-simulator) niet te verstoren.
+    Live Claude Haiku-aanroep: vraagt 2-3 ijskoude, korte risico-
+    waarschuwingen (max 2 zinnen) over de gegeven tickers als GROEP
+    (correlatie/concentratie-risico's), niet per los aandeel. UITDRUKKELIJK
+    GEEN actie-adviezen of aanbevelingen -- puur observerend/informatief,
+    want concrete mitigatie-acties zouden feitelijk financieel advies zijn,
+    en dat willen we bewust niet geven. Krijgt de al-berekende, ECHTE
+    blootstellings-percentages (land/sector/valuta) mee als context, zodat
+    de waarschuwingen kloppende cijfers noemen i.p.v. verzonnen getallen.
+    Geeft een lijst van (type, tekst)-tuples terug, leeg bij een mislukte/
+    niet-geconfigureerde aanroep. ROEPT NOOIT st.error() aan: dit paneel is
+    een aanvulling, geen kernfunctie -- een mislukte aanroep hoort de rest
+    van de Stress-Test-pagina (tegels, crash-simulator) niet te verstoren.
     """
     import json
     try:
         from anthropic import Anthropic
     except ImportError:
-        return [], []
+        return []
 
     api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic", {}).get("api_key")
     if not api_key or not tickers:
-        return [], []
+        return []
 
     try:
         _accept_language = st.context.headers.get("Accept-Language", "")
@@ -6321,35 +6299,34 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> tuple:
         "You are the Hestys Risk Assistant. Given a list of stock tickers making up someone's "
         "portfolio, plus their current largest concentration percentages (country/sector/currency), "
         "identify hidden correlation, concentration, or systemic risks ACROSS the group (not risks "
-        "about a single stock in isolation), AND propose concrete tactical rebalancing actions. "
-        "Respond with ONLY a raw JSON object -- no markdown fences, no commentary. Shape: "
-        '{"alerts": [{"type": ..., "text": ...}, ...], "actions": [{"type": ..., "text": ...}, ...]}. '
-        "'alerts' has 2 to 3 items (the risks). 'actions' has EXACTLY 2 items -- each a specific, "
-        "actionable mitigation step that references the actual exposure percentages given (e.g. "
-        "reducing a named concentration below a target level, or shifting new contributions toward "
-        "an underweight area). Both 'type' and 'text' (in every item, alerts and actions alike) MUST "
-        f"be written in {_response_language}, in uppercase (ALL-CAPS). 'text' max 2 short sentences, "
-        "cold and institutional in tone, no fluff."
+        "about a single stock in isolation). Respond with ONLY a raw JSON array -- no markdown "
+        "fences, no commentary. Each item: {\"type\": short risk category label, \"text\": the "
+        "warning itself}. 2 to 3 items total. IMPORTANT: describe risks and observations only -- "
+        "NEVER recommend, suggest, or imply a specific action the person should take (no 'reduce', "
+        "'shift', 'buy', 'sell', 'consider adding', target percentages to move to, etc.) -- this is "
+        "risk information, not investment advice. Both 'type' and 'text' MUST be written in "
+        f"{_response_language}, in uppercase (ALL-CAPS). 'text' max 2 short sentences, cold and "
+        "institutional in tone, no fluff."
     )
     user_prompt = (
         f"Portfolio tickers: {', '.join(tickers)}. "
         f"Current largest exposures -- country: {exposure_context.get('top_country')} "
         f"({exposure_context.get('top_country_pct')}%), sector: {exposure_context.get('top_sector')} "
         f"({exposure_context.get('top_sector_pct')}%), currency: {exposure_context.get('top_currency')} "
-        f"({exposure_context.get('top_currency_pct')}%). Identify the sharpest hidden risks across this "
-        f"group, and propose 2 concrete rebalancing actions referencing these exact percentages."
+        f"({exposure_context.get('top_currency_pct')}%). Identify the sharpest hidden risks across "
+        f"this group."
     )
 
     with st.spinner("\u2726 Computing black swan stress-tests..."):
         try:
             _api_kwargs = dict(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=900,
+                max_tokens=600,
                 temperature=0.3,
                 system=system_prompt,
                 messages=[
                     {"role": "user", "content": user_prompt},
-                    {"role": "assistant", "content": "{"},
+                    {"role": "assistant", "content": "["},
                 ],
             )
             try:
@@ -6360,25 +6337,20 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> tuple:
                     message = client.messages.create(**_api_kwargs)
                 else:
                     raise
-            raw_text = "{" + message.content[0].text
-            response_data = json.loads(raw_text)
+            raw_text = "[" + message.content[0].text
+            alerts_data = json.loads(raw_text)
         except Exception:
             # Stil falen -- dit paneel is een aanvulling, geen kernfunctie.
             # De rest van de Stress-Test-pagina (tegels, crash-simulator)
-            # blijft gewoon werken; alleen deze 2 blokjes tonen dan de
-            # nette 'niet beschikbaar'-melding.
-            return [], []
+            # blijft gewoon werken; alleen dit blokje toont dan de nette
+            # 'No risk alerts available'-melding.
+            return []
 
-    def _extract(items, limit):
-        results = []
-        for item in (items or [])[:limit]:
-            if isinstance(item, dict) and item.get("type") and item.get("text"):
-                results.append((str(item["type"]), str(item["text"])))
-        return results
-
-    alerts = _extract(response_data.get("alerts"), 3)
-    actions = _extract(response_data.get("actions"), 2)
-    return alerts, actions
+    results = []
+    for item in alerts_data[:3]:
+        if isinstance(item, dict) and item.get("type") and item.get("text"):
+            results.append((str(item["type"]), str(item["text"])))
+    return results
 
 
 def _render_wealth_engine(user_email: str) -> None:
