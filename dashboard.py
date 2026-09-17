@@ -5566,9 +5566,9 @@ def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
     'management_assessment') en zonder score-velden -- dat zou de rest
     van de app (die leunt op database.add_deep_dive() en de 6 score-
     velden voor de conviction-berekening) omzeild en losgekoppeld hebben.
-    Model-ID 'claude-haiku-4-5' geverifieerd via web-search (het model
-    'claude-3-5-haiku' uit het aangeleverde voorbeeld bestaat niet als
-    volledig, geldig API-ID).
+    Model-ID 'claude-haiku-4-5-20251001' -- de precieze, huidige API-ID
+    voor Claude Haiku 4.5 ('claude-3-5-haiku' uit het oorspronkelijk
+    aangeleverde voorbeeld bestaat niet als volledig, geldig API-ID).
     """
     import json
     try:
@@ -5606,7 +5606,7 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
     with st.spinner(f"Hestys AI is scanning {ticker}..."):
         try:
             message = client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=1200,
                 temperature=0.2,
                 system=system_prompt,
