@@ -6914,9 +6914,10 @@ def _render_wealth_engine(user_email: str) -> None:
                 f'<span style="color:#34d399; font-weight:700;">{year_val}</span> '
                 f'<span style="color:#34d399;">&#10003;</span>'
             )
-        # Binnen de 30 jaar bereikt (maar pas in de toekomst) -- oplichtend
-        # Hestys-groen, zonder vinkje.
-        return f'<span style="color:#34d399; font-weight:700;">{year_val}</span>'
+        # Binnen de 30 jaar, maar pas in de TOEKOMST -- amber/oranje i.p.v.
+        # groen, zodat groen exclusief 'nu al gehaald' betekent en oranje
+        # 'onderweg, nog niet zover'.
+        return f'<span style="color:#FBBF24; font-weight:700;">{year_val}</span>'
 
     # (naam, technische voorwaarde, jaartal-html)
     milestone_rows = [
