@@ -3091,8 +3091,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
             )
             with st.container(key=_edit_ai_key):
                 if st.button("\u2726 Generate Anthropic Intelligence Briefing", key=f"dd_edit_ai_briefing_btn_{version_id}"):
-                    if _run_ai_cockpit_briefing(version["ticker"], version.get("naam", version["ticker"]), user_email):
-                        st.session_state[edit_key] = False
+                    if _run_ai_cockpit_briefing(
+                        version["ticker"], version.get("naam", version["ticker"]), user_email,
+                        field_prefix="dd_edit", key_suffix=f"_{version_id}",
+                    ):
+                        # Blijft in de bewerk-modus staan (edit_key blijft True)
+                        # -- geen sprong terug naar de alleen-lezen weergave.
                         st.rerun()
 
             edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}", height=90)
@@ -5555,17 +5559,31 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     unsafe_allow_html=True,
                 )
 
-def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
+def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str, field_prefix: str = "dd", key_suffix: str = "") -> bool:
     """
-    Roept Claude Haiku 4.5 aan om een ticker te onderzoeken, en slaat het
-    resultaat op via database.add_deep_dive() -- DEZELFDE opslagroute als
-    het handmatige formulier, zodat AI-gegenereerde research overal
-    (conviction-tegels, tabellen, drawer) er identiek uitziet en meetelt.
-    De aangeleverde code schreef rechtstreeks naar een losse 'deep_dives'-
-    Supabase-tabel met andere veldnamen (bv. 'management_check' i.p.v.
-    'management_assessment') en zonder score-velden -- dat zou de rest
-    van de app (die leunt op database.add_deep_dive() en de 6 score-
-    velden voor de conviction-berekening) omzeild en losgekoppeld hebben.
+    Roept Claude Haiku 4.5 aan om een ticker te onderzoeken. Vult UITSLUITEND
+    het formulier (session_state) -- slaat NIETS meer rechtstreeks op in
+    Supabase. Eerder sloeg deze functie meteen op en navigeerde je door
+    naar de alleen-lezen weergave, waarna je apart op 'Edit' moest klikken
+    om de rest van de deep-dive (Valuation, Technical, Position sizing,
+    Sell criteria/trigger) alsnog in te vullen -- een onnodige, verwarrende
+    tussenstap. Nu blijf je gewoon in hetzelfde, doorlopende formulier
+    staan: je ziet meteen wat de AI heeft ingevuld, kunt het bijstellen,
+    vult zelf de rest aan, en klikt pas daarna zelf op 'Save Complete
+    Deep-Dive ->'.
+
+    Vult ALLEEN Management- en Bear Case-scores (die hebben allebei ECHTE
+    tekstuele onderbouwing van de AI: management_assessment/bear_case).
+    Valuation- en Catalysts-scores blijven bewust op hun neutrale 5.0
+    staan -- de AI schrijft daar geen tekst over, en die 2 velden staan
+    juist op de tabs 'My Conviction'/'Exit Matrix', die je eigen oordeel
+    horen te representeren, niet een AI-gok zonder onderbouwing.
+
+    field_prefix/key_suffix bepalen WELK formulier gevuld wordt: het
+    nieuwe-positie-formulier (field_prefix='dd', key_suffix='') of het
+    bewerk-formulier van een bestaande versie (field_prefix='dd_edit',
+    key_suffix=f'_{version_id}').
+
     Model-ID 'claude-haiku-4-5-20251001' -- de precieze, huidige API-ID
     voor Claude Haiku 4.5 ('claude-3-5-haiku' uit het oorspronkelijk
     aangeleverde voorbeeld bestaat niet als volledig, geldig API-ID).
@@ -5599,11 +5617,11 @@ def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str) -> bool:
 - "investment_thesis" (string): the bull case for a long-term position
 - "bear_case" (string): the biggest fundamental risks
 - "management_assessment" (string): a quick evaluation of the CEO and governance
-- "management_score", "bear_case_score", "valuation_score", "catalysts_score" (numbers, 0.0-10.0, half-point increments like 6.5 or 7.0 allowed): your rating of each dimension, higher always meaning more favorable for a buy decision. These become the DEFAULT position of the corresponding sliders in the app -- the user can still drag them to a different value afterwards.
+- "management_score", "bear_case_score" (numbers, 0.0-10.0, half-point increments like 6.5 or 7.0 allowed): your rating of management quality and how manageable the bear case is, higher always meaning more favorable for a buy decision. These become the DEFAULT position of the corresponding sliders in the app -- the user can still drag them to a different value afterwards.
 
 Respond with ONLY the JSON object, starting with {{ and ending with }}."""
 
-    with st.spinner(f"Hestys AI is scanning {ticker}..."):
+    with st.spinner(f"\u2726 Engaging Anthropic Intelligence System... scanning {ticker}"):
         try:
             _api_kwargs = dict(
                 model="claude-haiku-4-5-20251001",
@@ -5642,54 +5660,33 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
             st.error(f"AI scan failed: {e}")
             return False
 
-    try:
-        import database
-        market_snapshot = get_deep_dive_market_snapshot(ticker)
+    def _safe_score(key):
+        try:
+            return max(1.0, min(10.0, float(ai_data.get(key, 5.0))))
+        except (TypeError, ValueError):
+            return 5.0
 
-        def _safe_score(key):
-            try:
-                return max(1.0, min(10.0, float(ai_data.get(key, 5.0))))
-            except (TypeError, ValueError):
-                return 5.0
+    _management_score = _safe_score("management_score")
+    _bear_case_score = _safe_score("bear_case_score")
 
-        _management_score = _safe_score("management_score")
-        _bear_case_score = _safe_score("bear_case_score")
-        _valuation_score = _safe_score("valuation_score")
-        _catalysts_score = _safe_score("catalysts_score")
-        # Conclusion is geen los AI-geraden getal meer, maar het
-        # gemiddelde van de 4 echte AI-scores + een neutrale 5.0 voor
-        # Technical (die vraagt live chart-data die de AI niet heeft) --
-        # zelfde berekening als de 'Conclusion'-weergave in de drawer.
-        _thesis_score = (_management_score + _bear_case_score + _valuation_score + _catalysts_score + 5.0) / 5
+    # Formulier vullen (session_state) -- GEEN database-write hier. Voor
+    # sliders ook de '_committed'-variant meteen zetten, want dat is de
+    # bron-van-waarheid die het formulier bij het opslaan daadwerkelijk
+    # leest (zie de 'committed'-toelichting elders in dit bestand).
+    _ss = st.session_state
+    _ss[f"{field_prefix}_business{key_suffix}"] = ai_data.get("business_overview") or ""
+    _ss[f"{field_prefix}_thesis{key_suffix}"] = ai_data.get("investment_thesis") or ""
+    _ss[f"{field_prefix}_bear{key_suffix}"] = ai_data.get("bear_case") or ""
+    _ss[f"{field_prefix}_management{key_suffix}"] = ai_data.get("management_assessment") or ""
+    _ss[f"{field_prefix}_bear_score{key_suffix}"] = _bear_case_score
+    _ss[f"{field_prefix}_bear_score_committed{key_suffix}"] = _bear_case_score
+    _ss[f"{field_prefix}_management_score{key_suffix}"] = _management_score
+    _ss[f"{field_prefix}_management_score_committed{key_suffix}"] = _management_score
 
-        database.add_deep_dive(
-            user_email, ticker.upper(), naam,
-            business_overview=ai_data.get("business_overview") or None,
-            investment_thesis=ai_data.get("investment_thesis") or None,
-            management_assessment=ai_data.get("management_assessment") or None,
-            bear_case=ai_data.get("bear_case") or None,
-            valuation_view=None,
-            interested_price=None,
-            catalysts=None,
-            position_sizing_plan=None,
-            sell_criteria=None,
-            conclusion="Watch",
-            market_snapshot=market_snapshot,
-            sell_trigger_price=None,
-            sell_trigger_date=None,
-            thesis_score=_thesis_score,
-            management_score=_management_score,
-            bear_case_score=_bear_case_score,
-            valuation_score=_valuation_score,
-            catalysts_score=_catalysts_score,
-            technical_analysis=None,
-            technical_analysis_score=None,
-        )
-    except Exception as e:
-        st.error(f"AI research was generated but saving it failed: {e}")
-        return False
-
-    st.success(f"Research for {ticker} generated and saved.")
+    st.success(
+        f"AI briefing for {ticker} generated -- review it below, fill in the rest "
+        f"(Valuation, Technical, etc.), then save when you're ready."
+    )
     return True
 
 
@@ -5780,7 +5777,10 @@ def _render_deep_dive_add_form(user_email: str) -> None:
                     st.error("Fill in a ticker above first, then generate the briefing.")
                 else:
                     if _run_ai_cockpit_briefing(_briefing_ticker, _briefing_naam, user_email):
-                        st.session_state["selected_research"] = _briefing_ticker
+                        # Blijft in HETZELFDE formulier staan -- geen navigatie
+                        # meer naar de alleen-lezen weergave. De widgets
+                        # hieronder lezen hun (nu net gevulde) session_state
+                        # meteen in deze zelfde run.
                         st.rerun()
 
         _dd_label("Business overview")
