@@ -5605,12 +5605,28 @@ def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str, field_pref
 
     client = Anthropic(api_key=api_key)
 
+    # Taal automatisch afleiden uit de Accept-Language-header van de
+    # browser -- het signaal dat elke browser toch al standaard meestuurt
+    # op basis van de systeem-/browserinstellingen van de bezoeker. Geen
+    # opslag, geen instelling, werkt voor IEDEREEN (ook zonder inloggen
+    # via Google, dat wél een 'locale' zou kunnen geven maar alleen voor
+    # die ene inlogmethode). Defensief: als st.context (relatief nieuwe
+    # Streamlit-functionaliteit) om wat voor reden dan ook niet
+    # beschikbaar is, valt dit gewoon terug op Engels.
+    try:
+        _accept_language = st.context.headers.get("Accept-Language", "")
+    except Exception:
+        _accept_language = ""
+    _primary_lang = _accept_language.split(",")[0].split("-")[0].split(";")[0].strip().lower()
+    _response_language = "Dutch (Nederlands)" if _primary_lang == "nl" else "English"
+
     system_prompt = (
         "You are the Hestys AI Research Assistant. Analyze the requested stock ticker. "
         "Respond with ONLY a raw JSON object -- no markdown code fences, no commentary before or after. "
-        "All text field values MUST be written in uppercase (ALL-CAPS). Crisp, professional, "
-        "institutional-grade insights. No chatty intros or fluff. Max 3 punchy points per text field, "
-        "separated by ' | '."
+        f"The JSON keys themselves must stay in English exactly as specified, but ALL TEXT VALUES "
+        f"(business_overview, investment_thesis, bear_case, management_assessment) MUST be written "
+        f"in {_response_language}, in uppercase (ALL-CAPS). Crisp, professional, institutional-grade "
+        "insights. No chatty intros or fluff. Max 3 punchy points per text field, separated by ' | '."
     )
     user_prompt = f"""Analyze the ticker {ticker} ({naam}). Return a JSON object with exactly these keys:
 - "business_overview" (string): what the company does and its business model
