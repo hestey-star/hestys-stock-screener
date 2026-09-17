@@ -6079,6 +6079,238 @@ def _render_analyze_drawer(user_email: str) -> None:
                 _render_deep_dive_version(version, user_email)
 
 
+def _render_stress_test(user_email: str) -> None:
+    """
+    'Stress-Test' -- institutionele Hidden Risk Matrix. Volledig LOSSTAAND
+    van Conviction Tracker/Wealth Engine: eigen, verse database-aanroepen,
+    geen gedeelde state. Gebruikt UITSLUITEND de actieve, huidige posities
+    (filter_active_holdings()) -- geen historische/gesloten posities die
+    er ooit in hebben gezeten maar nu niet meer meetellen.
+    """
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
+    total_value = sum(h.get("position_value") or 0 for h in holdings)
+
+    if total_value <= 0 or not holdings:
+        st.markdown(
+            '<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
+            'Add some positions first (see Conviction Tracker) to run a stress-test.</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # --- 1. Risk metrics -- gewogen (naar positiegrootte) op basis van
+    # LIVE Yahoo Finance-data (country/sector) + de al-bekende valuta per
+    # positie. Geen vaste voorbeeldwaarden -- puur berekend uit jouw
+    # daadwerkelijke, actieve portfolio.
+    _country_weight: dict = {}
+    _sector_weight: dict = {}
+    _currency_weight: dict = {}
+    for h in holdings:
+        ticker = h.get("ticker")
+        value = h.get("position_value") or 0
+        if not ticker or value <= 0:
+            continue
+        try:
+            info = get_cached_ticker_info(ticker)
+        except Exception:
+            info = {}
+        country = info.get("country")
+        if country:
+            _country_weight[country] = _country_weight.get(country, 0) + value
+        sector = info.get("sector")
+        if sector:
+            _sector_weight[sector] = _sector_weight.get(sector, 0) + value
+        currency = _native_currency_for_holding(h)
+        if currency:
+            _currency_weight[currency] = _currency_weight.get(currency, 0) + value
+
+    def _dominant(weight_dict: dict):
+        if not weight_dict:
+            return None, 0.0
+        top_key = max(weight_dict, key=weight_dict.get)
+        top_pct = (weight_dict[top_key] / total_value) * 100
+        return top_key, top_pct
+
+    _top_country, _top_country_pct = _dominant(_country_weight)
+    _top_sector, _top_sector_pct = _dominant(_sector_weight)
+    _top_currency, _top_currency_pct = _dominant(_currency_weight)
+
+    risk_col1, risk_col2, risk_col3 = st.columns(3, gap="medium")
+    _risk_tile_style = (
+        'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+        'border-radius:12px; padding:1rem; text-align:left;'
+    )
+    with risk_col1:
+        _country_label = f"{_top_country_pct:.0f}% {_top_country.upper()}-EXPOSED" if _top_country else "UNKNOWN"
+        st.markdown(
+            f'<div style="{_risk_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#127760; Geopolitical exposure</div>'
+            f'<div style="font-size:1.15rem; font-weight:800; color:#F1F5F9;">{_country_label}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with risk_col2:
+        _sector_label = f"{_top_sector_pct:.0f}% {_top_sector.upper()} SECTOR" if _top_sector else "UNKNOWN"
+        st.markdown(
+            f'<div style="{_risk_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128268; Systemic dependency</div>'
+            f'<div style="font-size:1.15rem; font-weight:800; color:#F1F5F9;">{_sector_label}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with risk_col3:
+        _currency_label = f"{_top_currency_pct:.0f}% {_top_currency}-DENOMINATED" if _top_currency else "UNKNOWN"
+        st.markdown(
+            f'<div style="{_risk_tile_style}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128184; Currency overlap</div>'
+            f'<div style="font-size:1.15rem; font-weight:800; color:#F1F5F9;">{_currency_label}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    # --- 2. Historical Crash Simulator -- puur rekenwerk tegen je
+    # ECHTE, actuele totale portfoliowaarde (niet een vast voorbeeld-
+    # bedrag -- dat zou dit een statische demo maken i.p.v. een live
+    # tool die meebeweegt met je portfolio).
+    _crash_scenarios = [
+        ("Dot-Com Bubble Burst", -0.54),
+        ("2008 Great Financial Crisis", -0.38),
+        ("2020 Covid-19 Panic", -0.22),
+    ]
+    _crash_rows_html = ""
+    for _label, _impact in _crash_scenarios:
+        _loss_eur = total_value * _impact
+        _crash_rows_html += (
+            f'<tr>'
+            f'<td style="border-bottom:1px solid rgba(255,255,255,0.05); padding:12px 0; '
+            f'color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%)</td>'
+            f'<td style="border-bottom:1px solid rgba(255,255,255,0.05); padding:12px 0; '
+            f'text-align:right; color:rgba(244,63,94,0.7); font-weight:700; font-size:0.85rem;">'
+            f'-&euro;{abs(_loss_eur):,.0f}</td>'
+            f'</tr>'
+        )
+    st.markdown(
+        f'<table style="width:100%; border-collapse:collapse;">'
+        f'<thead><tr>'
+        f'<th style="text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; '
+        f'letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); '
+        f'text-align:left;">Historical scenario</th>'
+        f'<th style="text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; '
+        f'letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); '
+        f'text-align:right;">Projected impact (EUR)</th>'
+        f'</tr></thead>'
+        f'<tbody>{_crash_rows_html}</tbody>'
+        f'</table>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
+
+    # --- 3. Live Anthropic Risk Alerts ---
+    st.markdown(
+        _uniform_section_header_html("Portfolio Robustness Audit", "shield", is_first=False),
+        unsafe_allow_html=True,
+    )
+    _tickers_list = sorted({h["ticker"] for h in holdings if h.get("ticker")})
+    _alerts = _run_ai_risk_alerts(_tickers_list, user_email)
+    if _alerts:
+        for _alert_type, _alert_text in _alerts:
+            st.markdown(
+                f'<div style="font-size:11px; color:#94A3B8; font-weight:500; letter-spacing:0.02em; '
+                f'margin-bottom:0.75rem; display:block;">&#9888;&#65039; '
+                f'<span style="font-weight:700; color:#CBD5E1;">{_alert_type.upper()}</span> '
+                f'| {_alert_text.upper()}</div>',
+                unsafe_allow_html=True,
+            )
+    else:
+        st.markdown(
+            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+            'text-transform:uppercase;">No risk alerts available right now.</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _run_ai_risk_alerts(tickers: list, user_email: str) -> list:
+    """
+    Live Claude Haiku-aanroep: vraagt 2-3 ijskoude, korte risico-
+    waarschuwingen (max 2 zinnen) over de gegeven tickers als GROEP
+    (correlatie/concentratie-risico's), niet per los aandeel. Geeft een
+    lijst van (type, tekst)-tuples terug, of een lege lijst bij een
+    mislukte/niet-geconfigureerde aanroep -- ROEPT NOOIT st.error() aan,
+    want dit is een aanvullend paneel, geen kernfunctie; een mislukte
+    aanroep hoort de rest van de Stress-Test-pagina niet te verstoren.
+    """
+    import json
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return []
+
+    api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic", {}).get("api_key")
+    if not api_key or not tickers:
+        return []
+
+    try:
+        _accept_language = st.context.headers.get("Accept-Language", "")
+    except Exception:
+        _accept_language = ""
+    _primary_lang = _accept_language.split(",")[0].split("-")[0].split(";")[0].strip().lower()
+    _response_language = "Dutch (Nederlands)" if _primary_lang == "nl" else "English"
+
+    client = Anthropic(api_key=api_key)
+    system_prompt = (
+        "You are the Hestys Risk Assistant. Given a list of stock tickers making up someone's "
+        "portfolio, identify hidden correlation, concentration, or systemic risks ACROSS the group "
+        "(not risks about a single stock in isolation). Respond with ONLY a raw JSON array -- no "
+        "markdown fences, no commentary. Each item: {\"type\": short risk category label, \"text\": "
+        f"the warning itself}}. Both 'type' and 'text' MUST be written in {_response_language}, in "
+        "uppercase (ALL-CAPS). 'text' max 2 short sentences, cold and institutional in tone, no fluff. "
+        "Return 2 to 3 items total."
+    )
+    user_prompt = f"Portfolio tickers: {', '.join(tickers)}. Identify the sharpest hidden risks across this group."
+
+    with st.spinner("\u2726 Computing black swan stress-tests..."):
+        try:
+            _api_kwargs = dict(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=600,
+                temperature=0.3,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_prompt},
+                    {"role": "assistant", "content": "["},
+                ],
+            )
+            try:
+                message = client.messages.create(**_api_kwargs)
+            except TypeError as _te:
+                if "temperature" in str(_te):
+                    _api_kwargs.pop("temperature", None)
+                    message = client.messages.create(**_api_kwargs)
+                else:
+                    raise
+            raw_text = "[" + message.content[0].text
+            alerts_data = json.loads(raw_text)
+        except Exception:
+            # Stil falen -- dit paneel is een aanvulling, geen kernfunctie.
+            # De rest van de Stress-Test-pagina (tegels, crash-simulator)
+            # blijft gewoon werken; alleen dit blokje toont dan de nette
+            # 'No risk alerts available'-melding.
+            return []
+
+    results = []
+    for item in alerts_data[:3]:
+        if isinstance(item, dict) and item.get("type") and item.get("text"):
+            results.append((str(item["type"]), str(item["text"])))
+    return results
+
+
 def _render_wealth_engine(user_email: str) -> None:
     """
     'Wealth Engine' -- rustgevende dividend- en vermogensprojector.
@@ -6603,14 +6835,7 @@ def render_analyze():
     st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
 
     if _analyze_sub_choice == "STRESS-TEST":
-        st.markdown(
-            f'<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-            f'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
-            f'<div style="font-size:0.7rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.5rem;">{_analyze_sub_choice}</div>'
-            f'Coming soon -- this section isn\'t built yet.</div>',
-            unsafe_allow_html=True,
-        )
+        _render_stress_test(user_email)
         return
 
     if _analyze_sub_choice == "WEALTH ENGINE":
