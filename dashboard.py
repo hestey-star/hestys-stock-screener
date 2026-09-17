@@ -6849,10 +6849,14 @@ def _render_wealth_engine(user_email: str) -> None:
         unsafe_allow_html=True,
     )
     _matrix_cells_html = ""
-    for i in range(1, 6):
+    for i in range(0, 5):
         _yr = years[i]
         _eur = dividend_income_by_year[i]
-        if i == 1:
+        if i == 0:
+            # Kolom 1 = HUIDIG jaar (2026) = je echte, actuele live cashflow
+            # -- geen +YoY-berekening nodig/mogelijk, dit IS het startpunt
+            # zelf, exact synchroon met de historische grafiek hierboven
+            # (die ook in het huidige jaar eindigt).
             _yoy_html = '<div style="font-size:11px; font-weight:700; color:#34d399;">BASELINE</div>'
         else:
             _prev = dividend_income_by_year[i - 1]
