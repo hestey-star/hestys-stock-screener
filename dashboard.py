@@ -6906,7 +6906,16 @@ def _render_wealth_engine(user_email: str) -> None:
             # mijlpaal. Geeft meteen een visuele prikkel welke doelen nog
             # niet binnen bereik liggen.
             return '<span style="color:rgba(244,63,94,0.6); font-weight:700; letter-spacing:0.03em; white-space:nowrap;">&gt; 30 YRS</span>'
-        # Binnen de 30 jaar bereikt -- oplichtend Hestys-groen.
+        if year_val == current_year:
+            # Al VANDAAG bereikt (jaar 0 van de projectie) -- een groen
+            # vinkje ernaast, ter onderscheid van een toekomstige
+            # projectie die nog moet gebeuren.
+            return (
+                f'<span style="color:#34d399; font-weight:700;">{year_val}</span> '
+                f'<span style="color:#34d399;">&#10003;</span>'
+            )
+        # Binnen de 30 jaar bereikt (maar pas in de toekomst) -- oplichtend
+        # Hestys-groen, zonder vinkje.
         return f'<span style="color:#34d399; font-weight:700;">{year_val}</span>'
 
     # (naam, technische voorwaarde, jaartal-html)
