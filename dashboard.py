@@ -6246,12 +6246,14 @@ def _render_stress_test(user_email: str) -> None:
     }
     _alerts = _run_ai_risk_alerts(_tickers_list, _exposure_context)
     if _alerts:
-        for _alert_type, _alert_text in _alerts:
+        for _cluster, _tickers_str, _fact in _alerts:
             st.markdown(
                 f'<div style="font-size:11px; color:#94A3B8; font-weight:500; letter-spacing:0.02em; '
                 f'margin-bottom:0.75rem; display:block;">&#9888;&#65039; '
-                f'<span style="font-weight:700; color:#CBD5E1;">{_alert_type.upper()}</span> '
-                f'| {_alert_text.upper()}</div>',
+                f'<span style="font-weight:700; color:#CBD5E1;">COGNITIVE SCAN</span> '
+                f'| CLUSTER: {_cluster.upper()} '
+                f'| TICKERS: {_tickers_str.upper()} '
+                f'| FACT: {_fact.upper()}</div>',
                 unsafe_allow_html=True,
             )
     else:
@@ -6261,21 +6263,29 @@ def _render_stress_test(user_email: str) -> None:
             unsafe_allow_html=True,
         )
 
+    # Verplichte institutionele disclaimer -- helemaal onderaan de pagina,
+    # klein en gedempt maar altijd zichtbaar.
+    st.markdown(
+        '<div style="color:#475569; font-size:10px; font-weight:400; letter-spacing:0.03em; '
+        'text-transform:uppercase; margin-top:3rem; display:block;">Hestys provides financial data '
+        'analysis and systemic exposure metrics for informational purposes only. No content on this '
+        'platform constitutes investment, legal, or tax advice.</div>',
+        unsafe_allow_html=True,
+    )
+
 
 def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
     """
-    Live Claude Haiku-aanroep: vraagt 2-3 ijskoude, korte risico-
-    waarschuwingen (max 2 zinnen) over de gegeven tickers als GROEP
-    (correlatie/concentratie-risico's), niet per los aandeel. UITDRUKKELIJK
-    GEEN actie-adviezen of aanbevelingen -- puur observerend/informatief,
-    want concrete mitigatie-acties zouden feitelijk financieel advies zijn,
-    en dat willen we bewust niet geven. Krijgt de al-berekende, ECHTE
-    blootstellings-percentages (land/sector/valuta) mee als context, zodat
-    de waarschuwingen kloppende cijfers noemen i.p.v. verzonnen getallen.
-    Geeft een lijst van (type, tekst)-tuples terug, leeg bij een mislukte/
-    niet-geconfigureerde aanroep. ROEPT NOOIT st.error() aan: dit paneel is
-    een aanvulling, geen kernfunctie -- een mislukte aanroep hoort de rest
-    van de Stress-Test-pagina (tegels, crash-simulator) niet te verstoren.
+    Live Claude Haiku-aanroep: vraagt 2-3 ijskoude, PUUR FEITELIJKE
+    correlatie-observaties (systemic overlap) over de gegeven tickers als
+    GROEP -- geen mening, geen risico-DUIDING, geen actie-advies. Elke
+    observatie is een 'Cognitive Scan': welke tickers samen in eenzelfde
+    cluster (valuta/sector/land/keten) zitten, plus een kale, meetbare
+    data-fact daarover. Geeft een lijst van (cluster, tickers, fact)-
+    tuples terug, leeg bij een mislukte/niet-geconfigureerde aanroep.
+    ROEPT NOOIT st.error() aan: dit paneel is een aanvulling, geen
+    kernfunctie -- een mislukte aanroep hoort de rest van de Stress-Test-
+    pagina (tegels, crash-simulator) niet te verstoren.
     """
     import json
     try:
@@ -6296,32 +6306,34 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
 
     client = Anthropic(api_key=api_key)
     system_prompt = (
-        "You are the Hestys Risk Assistant. Given a list of stock tickers making up someone's "
+        "You are the Hestys Cognitive Scan engine. Given a list of stock tickers making up someone's "
         "portfolio, plus their current largest concentration percentages (country/sector/currency), "
-        "identify hidden correlation, concentration, or systemic risks ACROSS the group (not risks "
-        "about a single stock in isolation). Respond with ONLY a raw JSON array -- no markdown "
-        "fences, no commentary. Each item: {\"type\": short risk category label, \"text\": the "
-        "warning itself}. 2 to 3 items total. IMPORTANT: describe risks and observations only -- "
-        "NEVER recommend, suggest, or imply a specific action the person should take (no 'reduce', "
-        "'shift', 'buy', 'sell', 'consider adding', target percentages to move to, etc.) -- this is "
-        "risk information, not investment advice. Both 'type' and 'text' MUST be written in "
-        f"{_response_language}, in uppercase (ALL-CAPS). 'text' max 2 short sentences, cold and "
-        "institutional in tone, no fluff."
+        "identify hidden correlation/systemic-overlap CLUSTERS across the group (e.g. a shared "
+        "currency dependency, a shared supply-chain link, a shared macro sensitivity). Respond with "
+        "ONLY a raw JSON array -- no markdown fences, no commentary. Each item: {\"cluster\": a short "
+        "cluster category label, \"tickers\": array of the specific tickers involved in that cluster, "
+        "\"fact\": one single, cold, objective, MEASURABLE data statement about that cluster}. 2 to 3 "
+        "items total. STRICT RULES for 'fact': state ONLY a verifiable fact or measurable exposure "
+        "(a percentage, a dependency, a shared sensitivity) -- NEVER an opinion, a judgment of whether "
+        "this is good or bad, a risk label, or any recommended/implied action (no 'reduce', 'shift', "
+        "'buy', 'sell', 'should', 'consider', 'too high', 'risky', target percentages to move to, "
+        "etc.). Pure factual correlation data only. 'cluster', 'tickers', and 'fact' MUST all be "
+        f"written in {_response_language}, in uppercase (ALL-CAPS). 'fact' is one sentence, no fluff."
     )
     user_prompt = (
         f"Portfolio tickers: {', '.join(tickers)}. "
         f"Current largest exposures -- country: {exposure_context.get('top_country')} "
         f"({exposure_context.get('top_country_pct')}%), sector: {exposure_context.get('top_sector')} "
         f"({exposure_context.get('top_sector_pct')}%), currency: {exposure_context.get('top_currency')} "
-        f"({exposure_context.get('top_currency_pct')}%). Identify the sharpest hidden risks across "
-        f"this group."
+        f"({exposure_context.get('top_currency_pct')}%). Identify the sharpest hidden correlation "
+        f"clusters across this group."
     )
 
     with st.spinner("\u2726 Computing black swan stress-tests..."):
         try:
             _api_kwargs = dict(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=600,
+                max_tokens=700,
                 temperature=0.3,
                 system=system_prompt,
                 messages=[
@@ -6348,8 +6360,13 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
 
     results = []
     for item in alerts_data[:3]:
-        if isinstance(item, dict) and item.get("type") and item.get("text"):
-            results.append((str(item["type"]), str(item["text"])))
+        if isinstance(item, dict) and item.get("cluster") and item.get("fact"):
+            tickers_involved = item.get("tickers") or []
+            if isinstance(tickers_involved, list):
+                tickers_str = ", ".join(str(t) for t in tickers_involved)
+            else:
+                tickers_str = str(tickers_involved)
+            results.append((str(item["cluster"]), tickers_str, str(item["fact"])))
     return results
 
 
