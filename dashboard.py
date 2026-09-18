@@ -6308,6 +6308,13 @@ def _render_stress_test(user_email: str) -> None:
     # (welke concentratierisico's vallen op), UITDRUKKELIJK GEEN
     # actie-adviezen of aanbevelingen. Dat zou feitelijk financieel
     # advies zijn, en dat willen we bewust niet geven.
+    #
+    # Achter een KNOP i.p.v. automatisch bij elke page-load -- anders
+    # vuurt dit bij elke keer dat je naar dit tabblad navigeert een
+    # nieuwe, onnodige API-aanroep af (kosten + latency), ook als je
+    # helemaal geen nieuwe scan wilde. session_state onthoudt het
+    # resultaat binnen de sessie, dus wisselen van tabblad en terugkomen
+    # verliest de laatste scan niet.
     st.markdown(
         _uniform_section_header_html("Portfolio Robustness Audit", "shield", is_first=False),
         unsafe_allow_html=True,
@@ -6318,7 +6325,9 @@ def _render_stress_test(user_email: str) -> None:
         "top_sector": _top_sector, "top_sector_pct": round(_top_sector_pct, 1),
         "top_currency": _top_currency, "top_currency_pct": round(_top_currency_pct, 1),
     }
-    _alerts = _run_ai_risk_alerts(_tickers_list, _exposure_context)
+    if st.button("\u2726 Run Cognitive Scan", key="stress_test_run_scan_btn"):
+        st.session_state["stress_test_alerts"] = _run_ai_risk_alerts(_tickers_list, _exposure_context)
+    _alerts = st.session_state.get("stress_test_alerts")
     if _alerts:
         for _cluster, _tickers_str, _fact in _alerts:
             st.markdown(
@@ -6330,6 +6339,12 @@ def _render_stress_test(user_email: str) -> None:
                 f'| FACT: {_fact.upper()}</div>',
                 unsafe_allow_html=True,
             )
+    elif _alerts is None:
+        st.markdown(
+            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
+            'text-transform:uppercase;">Click above to scan your portfolio for hidden correlation clusters.</div>',
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown(
             '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
@@ -6494,12 +6509,14 @@ def _render_wealth_engine(user_email: str) -> None:
     # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
     API_FALLBACK_YIELD = 0.03
     _weighted_yield_sum = 0.0
+    _debug_rows = []
     for h in holdings:
         ticker = h.get("ticker")
         value = h.get("position_value") or 0
         if not ticker or value <= 0:
             continue
         _custom_cashflow = h.get("custom_annual_cashflow")
+        _debug_row = {"ticker": ticker, "position_value": value, "custom_annual_cashflow": _custom_cashflow}
         if _custom_cashflow is not None:
             # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
             # e.d.) -- geen echte ticker om bij Yahoo Finance op te
@@ -6508,15 +6525,20 @@ def _render_wealth_engine(user_email: str) -> None:
             # jaarlijkse cashflow t.o.v. de (eveneens handmatig
             # ingevoerde) positiewaarde.
             y = float(_custom_cashflow) / value
+            _debug_row["path"] = "custom_asset"
         else:
             try:
                 info = get_cached_ticker_info(ticker)
                 raw_yield = info.get("dividendYield")
+                _debug_row["raw_dividendYield_from_yfinance"] = raw_yield
+                _debug_row["info_dict_length"] = len(info) if isinstance(info, dict) else None
+                _debug_row["info_has_shortName"] = info.get("shortName") if isinstance(info, dict) else None
                 if raw_yield is None:
                     # Yahoo Finance heeft dit ticker's dividend-veld gewoon
                     # leeg -- meestal omdat de asset simpelweg geen dividend
                     # uitkeert. Telt dus terecht als 0%, geen fallback.
                     y = 0.0
+                    _debug_row["path"] = "no_dividendYield_field -> 0%"
                 else:
                     y = float(raw_yield)
                     # yfinance geeft dividendYield soms als fractie (0.03) en
@@ -6527,14 +6549,28 @@ def _render_wealth_engine(user_email: str) -> None:
                         y = y / 100
                     if y < 0:
                         y = 0.0
-            except Exception:
+                    _debug_row["path"] = "live_yfinance"
+            except Exception as _e:
                 # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
                 # dividend'-antwoord) -- hier WEL de fallback, want dit is
                 # echt ontbrekende data, geen bevestigd 0%-dividend.
                 y = API_FALLBACK_YIELD
+                _debug_row["path"] = f"EXCEPTION: {_e} -> 3% fallback"
+        _debug_row["computed_yield_pct"] = round(y * 100, 4)
+        _debug_row["weighted_contribution_eur"] = round(value * y, 2)
+        _debug_rows.append(_debug_row)
         _weighted_yield_sum += value * y
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
+
+    # TIJDELIJK (opnieuw) -- de cache-fix loste het niet op, dus het
+    # probleem zit dieper. Verwijderen zodra bevestigd opgelost.
+    with st.expander("\U0001F41B Debug: yield-berekening per positie", expanded=False):
+        st.write(f"Total portfolio value: \u20ac{total_value:,.2f}")
+        for _row in _debug_rows:
+            st.write(_row)
+        st.write(f"live_avg_yield: {live_avg_yield * 100:.4f}%")
+        st.write(f"annual_cashflow: \u20ac{annual_cashflow:,.2f}")
 
     # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
     # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
