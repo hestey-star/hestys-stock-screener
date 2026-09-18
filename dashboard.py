@@ -6672,9 +6672,17 @@ def _render_wealth_engine(user_email: str) -> None:
             # verkeerd zette). Deze knop zet 'm expliciet terug naar de
             # ZOJUIST verse berekening, zonder op een sessie-reset te
             # hoeven wachten.
-            if st.button("\u21bb Reset to live yield", key="wealth_yield_reset_btn"):
-                st.session_state["wealth_yield_slider"] = round(live_avg_yield * 100, 1)
-                st.rerun()
+            #
+            # BUGFIX: session_state[key] direct zetten NA het tekenen van
+            # de slider (binnen dezelfde run) is verboden in Streamlit --
+            # StreamlitWidgetAlreadyInstantiatedError. Via on_click i.p.v.
+            # een gewone if-knop: die callback draait VOORDAT de widgets
+            # van de volgende run getekend worden, dus dat is wel
+            # toegestaan.
+            def _reset_yield_to_live(_live_value=round(live_avg_yield * 100, 1)):
+                st.session_state["wealth_yield_slider"] = _live_value
+
+            st.button("\u21bb Reset to live yield", key="wealth_yield_reset_btn", on_click=_reset_yield_to_live)
         with sim_col3:
             contribution_slider = st.slider(
                 "Simulated annual contribution", min_value=0, max_value=50000,
