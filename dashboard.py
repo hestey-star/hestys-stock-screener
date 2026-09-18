@@ -6481,12 +6481,14 @@ def _render_wealth_engine(user_email: str) -> None:
     # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
     API_FALLBACK_YIELD = 0.03
     _weighted_yield_sum = 0.0
+    _debug_rows = []
     for h in holdings:
         ticker = h.get("ticker")
         value = h.get("position_value") or 0
         if not ticker or value <= 0:
             continue
         _custom_cashflow = h.get("custom_annual_cashflow")
+        _debug_row = {"ticker": ticker, "position_value": value, "custom_annual_cashflow": _custom_cashflow}
         if _custom_cashflow is not None:
             # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
             # e.d.) -- geen echte ticker om bij Yahoo Finance op te
@@ -6495,15 +6497,19 @@ def _render_wealth_engine(user_email: str) -> None:
             # jaarlijkse cashflow t.o.v. de (eveneens handmatig
             # ingevoerde) positiewaarde.
             y = float(_custom_cashflow) / value
+            _debug_row["path"] = "custom_asset"
         else:
             try:
                 info = get_cached_ticker_info(ticker)
                 raw_yield = info.get("dividendYield")
+                _debug_row["raw_dividendYield_from_yfinance"] = raw_yield
+                _debug_row["info_dict_was_empty"] = (info == {})
                 if raw_yield is None:
                     # Yahoo Finance heeft dit ticker's dividend-veld gewoon
                     # leeg -- meestal omdat de asset simpelweg geen dividend
                     # uitkeert. Telt dus terecht als 0%, geen fallback.
                     y = 0.0
+                    _debug_row["path"] = "no_dividendYield_field -> 0%"
                 else:
                     y = float(raw_yield)
                     # yfinance geeft dividendYield soms als fractie (0.03) en
@@ -6514,26 +6520,26 @@ def _render_wealth_engine(user_email: str) -> None:
                         y = y / 100
                     if y < 0:
                         y = 0.0
-            except Exception:
+                    _debug_row["path"] = "live_yfinance"
+            except Exception as _e:
                 # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
                 # dividend'-antwoord) -- hier WEL de fallback, want dit is
                 # echt ontbrekende data, geen bevestigd 0%-dividend.
                 y = API_FALLBACK_YIELD
+                _debug_row["path"] = f"EXCEPTION: {_e} -> 3% fallback"
+        _debug_row["computed_yield_pct"] = round(y * 100, 4)
+        _debug_row["weighted_contribution_eur"] = round(value * y, 2)
+        _debug_rows.append(_debug_row)
         _weighted_yield_sum += value * y
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
 
-    # TIJDELIJK -- puur om te diagnosticeren waarom Prop.com's cashflow
+    # TIJDELIJK -- puur om te diagnosticeren waarom TDIV/TMUS/KHC's yield
     # niet lijkt mee te tellen. Verwijderen zodra bevestigd opgelost.
     with st.expander("\U0001F41B Debug: yield-berekening per positie", expanded=False):
         st.write(f"Total portfolio value: \u20ac{total_value:,.2f}")
-        for h in holdings:
-            st.write({
-                "ticker": h.get("ticker"),
-                "position_value": h.get("position_value"),
-                "custom_annual_cashflow": h.get("custom_annual_cashflow"),
-                "shares": h.get("shares"),
-            })
+        for _row in _debug_rows:
+            st.write(_row)
         st.write(f"live_avg_yield: {live_avg_yield * 100:.4f}%")
         st.write(f"annual_cashflow: \u20ac{annual_cashflow:,.2f}")
 
