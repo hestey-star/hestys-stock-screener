@@ -968,16 +968,15 @@ def get_cached_ticker_info(ticker: str) -> dict:
     werd (in tegenstelling tot get_cached_ticker_history/_earnings_dates/
     _ticker_dividends hieronder, die het decorator wel correct hadden).
 
-    BUGFIX 2: de cache uit BUGFIX 1 introduceerde een nieuw probleem --
-    een EENMALIGE, tijdelijke yfinance-hik (netwerk-issue/rate-limit) gaf
-    een lege dict terug, die vervolgens voor de VOLLE 5 minuten werd
-    vastgehouden (een leeg resultaat wordt net zo gecached als een goed
-    resultaat). Dat verklaarde waarom 'reset naar live yield' soms nog
-    steeds het foute getal liet zien: de cache zelf hield het foute
-    resultaat al vast, los van de UI. Nu wordt de aanroep bij een lege/
-    mislukte respons tot 2x extra geprobeerd (met een korte pauze) VOOR
-    er iets gecached wordt -- zo wordt alleen een ECHT herhaaldelijk
-    mislukte aanroep als 'geen data' opgeslagen, niet een eenmalige hik.
+    BUGFIX 3: BUGFIX 2's retry checkte alleen 'is de dict niet-leeg?' --
+    maar Yahoo Finance geeft bij een mislukte aanroep niet altijd een
+    lege dict terug. Soms komt er een SCHIJN-geldige dict met slechts 1
+    a 2 sleutels terug (bv. {'trailingPegRatio': None}) -- niet-leeg,
+    dus 'succesvol' volgens de oude check, maar feitelijk waardeloos: een
+    echte .info-respons voor een bestaande ticker heeft altijd tientallen
+    tot 100+ velden. Nu wordt zo'n te-kleine dict ook als mislukking
+    behandeld en opnieuw geprobeerd, i.p.v. meteen als 'geen dividend'
+    (0%) te worden geinterpreteerd.
     """
     last_result = {}
     for _attempt in range(3):
@@ -985,7 +984,7 @@ def get_cached_ticker_info(ticker: str) -> dict:
             info = yf.Ticker(ticker).info
         except Exception:
             info = {}
-        if info:
+        if info and len(info) > 5:
             return info
         last_result = info
         if _attempt < 2:
