@@ -6523,6 +6523,20 @@ def _render_wealth_engine(user_email: str) -> None:
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
 
+    # TIJDELIJK -- puur om te diagnosticeren waarom Prop.com's cashflow
+    # niet lijkt mee te tellen. Verwijderen zodra bevestigd opgelost.
+    with st.expander("\U0001F41B Debug: yield-berekening per positie", expanded=False):
+        st.write(f"Total portfolio value: \u20ac{total_value:,.2f}")
+        for h in holdings:
+            st.write({
+                "ticker": h.get("ticker"),
+                "position_value": h.get("position_value"),
+                "custom_annual_cashflow": h.get("custom_annual_cashflow"),
+                "shares": h.get("shares"),
+            })
+        st.write(f"live_avg_yield: {live_avg_yield * 100:.4f}%")
+        st.write(f"annual_cashflow: \u20ac{annual_cashflow:,.2f}")
+
     # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
     # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
     # dat wel live opgehaald kan worden) -- daarom werken we hier met een
