@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import base64
+import time
 from datetime import datetime, timezone, timedelta, date
 
 import numpy as np
@@ -962,22 +963,34 @@ def get_cached_ticker_info(ticker: str) -> dict:
     dezelfde koersinfo steeds opnieuw wordt opgehaald bij elke
     pagina-interactie (Streamlit herstart het hele script bij elke klik).
 
-    BUGFIX: het @st.cache_data-decorator ontbrak hier -- ondanks dat de
+    BUGFIX 1: het @st.cache_data-decorator ontbrak hier -- ondanks dat de
     docstring en functienaam al die hele tijd BEWEERDEN dat dit gecached
     werd (in tegenstelling tot get_cached_ticker_history/_earnings_dates/
     _ticker_dividends hieronder, die het decorator wel correct hadden).
-    Zonder caching deed deze functie bij ELKE rerun een compleet verse,
-    live yfinance-aanroep per ticker -- Yahoo Finance's onaangekondigde
-    rate-limits bij zulke snelle, herhaalde aanroepen verklaren precies
-    waarom sommige tickers (bv. in de Wealth Engine's yield-berekening)
-    op de ene page-load wel data teruggaven en op de volgende niet: geen
-    structurele fout in de rekenlogica zelf, maar een gemiste cache die
-    de aanroepen onnodig fragiel maakte.
+
+    BUGFIX 2: de cache uit BUGFIX 1 introduceerde een nieuw probleem --
+    een EENMALIGE, tijdelijke yfinance-hik (netwerk-issue/rate-limit) gaf
+    een lege dict terug, die vervolgens voor de VOLLE 5 minuten werd
+    vastgehouden (een leeg resultaat wordt net zo gecached als een goed
+    resultaat). Dat verklaarde waarom 'reset naar live yield' soms nog
+    steeds het foute getal liet zien: de cache zelf hield het foute
+    resultaat al vast, los van de UI. Nu wordt de aanroep bij een lege/
+    mislukte respons tot 2x extra geprobeerd (met een korte pauze) VOOR
+    er iets gecached wordt -- zo wordt alleen een ECHT herhaaldelijk
+    mislukte aanroep als 'geen data' opgeslagen, niet een eenmalige hik.
     """
-    try:
-        return yf.Ticker(ticker).info
-    except Exception:
-        return {}
+    last_result = {}
+    for _attempt in range(3):
+        try:
+            info = yf.Ticker(ticker).info
+        except Exception:
+            info = {}
+        if info:
+            return info
+        last_result = info
+        if _attempt < 2:
+            time.sleep(0.6)
+    return last_result
 
 
 @st.cache_data(ttl=300, show_spinner=False)
