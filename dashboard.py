@@ -6521,14 +6521,12 @@ def _render_wealth_engine(user_email: str) -> None:
     # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
     API_FALLBACK_YIELD = 0.03
     _weighted_yield_sum = 0.0
-    _debug_rows = []
     for h in holdings:
         ticker = h.get("ticker")
         value = h.get("position_value") or 0
         if not ticker or value <= 0:
             continue
         _custom_cashflow = h.get("custom_annual_cashflow")
-        _debug_row = {"ticker": ticker, "position_value": value, "custom_annual_cashflow": _custom_cashflow}
         if _custom_cashflow is not None:
             # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
             # e.d.) -- geen echte ticker om bij Yahoo Finance op te
@@ -6537,20 +6535,15 @@ def _render_wealth_engine(user_email: str) -> None:
             # jaarlijkse cashflow t.o.v. de (eveneens handmatig
             # ingevoerde) positiewaarde.
             y = float(_custom_cashflow) / value
-            _debug_row["path"] = "custom_asset"
         else:
             try:
                 info = get_cached_ticker_info(ticker)
                 raw_yield = info.get("dividendYield")
-                _debug_row["raw_dividendYield_from_yfinance"] = raw_yield
-                _debug_row["info_dict_length"] = len(info) if isinstance(info, dict) else None
-                _debug_row["info_has_shortName"] = info.get("shortName") if isinstance(info, dict) else None
                 if raw_yield is None:
                     # Yahoo Finance heeft dit ticker's dividend-veld gewoon
                     # leeg -- meestal omdat de asset simpelweg geen dividend
                     # uitkeert. Telt dus terecht als 0%, geen fallback.
                     y = 0.0
-                    _debug_row["path"] = "no_dividendYield_field -> 0%"
                 else:
                     y = float(raw_yield)
                     # yfinance geeft dividendYield soms als fractie (0.03) en
@@ -6561,14 +6554,11 @@ def _render_wealth_engine(user_email: str) -> None:
                         y = y / 100
                     if y < 0:
                         y = 0.0
-                    _debug_row["path"] = "live_yfinance"
-            except Exception as _e:
+            except Exception:
                 # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
                 # dividend'-antwoord) -- hier WEL de fallback, want dit is
                 # echt ontbrekende data, geen bevestigd 0%-dividend.
                 y = API_FALLBACK_YIELD
-                _debug_row["path"] = f"EXCEPTION: {_e} -> 3% fallback"
-        _debug_row["computed_yield_pct"] = round(y * 100, 4)
         _weighted_contribution = value * y
 
         # Staking -- een DEEL van deze positie (in aandelen/coins, niet
@@ -6585,22 +6575,10 @@ def _render_wealth_engine(user_email: str) -> None:
             _staked_value_eur = value * _staked_fraction
             _staking_contribution = _staked_value_eur * (float(_staking_apy) / 100)
             _weighted_contribution += _staking_contribution
-            _debug_row["staking_contribution_eur"] = round(_staking_contribution, 2)
 
-        _debug_row["weighted_contribution_eur"] = round(_weighted_contribution, 2)
-        _debug_rows.append(_debug_row)
         _weighted_yield_sum += _weighted_contribution
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
-
-    # TIJDELIJK (opnieuw) -- de cache-fix loste het niet op, dus het
-    # probleem zit dieper. Verwijderen zodra bevestigd opgelost.
-    with st.expander("\U0001F41B Debug: yield-berekening per positie", expanded=False):
-        st.write(f"Total portfolio value: \u20ac{total_value:,.2f}")
-        for _row in _debug_rows:
-            st.write(_row)
-        st.write(f"live_avg_yield: {live_avg_yield * 100:.4f}%")
-        st.write(f"annual_cashflow: \u20ac{annual_cashflow:,.2f}")
 
     # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
     # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
@@ -6869,70 +6847,85 @@ def _render_wealth_engine(user_email: str) -> None:
     # over_time()). Losstaand van de 30-jarige projectie hierboven --
     # eigen databronnen, geen gedeelde state, dus kan die projectie op
     # geen enkele manier verstoren.
-    _hist_holdings_for_chart = holdings
-    _hist_capital_series = compute_cumulative_contribution_over_time(_hist_holdings_for_chart, user_email)
-    if _hist_capital_series:
-        _hist_history_by_ticker = get_shared_history_for_holdings(_hist_holdings_for_chart)
-        _hist_value_series = compute_portfolio_value_over_time(
-            _hist_holdings_for_chart, user_email, _hist_history_by_ticker,
-        )
-        # Beide reeksen kunnen een licht andere puntenset hebben (de
-        # waarde-reeks laat een punt weg als er nog geen geldige koers
-        # binnen bereik lag) -- op datum samenvoegen i.p.v. blind op
-        # index, zodat de 2 lijnen altijd kloppend uitgelijnd blijven.
-        _hist_value_by_date = {p["date"]: p["value"] for p in _hist_value_series}
-        _hist_dates = [p["date"] for p in _hist_capital_series]
-        _hist_capital_values = [p["value"] for p in _hist_capital_series]
-        _hist_networth_values = [_hist_value_by_date.get(d) for d in _hist_dates]
+    #
+    # Achter een KNOP i.p.v. automatisch bij elke page-load: de eerste
+    # (koude-cache) aanroep van get_shared_history_for_holdings() haalt
+    # de VOLLEDIGE koershistorie ("max", soms jaren aan dagelijkse data)
+    # per ticker op, achter elkaar -- dat maakte de HELE Wealth Engine
+    # traag bij elk bezoek, ook als je deze specifieke grafiek niet wilde
+    # zien. session_state onthoudt het resultaat binnen de sessie, dus
+    # eenmaal geladen blijft 'ie zichtbaar bij het wisselen van sliders.
+    st.markdown(
+        '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
+        'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
+        'padding-bottom:8px; margin-bottom:15px;">&#128202; Historical Portfolio '
+        'Accumulation (TransVelocity Proxy)</div>',
+        unsafe_allow_html=True,
+    )
+    if not st.session_state.get("wealth_engine_show_history"):
+        if st.button("\U0001F4C8 Load historical chart", key="wealth_engine_load_history_btn"):
+            st.session_state["wealth_engine_show_history"] = True
+            st.rerun()
+    else:
+        _hist_holdings_for_chart = holdings
+        with st.spinner("Loading historical price data..."):
+            _hist_capital_series = compute_cumulative_contribution_over_time(_hist_holdings_for_chart, user_email)
+            if _hist_capital_series:
+                _hist_history_by_ticker = get_shared_history_for_holdings(_hist_holdings_for_chart)
+                _hist_value_series = compute_portfolio_value_over_time(
+                    _hist_holdings_for_chart, user_email, _hist_history_by_ticker,
+                )
+        if _hist_capital_series:
+            # Beide reeksen kunnen een licht andere puntenset hebben (de
+            # waarde-reeks laat een punt weg als er nog geen geldige koers
+            # binnen bereik lag) -- op datum samenvoegen i.p.v. blind op
+            # index, zodat de 2 lijnen altijd kloppend uitgelijnd blijven.
+            _hist_value_by_date = {p["date"]: p["value"] for p in _hist_value_series}
+            _hist_dates = [p["date"] for p in _hist_capital_series]
+            _hist_capital_values = [p["value"] for p in _hist_capital_series]
+            _hist_networth_values = [_hist_value_by_date.get(d) for d in _hist_dates]
 
-        st.markdown(
-            '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
-            'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
-            'padding-bottom:8px; margin-bottom:15px;">&#128202; Historical Portfolio '
-            'Accumulation (TransVelocity Proxy)</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-            f'text-transform:uppercase; margin-bottom:1rem;">'
-            f'<span style="{_legend_line_style} background-color:#64748b;"></span>Cumulative Net Capital Invested '
-            f'&nbsp;&nbsp;|&nbsp;&nbsp; '
-            f'<span style="{_legend_line_style} background-color:#34d399;"></span>Historical Portfolio Value'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        hist_fig = go.Figure()
-        hist_fig.add_trace(go.Scatter(
-            x=_hist_dates, y=_hist_capital_values, name="Net Capital Invested", mode="lines",
-            line=dict(color="rgba(148,163,184,0.75)", width=1.5),
-            hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
-        ))
-        hist_fig.add_trace(go.Scatter(
-            x=_hist_dates, y=_hist_networth_values, name="Portfolio Value", mode="lines",
-            line=dict(color="#34D399", width=2.5),
-            connectgaps=True,
-            hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
-        ))
-        hist_fig.update_layout(
-            height=280,
-            margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            showlegend=False,
-            xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
-            yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
-                       tickprefix="\u20ac", tickformat=",.0f"),
-            hovermode="x unified",
-            hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
-        )
-        st.plotly_chart(hist_fig, use_container_width=True, config={"displayModeBar": False})
-        st.markdown(
-            '<div style="color:#475569; font-size:9px; font-weight:400; letter-spacing:0.03em; '
-            'text-transform:uppercase; margin-top:0.25rem;">Notice: historical inflow is derived via '
-            'net transaction velocity (buy/sell volume) and serves as an empirical proxy, not a '
-            'literal bank deposit record.</div>',
-            unsafe_allow_html=True,
-        )
+            st.markdown(
+                f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+                f'text-transform:uppercase; margin-bottom:1rem;">'
+                f'<span style="{_legend_line_style} background-color:#64748b;"></span>Cumulative Net Capital Invested '
+                f'&nbsp;&nbsp;|&nbsp;&nbsp; '
+                f'<span style="{_legend_line_style} background-color:#34d399;"></span>Historical Portfolio Value'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            hist_fig = go.Figure()
+            hist_fig.add_trace(go.Scatter(
+                x=_hist_dates, y=_hist_capital_values, name="Net Capital Invested", mode="lines",
+                line=dict(color="rgba(148,163,184,0.75)", width=1.5),
+                hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
+            ))
+            hist_fig.add_trace(go.Scatter(
+                x=_hist_dates, y=_hist_networth_values, name="Portfolio Value", mode="lines",
+                line=dict(color="#34D399", width=2.5),
+                connectgaps=True,
+                hovertemplate="%{x|%Y-%m-%d}: \u20ac%{y:,.0f}<extra></extra>",
+            ))
+            hist_fig.update_layout(
+                height=280,
+                margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+                yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                           tickprefix="\u20ac", tickformat=",.0f"),
+                hovermode="x unified",
+                hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+            )
+            st.plotly_chart(hist_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown(
+                '<div style="color:#475569; font-size:9px; font-weight:400; letter-spacing:0.03em; '
+                'text-transform:uppercase; margin-top:0.25rem;">Notice: historical inflow is derived via '
+                'net transaction velocity (buy/sell volume) and serves as an empirical proxy, not a '
+                'literal bank deposit record.</div>',
+                unsafe_allow_html=True,
+            )
         st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
     # --- Cashflow Velocity -- absolute jaarlijkse passieve cashflow in
