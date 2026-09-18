@@ -6664,6 +6664,17 @@ def _render_wealth_engine(user_email: str) -> None:
                 "Simulated dividend yield", min_value=0.0, max_value=10.0,
                 value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
             )
+            # 'value=' hierboven werkt ALLEEN bij de allereerste keer dat
+            # deze slider in je sessie getekend wordt -- daarna blijft 'ie
+            # op zijn laatst-versleepte positie staan, ook als de live
+            # yield-berekening daarna verandert (bv. door een eerdere,
+            # inmiddels-gefixte yfinance-hik die de starende waarde ooit
+            # verkeerd zette). Deze knop zet 'm expliciet terug naar de
+            # ZOJUIST verse berekening, zonder op een sessie-reset te
+            # hoeven wachten.
+            if st.button("\u21bb Reset to live yield", key="wealth_yield_reset_btn"):
+                st.session_state["wealth_yield_slider"] = round(live_avg_yield * 100, 1)
+                st.rerun()
         with sim_col3:
             contribution_slider = st.slider(
                 "Simulated annual contribution", min_value=0, max_value=50000,
