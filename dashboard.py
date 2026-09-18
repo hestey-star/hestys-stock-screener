@@ -11254,7 +11254,13 @@ def render_settings():
             st.markdown("#### Email preferences")
             prefs = database.get_user_preferences(user_email)
 
-            st.caption("Weekly signals (choose which ones you want -- delivered in 1 combined email)")
+            # 3 duidelijk GESCHEIDEN e-mails, elk met een eigen subkop --
+            # voorheen stonden de 3 signalen-checkboxes en de daily/weekly-
+            # toggles allemaal los onder elkaar, zonder dat de opmaak
+            # duidelijk maakte dat het om 3 aparte mails gaat (en welke
+            # instelling bij welke mail hoort).
+            st.markdown("**Weekly signals email**")
+            st.caption("Pick which signal type(s) you want -- delivered together in 1 combined email, once a week.")
             wants_momentocrats = st.checkbox(
                 "Momentocrats -- technical momentum + fundamental quality combo",
                 value=prefs.get("wants_momentocrats_email", False),
@@ -11268,6 +11274,8 @@ def render_settings():
                 value=prefs.get("wants_rocket_email", False),
             )
 
+            st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+            st.markdown("**Daily screener email**")
             wants_daily = st.checkbox(
                 "Receive the daily screener email (swing-trade signals, weekdays)",
                 value=prefs.get("wants_daily_email", False),
@@ -11284,6 +11292,9 @@ def render_settings():
                 index=region_options.index(prefs.get("email_region", "EU")),
                 format_func=lambda x: region_labels[x],
             )
+
+            st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+            st.markdown("**Weekly portfolio email**")
             wants_portfolio = st.checkbox(
                 "Receive the weekly portfolio email (status + news for your own positions)",
                 value=prefs["wants_portfolio_email"],
@@ -11292,8 +11303,8 @@ def render_settings():
             st.markdown("**Wealth Engine**")
             financial_independence_target = st.number_input(
                 "Financial Independence target (annual passive cashflow, \u20ac)",
-                min_value=0.0, step=1000.0,
-                value=float(prefs.get("financial_independence_target") or 60000.0),
+                min_value=0, step=1000,
+                value=int(prefs.get("financial_independence_target") or 60000),
                 help="Used by the Snowball Milestones on the Wealth Engine (Analyze) to determine "
                      "when your projected passive cashflow reaches full financial independence.",
             )
@@ -11313,7 +11324,7 @@ def render_settings():
                 current_cash = database.get_cash_value(user_email)
                 new_cash = st.number_input(
                     "Cash not currently invested (used for the cash% check in Analyze)",
-                    min_value=0.0, value=float(current_cash), step=100.0, key="cash_input",
+                    min_value=0, value=int(current_cash), step=100, key="cash_input",
                 )
                 if st.button("Save cash amount"):
                     database.set_cash_value(user_email, new_cash)
