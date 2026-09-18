@@ -6685,8 +6685,8 @@ def _render_wealth_engine(user_email: str) -> None:
     total_wealth = [total_value]
     dividend_income_by_year = [simulated_starting_cashflow]
 
-    # Het dividendinkomen wordt nu berekend als (vermogen aan het BEGIN
-    # van het jaar) x (dividendrendement-per-aandeel) -- i.p.v. een
+    # Het dividendinkomen wordt berekend als (vermogen op dat moment) x
+    # (dividendrendement-per-aandeel op dat moment) -- i.p.v. een
     # dividendbedrag dat volledig LOSSTAAT van hoeveel vermogen er
     # daadwerkelijk is opgebouwd. Zo werkt herbeleggen/compounding pas
     # ECHT door: elk jaar extra ingelegd geld EN elk herbelegd dividend
@@ -6695,15 +6695,24 @@ def _render_wealth_engine(user_email: str) -> None:
     # steeds licht per jaar (effective_dividend_growth_rate, gekoppeld
     # aan de groei-slider) -- dat simuleert dat bedrijven hun dividend
     # per aandeel verhogen, los van hoeveel aandelen je bezit.
+    #
+    # BELANGRIJK (bugfix): vermogen/rendement worden nu EERST voor het
+    # nieuwe jaar bijgewerkt, en PAS DAARNA wordt dat jaar's dividend
+    # berekend uit die vernieuwde stand. Eerder gebeurde dit in de
+    # omgekeerde volgorde, waardoor jaar 1's dividend nog exact de OUDE
+    # (jaar 0-)stand van vermogen/rendement gebruikte -- identiek aan
+    # jaar 0 zelf, dus altijd +0,0% YoY in het eerste jaar, ongeacht de
+    # sliders. Nu groeit elk jaar daadwerkelijk door t.o.v. het vorige.
     _wealth = total_value
     _deposits = total_value
     _yield_rate = yield_slider / 100
     for i in range(1, PROJECTION_YEARS + 1):
-        _dividend_this_year = _wealth * _yield_rate
+        _prior_dividend = dividend_income_by_year[-1]
         capital_growth = _wealth * simulated_price_growth
-        _wealth = _wealth + capital_growth + _dividend_this_year + simulated_contribution
+        _wealth = _wealth + capital_growth + _prior_dividend + simulated_contribution
         _deposits = _deposits + simulated_contribution
         _yield_rate = _yield_rate * (1 + effective_dividend_growth_rate)
+        _dividend_this_year = _wealth * _yield_rate
         years.append(current_year + i)
         net_deposits.append(_deposits)
         total_wealth.append(_wealth)
