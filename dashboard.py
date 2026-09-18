@@ -955,11 +955,24 @@ def refresh_portfolio_values(holdings: list, user_email: str, display_currency: 
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_cached_ticker_info(ticker: str) -> dict:
     """
     Cachet yfinance's .info per ticker voor 5 minuten -- voorkomt dat
     dezelfde koersinfo steeds opnieuw wordt opgehaald bij elke
     pagina-interactie (Streamlit herstart het hele script bij elke klik).
+
+    BUGFIX: het @st.cache_data-decorator ontbrak hier -- ondanks dat de
+    docstring en functienaam al die hele tijd BEWEERDEN dat dit gecached
+    werd (in tegenstelling tot get_cached_ticker_history/_earnings_dates/
+    _ticker_dividends hieronder, die het decorator wel correct hadden).
+    Zonder caching deed deze functie bij ELKE rerun een compleet verse,
+    live yfinance-aanroep per ticker -- Yahoo Finance's onaangekondigde
+    rate-limits bij zulke snelle, herhaalde aanroepen verklaren precies
+    waarom sommige tickers (bv. in de Wealth Engine's yield-berekening)
+    op de ene page-load wel data teruggaven en op de volgende niet: geen
+    structurele fout in de rekenlogica zelf, maar een gemiste cache die
+    de aanroepen onnodig fragiel maakte.
     """
     try:
         return yf.Ticker(ticker).info
