@@ -253,6 +253,23 @@ def set_target_weight(holding_id: int, user_email: str, target_weight: float = N
         .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def set_staking_info(holding_id: int, user_email: str, staked_amount: float = None, staking_apy_pct: float = None) -> None:
+    """
+    Legt vast hoeveel van een positie (in aandelen/coins, NIET euro's) is
+    gestaked, en tegen welk jaarlijks rendement (APY%) -- voor posities
+    waarbij een DEEL van het bezit los een eigen yield oplevert (bv. 20
+    van je 50 SOL gestaked tegen 7% APY), los van een eventuele live
+    markt-dividendyield van de positie zelf (bij crypto sowieso 0%). De
+    Wealth Engine rekent dit apart bij: (staked_amount / totaal aantal
+    aandelen) x position_value x (staking_apy_pct/100). Beide op None
+    zetten wist de staking-info weer (positie telt dan niet meer mee).
+    """
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({
+        "staked_amount": staked_amount, "staking_apy_pct": staking_apy_pct,
+    }).eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def set_watchlist_alert(holding_id: int, user_email: str, target_price: float, current_price: float) -> None:
     """
     Stelt een prijs-alert in voor een WATCHLIST-item (geen eigen

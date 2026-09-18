@@ -6557,9 +6557,27 @@ def _render_wealth_engine(user_email: str) -> None:
                 y = API_FALLBACK_YIELD
                 _debug_row["path"] = f"EXCEPTION: {_e} -> 3% fallback"
         _debug_row["computed_yield_pct"] = round(y * 100, 4)
-        _debug_row["weighted_contribution_eur"] = round(value * y, 2)
+        _weighted_contribution = value * y
+
+        # Staking -- een DEEL van deze positie (in aandelen/coins, niet
+        # euro's) kan los een eigen yield opleveren, bv. 20 van 50
+        # gehouden SOL gestaked tegen 7% APY. Telt BOVENOP de gewone
+        # markt-yield hierboven mee (niet als vervanging) -- bij crypto
+        # is die toch al 0%, maar dit werkt ook voor een aandeel met
+        # zowel dividend als een apart gestaked deel.
+        _staked_amount = h.get("staked_amount")
+        _staking_apy = h.get("staking_apy_pct")
+        _total_shares = h.get("shares") or 0
+        if _staked_amount and _staking_apy and _total_shares > 0:
+            _staked_fraction = min(float(_staked_amount) / float(_total_shares), 1.0)
+            _staked_value_eur = value * _staked_fraction
+            _staking_contribution = _staked_value_eur * (float(_staking_apy) / 100)
+            _weighted_contribution += _staking_contribution
+            _debug_row["staking_contribution_eur"] = round(_staking_contribution, 2)
+
+        _debug_row["weighted_contribution_eur"] = round(_weighted_contribution, 2)
         _debug_rows.append(_debug_row)
-        _weighted_yield_sum += value * y
+        _weighted_yield_sum += _weighted_contribution
     live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
     annual_cashflow = total_value * live_avg_yield
 
@@ -7942,6 +7960,45 @@ def render_portfolio():
                             database.set_target_weight(
                                 selected_holding["id"], user_email,
                                 detail_new_target if detail_new_target > 0 else None,
+                            )
+                            st.rerun()
+
+                # --- Staking -- voor posities waarvan een DEEL (in
+                # aandelen/coins, niet euro's) los een eigen yield
+                # oplevert, bv. 20 van je 50 gehouden SOL gestaked tegen
+                # 7% APY. Los van eventuele live markt-dividendyield van
+                # de positie zelf, en telt in de Wealth Engine bovenop
+                # mee, niet als vervanging.
+                _staking_key = f"detail_staking_wrap_{selected_holding['id']}"
+                st.markdown(
+                    f'<style>.st-key-{_staking_key} div[data-baseweb="input"] {{ '
+                    f'background:transparent !important; border:1px solid rgba(148,163,184,0.18) !important; '
+                    f'box-shadow:none !important; }} '
+                    f'</style>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_staking_key):
+                    _staking_col1, _staking_col2, _staking_col3 = st.columns([1.3, 1.3, 1])
+                    with _staking_col1:
+                        detail_staked_amount = st.number_input(
+                            "Staked amount (shares/coins)", min_value=0.0, step=1.0,
+                            value=float(selected_holding.get("staked_amount") or 0.0),
+                            key=f"detail_staked_amount_{selected_holding['id']}",
+                            help="How many shares/coins of this position are staked (not euros).",
+                        )
+                    with _staking_col2:
+                        detail_staking_apy = st.number_input(
+                            "Staking APY %", min_value=0.0, max_value=100.0, step=0.5,
+                            value=float(selected_holding.get("staking_apy_pct") or 0.0),
+                            key=f"detail_staking_apy_{selected_holding['id']}",
+                        )
+                    with _staking_col3:
+                        st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
+                        if st.button("Save", key=f"detail_save_staking_{selected_holding['id']}"):
+                            database.set_staking_info(
+                                selected_holding["id"], user_email,
+                                staked_amount=detail_staked_amount if detail_staked_amount > 0 else None,
+                                staking_apy_pct=detail_staking_apy if detail_staking_apy > 0 else None,
                             )
                             st.rerun()
 
