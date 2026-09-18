@@ -6868,13 +6868,27 @@ def _render_wealth_engine(user_email: str) -> None:
             st.rerun()
     else:
         _hist_holdings_for_chart = holdings
-        with st.spinner("Loading historical price data..."):
-            _hist_capital_series = compute_cumulative_contribution_over_time(_hist_holdings_for_chart, user_email)
-            if _hist_capital_series:
-                _hist_history_by_ticker = get_shared_history_for_holdings(_hist_holdings_for_chart)
-                _hist_value_series = compute_portfolio_value_over_time(
-                    _hist_holdings_for_chart, user_email, _hist_history_by_ticker,
-                )
+        # Deze berekeningen doen meerdere, ongedekte Supabase-/yfinance-
+        # aanroepen (1 per positie) -- een enkele tijdelijke netwerkhik
+        # (bv. Supabase's verbinding die even wegvalt) crashte voorheen
+        # de HELE pagina i.p.v. gewoon deze ene grafiek. Nu gevangen: een
+        # mislukte poging toont een nette melding + retry-knop, en laat
+        # de rest van de Wealth Engine (tegels, sliders, projectie)
+        # gewoon intact.
+        try:
+            with st.spinner("Loading historical price data..."):
+                _hist_capital_series = compute_cumulative_contribution_over_time(_hist_holdings_for_chart, user_email)
+                _hist_value_series = []
+                if _hist_capital_series:
+                    _hist_history_by_ticker = get_shared_history_for_holdings(_hist_holdings_for_chart)
+                    _hist_value_series = compute_portfolio_value_over_time(
+                        _hist_holdings_for_chart, user_email, _hist_history_by_ticker,
+                    )
+        except Exception as _hist_error:
+            st.error(f"Couldn't load the historical chart right now (temporary connection issue): {_hist_error}")
+            if st.button("Try again", key="wealth_engine_retry_history_btn"):
+                st.rerun()
+            _hist_capital_series = None
         if _hist_capital_series:
             # Beide reeksen kunnen een licht andere puntenset hebben (de
             # waarde-reeks laat een punt weg als er nog geen geldige koers
