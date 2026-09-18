@@ -11318,55 +11318,6 @@ def render_settings():
                 if st.button("Save cash amount"):
                     database.set_cash_value(user_email, new_cash)
                     st.success("Saved!")
-
-        with st.container(border=True):
-            st.markdown("#### Risk profile")
-            st.caption("Used to personalize your Concentration Risk and Sectors analysis under "
-                       "Analyze. Not a one-time thing -- update it anytime your situation changes.")
-
-            profile = database.get_risk_profile(user_email)
-            horizon_options = ["short", "medium", "long"]
-            horizon_labels = {"short": "Short (< 2 years)", "medium": "Medium (2-7 years)", "long": "Long (7+ years)"}
-            horizon = st.selectbox(
-                "Investment horizon", horizon_options,
-                index=horizon_options.index(profile["investment_horizon"]),
-                format_func=lambda x: horizon_labels[x],
-                help="How long do you plan to hold most of your investments?",
-            )
-
-            tolerance_options = ["conservative", "balanced", "aggressive"]
-            tolerance = st.selectbox(
-                "Risk tolerance", tolerance_options,
-                index=tolerance_options.index(profile["risk_tolerance"]),
-                format_func=lambda x: x.capitalize(),
-                help="How comfortable are you with short-term swings for potentially higher returns?",
-            )
-
-            max_position = st.slider(
-                "Max % you're comfortable with in a single position", 5, 100,
-                int(profile["max_position_pct"]),
-                help="A common rule of thumb is 20-25%, but this is personal.",
-            )
-            max_sector = st.slider(
-                "Max % you're comfortable with in a single sector", 5, 100,
-                int(profile["max_sector_pct"]),
-                help="A common rule of thumb is 30-40%.",
-            )
-            target_cash = st.slider(
-                "Target cash buffer %", 0, 100, int(profile["target_cash_pct"]),
-                help="How much of your total portfolio do you want to keep as uninvested cash?",
-            )
-
-            wcol1, wcol2 = st.columns(2)
-            with wcol1:
-                if st.button("Save risk profile", type="primary"):
-                    database.set_risk_profile(user_email, horizon, tolerance, max_position, max_sector, target_cash)
-                    st.success("Saved!")
-            with wcol2:
-                if st.button("Reset to defaults"):
-                    database.reset_risk_profile(user_email)
-                    st.success("Reset to defaults!")
-                    st.rerun()
     else:
         st.info("Log in via the menu to manage your email preferences.")
 
