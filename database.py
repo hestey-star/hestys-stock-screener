@@ -334,7 +334,10 @@ def get_user_preferences(user_email: str) -> dict:
     Geeft de e-mail-voorkeuren (en premium-status) van deze gebruiker terug.
     Als er nog geen rij bestaat (nieuwe gebruiker), gelden de
     standaardwaarden: WEL de persoonlijke portfolio-mail, NIET de
-    signaal-mails (allemaal opt-in, per type), GEEN premium, EU als regio.
+    signaal-mails (allemaal opt-in, per type), GEEN premium, EU als regio,
+    en een default Financial Independence-doel van €60.000/jaar (de Wealth
+    Engine's Snowball Milestones lezen dit -- was eerder een vast €30.000
+    voor iedereen, nu instelbaar per gebruiker).
     """
     client = get_supabase_client()
     hashed = hash_email(user_email)
@@ -345,6 +348,7 @@ def get_user_preferences(user_email: str) -> dict:
         "user_email": hashed, "wants_portfolio_email": True,
         "wants_daily_email": False, "is_premium": False, "email_region": "EU",
         "wants_momentocrats_email": False, "wants_snowball_email": False, "wants_rocket_email": False,
+        "financial_independence_target": 60000.0,
     }
 
 
@@ -352,11 +356,11 @@ def set_user_preferences(
     user_email: str, wants_portfolio_email: bool,
     wants_daily_email: bool = False, email_region: str = "EU",
     wants_momentocrats_email: bool = False, wants_snowball_email: bool = False,
-    wants_rocket_email: bool = False,
+    wants_rocket_email: bool = False, financial_independence_target: float = None,
 ) -> None:
     """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
     client = get_supabase_client()
-    client.table("user_preferences").upsert({
+    upsert_data = {
         "user_email": hash_email(user_email),
         "wants_portfolio_email": wants_portfolio_email,
         "wants_daily_email": wants_daily_email,
@@ -364,7 +368,10 @@ def set_user_preferences(
         "wants_momentocrats_email": wants_momentocrats_email,
         "wants_snowball_email": wants_snowball_email,
         "wants_rocket_email": wants_rocket_email,
-    }).execute()
+    }
+    if financial_independence_target is not None:
+        upsert_data["financial_independence_target"] = financial_independence_target
+    client.table("user_preferences").upsert(upsert_data).execute()
 
 
 def set_signal_email_preference(user_email: str, signal_key: str, value: bool) -> None:

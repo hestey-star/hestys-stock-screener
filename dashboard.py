@@ -6910,7 +6910,10 @@ def _render_wealth_engine(user_email: str) -> None:
     _milestone_crossover = _find_milestone_year(
         lambda idx: dividend_income_by_year[idx] > simulated_contribution
     ) if simulated_contribution > 0 else None
-    _milestone_freedom = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 30000)
+    # Instelbaar via Settings (was eerder een vast €30.000 voor iedereen) --
+    # default €60.000 als de gebruiker nog nooit iets heeft ingesteld.
+    _fi_target = _wealth_db.get_user_preferences(user_email).get("financial_independence_target") or 60000.0
+    _milestone_freedom = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= _fi_target)
 
     def _milestone_year_html(year_val):
         if year_val is None:
@@ -6939,7 +6942,7 @@ def _render_wealth_engine(user_email: str) -> None:
         ("The Concierge Travel", "&euro;1,200", _milestone_year_html(_milestone_travel)),
         ("The Baseline Cover", "&euro;5,000", _milestone_year_html(_milestone_baseline)),
         ("The Crossover Event", "CASHFLOW &gt; CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
-        ("Financial Independence", "&euro;30,000", _milestone_year_html(_milestone_freedom)),
+        ("Financial Independence", f"&euro;{_fi_target:,.0f}", _milestone_year_html(_milestone_freedom)),
     ]
 
     # Echte <table> met <thead>, deze keer met HARDE, expliciete
@@ -11285,12 +11288,22 @@ def render_settings():
                 "Receive the weekly portfolio email (status + news for your own positions)",
                 value=prefs["wants_portfolio_email"],
             )
+            st.markdown("---")
+            st.markdown("**Wealth Engine**")
+            financial_independence_target = st.number_input(
+                "Financial Independence target (annual passive cashflow, \u20ac)",
+                min_value=0.0, step=1000.0,
+                value=float(prefs.get("financial_independence_target") or 60000.0),
+                help="Used by the Snowball Milestones on the Wealth Engine (Analyze) to determine "
+                     "when your projected passive cashflow reaches full financial independence.",
+            )
             if st.button("Save preferences"):
                 database.set_user_preferences(
                     user_email, wants_portfolio,
                     wants_daily_email=wants_daily, email_region=email_region,
                     wants_momentocrats_email=wants_momentocrats,
                     wants_snowball_email=wants_snowball, wants_rocket_email=wants_rocket,
+                    financial_independence_target=financial_independence_target,
                 )
                 st.success("Preferences saved!")
 
