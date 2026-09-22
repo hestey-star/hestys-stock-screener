@@ -1,4 +1,8 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-EBAY,2026-09-17,1,32,112.9,111.84,-0.94,True,^GSPC,-1.48,True,17.2,stijgend,6.2,True,2026-08-05,44,116.22,-3.8,6.75
-GNRC,2026-09-17,1,51,207.23,207.44,0.1,True,^GSPC,-30.97,True,5.7,dalend,44.6,True,2026-07-29,51,290.12,-28.5,4.64
-DVA,2026-09-16,2,29,193.86,183.86,-5.16,False,^GSPC,-17.67,False,13.1,stijgend,3.5,True,2026-08-04,45,219.86,-16.4,4.14
+P,2026-09-21,0,19,113.66,113.66,0.0,True,^GSPC,53.01,True,10.7,stijgend,21.0,True,2026-08-26,26,130.53,-12.9,9.29
+ETN,2026-09-21,0,19,435.43,435.43,0.0,True,^GSPC,-1.57,True,13.3,stijgend,2.4,True,2026-07-31,52,479.57,-9.2,7.15
+ECHO,2026-09-21,0,73,95.36,95.36,0.0,True,^GSPC,-7.42,True,-0.2,stijgend,-94.8,False,2026-08-03,49,131.44,-27.5,6.95
+LUV,2026-09-21,0,41,41.77,41.77,0.0,False,^GSPC,-24.97,True,3.0,stijgend,80.2,True,2026-07-22,61,50.05,-16.5,5.9
+EBAY,2026-09-17,2,32,112.9,108.3,-4.07,True,^GSPC,-4.95,True,17.2,stijgend,6.2,True,2026-08-05,47,116.04,-6.7,5.41
+DDOG,2026-09-21,0,31,245.05,245.05,0.0,True,^GSPC,5.38,False,-0.7,dalend,11.4,True,2026-08-06,46,285.28,-14.1,5.31
+GNRC,2026-09-17,2,51,207.23,204.96,-1.1,False,^GSPC,-36.09,True,5.7,dalend,44.6,True,2026-07-29,54,293.94,-30.3,3.94
