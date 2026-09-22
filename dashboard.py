@@ -3124,10 +3124,32 @@ def _render_deep_dive_version(version: dict, user_email: str):
                         # -- geen sprong terug naar de alleen-lezen weergave.
                         st.rerun()
 
-            edit_business = st.text_area("Business overview", value=version.get("business_overview") or "", key=f"dd_edit_business_{version_id}", height=90)
-            edit_thesis = st.text_area("Investment thesis", value=version.get("investment_thesis") or "", key=f"dd_edit_thesis_{version_id}", height=90)
+            # Zelfde 'GEVONDEN BUG' als in het Add New-formulier: zonder de
+            # '_committed'-mirror hieronder verwijdert Streamlit deze
+            # tekstvelden uit session_state zodra je naar een andere tab
+            # navigeert, waarna 'Save changes' stilletjes NULL zou
+            # opslaan (en zo de oorspronkelijke, WEL opgeslagen tekst zou
+            # overschrijven) voor elk veld dat niet op Exit Matrix staat.
+            edit_business = st.text_area(
+                "Business overview",
+                value=st.session_state.get(f"dd_edit_business_committed_{version_id}", version.get("business_overview") or ""),
+                key=f"dd_edit_business_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_business_committed_{version_id}"] = edit_business
 
-            edit_bear = st.text_area("Core risks", value=version.get("bear_case") or "", key=f"dd_edit_bear_{version_id}", height=90)
+            edit_thesis = st.text_area(
+                "Investment thesis",
+                value=st.session_state.get(f"dd_edit_thesis_committed_{version_id}", version.get("investment_thesis") or ""),
+                key=f"dd_edit_thesis_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_thesis_committed_{version_id}"] = edit_thesis
+
+            edit_bear = st.text_area(
+                "Core risks",
+                value=st.session_state.get(f"dd_edit_bear_committed_{version_id}", version.get("bear_case") or ""),
+                key=f"dd_edit_bear_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_bear_committed_{version_id}"] = edit_bear
             _dd_slider_value_html(f"dd_edit_bear_score_{version_id}")
             edit_bear_score = st.slider(
                 "Risk score", 1.0, 10.0,
@@ -3136,7 +3158,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
             )
             st.session_state[f"dd_edit_bear_score_committed_{version_id}"] = edit_bear_score
 
-            edit_management = st.text_area("Management check", value=version.get("management_assessment") or "", key=f"dd_edit_management_{version_id}", height=90)
+            edit_management = st.text_area(
+                "Management check",
+                value=st.session_state.get(f"dd_edit_management_committed_{version_id}", version.get("management_assessment") or ""),
+                key=f"dd_edit_management_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_management_committed_{version_id}"] = edit_management
             _dd_slider_value_html(f"dd_edit_management_score_{version_id}")
             edit_management_score = st.slider(
                 "Management score", 1.0, 10.0,
@@ -3147,8 +3174,11 @@ def _render_deep_dive_version(version: dict, user_email: str):
 
         elif _edit_tab == "MY CONVICTION":
             edit_technical_analysis = st.text_area(
-                "Technical notes", value=version.get("technical_analysis") or "", key=f"dd_edit_ta_{version_id}", height=90,
+                "Technical notes",
+                value=st.session_state.get(f"dd_edit_ta_committed_{version_id}", version.get("technical_analysis") or ""),
+                key=f"dd_edit_ta_{version_id}", height=90,
             )
+            st.session_state[f"dd_edit_ta_committed_{version_id}"] = edit_technical_analysis
             _dd_slider_value_html(f"dd_edit_ta_score_{version_id}")
             edit_technical_analysis_score = st.slider(
                 "Technical score", 1.0, 10.0,
@@ -3157,7 +3187,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
             )
             st.session_state[f"dd_edit_ta_score_committed_{version_id}"] = edit_technical_analysis_score
 
-            edit_catalysts = st.text_area("Catalysts notes", value=version.get("catalysts") or "", key=f"dd_edit_catalysts_{version_id}", height=90)
+            edit_catalysts = st.text_area(
+                "Catalysts notes",
+                value=st.session_state.get(f"dd_edit_catalysts_committed_{version_id}", version.get("catalysts") or ""),
+                key=f"dd_edit_catalysts_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_catalysts_committed_{version_id}"] = edit_catalysts
             _dd_slider_value_html(f"dd_edit_catalysts_score_{version_id}")
             edit_catalysts_score = st.slider(
                 "Catalysts score", 1.0, 10.0,
@@ -3166,7 +3201,12 @@ def _render_deep_dive_version(version: dict, user_email: str):
             )
             st.session_state[f"dd_edit_catalysts_score_committed_{version_id}"] = edit_catalysts_score
 
-            edit_sizing = st.text_area("Position sizing plan", value=version.get("position_sizing_plan") or "", key=f"dd_edit_sizing_{version_id}", height=90)
+            edit_sizing = st.text_area(
+                "Position sizing plan",
+                value=st.session_state.get(f"dd_edit_sizing_committed_{version_id}", version.get("position_sizing_plan") or ""),
+                key=f"dd_edit_sizing_{version_id}", height=90,
+            )
+            st.session_state[f"dd_edit_sizing_committed_{version_id}"] = edit_sizing
 
         elif _edit_tab == "EXIT MATRIX":
             # Conclusion is nu een NIET-aanpasbare, live berekende score
@@ -3288,14 +3328,19 @@ def _render_deep_dive_version(version: dict, user_email: str):
                 if st.button("Save changes", type="primary", key=f"dd_save_edit_{version_id}", use_container_width=True):
                     database.update_deep_dive(
                         version_id, user_email,
-                        business_overview=_ess.get(f"dd_edit_business_{version_id}") or None,
-                        investment_thesis=_ess.get(f"dd_edit_thesis_{version_id}") or None,
-                        management_assessment=_ess.get(f"dd_edit_management_{version_id}") or None,
-                        bear_case=_ess.get(f"dd_edit_bear_{version_id}") or None,
+                        # '_committed' i.p.v. de rauwe widget-sleutel voor elk
+                        # tekstveld dat OOK op een andere tab dan Exit Matrix
+                        # kan staan -- zie de toelichting bij die velden
+                        # hierboven (voorkomt dat Save stilletjes NULL opslaat
+                        # voor een veld dat je op een eerdere tab invulde).
+                        business_overview=_ess.get(f"dd_edit_business_committed_{version_id}") or None,
+                        investment_thesis=_ess.get(f"dd_edit_thesis_committed_{version_id}") or None,
+                        management_assessment=_ess.get(f"dd_edit_management_committed_{version_id}") or None,
+                        bear_case=_ess.get(f"dd_edit_bear_committed_{version_id}") or None,
                         valuation_view=_ess.get(f"dd_edit_valuation_{version_id}") or None,
                         interested_price=_ess.get(f"dd_edit_price_{version_id}") or None,
-                        catalysts=_ess.get(f"dd_edit_catalysts_{version_id}") or None,
-                        position_sizing_plan=_ess.get(f"dd_edit_sizing_{version_id}") or None,
+                        catalysts=_ess.get(f"dd_edit_catalysts_committed_{version_id}") or None,
+                        position_sizing_plan=_ess.get(f"dd_edit_sizing_committed_{version_id}") or None,
                         sell_criteria=_ess.get(f"dd_edit_sell_{version_id}") or None,
                         conclusion=_ess.get(f"dd_edit_conclusion_{version_id}", version.get("conclusion", "Watch")),
                         sell_trigger_price=_ess.get(f"dd_edit_trigger_price_{version_id}") or None,
@@ -3308,7 +3353,7 @@ def _render_deep_dive_version(version: dict, user_email: str):
                         bear_case_score=_ess.get(f"dd_edit_bear_score_committed_{version_id}", float(version.get("bear_case_score") or 5)),
                         valuation_score=_ess.get(f"dd_edit_valuation_score_committed_{version_id}", float(version.get("valuation_score") or 5)),
                         catalysts_score=_ess.get(f"dd_edit_catalysts_score_committed_{version_id}", float(version.get("catalysts_score") or 5)),
-                        technical_analysis=_ess.get(f"dd_edit_ta_{version_id}") or None,
+                        technical_analysis=_ess.get(f"dd_edit_ta_committed_{version_id}") or None,
                         technical_analysis_score=_ess.get(f"dd_edit_ta_score_committed_{version_id}", float(version.get("technical_analysis_score") or 5)),
                     )
                     st.session_state[edit_key] = False
@@ -5807,9 +5852,13 @@ Respond with ONLY the JSON object, starting with {{ and ending with }}."""
     # leest (zie de 'committed'-toelichting elders in dit bestand).
     _ss = st.session_state
     _ss[f"{field_prefix}_business{key_suffix}"] = ai_data.get("business_overview") or ""
+    _ss[f"{field_prefix}_business_committed{key_suffix}"] = ai_data.get("business_overview") or ""
     _ss[f"{field_prefix}_thesis{key_suffix}"] = ai_data.get("investment_thesis") or ""
+    _ss[f"{field_prefix}_thesis_committed{key_suffix}"] = ai_data.get("investment_thesis") or ""
     _ss[f"{field_prefix}_bear{key_suffix}"] = ai_data.get("bear_case") or ""
+    _ss[f"{field_prefix}_bear_committed{key_suffix}"] = ai_data.get("bear_case") or ""
     _ss[f"{field_prefix}_management{key_suffix}"] = ai_data.get("management_assessment") or ""
+    _ss[f"{field_prefix}_management_committed{key_suffix}"] = ai_data.get("management_assessment") or ""
     _ss[f"{field_prefix}_bear_score{key_suffix}"] = _bear_case_score
     _ss[f"{field_prefix}_bear_score_committed{key_suffix}"] = _bear_case_score
     _ss[f"{field_prefix}_management_score{key_suffix}"] = _management_score
@@ -5915,21 +5964,45 @@ def _render_deep_dive_add_form(user_email: str) -> None:
                         # meteen in deze zelfde run.
                         st.rerun()
 
+        # GEVONDEN BUG: Streamlit verwijdert de session_state-waarde van een
+        # widget zodra die widget in een rerun niet getekend wordt (bv. na
+        # navigeren naar een andere wizard-tab) -- exact de reden waarom de
+        # '_committed'-truc hieronder al langer voor de score-sliders
+        # bestond, maar nooit was toegepast op deze tekstvelden. Zonder dit
+        # gingen Business overview/Investment thesis/Core risks/Management
+        # check STIL verloren zodra je naar 'My Conviction'/'Exit Matrix'
+        # doorklikte -- de Save-knop op Exit Matrix vond dan alleen nog lege
+        # tekstvelden terug (de scores overleefden wel, want die hadden de
+        # bescherming al). 'value=' leest nu ook uit de committed-sleutel,
+        # zodat teruggaan naar een eerdere tab de eerder getypte tekst ook
+        # weer laat zien i.p.v. een leeg vak.
         _dd_label("Business overview")
-        st.text_area("Business overview", label_visibility="collapsed", key="dd_business", height=90)
+        st.session_state["dd_business_committed"] = st.text_area(
+            "Business overview", value=st.session_state.get("dd_business_committed", ""),
+            label_visibility="collapsed", key="dd_business", height=90,
+        )
 
         _dd_label("Investment thesis")
-        st.text_area("Investment thesis", label_visibility="collapsed", key="dd_thesis", height=90)
+        st.session_state["dd_thesis_committed"] = st.text_area(
+            "Investment thesis", value=st.session_state.get("dd_thesis_committed", ""),
+            label_visibility="collapsed", key="dd_thesis", height=90,
+        )
 
         _dd_label("Core risks")
-        st.text_area("Core risks", label_visibility="collapsed", key="dd_bear", height=90)
+        st.session_state["dd_bear_committed"] = st.text_area(
+            "Core risks", value=st.session_state.get("dd_bear_committed", ""),
+            label_visibility="collapsed", key="dd_bear", height=90,
+        )
         _dd_slider_value_html("dd_bear_score")
         st.session_state["dd_bear_score_committed"] = st.slider(
             "Risk score", 1.0, 10.0, 5.0, step=0.5, key="dd_bear_score", label_visibility="collapsed",
         )
 
         _dd_label("Management check")
-        st.text_area("Management check", label_visibility="collapsed", key="dd_management", height=90)
+        st.session_state["dd_management_committed"] = st.text_area(
+            "Management check", value=st.session_state.get("dd_management_committed", ""),
+            label_visibility="collapsed", key="dd_management", height=90,
+        )
         _dd_slider_value_html("dd_management_score")
         st.session_state["dd_management_score_committed"] = st.slider(
             "Management score", 1.0, 10.0, 5.0, step=0.5, key="dd_management_score", label_visibility="collapsed",
@@ -5937,21 +6010,30 @@ def _render_deep_dive_add_form(user_email: str) -> None:
 
     elif _dd_tab == "MY CONVICTION":
         _dd_label("Technical notes")
-        st.text_area("Technical notes", label_visibility="collapsed", key="dd_technical_analysis", height=90)
+        st.session_state["dd_technical_analysis_committed"] = st.text_area(
+            "Technical notes", value=st.session_state.get("dd_technical_analysis_committed", ""),
+            label_visibility="collapsed", key="dd_technical_analysis", height=90,
+        )
         _dd_slider_value_html("dd_technical_analysis_score")
         st.session_state["dd_technical_analysis_score_committed"] = st.slider(
             "Technical score", 1.0, 10.0, 5.0, step=0.5, key="dd_technical_analysis_score", label_visibility="collapsed",
         )
 
         _dd_label("Catalysts notes")
-        st.text_area("Catalysts notes", label_visibility="collapsed", key="dd_catalysts", height=90)
+        st.session_state["dd_catalysts_committed"] = st.text_area(
+            "Catalysts notes", value=st.session_state.get("dd_catalysts_committed", ""),
+            label_visibility="collapsed", key="dd_catalysts", height=90,
+        )
         _dd_slider_value_html("dd_catalysts_score")
         st.session_state["dd_catalysts_score_committed"] = st.slider(
             "Catalysts score", 1.0, 10.0, 5.0, step=0.5, key="dd_catalysts_score", label_visibility="collapsed",
         )
 
         _dd_label("Position sizing plan")
-        st.text_area("Position sizing plan", label_visibility="collapsed", key="dd_sizing", height=90)
+        st.session_state["dd_sizing_committed"] = st.text_area(
+            "Position sizing plan", value=st.session_state.get("dd_sizing_committed", ""),
+            label_visibility="collapsed", key="dd_sizing", height=90,
+        )
 
         # Afbeeldingen (charts/screenshots) kunnen pas geupload worden
         # NADAT deze deep-dive minstens 1x is opgeslagen -- een upload
@@ -6071,14 +6153,17 @@ def _render_deep_dive_add_form(user_email: str) -> None:
             _ss = st.session_state
             database.add_deep_dive(
                 user_email, dd_ticker, dd_naam,
-                business_overview=_ss.get("dd_business") or None,
-                investment_thesis=_ss.get("dd_thesis") or None,
-                management_assessment=_ss.get("dd_management") or None,
-                bear_case=_ss.get("dd_bear") or None,
+                # '_committed' i.p.v. de rauwe widget-sleutel voor elk
+                # tekstveld dat OOK op een andere tab dan Exit Matrix kan
+                # staan -- zie de toelichting bij die velden hierboven.
+                business_overview=_ss.get("dd_business_committed") or None,
+                investment_thesis=_ss.get("dd_thesis_committed") or None,
+                management_assessment=_ss.get("dd_management_committed") or None,
+                bear_case=_ss.get("dd_bear_committed") or None,
                 valuation_view=_ss.get("dd_valuation") or None,
                 interested_price=_ss.get("dd_interested_price") or None,
-                catalysts=_ss.get("dd_catalysts") or None,
-                position_sizing_plan=_ss.get("dd_sizing") or None,
+                catalysts=_ss.get("dd_catalysts_committed") or None,
+                position_sizing_plan=_ss.get("dd_sizing_committed") or None,
                 sell_criteria=_ss.get("dd_sell_criteria") or None,
                 conclusion=_ss.get("dd_conclusion", "Watch"),
                 market_snapshot=market_snapshot,
@@ -6089,7 +6174,7 @@ def _render_deep_dive_add_form(user_email: str) -> None:
                 bear_case_score=_ss.get("dd_bear_score_committed", 5.0),
                 valuation_score=_ss.get("dd_valuation_score", 5.0),
                 catalysts_score=_ss.get("dd_catalysts_score_committed", 5.0),
-                technical_analysis=_ss.get("dd_technical_analysis") or None,
+                technical_analysis=_ss.get("dd_technical_analysis_committed") or None,
                 technical_analysis_score=_ss.get("dd_technical_analysis_score_committed", 5.0),
             )
             st.success(f"New version for {dd_ticker} saved!")
