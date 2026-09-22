@@ -6350,31 +6350,52 @@ def _stress_test_beta_for_holding(h: dict) -> float:
 
 def _stress_tile_style(impact_eur: float, base_eur: float) -> str:
     """
-    Geeft een CSS-stijl-string terug voor 1 van de 3 Systemic Risk Tiles,
-    met een achtergrond/rand die kleurt naar waarschuwend oranje/rood
-    naarmate de LIVE, slider-gedreven impact een groter deel van de
-    portfolio (of het cluster) uitmaakt -- rustig gedempt grijs bij geen/
-    weinig stress, subtiel amber bij gematigde stress, duidelijk rose/rood
-    bij zware stress. 3 vaste drempels i.p.v. een continue CSS-gradient
-    (niet zuiver berekenbaar in platte inline-CSS), consistent met hoe de
-    rest van Hestys kleur-drempels al toepast (zie _deep_dive_score_color).
+    Geeft een CSS-stijl-string terug voor 1 van de 3 Systemic Risk Tiles.
+    De kleur van de rand/gloed volgt ALTIJD eerst het TEKEN van de live
+    impact (winst = groen, verlies = rood/amber) en pas daarna de
+    INTENSITEIT via hetzelfde 3-traps-systeem (rustig gedempt grijs bij
+    weinig stress, sterker gekleurd bij meer). Relevant vooral voor de
+    Currency Risk-tegel: die kan door de FX-slider (-20% tot +20%) zowel
+    een positieve als negatieve live impact hebben, dus de tegel moet
+    vloeiend van rood naar groen (en terug) kunnen omslaan i.p.v. altijd
+    hardcoded rood te blijven zoals de andere 2 (altijd-negatieve) tegels.
+    3 vaste drempels i.p.v. een continue CSS-gradient (niet zuiver
+    berekenbaar in platte inline-CSS), consistent met hoe de rest van
+    Hestys kleur-drempels al toepast (zie _deep_dive_score_color).
     """
     impact_pct = abs(impact_eur) / base_eur if base_eur else 0.0
-    if impact_pct >= 0.08:
-        return (
-            "background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.4); "
-            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
-        )
-    elif impact_pct >= 0.02:
-        return (
-            "background:rgba(232,169,60,0.07); border:1px solid rgba(232,169,60,0.35); "
-            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
-        )
+    if impact_eur >= 0:
+        if impact_pct >= 0.08:
+            return (
+                "background:rgba(16,185,129,0.10); border:1px solid rgba(16,185,129,0.45); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
+        elif impact_pct >= 0.02:
+            return (
+                "background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.3); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
+        else:
+            return (
+                "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
     else:
-        return (
-            "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
-            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
-        )
+        if impact_pct >= 0.08:
+            return (
+                "background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.4); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
+        elif impact_pct >= 0.02:
+            return (
+                "background:rgba(232,169,60,0.07); border:1px solid rgba(232,169,60,0.35); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
+        else:
+            return (
+                "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
+                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+            )
 
 
 def _fmt_eur_signed(value: float) -> str:
