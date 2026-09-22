@@ -6393,14 +6393,17 @@ def _render_stress_test(user_email: str) -> None:
     gesloten posities die er ooit in hebben gezeten maar nu niet meer
     meetellen.
 
-    3 lagen, volledig met elkaar verweven via dezelfde 3 macro-sliders:
+    3 lagen, ELK MET EEN EIGEN, BEWUST GESCHEIDEN ROL (geen dubbele
+    weging van dezelfde schok over 2 secties heen):
     1. Macro Control Panel -- 3 sliders (equity crash / FX-schok / supply
        chain-schok) die een LIVE, zelf te bepalen 'wat als'-scenario sturen.
+       Voeden UITSLUITEND de 3 tegels in laag 3, niet de historische tabel.
     2. Beta-Weighted Black Swan Timeline -- de 3 vaste, historische crashes
        (Dot-Com/2008/Covid) herrekend PER POSITIE met een eigen bèta i.p.v.
-       1 vlak percentage over de hele portfolio, met de 3 sliders als
-       BOVENOP-de-historie gestapelde extra stress (op de standaardstand
-       0/0/0 is dit dus zuiver de historische bèta-weging).
+       1 vlak percentage over de hele portfolio. Volledig LOSGEKOPPELD van
+       de 3 sliders (puur historisch percentage x bèta) en met een harde
+       floor per positie (nooit meer dan -100% van die ene positie), zodat
+       het totaal ook nooit groter kan zijn dan de totale portfoliowaarde.
     3. Systemic Risk Correlation Matrix -- 3 tegels die uitsluitend de
        LIVE slider-impact tonen voor de 3 concrete clusters in je eigen
        portfolio (tech/semiconductor, USD-blootstelling, crypto).
@@ -6559,11 +6562,20 @@ def _render_stress_test(user_email: str) -> None:
     # 2. BETA-WEIGHTED BLACK SWAN TIMELINE -- de 3 vaste, historische
     # marktdalingen (Dot-Com/2008/Covid) niet langer als 1 vlak percentage
     # over de hele portfoliowaarde, maar PER POSITIE herrekend met zijn
-    # eigen b\u00e8ta (_stress_test_beta_for_holding). De 3 macro-sliders
-    # stapelen BOVENOP de historische daling (op hun standaardstand 0/0/0
-    # is dit dus zuiver de historische b\u00e8ta-weging, ongewijzigd t.o.v. een
-    # 'kale' herberekening) -- zo simuleer je 'wat als DIT specifieke
-    # macro-scenario zich nu, BOVENOP een Dot-Com-achtige crash, voordoet'.
+    # eigen b\u00e8ta (_stress_test_beta_for_holding).
+    #
+    # GEVONDEN, EERDERE FOUT: de 3 macro-sliders werden BOVENOP de
+    # historische daling opgeteld, wat 2 wiskundig kapotte dingen gaf:
+    # (1) een dubbele weging -- de sliders horen puur bij de LIVE 'wat-
+    # als'-tegels onderin, niet ALSNOG een keer door de historische
+    # tabel heen; (2) geen enkele ondergrens -- bij extreme sliderstanden
+    # kon het berekende verlies makkelijk GROTER worden dan de totale
+    # portfoliowaarde zelf (bv. -84k verlies op een 64k-portfolio), wat
+    # onmogelijk is: je kunt nooit meer dan 100% van je inleg verliezen.
+    # Nu volledig losgekoppeld van de sliders (puur historisch percentage
+    # x b\u00e8ta) EN met een harde floor PER POSITIE: het verlies op 1 asset
+    # kan nooit groter zijn dan de waarde van die ene positie, waardoor
+    # het totaal ook nooit groter kan zijn dan de totale portfoliowaarde.
     # ================================================================
     _crash_scenarios = [
         ("Dot-Com Bubble Burst", -0.54),
@@ -6574,11 +6586,12 @@ def _render_stress_test(user_email: str) -> None:
     def _scenario_loss_eur(market_impact: float) -> float:
         _total = 0.0
         for r in _rows:
-            _total += r["eur_value"] * r["beta"] * (market_impact + _equity_shock_frac)
-            if r["is_semi_tech"]:
-                _total += r["eur_value"] * _supply_chain_frac
-            if r["currency"] == "USD":
-                _total += r["eur_value"] * _fx_shock_frac
+            _calculated_loss = r["eur_value"] * r["beta"] * market_impact
+            # Hard floor: verlies op DEZE positie kan nooit groter zijn dan
+            # -100% van zijn eigen waarde (calculated_loss is negatief bij
+            # een daling, dus max(...) begrenst 'm naar boven -- richting 0).
+            _floored_loss = max(-r["eur_value"], _calculated_loss)
+            _total += _floored_loss
         return _total
 
     _crash_header_style = (
@@ -6639,10 +6652,14 @@ def _render_stress_test(user_email: str) -> None:
         unsafe_allow_html=True,
     )
 
+    # Zelfde harde floor per positie als bij de historische tabel: bij een
+    # hoge bèta (TSLA=2.3) plus de equity- EN supply chain-slider allebei
+    # op hun extreme stand samen, zou de ongefloorde som anders ook hier
+    # over de -100% van die ene positie heen kunnen schieten.
     _semi_tech_rows = [r for r in _rows if r["is_semi_tech"]]
     _semi_tech_value = sum(r["eur_value"] for r in _semi_tech_rows)
     _semi_tech_impact = sum(
-        r["eur_value"] * r["beta"] * _equity_shock_frac + r["eur_value"] * _supply_chain_frac
+        max(-r["eur_value"], r["eur_value"] * r["beta"] * _equity_shock_frac + r["eur_value"] * _supply_chain_frac)
         for r in _semi_tech_rows
     )
 
@@ -6653,7 +6670,9 @@ def _render_stress_test(user_email: str) -> None:
 
     _crypto_rows = [r for r in _rows if r["is_crypto"]]
     _crypto_value = sum(r["eur_value"] for r in _crypto_rows)
-    _crypto_impact = sum(r["eur_value"] * r["beta"] * _equity_shock_frac for r in _crypto_rows)
+    _crypto_impact = sum(
+        max(-r["eur_value"], r["eur_value"] * r["beta"] * _equity_shock_frac) for r in _crypto_rows
+    )
 
     heat_col1, heat_col2, heat_col3 = st.columns(3, gap="medium")
     with heat_col1:
