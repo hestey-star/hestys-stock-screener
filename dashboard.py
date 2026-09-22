@@ -6577,10 +6577,13 @@ def _render_stress_test(user_email: str) -> None:
     # kan nooit groter zijn dan de waarde van die ene positie, waardoor
     # het totaal ook nooit groter kan zijn dan de totale portfoliowaarde.
     # ================================================================
+    # LET OP: hier staan bewust ECHTE PERCENTAGES (-54.0, 228.0, ...), geen
+    # vooraf gedeelde fracties -- dat voorkomt elke twijfel over schaal en
+    # matcht 1-op-1 de expliciete formule hieronder (.../100).
     _crash_scenarios = [
-        ("Dot-Com Bubble Burst", -0.54, "beta-weighted"),
-        ("2008 Great Financial Crisis", -0.38, "beta-weighted"),
-        ("2020 Covid-19 Panic", -0.22, "beta-weighted"),
+        ("Dot-Com Bubble Burst", -54.0, "beta-weighted"),
+        ("2008 Great Financial Crisis", -38.0, "beta-weighted"),
+        ("2020 Covid-19 Panic", -22.0, "beta-weighted"),
     ]
 
     # GOLDEN ERAS (UPSIDE) -- zelfde bèta-wiskunde als de crashes, maar dan
@@ -6589,25 +6592,40 @@ def _render_stress_test(user_email: str) -> None:
     # per-asset bèta's (TSLA/NVDA/SMH.L=1.4-2.3, crypto=1.8 t.o.v. default
     # 1.1) -- geen aparte extra vermenigvuldiging per cluster nodig.
     _golden_era_scenarios = [
-        ("1982 Reaganomics Rally", 2.28, "beta-weighted"),
-        ("1995 Dot-Com Exuberance Boom", 4.00, "tech-leveraged"),
-        ("2020 Post-Covid Liquidity Injection", 0.70, "hyper-volatility"),
+        ("1982 Reaganomics Rally", 228.0, "beta-weighted"),
+        ("1995 Dot-Com Exuberance Boom", 400.0, "tech-leveraged"),
+        ("2020 Post-Covid Liquidity Injection", 70.0, "hyper-volatility"),
     ]
 
-    def _scenario_pnl_eur(market_change: float) -> float:
-        _total = 0.0
+    def _scenario_pnl_eur(market_upside_percentage: float) -> float:
+        """
+        Loopt PER INDIVIDUELE ACTIEVE POSITIE (nooit een vooraf uitgemiddeld
+        portefeuille-cijfer) en telt de resultaten daarna pas bij elkaar op,
+        exact volgens:
+            asset_gain = current_position_value * (market_upside_percentage / 100) * asset_beta
+        Bèta's komen 1-op-1 uit _stress_test_beta_for_holding: TSLA=2.3,
+        crypto (BTC/SOL, ticker met '-')=1.8, NVDA/SMH.L=1.4, Custom Yield
+        Assets ("Prop.com"-achtige posities)=0.0, overig=1.1. Een cluster
+        met een hoge bèta (tech/chips bij de Dot-Com Exuberance Boom,
+        crypto bij de Post-Covid scenario) versterkt zichzelf hierdoor
+        automatisch t.o.v. de rest van de portfolio -- geen platte 1-op-1
+        vermenigvuldiging en geen aparte cluster-multiplier nodig.
+        """
+        _total_pnl = 0.0
         for r in _rows:
-            _calculated_pnl = r["eur_value"] * r["beta"] * market_change
-            if market_change < 0:
-                # Hard floor: verlies op DEZE positie kan nooit groter zijn
-                # dan -100% van zijn eigen waarde (calculated_pnl is negatief
-                # bij een daling, dus max(...) begrenst 'm naar boven --
-                # richting 0). Bij een winst (Golden Eras) is er bewust GEEN
-                # plafond: een bèta-versterkte winst van >100% op 1 positie
-                # is wiskundig heel normaal en mag niet worden afgekapt.
-                _calculated_pnl = max(-r["eur_value"], _calculated_pnl)
-            _total += _calculated_pnl
-        return _total
+            current_position_value = r["eur_value"]
+            asset_beta = r["beta"]
+            asset_gain = current_position_value * (market_upside_percentage / 100.0) * asset_beta
+            if market_upside_percentage < 0:
+                # Alleen bij een verlies-scenario: harde floor per positie --
+                # het verlies op DEZE ene positie kan nooit groter zijn dan
+                # -100% van zijn eigen waarde. Bij een winst (Golden Eras) is
+                # er bewust GEEN plafond: een bèta-versterkte winst van meer
+                # dan 100% op 1 positie is wiskundig normaal en mag niet
+                # worden afgekapt.
+                asset_gain = max(-current_position_value, asset_gain)
+            _total_pnl += asset_gain
+        return _total_pnl
 
     _crash_header_style = (
         "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
@@ -6651,7 +6669,7 @@ def _render_stress_test(user_email: str) -> None:
             _sign = "-"
         _crash_rows_html += (
             f'<tr>'
-            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:+.0f}%, {_suffix})</td>'
+            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact:+.0f}%, {_suffix})</td>'
             f'<td style="{_crash_cell_base} text-align:right; {_value_style} '
             f'font-size:0.85rem;">{_sign}&euro;{abs(_pnl_eur):,.0f}</td>'
             f'</tr>'
