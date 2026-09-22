@@ -832,6 +832,36 @@ def _native_currency_for_holding(h: dict) -> str:
     return get_cached_ticker_currency(h["ticker"])
 
 
+def _eur_position_value(h: dict) -> float:
+    """
+    Zet position_value om naar EUR, ongeacht in welke valuta 'ie toevallig
+    het laatst is opgeslagen. 'value_currency' volgt de DISPLAY-valuta die
+    actief was op de My Portfolio-pagina tijdens de laatste 'Update
+    portfolio value'-klik (kan dus EUR of USD zijn, en wisselt per
+    refresh) -- NIET een vaste, gegarandeerde valuta.
+
+    GEVONDEN BUG (oorspronkelijk in de Wealth Engine): zonder deze
+    conversie behandelde elke plek die absolute euro-bedragen toont een in
+    USD opgeslagen totaal alsof het al EUR was. Omdat 1 USD < 1 EUR is,
+    gaf datzelfde portfolio na een USD-refresh een HOGER (fout) EUR-bedrag
+    te zien dan na een EUR-refresh. Op module-niveau gezet (i.p.v. een
+    lokale closure binnen 1 functie) zodat elke plek die absolute
+    portfolio-euro's berekent (Wealth Engine, Stress-Test's Crisis
+    Simulator) 'm hergebruikt i.p.v. los, mogelijk inconsistent, hetzelfde
+    wiel opnieuw uit te vinden.
+    """
+    raw_value = h.get("position_value") or 0
+    if raw_value <= 0:
+        return 0.0
+    holding_currency = h.get("value_currency") or "EUR"
+    if holding_currency == "EUR":
+        return raw_value
+    fx_rate = get_fx_rate(holding_currency, "EUR")
+    if fx_rate is None:
+        return raw_value  # zeldzame FX-storing -- liever een schatting tonen dan crashen
+    return raw_value * fx_rate
+
+
 def refresh_portfolio_values(holdings: list, user_email: str, display_currency: str = "EUR") -> tuple:
     """
     Haalt voor al je posities in 1x (via een gebatchte download) de
@@ -6288,18 +6318,115 @@ def _render_analyze_drawer(user_email: str) -> None:
                 _render_deep_dive_version(version, user_email)
 
 
+_STRESS_TEST_KNOWN_BETAS = {
+    "TSLA": 2.3,
+    "NVDA": 1.4,
+    "SMH.L": 1.4,
+}
+_STRESS_TEST_SEMI_TECH_TICKERS = {"TSLA", "NVDA", "SMH.L"}
+
+
+def _stress_test_beta_for_holding(h: dict) -> float:
+    """
+    Geeft de bèta (gevoeligheid t.o.v. een algemene marktbeweging) voor 1
+    positie terug -- gecureerde tabel, want Yahoo Finance's eigen 'beta'-
+    veld is onbetrouwbaar/vaak leeg voor kleinere of niet-Amerikaanse
+    tickers. Vaste, met de hand gekozen waarden: TSLA=2.3 (notoir volatiel
+    t.o.v. de brede markt), NVDA/SMH.L=1.4 (semiconductor-cluster, hoger
+    dan gemiddeld maar minder extreem dan TSLA), Overig=1.1 (licht boven
+    marktgemiddelde, een redelijke default voor een individueel aandeel).
+    Crypto (ticker met een '-', zoals BTC-USD/SOL-USD) krijgt 1.8 -- hoog-
+    volatiel, beweegt doorgaans harder dan aandelen bij eenzelfde macro-
+    schok. Een Custom Yield Asset (fractioneel vastgoed e.d., geen echte
+    beursnotering) krijgt 0.0 -- ontkoppeld van beurskoersen per definitie.
+    """
+    if h.get("custom_annual_cashflow") is not None:
+        return 0.0
+    ticker_upper = (h.get("ticker") or "").upper()
+    if "-" in ticker_upper:
+        return 1.8
+    return _STRESS_TEST_KNOWN_BETAS.get(ticker_upper, 1.1)
+
+
+def _stress_tile_style(impact_eur: float, base_eur: float) -> str:
+    """
+    Geeft een CSS-stijl-string terug voor 1 van de 3 Systemic Risk Tiles,
+    met een achtergrond/rand die kleurt naar waarschuwend oranje/rood
+    naarmate de LIVE, slider-gedreven impact een groter deel van de
+    portfolio (of het cluster) uitmaakt -- rustig gedempt grijs bij geen/
+    weinig stress, subtiel amber bij gematigde stress, duidelijk rose/rood
+    bij zware stress. 3 vaste drempels i.p.v. een continue CSS-gradient
+    (niet zuiver berekenbaar in platte inline-CSS), consistent met hoe de
+    rest van Hestys kleur-drempels al toepast (zie _deep_dive_score_color).
+    """
+    impact_pct = abs(impact_eur) / base_eur if base_eur else 0.0
+    if impact_pct >= 0.08:
+        return (
+            "background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.4); "
+            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+        )
+    elif impact_pct >= 0.02:
+        return (
+            "background:rgba(232,169,60,0.07); border:1px solid rgba(232,169,60,0.35); "
+            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+        )
+    else:
+        return (
+            "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
+            "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+        )
+
+
+def _fmt_eur_signed(value: float) -> str:
+    """Formatteert een euro-impact met expliciet teken en kleur (rood bij verlies, groen bij winst)."""
+    color = "#FB7185" if value < 0 else "#34D399"
+    sign = "-" if value < 0 else "+"
+    return f'<span style="color:{color}; font-weight:800;">{sign}&euro;{abs(value):,.0f}</span>'
+
+
 def _render_stress_test(user_email: str) -> None:
     """
-    'Stress-Test' -- institutionele Hidden Risk Matrix. Volledig LOSSTAAND
-    van Conviction Tracker/Wealth Engine: eigen, verse database-aanroepen,
-    geen gedeelde state. Gebruikt UITSLUITEND de actieve, huidige posities
-    (filter_active_holdings()) -- geen historische/gesloten posities die
-    er ooit in hebben gezeten maar nu niet meer meetellen.
+    'Stress-Test' -- interactieve What-If Crisis Simulator. Volledig
+    LOSSTAAND van Conviction Tracker/Wealth Engine: eigen, verse database-
+    aanroepen, geen gedeelde state. Gebruikt UITSLUITEND de actieve,
+    huidige posities (filter_active_holdings()) -- geen historische/
+    gesloten posities die er ooit in hebben gezeten maar nu niet meer
+    meetellen.
+
+    3 lagen, volledig met elkaar verweven via dezelfde 3 macro-sliders:
+    1. Macro Control Panel -- 3 sliders (equity crash / FX-schok / supply
+       chain-schok) die een LIVE, zelf te bepalen 'wat als'-scenario sturen.
+    2. Beta-Weighted Black Swan Timeline -- de 3 vaste, historische crashes
+       (Dot-Com/2008/Covid) herrekend PER POSITIE met een eigen bèta i.p.v.
+       1 vlak percentage over de hele portfolio, met de 3 sliders als
+       BOVENOP-de-historie gestapelde extra stress (op de standaardstand
+       0/0/0 is dit dus zuiver de historische bèta-weging).
+    3. Systemic Risk Correlation Matrix -- 3 tegels die uitsluitend de
+       LIVE slider-impact tonen voor de 3 concrete clusters in je eigen
+       portfolio (tech/semiconductor, USD-blootstelling, crypto).
     """
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
-    total_value = sum(h.get("position_value") or 0 for h in holdings)
 
-    if total_value <= 0 or not holdings:
+    _rows = []
+    for h in holdings:
+        ticker = h.get("ticker")
+        eur_value = _eur_position_value(h)
+        if not ticker or eur_value <= 0:
+            continue
+        ticker_upper = ticker.upper()
+        _rows.append({
+            "ticker": ticker_upper,
+            "naam": h.get("naam", ticker),
+            "eur_value": eur_value,
+            "beta": _stress_test_beta_for_holding(h),
+            "currency": _native_currency_for_holding(h),
+            "is_crypto": "-" in ticker_upper,
+            "is_semi_tech": ticker_upper in _STRESS_TEST_SEMI_TECH_TICKERS,
+        })
+
+    total_value = sum(r["eur_value"] for r in _rows)
+
+    if total_value <= 0 or not _rows:
         st.markdown(
             '<div style="background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
             'border-radius:14px; padding:2rem; text-align:center; color:#64748B; font-size:0.85rem;">'
@@ -6308,8 +6435,53 @@ def _render_stress_test(user_email: str) -> None:
         )
         return
 
-    # --- 1. Risk metrics -- gewogen (naar positiegrootte) op basis van
-    # LIVE Yahoo Finance-data (country/sector) + de al-bekende valuta per
+    # ================================================================
+    # 1. MACRO CONTROL PANEL -- 3 sliders die een LIVE 'wat-als'-scenario
+    # sturen. Rechtstreeks de teruggegeven waarde van elke slider gebruikt
+    # in de rest van deze functie (geen omweg via session_state) -- zelfde,
+    # al-bewezen patroon als de Wealth Engine's Simulation Control Panel:
+    # gegarandeerd synchroon bij elke rerun, geen extra plumbing nodig.
+    # ================================================================
+    st.markdown(
+        _uniform_section_header_html("Macro Control Panel", "tune", is_first=True),
+        unsafe_allow_html=True,
+    )
+    _sim_key = "stress_test_sim_panel"
+    st.markdown(
+        f'<style>'
+        f'.st-key-{_sim_key} label p {{ '
+        f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
+        f'text-transform:uppercase !important; color:#64748B !important; }} '
+        f'</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_sim_key):
+        macro_col1, macro_col2, macro_col3 = st.columns(3, gap="medium")
+        with macro_col1:
+            equity_crash_pct = st.slider(
+                "Global equity market crash (beta shock)", min_value=-50.0, max_value=0.0,
+                value=0.0, step=1.0, key="stress_equity_crash_slider", format="%.0f%%",
+            )
+        with macro_col2:
+            fx_shock_pct = st.slider(
+                "USD / EUR exchange rate shock", min_value=-20.0, max_value=20.0,
+                value=0.0, step=0.5, key="stress_fx_shock_slider", format="%.1f%%",
+                help="Affects only your USD-denominated positions.",
+            )
+        with macro_col3:
+            supply_chain_pct = st.slider(
+                "Geopolitical supply chain shock", min_value=-50.0, max_value=0.0,
+                value=0.0, step=1.0, key="stress_supply_chain_slider", format="%.0f%%",
+                help="Affects only your semiconductor/tech cluster (TSLA, NVDA, SMH.L).",
+            )
+    _equity_shock_frac = equity_crash_pct / 100
+    _fx_shock_frac = fx_shock_pct / 100
+    _supply_chain_frac = supply_chain_pct / 100
+
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    # --- Risk metrics -- gewogen (naar positiegrootte) op basis van LIVE
+    # Yahoo Finance-data (country/sector) + de al-bekende valuta per
     # positie. Geen vaste voorbeeldwaarden -- puur berekend uit jouw
     # daadwerkelijke, actieve portfolio.
     _country_weight: dict = {}
@@ -6317,7 +6489,7 @@ def _render_stress_test(user_email: str) -> None:
     _currency_weight: dict = {}
     for h in holdings:
         ticker = h.get("ticker")
-        value = h.get("position_value") or 0
+        value = _eur_position_value(h)
         if not ticker or value <= 0:
             continue
         try:
@@ -6383,15 +6555,32 @@ def _render_stress_test(user_email: str) -> None:
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # --- 2. Historical Crash Simulator -- puur rekenwerk tegen je
-    # ECHTE, actuele totale portfoliowaarde (niet een vast voorbeeld-
-    # bedrag -- dat zou dit een statische demo maken i.p.v. een live
-    # tool die meebeweegt met je portfolio).
+    # ================================================================
+    # 2. BETA-WEIGHTED BLACK SWAN TIMELINE -- de 3 vaste, historische
+    # marktdalingen (Dot-Com/2008/Covid) niet langer als 1 vlak percentage
+    # over de hele portfoliowaarde, maar PER POSITIE herrekend met zijn
+    # eigen b\u00e8ta (_stress_test_beta_for_holding). De 3 macro-sliders
+    # stapelen BOVENOP de historische daling (op hun standaardstand 0/0/0
+    # is dit dus zuiver de historische b\u00e8ta-weging, ongewijzigd t.o.v. een
+    # 'kale' herberekening) -- zo simuleer je 'wat als DIT specifieke
+    # macro-scenario zich nu, BOVENOP een Dot-Com-achtige crash, voordoet'.
+    # ================================================================
     _crash_scenarios = [
         ("Dot-Com Bubble Burst", -0.54),
         ("2008 Great Financial Crisis", -0.38),
         ("2020 Covid-19 Panic", -0.22),
     ]
+
+    def _scenario_loss_eur(market_impact: float) -> float:
+        _total = 0.0
+        for r in _rows:
+            _total += r["eur_value"] * r["beta"] * (market_impact + _equity_shock_frac)
+            if r["is_semi_tech"]:
+                _total += r["eur_value"] * _supply_chain_frac
+            if r["currency"] == "USD":
+                _total += r["eur_value"] * _fx_shock_frac
+        return _total
+
     _crash_header_style = (
         "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
         "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
@@ -6403,10 +6592,10 @@ def _render_stress_test(user_email: str) -> None:
     )
     _crash_rows_html = ""
     for _label, _impact in _crash_scenarios:
-        _loss_eur = total_value * _impact
+        _loss_eur = _scenario_loss_eur(_impact)
         _crash_rows_html += (
             f'<tr>'
-            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%)</td>'
+            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%, beta-weighted)</td>'
             f'<td style="{_crash_cell_base} text-align:right; color:rgba(244,63,94,0.7); '
             f'font-weight:700; font-size:0.85rem;">-&euro;{abs(_loss_eur):,.0f}</td>'
             f'</tr>'
@@ -6439,51 +6628,75 @@ def _render_stress_test(user_email: str) -> None:
 
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
-    # --- 3. Live Anthropic Risk Alerts -- puur informatief/observerend
-    # (welke concentratierisico's vallen op), UITDRUKKELIJK GEEN
-    # actie-adviezen of aanbevelingen. Dat zou feitelijk financieel
-    # advies zijn, en dat willen we bewust niet geven.
-    #
-    # Achter een KNOP i.p.v. automatisch bij elke page-load -- anders
-    # vuurt dit bij elke keer dat je naar dit tabblad navigeert een
-    # nieuwe, onnodige API-aanroep af (kosten + latency), ook als je
-    # helemaal geen nieuwe scan wilde. session_state onthoudt het
-    # resultaat binnen de sessie, dus wisselen van tabblad en terugkomen
-    # verliest de laatste scan niet.
+    # ================================================================
+    # 3. SYSTEMIC RISK CORRELATION MATRIX -- 3 grafische tegels i.p.v. de
+    # eerdere pratende AI-bulletpoints. Elke tegel is 100% deterministisch
+    # herberekend uit je eigen holdings + de 3 macro-sliders hierboven --
+    # geen API-aanroep, dus flitsloos/synchroon bij elke slider-beweging.
+    # ================================================================
     st.markdown(
-        _uniform_section_header_html("Portfolio Robustness Audit", "shield", is_first=False),
+        _uniform_section_header_html("Systemic Risk Correlation Matrix", "bar_chart", is_first=False),
         unsafe_allow_html=True,
     )
-    _tickers_list = sorted({h["ticker"] for h in holdings if h.get("ticker")})
-    _exposure_context = {
-        "top_country": _top_country, "top_country_pct": round(_top_country_pct, 1),
-        "top_sector": _top_sector, "top_sector_pct": round(_top_sector_pct, 1),
-        "top_currency": _top_currency, "top_currency_pct": round(_top_currency_pct, 1),
-    }
-    if st.button("\u2726 Run Cognitive Scan", key="stress_test_run_scan_btn"):
-        st.session_state["stress_test_alerts"] = _run_ai_risk_alerts(_tickers_list, _exposure_context, user_email)
-    _alerts = st.session_state.get("stress_test_alerts")
-    if _alerts:
-        for _cluster, _tickers_str, _fact in _alerts:
-            st.markdown(
-                f'<div style="font-size:11px; color:#94A3B8; font-weight:500; letter-spacing:0.02em; '
-                f'margin-bottom:0.75rem; display:block;">&#9888;&#65039; '
-                f'<span style="font-weight:700; color:#CBD5E1;">COGNITIVE SCAN</span> '
-                f'| CLUSTER: {_cluster.upper()} '
-                f'| TICKERS: {_tickers_str.upper()} '
-                f'| FACT: {_fact.upper()}</div>',
-                unsafe_allow_html=True,
-            )
-    elif _alerts is None:
+
+    _semi_tech_rows = [r for r in _rows if r["is_semi_tech"]]
+    _semi_tech_value = sum(r["eur_value"] for r in _semi_tech_rows)
+    _semi_tech_impact = sum(
+        r["eur_value"] * r["beta"] * _equity_shock_frac + r["eur_value"] * _supply_chain_frac
+        for r in _semi_tech_rows
+    )
+
+    _usd_rows = [r for r in _rows if r["currency"] == "USD"]
+    _usd_value = sum(r["eur_value"] for r in _usd_rows)
+    _usd_pct_of_total = (_usd_value / total_value * 100) if total_value else 0.0
+    _fx_impact = sum(r["eur_value"] * _fx_shock_frac for r in _usd_rows)
+
+    _crypto_rows = [r for r in _rows if r["is_crypto"]]
+    _crypto_value = sum(r["eur_value"] for r in _crypto_rows)
+    _crypto_impact = sum(r["eur_value"] * r["beta"] * _equity_shock_frac for r in _crypto_rows)
+
+    heat_col1, heat_col2, heat_col3 = st.columns(3, gap="medium")
+    with heat_col1:
         st.markdown(
-            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
-            'text-transform:uppercase;">Click above to scan your portfolio for hidden correlation clusters.</div>',
+            f'<div style="{_stress_tile_style(_semi_tech_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128680; Tech &amp; hardware overlap</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">&euro;{_semi_tech_value:,.0f} '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">exposed</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_semi_tech_impact)} '
+            f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
+            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
+            f'{", ".join(r["ticker"] for r in _semi_tech_rows) if _semi_tech_rows else "No exposure in this cluster"}</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
-    else:
+    with heat_col2:
         st.markdown(
-            '<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.06em; '
-            'text-transform:uppercase;">No risk alerts available right now.</div>',
+            f'<div style="{_stress_tile_style(_fx_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128184; Currency risk exposure</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">{_usd_pct_of_total:.0f}% '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">USD-denominated</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_fx_impact)} '
+            f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
+            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
+            f'&euro;{_usd_value:,.0f} at risk from the FX shock slider</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with heat_col3:
+        st.markdown(
+            f'<div style="{_stress_tile_style(_crypto_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#9889; High-volatility cluster</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">&euro;{_crypto_value:,.0f} '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">crypto exposure</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_crypto_impact)} '
+            f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
+            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
+            f'{", ".join(r["ticker"] for r in _crypto_rows) if _crypto_rows else "No crypto exposure"} '
+            f'-- historically move together in the vast majority of drawdowns</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
@@ -6619,34 +6832,6 @@ def _render_wealth_engine(user_email: str) -> None:
     import database as _wealth_db
 
     holdings = filter_active_holdings(_wealth_db.get_user_holdings(user_email))
-
-    def _eur_position_value(h: dict) -> float:
-        """
-        Zet position_value om naar EUR, ongeacht in welke valuta 'ie
-        toevallig het laatst is opgeslagen. 'value_currency' volgt de
-        DISPLAY-valuta die actief was op de My Portfolio-pagina tijdens de
-        laatste 'Update portfolio value'-klik (kan dus EUR of USD zijn, en
-        wisselt per refresh) -- NIET een vaste, gegarandeerde valuta.
-
-        GEVONDEN BUG: zonder deze conversie behandelde de Wealth Engine
-        (total_value/live_avg_yield/annual_cashflow, en dus ALLE tegels,
-        de compounding-projectie en de Snowball Milestones) een in USD
-        opgeslagen totaal alsof het al EUR was. Omdat 1 USD < 1 EUR is,
-        gaf datzelfde portfolio na een USD-refresh een HOGER (fout) EUR-
-        bedrag te zien dan na een EUR-refresh -- precies het gemelde
-        patroon ('lager bedrag na EUR-refresh, hoger na USD-refresh').
-        """
-        raw_value = h.get("position_value") or 0
-        if raw_value <= 0:
-            return 0.0
-        holding_currency = h.get("value_currency") or "EUR"
-        if holding_currency == "EUR":
-            return raw_value
-        fx_rate = get_fx_rate(holding_currency, "EUR")
-        if fx_rate is None:
-            return raw_value  # zeldzame FX-storing -- liever een schatting tonen dan crashen
-        return raw_value * fx_rate
-
     total_value = sum(_eur_position_value(h) for h in holdings)
 
     if total_value <= 0 or not holdings:
