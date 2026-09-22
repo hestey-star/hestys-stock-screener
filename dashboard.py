@@ -7390,15 +7390,18 @@ def render_analyze():
                 unmapped_assets.append({"ticker": ticker, "naam": h.get("naam", ticker)})
             elif score >= 8:
                 high_weight += weight
-            elif score >= 5:
+            elif score >= 5.5:
+                # Grens ligt op 5.5, niet 5.0 -- consistent met de
+                # Nederlandse schoolcijfer-logica die ook de rode
+                # score-kleur elders bepaalt ('onvoldoende' onder een 5.5).
                 medium_weight += weight
             else:
                 low_weight += weight
 
         tiles_html = (
             _conviction_tile_html("\U0001F7E2", "High conviction (8-10)", high_weight)
-            + _conviction_tile_html("\U0001F7E1", "Medium conviction (5-7)", medium_weight)
-            + _conviction_tile_html("\U0001F534", "Speculative / Low (1-4)", low_weight, warn=(low_weight > 15))
+            + _conviction_tile_html("\U0001F7E1", "Medium conviction (5.5-7.9)", medium_weight)
+            + _conviction_tile_html("\U0001F534", "Speculative / Low (0-5.4)", low_weight, warn=(low_weight > 15))
         )
         # De 3 tegels (en de waarschuwingsbalk) verdwijnen VOLLEDIG zodra
         # de drawer open staat -- eerder werden ze alleen smaller
