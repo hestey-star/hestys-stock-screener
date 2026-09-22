@@ -6578,20 +6578,35 @@ def _render_stress_test(user_email: str) -> None:
     # het totaal ook nooit groter kan zijn dan de totale portfoliowaarde.
     # ================================================================
     _crash_scenarios = [
-        ("Dot-Com Bubble Burst", -0.54),
-        ("2008 Great Financial Crisis", -0.38),
-        ("2020 Covid-19 Panic", -0.22),
+        ("Dot-Com Bubble Burst", -0.54, "beta-weighted"),
+        ("2008 Great Financial Crisis", -0.38, "beta-weighted"),
+        ("2020 Covid-19 Panic", -0.22, "beta-weighted"),
     ]
 
-    def _scenario_loss_eur(market_impact: float) -> float:
+    # GOLDEN ERAS (UPSIDE) -- zelfde bèta-wiskunde als de crashes, maar dan
+    # met een positief marktrendement. De "cluster-explosie" (tech/chips bij
+    # Dot-Com, crypto bij Post-Covid) ontstaat vanzelf uit de bestaande
+    # per-asset bèta's (TSLA/NVDA/SMH.L=1.4-2.3, crypto=1.8 t.o.v. default
+    # 1.1) -- geen aparte extra vermenigvuldiging per cluster nodig.
+    _golden_era_scenarios = [
+        ("1982 Reaganomics Rally", 2.28, "beta-weighted"),
+        ("1995 Dot-Com Exuberance Boom", 4.00, "tech-leveraged"),
+        ("2020 Post-Covid Liquidity Injection", 0.70, "hyper-volatility"),
+    ]
+
+    def _scenario_pnl_eur(market_change: float) -> float:
         _total = 0.0
         for r in _rows:
-            _calculated_loss = r["eur_value"] * r["beta"] * market_impact
-            # Hard floor: verlies op DEZE positie kan nooit groter zijn dan
-            # -100% van zijn eigen waarde (calculated_loss is negatief bij
-            # een daling, dus max(...) begrenst 'm naar boven -- richting 0).
-            _floored_loss = max(-r["eur_value"], _calculated_loss)
-            _total += _floored_loss
+            _calculated_pnl = r["eur_value"] * r["beta"] * market_change
+            if market_change < 0:
+                # Hard floor: verlies op DEZE positie kan nooit groter zijn
+                # dan -100% van zijn eigen waarde (calculated_pnl is negatief
+                # bij een daling, dus max(...) begrenst 'm naar boven --
+                # richting 0). Bij een winst (Golden Eras) is er bewust GEEN
+                # plafond: een bèta-versterkte winst van >100% op 1 positie
+                # is wiskundig heel normaal en mag niet worden afgekapt.
+                _calculated_pnl = max(-r["eur_value"], _calculated_pnl)
+            _total += _calculated_pnl
         return _total
 
     _crash_header_style = (
@@ -6603,14 +6618,42 @@ def _render_stress_test(user_email: str) -> None:
         "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
         "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
     )
+
+    # HESTYS SCENARIO-SCHAKELAAR -- wisselt de tabel eronder flitsloos/
+    # synchroon tussen historische Black Swans (crashes) en Golden Eras
+    # (bull-runs), puur via session_state, geen rerun-vertraging.
+    _scenario_toggle_key = "stress_test_scenario_toggle"
+    st.markdown(
+        f'<style>.st-key-{_scenario_toggle_key} {{ margin-bottom: 0.6rem; }}</style>',
+        unsafe_allow_html=True,
+    )
+    with st.container(key=_scenario_toggle_key):
+        st.pills(
+            "Scenario mode",
+            options=["BLACK SWANS (CRASH)", "GOLDEN ERAS (UPSIDE)"],
+            default=st.session_state.get("active_scenario_mode", "BLACK SWANS (CRASH)"),
+            key="active_scenario_mode",
+            label_visibility="collapsed",
+        )
+    _is_golden_era = st.session_state.get("active_scenario_mode") == "GOLDEN ERAS (UPSIDE)"
+
+    _scenario_list = _golden_era_scenarios if _is_golden_era else _crash_scenarios
+    _impact_header_label = "Projected gain (EUR)" if _is_golden_era else "Projected impact (EUR)"
+
     _crash_rows_html = ""
-    for _label, _impact in _crash_scenarios:
-        _loss_eur = _scenario_loss_eur(_impact)
+    for _label, _impact, _suffix in _scenario_list:
+        _pnl_eur = _scenario_pnl_eur(_impact)
+        if _is_golden_era:
+            _value_style = "color:#34d399; font-weight:700;"
+            _sign = "+"
+        else:
+            _value_style = "color:rgba(244,63,94,0.7); font-weight:700;"
+            _sign = "-"
         _crash_rows_html += (
             f'<tr>'
-            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:.0f}%, beta-weighted)</td>'
-            f'<td style="{_crash_cell_base} text-align:right; color:rgba(244,63,94,0.7); '
-            f'font-weight:700; font-size:0.85rem;">-&euro;{abs(_loss_eur):,.0f}</td>'
+            f'<td style="{_crash_cell_base} color:#8992A3; font-size:0.82rem;">{_label} ({_impact * 100:+.0f}%, {_suffix})</td>'
+            f'<td style="{_crash_cell_base} text-align:right; {_value_style} '
+            f'font-size:0.85rem;">{_sign}&euro;{abs(_pnl_eur):,.0f}</td>'
             f'</tr>'
         )
     # Zelfde patroon als Snowball Milestones (Wealth Engine): raw <table>
@@ -6631,7 +6674,7 @@ def _render_stress_test(user_email: str) -> None:
             f'<table style="width:100%; border-collapse:collapse;">'
             f'<thead><tr>'
             f'<th style="{_crash_header_style} text-align:left;">Historical scenario</th>'
-            f'<th style="{_crash_header_style} text-align:right;">Projected impact (EUR)</th>'
+            f'<th style="{_crash_header_style} text-align:right;">{_impact_header_label}</th>'
             f'</tr></thead>'
             f'<tbody>{_crash_rows_html}</tbody>'
             f'</table>'
