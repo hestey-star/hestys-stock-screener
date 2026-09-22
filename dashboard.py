@@ -6665,8 +6665,9 @@ def _render_stress_test(user_email: str) -> None:
             f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">exposed</span></div>'
             f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_semi_tech_impact)} '
             f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
-            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
-            f'{", ".join(r["ticker"] for r in _semi_tech_rows) if _semi_tech_rows else "No exposure in this cluster"}</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'AFFECTED CLUSTER TICKERS: {", ".join(r["ticker"] for r in _semi_tech_rows) if _semi_tech_rows else "NO EXPOSURE IN THIS CLUSTER"}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -6679,8 +6680,9 @@ def _render_stress_test(user_email: str) -> None:
             f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">USD-denominated</span></div>'
             f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_fx_impact)} '
             f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
-            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
-            f'&euro;{_usd_value:,.0f} at risk from the FX shock slider</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'TOTAL EXPOSED CAPITAL: &euro;{_usd_value:,.0f} | SENSITIVITY: DIRECT FX COUPLING</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -6693,9 +6695,10 @@ def _render_stress_test(user_email: str) -> None:
             f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">crypto exposure</span></div>'
             f'<div style="font-size:0.9rem; margin-top:0.3rem;">{_fmt_eur_signed(_crypto_impact)} '
             f'<span style="font-size:0.68rem; font-weight:600; color:#64748B;">live impact</span></div>'
-            f'<div style="font-size:0.66rem; color:#475569; margin-top:0.5rem;">'
-            f'{", ".join(r["ticker"] for r in _crypto_rows) if _crypto_rows else "No crypto exposure"} '
-            f'-- historically move together in the vast majority of drawdowns</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'TICKERS: {", ".join(r["ticker"] for r in _crypto_rows) if _crypto_rows else "NONE"} '
+            f'| COMPONENT CORE CORRELATION: HISTORICALLY MOVE SYNCHRONOUS DURING MAXIMUM DRAWDOWN EVENTS.</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
