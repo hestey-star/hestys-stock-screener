@@ -2938,13 +2938,18 @@ def build_sector_rotation(region: str = "US", window_days: int = THEME_ROTATION_
 
 
 def _deep_dive_score_color(score: float) -> str:
-    """Vertaalt een score (1-10) naar een betekenisvolle kleur -- groen (sterk), amber (gemiddeld), rood (zwak)."""
+    """
+    Vertaalt een score (1-10) naar een betekenisvolle kleur -- groen
+    (sterk), amber (gemiddeld), rood (onvoldoende). Grens voor rood ligt op
+    5.5 (i.p.v. 5.0) -- consistent met de Nederlandse schoolcijfer-logica
+    ('onvoldoende' begint onder een 5.5, niet onder een 5.0).
+    """
     if score >= 7.5:
         return "#1FAE96"  # Hesty's signature teal/groen -- sterk
-    elif score >= 5.0:
+    elif score >= 5.5:
         return "#E8A93C"  # amber -- gemiddeld
     else:
-        return "#E5484D"  # rood -- zwak
+        return "#E5484D"  # rood -- onvoldoende
 
 
 def _compute_deep_dive_overall_score(version: dict):
@@ -5586,7 +5591,10 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                 if score is not None:
                     if score >= 8:
                         _score_color = "#34D399"
-                    elif score >= 5:
+                    elif score >= 5.5:
+                        # Grens voor rood ligt op 5.5, niet 5.0 -- consistent
+                        # met Nederlandse schoolcijfer-logica ('onvoldoende'
+                        # begint onder een 5.5).
                         _score_color = "#FBBF24"
                     else:
                         _score_color = "#FB7185"
