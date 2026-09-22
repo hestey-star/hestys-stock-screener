@@ -6501,7 +6501,35 @@ def _render_wealth_engine(user_email: str) -> None:
     import database as _wealth_db
 
     holdings = filter_active_holdings(_wealth_db.get_user_holdings(user_email))
-    total_value = sum(h.get("position_value") or 0 for h in holdings)
+
+    def _eur_position_value(h: dict) -> float:
+        """
+        Zet position_value om naar EUR, ongeacht in welke valuta 'ie
+        toevallig het laatst is opgeslagen. 'value_currency' volgt de
+        DISPLAY-valuta die actief was op de My Portfolio-pagina tijdens de
+        laatste 'Update portfolio value'-klik (kan dus EUR of USD zijn, en
+        wisselt per refresh) -- NIET een vaste, gegarandeerde valuta.
+
+        GEVONDEN BUG: zonder deze conversie behandelde de Wealth Engine
+        (total_value/live_avg_yield/annual_cashflow, en dus ALLE tegels,
+        de compounding-projectie en de Snowball Milestones) een in USD
+        opgeslagen totaal alsof het al EUR was. Omdat 1 USD < 1 EUR is,
+        gaf datzelfde portfolio na een USD-refresh een HOGER (fout) EUR-
+        bedrag te zien dan na een EUR-refresh -- precies het gemelde
+        patroon ('lager bedrag na EUR-refresh, hoger na USD-refresh').
+        """
+        raw_value = h.get("position_value") or 0
+        if raw_value <= 0:
+            return 0.0
+        holding_currency = h.get("value_currency") or "EUR"
+        if holding_currency == "EUR":
+            return raw_value
+        fx_rate = get_fx_rate(holding_currency, "EUR")
+        if fx_rate is None:
+            return raw_value  # zeldzame FX-storing -- liever een schatting tonen dan crashen
+        return raw_value * fx_rate
+
+    total_value = sum(_eur_position_value(h) for h in holdings)
 
     if total_value <= 0 or not holdings:
         st.markdown(
@@ -6523,7 +6551,7 @@ def _render_wealth_engine(user_email: str) -> None:
     _weighted_yield_sum = 0.0
     for h in holdings:
         ticker = h.get("ticker")
-        value = h.get("position_value") or 0
+        value = _eur_position_value(h)
         if not ticker or value <= 0:
             continue
         _custom_cashflow = h.get("custom_annual_cashflow")
@@ -6597,7 +6625,7 @@ def _render_wealth_engine(user_email: str) -> None:
     _weighted_growth_sum = 0.0
     for h in holdings:
         ticker = (h.get("ticker") or "").upper()
-        value = h.get("position_value") or 0
+        value = _eur_position_value(h)
         if not ticker or value <= 0:
             continue
         _weighted_growth_sum += value * _KNOWN_DIVIDEND_GROWTH_RATES.get(ticker, 0.0)
