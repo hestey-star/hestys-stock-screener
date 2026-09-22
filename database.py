@@ -366,6 +366,7 @@ def get_user_preferences(user_email: str) -> dict:
         "wants_daily_email": False, "is_premium": False, "email_region": "EU",
         "wants_momentocrats_email": False, "wants_snowball_email": False, "wants_rocket_email": False,
         "financial_independence_target": 60000.0,
+        "ai_response_language": None,
     }
 
 
@@ -374,8 +375,20 @@ def set_user_preferences(
     wants_daily_email: bool = False, email_region: str = "EU",
     wants_momentocrats_email: bool = False, wants_snowball_email: bool = False,
     wants_rocket_email: bool = False, financial_independence_target: float = None,
+    ai_response_language: str = None,
 ) -> None:
-    """Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de bestaande bij)."""
+    """
+    Slaat de e-mail-voorkeuren op (maakt een nieuwe rij aan, of werkt de
+    bestaande bij).
+
+    'ai_response_language' -- handmatige override voor de taal van de AI-
+    features (Cockpit Briefing, Cognitive Scan): None/'auto' = automatisch
+    afleiden uit de Accept-Language-browserheader (het standaardgedrag),
+    'nl'/'en' = altijd vastzetten op die taal. Vangnet voor als de
+    automatische detectie een keer een andere taal geeft dan verwacht (bv.
+    een proxy/CDN die de header aanpast), zonder de automatische detectie
+    voor andere, nieuwe bezoekers te moeten opgeven.
+    """
     client = get_supabase_client()
     upsert_data = {
         "user_email": hash_email(user_email),
@@ -385,6 +398,7 @@ def set_user_preferences(
         "wants_momentocrats_email": wants_momentocrats_email,
         "wants_snowball_email": wants_snowball_email,
         "wants_rocket_email": wants_rocket_email,
+        "ai_response_language": ai_response_language if ai_response_language != "auto" else None,
     }
     if financial_independence_target is not None:
         upsert_data["financial_independence_target"] = financial_independence_target

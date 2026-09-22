@@ -5645,6 +5645,49 @@ def _render_conviction_table(entries: list, key_prefix: str, unmapped: list = No
                     unsafe_allow_html=True,
                 )
 
+def _detect_ai_response_language(user_email: str = None) -> str:
+    """
+    Bepaalt in welke taal AI-tekst (Cockpit Briefing, Cognitive Scan) moet
+    antwoorden. Volgorde:
+
+    1. Een expliciete, handmatige override in Settings ('ai_response_
+       language' = 'nl'/'en') -- wint altijd. Bedoeld als vangnet voor als
+       de automatische detectie hieronder een keer misgaat (bv. een
+       CDN/proxy die de Accept-Language-header aanpast of wegfiltert
+       voordat die de app bereikt), zonder de automatische detectie voor
+       ALLE andere (nieuwe, niet-ingelogde) bezoekers te moeten opgeven.
+    2. Automatische detectie via de Accept-Language-header van de browser
+       -- geen opslag nodig, werkt voor iedere bezoeker.
+
+    GEVONDEN, VERBETERDE PARSING: zoekt nu naar 'nl' OVERAL in de volledige
+    taal-lijst (elk onderdeel van de komma-gescheiden Accept-Language-
+    header), niet alleen in het EERSTE/primaire onderdeel. Een header als
+    'en-US,nl;q=0.9' (bv. Engelse OS-taal, maar Nederlands wel als 2e
+    voorkeur) gaf voorheen ten onrechte Engels terug, puur omdat alleen de
+    eerste taal werd bekeken.
+    """
+    if user_email:
+        try:
+            import database as _lang_db
+            override = _lang_db.get_user_preferences(user_email).get("ai_response_language")
+            if override == "nl":
+                return "Dutch (Nederlands)"
+            if override == "en":
+                return "English"
+        except Exception:
+            pass
+
+    try:
+        _accept_language = st.context.headers.get("Accept-Language", "")
+    except Exception:
+        _accept_language = ""
+    _lang_tags = [
+        tag.split(";")[0].strip().split("-")[0].lower()
+        for tag in _accept_language.split(",") if tag.strip()
+    ]
+    return "Dutch (Nederlands)" if "nl" in _lang_tags else "English"
+
+
 def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str, field_prefix: str = "dd", key_suffix: str = "") -> bool:
     """
     Roept Claude Haiku 4.5 aan om een ticker te onderzoeken. Vult UITSLUITEND
@@ -5691,20 +5734,7 @@ def _run_ai_cockpit_briefing(ticker: str, naam: str, user_email: str, field_pref
 
     client = Anthropic(api_key=api_key)
 
-    # Taal automatisch afleiden uit de Accept-Language-header van de
-    # browser -- het signaal dat elke browser toch al standaard meestuurt
-    # op basis van de systeem-/browserinstellingen van de bezoeker. Geen
-    # opslag, geen instelling, werkt voor IEDEREEN (ook zonder inloggen
-    # via Google, dat wél een 'locale' zou kunnen geven maar alleen voor
-    # die ene inlogmethode). Defensief: als st.context (relatief nieuwe
-    # Streamlit-functionaliteit) om wat voor reden dan ook niet
-    # beschikbaar is, valt dit gewoon terug op Engels.
-    try:
-        _accept_language = st.context.headers.get("Accept-Language", "")
-    except Exception:
-        _accept_language = ""
-    _primary_lang = _accept_language.split(",")[0].split("-")[0].split(";")[0].strip().lower()
-    _response_language = "Dutch (Nederlands)" if _primary_lang == "nl" else "English"
+    _response_language = _detect_ai_response_language(user_email)
 
     system_prompt = (
         "You are the Hestys AI Research Assistant. Analyze the requested stock ticker. "
@@ -6338,7 +6368,7 @@ def _render_stress_test(user_email: str) -> None:
         "top_currency": _top_currency, "top_currency_pct": round(_top_currency_pct, 1),
     }
     if st.button("\u2726 Run Cognitive Scan", key="stress_test_run_scan_btn"):
-        st.session_state["stress_test_alerts"] = _run_ai_risk_alerts(_tickers_list, _exposure_context)
+        st.session_state["stress_test_alerts"] = _run_ai_risk_alerts(_tickers_list, _exposure_context, user_email)
     _alerts = st.session_state.get("stress_test_alerts")
     if _alerts:
         for _cluster, _tickers_str, _fact in _alerts:
@@ -6375,7 +6405,7 @@ def _render_stress_test(user_email: str) -> None:
     )
 
 
-def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
+def _run_ai_risk_alerts(tickers: list, exposure_context: dict, user_email: str = None) -> list:
     """
     Live Claude Haiku-aanroep: vraagt 2-3 ijskoude, PUUR FEITELIJKE
     correlatie-observaties (systemic overlap) over de gegeven tickers als
@@ -6398,12 +6428,7 @@ def _run_ai_risk_alerts(tickers: list, exposure_context: dict) -> list:
     if not api_key or not tickers:
         return []
 
-    try:
-        _accept_language = st.context.headers.get("Accept-Language", "")
-    except Exception:
-        _accept_language = ""
-    _primary_lang = _accept_language.split(",")[0].split("-")[0].split(";")[0].strip().lower()
-    _response_language = "Dutch (Nederlands)" if _primary_lang == "nl" else "English"
+    _response_language = _detect_ai_response_language(user_email)
 
     client = Anthropic(api_key=api_key)
     system_prompt = (
@@ -11480,6 +11505,20 @@ def render_settings():
                 help="Used by the Snowball Milestones on the Wealth Engine (Analyze) to determine "
                      "when your projected passive cashflow reaches full financial independence.",
             )
+            st.markdown("---")
+            st.markdown("**AI response language**")
+            st.caption(
+                "The Cockpit Briefing and Cognitive Scan normally detect your language "
+                "automatically from your browser. Force a specific language here if that "
+                "ever picks the wrong one."
+            )
+            _lang_options = ["auto", "nl", "en"]
+            _lang_labels = {"auto": "Automatic (detect from browser)", "nl": "Nederlands", "en": "English"}
+            ai_response_language = st.selectbox(
+                "AI response language", _lang_options,
+                index=_lang_options.index(prefs.get("ai_response_language") or "auto"),
+                format_func=lambda x: _lang_labels[x], label_visibility="collapsed",
+            )
             if st.button("Save preferences"):
                 database.set_user_preferences(
                     user_email, wants_portfolio,
@@ -11487,6 +11526,7 @@ def render_settings():
                     wants_momentocrats_email=wants_momentocrats,
                     wants_snowball_email=wants_snowball, wants_rocket_email=wants_rocket,
                     financial_independence_target=financial_independence_target,
+                    ai_response_language=ai_response_language,
                 )
                 st.success("Preferences saved!")
 
