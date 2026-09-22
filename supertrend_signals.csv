@@ -1,13 +1,5 @@
 ticker,flip_date,weken_geleden,voorgaande_trend_weken,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema20,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,weken_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-GDDY,2026-09-06,1,81,101.31,98.07,-3.2,True,^GSPC,25.21,False,28.5,stijgend,8.0,True,2026-07-30,6.0,104.53,-6.2,7.31
-TYL,2026-08-30,2,73,377.94,336.67,-10.92,True,^GSPC,18.62,True,8.1,stijgend,0.4,True,2026-07-29,6.0,426.64,-21.1,7.17
-SWKS,2026-09-13,0,9,88.35,88.35,0.0,True,^GSPC,19.86,True,6.8,dalend,4.8,True,2026-07-28,6.0,68.35,29.3,6.35
-SLB,2026-08-30,2,8,57.03,56.06,-1.71,True,^GSPC,15.09,True,11.8,dalend,6.3,True,2026-07-24,7.0,62.24,-9.9,6.14
-MCK,2026-08-30,2,18,892.44,881.51,-1.22,True,^GSPC,15.48,False,196.2,onbekend,4.1,True,2026-08-05,5.0,980.73,-10.1,6.11
-TTE.PA,2026-09-13,0,10,78.38,78.38,0.0,True,^FCHI,14.53,False,9.9,dalend,-1.1,False,2026-07-23,7.0,83.14,-5.3,5.83
-REN.AS,2026-08-30,2,55,31.4,29.14,-7.2,False,^AEX,4.68,False,23.5,stijgend,,,,,47.15,-38.5,5.79
-EFX,2026-08-30,2,43,193.79,169.0,-12.79,False,^GSPC,8.02,False,8.6,stijgend,2.3,True,2026-07-21,7.0,214.95,-21.4,5.67
-CME,2026-08-30,2,13,284.46,275.54,-3.14,True,^GSPC,10.28,False,11.4,stijgend,2.8,True,2026-07-22,7.0,283.6,-2.8,5.33
-HNR1.DE,2026-08-30,2,13,257.4,249.0,-3.26,True,^GDAXI,3.99,False,,onbekend,6.3,True,2026-08-11,4.0,280.6,-10.8,4.83
-AWK,2026-08-30,2,43,138.3,137.69,-0.44,True,^GSPC,8.74,False,5.3,dalend,4.0,True,2026-07-29,6.0,141.45,-2.7,4.11
-PSKY,2026-08-30,2,24,10.88,10.6,-2.57,True,^GSPC,4.55,False,4.1,stijgend,-2.3,False,2026-08-04,5.0,9.69,9.4,3.94
+VRSN,2026-09-20,0,12,303.12,303.12,0.0,True,^GSPC,14.9,True,,onbekend,1.1,True,2026-07-23,8,324.4,-6.6,7.48
+GDDY,2026-09-06,2,81,101.31,97.46,-3.8,True,^GSPC,11.24,False,28.5,stijgend,8.0,True,2026-07-30,7,105.19,-7.3,6.05
+SWKS,2026-09-13,1,9,88.35,88.76,0.46,True,^GSPC,26.5,True,6.8,dalend,4.8,True,2026-07-28,7,68.35,29.9,5.59
+TTE.PA,2026-09-13,1,10,78.77,80.03,1.6,True,^FCHI,22.35,False,9.9,dalend,-1.1,False,2026-07-23,8,84.07,-5.6,5.43
