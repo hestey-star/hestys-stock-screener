@@ -6756,6 +6756,56 @@ def _render_stress_test(user_email: str) -> None:
         max(-r["eur_value"], r["eur_value"] * r["beta"] * _equity_shock_frac) for r in _crypto_rows
     )
 
+    def _cluster_live_impact(rows: list) -> float:
+        """
+        Herbruikbare live-impact-berekening voor een willekeurige subset van
+        _rows -- exact hetzelfde patroon als de 3 tegels hierboven: bèta-
+        gewogen equity-shock (plus de supply chain-schok voor semi/tech-
+        posities), met dezelfde harde floor per positie (nooit meer dan
+        -100% van die ene positie). Gebruikt door tegel 4/5/6 zodat alle 6
+        tegels identiek, flitsloos meebewegen met de sliders hierboven.
+        """
+        _total = 0.0
+        for r in rows:
+            _calc = r["eur_value"] * r["beta"] * _equity_shock_frac
+            if r["is_semi_tech"]:
+                _calc += r["eur_value"] * _supply_chain_frac
+            _calc = max(-r["eur_value"], _calc)
+            _total += _calc
+        return _total
+
+    # TILE 4 -- Alternative Asset Anchor: Prop.com (fractioneel vastgoed)
+    # heeft per definitie bèta 0.0 (_stress_test_beta_for_holding), dus
+    # volledig ontkoppeld van elke slider -- functioneert als liquiditeits-
+    # anker tijdens equity-crashes.
+    _prop_rows = [r for r in _rows if r["ticker"] == "PROP.COM"]
+    _prop_value = sum(r["eur_value"] for r in _prop_rows)
+    _prop_impact = _cluster_live_impact(_prop_rows)
+
+    # TILE 5 -- Single-Asset Dominance: de grootste individuele positie in
+    # de hele portfolio (dynamisch bepaald, niet hardcoded op "TSLA"), met
+    # zijn concentratierisico (% van totaal) en zijn eigen live slider-
+    # impact.
+    _dominant_row = max(_rows, key=lambda r: r["eur_value"]) if _rows else None
+    _dominant_pct = (_dominant_row["eur_value"] / total_value * 100) if (_dominant_row and total_value) else 0.0
+    _dominant_impact = _cluster_live_impact([_dominant_row]) if _dominant_row else 0.0
+    _dominant_status_color = "#FB7185" if _dominant_pct > 30 else "#94A3B8"
+
+    # TILE 6 -- Asset Velocity Divergence: stabiele cashflow-ankers (dividend-
+    # ETF, defensief consumentenaandeel, fractioneel vastgoed) t.o.v. pure
+    # groei-/crypto-posities, allebei uitgedrukt als % van de totale
+    # portfolio. De live-impact van de tegel volgt de groei-cluster, want
+    # dat is het bèta-gevoelige deel van deze tegenstelling.
+    _yield_tickers = {"TDIV.AS", "KHC", "PROP.COM"}
+    _growth_tickers = {"TSLA", "ASTS", "HIMS", "BTC-USD", "SOL-USD"}
+    _yield_rows = [r for r in _rows if r["ticker"] in _yield_tickers]
+    _growth_rows = [r for r in _rows if r["ticker"] in _growth_tickers]
+    _yield_value = sum(r["eur_value"] for r in _yield_rows)
+    _growth_value = sum(r["eur_value"] for r in _growth_rows)
+    _yield_pct = (_yield_value / total_value * 100) if total_value else 0.0
+    _growth_pct = (_growth_value / total_value * 100) if total_value else 0.0
+    _velocity_impact = _cluster_live_impact(_growth_rows)
+
     heat_col1, heat_col2, heat_col3 = st.columns(3, gap="medium")
     with heat_col1:
         st.markdown(
@@ -6800,6 +6850,57 @@ def _render_stress_test(user_email: str) -> None:
             f'text-transform:uppercase; margin-top:0.5rem;">'
             f'TICKERS: {", ".join(r["ticker"] for r in _crypto_rows) if _crypto_rows else "NONE"} '
             f'| COMPONENT CORE CORRELATION: HISTORICALLY MOVE SYNCHRONOUS DURING MAXIMUM DRAWDOWN EVENTS.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    heat_col4, heat_col5, heat_col6 = st.columns(3, gap="medium")
+    with heat_col4:
+        st.markdown(
+            f'<div style="{_stress_tile_style(_prop_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#127970; Alternative asset anchor</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">&euro;{_prop_value:,.0f} '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">locked</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem; color:#64748B; font-weight:700;">'
+            f'0% LIQUIDITY CORRELATION</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'ASSET CLUSTER: REAL ESTATE | PROPERTY YIELD ACTING AS LIQUIDITY ANCHOR DURING EQUITY CRASHES.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with heat_col5:
+        _dominant_ticker = _dominant_row["ticker"] if _dominant_row else "N/A"
+        st.markdown(
+            f'<div style="{_stress_tile_style(_dominant_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#128081; Single-asset dominance</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">{_dominant_pct:.1f}% '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">portfolio weight</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem; color:{_dominant_status_color}; font-weight:700;">'
+            f'CRITICAL CONCENTRATION</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'TICKER: {_dominant_ticker} | MAXIMUM DRAWDOWN EXPOSURE RISK IS HEAVILY LEVERAGED TO A SINGLE EQUITY FACTOR.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with heat_col6:
+        st.markdown(
+            f'<div style="{_stress_tile_style(_velocity_impact, total_value)}">'
+            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+            f'color:#8992A3; margin-bottom:0.4rem;">&#8987; Asset velocity divergence</div>'
+            f'<div style="font-size:1.1rem; font-weight:800; color:#F1F5F9;">{_yield_pct:.0f}% '
+            f'<span style="font-size:0.7rem; font-weight:600; color:#64748B;">yield anchors</span> / '
+            f'{_growth_pct:.0f}% <span style="font-size:0.7rem; font-weight:600; color:#64748B;">growth engine</span></div>'
+            f'<div style="font-size:0.9rem; margin-top:0.3rem; color:#F59E0B; font-weight:700;">'
+            f'HIGH-BETA AGGRESSIVE</div>'
+            f'<div style="font-size:10px; color:#64748B; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:0.5rem;">'
+            f'SYSTEMIC DRIFT: PORTFOLIO VELOCITY IS OPTIMIZED FOR AGGRESSIVE UPSIDE CAPITAL ACCELERATION.</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
