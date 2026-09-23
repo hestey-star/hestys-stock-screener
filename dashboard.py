@@ -1574,8 +1574,33 @@ def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
             continue
         try:
             data = market_data.get(h["ticker"], {})
-            price_today = data.get("current_price")
-            price_yesterday = data.get("previous_close")
+
+            # GEVONDEN BUG: deze functie vertrouwde de gedeelde,
+            # achtergrond-gesynchroniseerde ticker_market_data-tabel altijd
+            # blind, ongeacht hoe oud een rij daadwerkelijk was. Als het
+            # sync-script (elke 15 min) voor 1 SPECIFIEKE ticker stilletjes
+            # vastliep of faalde (netwerkhik, tijdelijke yfinance-storing --
+            # exact dezelfde klasse bug als eerder al gevonden en gefixt in
+            # screener_daily.py), bleef de oude 'previous_close'/
+            # 'current_price' voor die ticker voor altijd staan, met een
+            # 'Best today'/'Worst today'-percentage tot gevolg dat niets
+            # meer met de werkelijke, huidige koers te maken had (bv. GRAB
+            # die '+8.2%' toonde terwijl de koers allang niet meer zo hoog
+            # stond). Nu: een rij ouder dan 1 uur (4x de sync-cyclus, ruime
+            # marge) wordt NIET vertrouwd en behandeld als 'ontbrekend' --
+            # dezelfde, al-bevestigd-betrouwbare live-yfinance-terugval
+            # hieronder vangt 'm dan alsnog op.
+            _last_updated_str = data.get("last_updated")
+            _is_fresh = False
+            if _last_updated_str:
+                try:
+                    _last_updated_dt = datetime.fromisoformat(_last_updated_str)
+                    _is_fresh = (datetime.now() - _last_updated_dt) < timedelta(hours=1)
+                except Exception:
+                    _is_fresh = False
+
+            price_today = data.get("current_price") if _is_fresh else None
+            price_yesterday = data.get("previous_close") if _is_fresh else None
 
             if price_today is None or not price_yesterday:
                 # Terugval: ticker nog niet (of nog niet recent) gesynchroniseerd
