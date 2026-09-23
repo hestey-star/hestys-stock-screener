@@ -147,12 +147,26 @@ def fetch_daily(ticker: str, years: int = YEARS_OF_HISTORY) -> pd.DataFrame:
         ):
             expected_trading_day -= pd.Timedelta(days=1)
 
-        # 1 dag speling bovenop de verwachte handelsdag, voor yfinance's
-        # eigen, normale verwerkingsvertraging na sluiting (geen extra
-        # dag zou precies de eerder waargenomen 'yfinance loopt 1+
-        # handelsdag achter'-bug ook goedkeuren, en 'm dus onzichtbaar
-        # maken -- zie de module-docstring hierboven).
-        oldest_acceptable_date = expected_trading_day - pd.Timedelta(days=1)
+        # GEEN extra dag speling meer bovenop de verwachte handelsdag.
+        # Die stond er eerder wel (voor yfinance's eigen, normale
+        # verwerkingsvertraging na sluiting), maar bleek precies het
+        # lek dat de nieuwe bug hierboven veroorzaakte: een ticker
+        # waarvan de koersdata voor 1 SPECIFIEKE dag structureel is
+        # blijven hangen (bv. 'P' op 2026-09-21) werd daardoor OOK op
+        # de VOLGENDE dag nog als 'net acceptabel vers' doorgelaten --
+        # exact 1 handelsdag oud is dan altijd binnen de marge, elke
+        # dag opnieuw, zonder ooit als stale herkend te worden. Gevolg:
+        # 'Since'/'dagen_geleden' bleef voor die ticker vastzitten op
+        # dezelfde (te lage) waarde, dag na dag, in plaats van mee op
+        # te lopen of de ticker gewoon te laten afvallen. Om 05:07 UTC
+        # (ruim na de vorige Amerikaanse sluiting) heeft yfinance al
+        # de hele nacht gehad om bij te werken, dus de vorige
+        # verwerkingsvertraging-marge was sowieso al overbodig ruim.
+        # Nu: de laatste koers moet exact de verwachte handelsdag zijn,
+        # geen dag ouder -- anders wordt de ticker terecht als stale
+        # afgewezen (en dus overgeslagen) in plaats van stilzwijgend
+        # met verouderde cijfers te blijven meedraaien.
+        oldest_acceptable_date = expected_trading_day
 
         if last_date < oldest_acceptable_date:
             days_stale = (today - last_date).days
