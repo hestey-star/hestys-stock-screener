@@ -11795,6 +11795,32 @@ def render_today():
                     macro_snippet,
                 ),
             ]
+
+            # --- THEME ALERT -- extra, 4e regel, ALLEEN zichtbaar als er
+            # daadwerkelijk iets te melden valt. radar_bundle's eigen macro-
+            # catalysts komen uit radar_data.py en dekken geen sector/thema-
+            # rotatie; build_theme_rotation() (dezelfde functie die eerder
+            # Discover's Sector/Theme-pagina voedde) draait hier apart, 15
+            # min gecached, en signaleert een thema pas als het de afgelopen
+            # ~maand (21 handelsdagen) 10% of meer bewoog -- een harde,
+            # zelf-gekozen drempel i.p.v. elke kleine schommeling te melden.
+            _theme_rotation = _session_cached("today_theme_rotation", 900, build_theme_rotation)
+            _extreme_themes = (
+                sorted(
+                    [t for t in _theme_rotation if abs(t["return_pct"]) >= 10],
+                    key=lambda t: abs(t["return_pct"]), reverse=True,
+                )
+                if _theme_rotation else []
+            )
+            if _extreme_themes:
+                theme_snippet = ", ".join(
+                    f"{t['theme']}: {t['return_pct']:+.1f}%" for t in _extreme_themes[:3]
+                )
+                summary_rows.append((
+                    "\U0001F4C9", "THEME ALERT",
+                    f"{len(_extreme_themes)} sector/theme(s) moved 10%+ over the past month.",
+                    theme_snippet,
+                ))
             # Typografie-fix: loepzuivere text-sm (0.875rem, i.p.v. de
             # eerdere 0.83rem/0.72rem die in het donker wegvielen),
             # onwrikbare ALL-CAPS metadata-stijl, helderwitte hoofdtekst
