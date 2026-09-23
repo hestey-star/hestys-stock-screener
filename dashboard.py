@@ -11438,6 +11438,7 @@ def render_today():
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
 
                 st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
                 st.markdown(
                     _uniform_section_header_html("Your Portfolio Today", "account_balance_wallet", is_first=True),
                     unsafe_allow_html=True,
@@ -11490,6 +11491,7 @@ def render_today():
             # handmatige ververs-knop rechtsboven in de titelregel; de pagina
             # laadt standaard nog steeds gewoon uit de gecachete data (zie
             # _session_cached()). ---
+            st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
             radar_header_col, radar_refresh_col = st.columns([11, 1])
             with radar_header_col:
                 _radar_explore_link_html = (
@@ -11588,37 +11590,53 @@ def render_today():
 
             # GEEN pratende 'X item(s) on your radar today' meer -- die zin
             # vermeldde WEL een aantal maar liet nooit zien WELK specifiek
-            # aandeel/signaal daar concreet achter zat. Vervangen door de
-            # harde data zelf: eerste keuze is de slechtst presterende
-            # positie van vandaag (al berekend hierboven in daily_stats,
-            # dus geen extra aanroep nodig); zonder holdings (bv. alleen
-            # watchlist) valt dit terug op de eerste concrete screener-hit,
-            # dan de eerste macro-uitschieter, en pas als ECHT niets van dit
-            # alles beschikbaar is een eerlijke 'geen signaal'-tekst -- nooit
-            # een verzonnen/nietszeggende metriek.
-            if daily_stats and daily_stats.get("worst_performer"):
-                _radar_asset = daily_stats["worst_performer"]
-                _radar_change = daily_stats["worst_change_pct"]
-                _radar_trigger = (
-                    f"DAILY VOLATILITY {'DROP' if _radar_change < 0 else 'MOVE'} OF {_radar_change:+.1f}%"
-                )
-            elif new_opportunity_tickers:
-                _radar_asset = new_opportunity_tickers[0]
-                _radar_trigger = "NEW SCREENER OPPORTUNITY DETECTED"
-            elif macro_top_movers:
-                _radar_asset = macro_top_movers[0]
-                _radar_trigger = "MACRO CATALYST MOVEMENT DETECTED"
-            else:
-                _radar_asset = None
-                _radar_trigger = None
+            # aandeel/signaal daar concreet achter zat.
+            #
+            # GEVONDEN, TWEEDE PROBLEEM (na live-gebruik): de eerste versie
+            # gebruikte hiervoor de slechtst presterende positie van vandaag
+            # -- maar dat is EXACT dezelfde asset + hetzelfde percentage als
+            # de 'Worst today'-tegel rechtsboven al toont. Pure duplicatie,
+            # geen nieuwe informatie. De radar mag daarom NOOIT nog een keer
+            # dezelfde best/worst-performer laten zien: eerst wordt de
+            # naam van vandaag's best/worst performer opgezocht in holdings
+            # (om de bijbehorende ticker te vinden), en die ticker(s) worden
+            # expliciet UITGESLOTEN als kandidaat voor het radar-signaal.
+            # Wat overblijft is een ECHT ANDER signaal (een verse screener-
+            # hit of macro-uitschieter, geen dubbele koersbeweging) -- en
+            # als daar ook niets van beschikbaar is, een eerlijke, statische
+            # statusregel i.p.v. een verzonnen/nietszeggende metriek.
+            _excluded_radar_tickers = set()
+            if daily_stats:
+                _name_to_ticker = {h["naam"]: h["ticker"] for h in holdings}
+                _excluded_radar_tickers = {
+                    _name_to_ticker.get(daily_stats.get("best_performer")),
+                    _name_to_ticker.get(daily_stats.get("worst_performer")),
+                }
+                _excluded_radar_tickers.discard(None)
 
-            radar_signal_text = (
-                f"ASSET: {_radar_asset.upper()} | TRIGGER: {_radar_trigger}"
-                if _radar_asset else "NO SIGNIFICANT SIGNAL DETECTED TODAY"
-            )
+            _radar_asset = None
+            _radar_trigger = None
+            for _candidate_ticker in new_opportunity_tickers:
+                if _candidate_ticker not in _excluded_radar_tickers:
+                    _radar_asset = _candidate_ticker
+                    _radar_trigger = "NEW SCREENER OPPORTUNITY DETECTED"
+                    break
+            if _radar_asset is None:
+                for _candidate_ticker in macro_top_movers:
+                    if _candidate_ticker not in _excluded_radar_tickers:
+                        _radar_asset = _candidate_ticker
+                        _radar_trigger = "MACRO CATALYST MOVEMENT DETECTED"
+                        break
+
+            if _radar_asset:
+                _radar_label = "RADAR SIGNAL"
+                radar_signal_text = f"ASSET: {_radar_asset.upper()} | TRIGGER: {_radar_trigger}"
+            else:
+                _radar_label = "RADAR STATUS"
+                radar_signal_text = "SYSTEM STABLE | NO ANOMALIES DETECTED WITHIN ACTIVE HOLDINGS"
 
             summary_rows = [
-                ("\u2726", "RADAR SIGNAL", radar_signal_text, None),
+                ("\u2726", _radar_label, radar_signal_text, None),
                 (
                     "\U0001F50D", "SCREENER HITS",
                     f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners.",
@@ -11689,6 +11707,7 @@ def render_today():
                         '<a href="/portfolio" target="_self" class="inline-link" '
                         'style="font-size:0.78rem; white-space:nowrap;">Adjust target allocations in My Portfolio &rarr;</a>'
                     )
+                    st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
                     st.markdown(
                         _uniform_section_header_html(
                             "Portfolio Health & DCA Insights", "insights", is_first=False,
@@ -11721,6 +11740,7 @@ def render_today():
             # superstrakke macro-balk met de live VIX-stand -- 1 harde,
             # onmiddellijk scanbare metriek i.p.v. een heel raster om te
             # moeten interpreteren. ---
+            st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
             st.markdown(
                 _uniform_section_header_html("Market Volatility & Sector Momentum", "speed", is_first=False),
                 unsafe_allow_html=True,
