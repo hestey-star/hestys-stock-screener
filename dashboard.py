@@ -11722,8 +11722,32 @@ def render_today():
             screener_snippet = (
                 f"Top hits: {', '.join(new_opportunity_tickers)}" if new_opportunity_tickers else None
             )
+
+            # GEVONDEN, DERDE AANPASSING (op verzoek na live-gebruik): een
+            # aparte 4e "THEME ALERT"-regel was overbodig -- als een thema
+            # 10%+ beweegt hoort dat gewoon MEE te tellen in de bestaande
+            # MACRO CATALYST-regel, niet als eigen bulletin ernaast. Daarom
+            # nu VOOR macro_snippet al build_theme_rotation() erbij pakken
+            # (dezelfde 15-min gecachete data als voorheen) en de thema's die
+            # nog niet al genoemd worden via macro_top_movers (radar_data.py
+            # heeft zijn eigen, strengere thema-drempel) toevoegen aan zowel
+            # de macro-teller als de macro-snippet zelf.
+            _theme_rotation = _session_cached("today_theme_rotation", 900, build_theme_rotation)
+            _extreme_themes = (
+                sorted(
+                    [t for t in _theme_rotation if abs(t["return_pct"]) >= 10],
+                    key=lambda t: abs(t["return_pct"]), reverse=True,
+                )
+                if _theme_rotation else []
+            )
+            _extra_theme_movers = [
+                f"{t['theme']} {t['return_pct']:+.1f}%" for t in _extreme_themes
+                if not any(t["theme"] in mover for mover in macro_top_movers)
+            ]
+            _combined_macro_count = len(macro_items) + len(_extra_theme_movers)
+            _combined_macro_movers = list(macro_top_movers) + _extra_theme_movers
             macro_snippet = (
-                f"Biggest movers: {', '.join(macro_top_movers)}" if macro_top_movers else None
+                f"Biggest movers: {', '.join(_combined_macro_movers)}" if _combined_macro_movers else None
             )
 
             # GEEN pratende 'X item(s) on your radar today' meer -- die zin
@@ -11761,10 +11785,47 @@ def render_today():
                 }
                 _excluded_radar_tickers.discard(None)
 
+            # GEVONDEN, VIERDE UITBREIDING (op verzoek na live-gebruik): de
+            # radar keek tot nu toe ALLEEN naar een technisch Supertrend-
+            # signaal. Maar radar_data.py berekent al 3 andere, minstens zo
+            # actiegerichte dag-gebeurtenissen die nergens los zichtbaar
+            # waren (alleen meegeteld in day_items): een deep-dive sell-
+            # trigger die vandaag geraakt is, een 52-week high/low, en een
+            # ex-dividend datum binnen 5 dagen. Die horen wat mij betreft
+            # ALLEMAAL onder dezelfde RADAR SIGNAL-regel thuis i.p.v. een
+            # aparte regel per soort -- er is toch maar 1 regel beschikbaar,
+            # dus een vaste prioriteit: een sell-trigger is het meest
+            # actiegericht (je eigen vooraf ingestelde regel wordt geraakt),
+            # dan een 52-week record (zeldzaam en prijs-relevant), dan een
+            # ex-dividend datum (gepland, minder urgent), en pas als geen
+            # van die 3 iets oplevert valt het terug op het technische
+            # Supertrend-signaal van hiervoor.
+            _deep_dive_hits = radar_data.get_deep_dive_triggers_hit(user_email, max_items=5)
+            _deep_dive_hits = [d for d in _deep_dive_hits if d["ticker"] not in _excluded_radar_tickers]
+
+            _week_52_hits = radar_data.get_52_week_records(holdings, market_data, max_items=3) if holdings else []
+            _week_52_hits = [r for r in _week_52_hits if r["ticker"] not in _excluded_radar_tickers]
+
+            _ex_div_hits = radar_data.get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3) if holdings else []
+            _ex_div_hits = [e for e in _ex_div_hits if e["ticker"] not in _excluded_radar_tickers]
+
             _held_signal = _find_held_or_watched_technical_signal(holdings, watchlist_items)
+
             _radar_asset = None
             _radar_trigger = None
-            if _held_signal and _held_signal["ticker"] not in _excluded_radar_tickers:
+            if _deep_dive_hits:
+                _hit = _deep_dive_hits[0]
+                _radar_asset = _hit["ticker"]
+                _radar_trigger = f"SELL TRIGGER, {_hit['detail'].upper()}"
+            elif _week_52_hits:
+                _hit = _week_52_hits[0]
+                _radar_asset = _hit["ticker"]
+                _radar_trigger = f"52-WEEK {_hit['type'].upper()} HIT"
+            elif _ex_div_hits:
+                _hit = _ex_div_hits[0]
+                _radar_asset = _hit["ticker"]
+                _radar_trigger = f"EX-DIVIDEND IN {_hit['days_until']}D ({_hit['ex_div_date']})"
+            elif _held_signal and _held_signal["ticker"] not in _excluded_radar_tickers:
                 _radar_asset = _held_signal["ticker"]
                 _trigger_parts = ["BULLISH FLIP"]
                 if _held_signal["score"] is not None:
@@ -11791,36 +11852,10 @@ def render_today():
                 ),
                 (
                     "\u26A1", "MACRO CATALYST",
-                    f"{len(macro_items)} key global market movement(s) detected today.",
+                    f"{_combined_macro_count} key global market movement(s) detected today.",
                     macro_snippet,
                 ),
             ]
-
-            # --- THEME ALERT -- extra, 4e regel, ALLEEN zichtbaar als er
-            # daadwerkelijk iets te melden valt. radar_bundle's eigen macro-
-            # catalysts komen uit radar_data.py en dekken geen sector/thema-
-            # rotatie; build_theme_rotation() (dezelfde functie die eerder
-            # Discover's Sector/Theme-pagina voedde) draait hier apart, 15
-            # min gecached, en signaleert een thema pas als het de afgelopen
-            # ~maand (21 handelsdagen) 10% of meer bewoog -- een harde,
-            # zelf-gekozen drempel i.p.v. elke kleine schommeling te melden.
-            _theme_rotation = _session_cached("today_theme_rotation", 900, build_theme_rotation)
-            _extreme_themes = (
-                sorted(
-                    [t for t in _theme_rotation if abs(t["return_pct"]) >= 10],
-                    key=lambda t: abs(t["return_pct"]), reverse=True,
-                )
-                if _theme_rotation else []
-            )
-            if _extreme_themes:
-                theme_snippet = ", ".join(
-                    f"{t['theme']}: {t['return_pct']:+.1f}%" for t in _extreme_themes[:3]
-                )
-                summary_rows.append((
-                    "\U0001F4C9", "THEME ALERT",
-                    f"{len(_extreme_themes)} sector/theme(s) moved 10%+ over the past month.",
-                    theme_snippet,
-                ))
             # Typografie-fix: loepzuivere text-sm (0.875rem, i.p.v. de
             # eerdere 0.83rem/0.72rem die in het donker wegvielen),
             # onwrikbare ALL-CAPS metadata-stijl, helderwitte hoofdtekst
