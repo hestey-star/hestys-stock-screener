@@ -1634,6 +1634,54 @@ def build_daily_portfolio_stats(holdings: list, market_data: dict = None):
     }
 
 
+def _find_held_or_watched_technical_signal(holdings: list, watchlist_items: list) -> dict | None:
+    """
+    Zoekt een ECHT technisch screener-signaal (Supertrend bullish-omslag)
+    op een ticker die je al BEZIT of VOLGT -- i.p.v. Today's Daily Radar
+    een kale 'nieuwe screener-opportunity' als DDOG te laten tonen, een
+    ticker die je toch niet bezit en dus weinig direct actiegericht is.
+    Leest dezelfde CSV's als build_opportunities_today() (dag + week),
+    filtert op je eigen tickers, en kiest bij meerdere matches de HOOGSTE
+    score. Geeft None als er geen enkele match is -- de aanroeper valt dan
+    terug op een neutrale 'system stable'-statusregel i.p.v. iets te
+    verzinnen.
+    """
+    holding_tickers = {h["ticker"] for h in holdings}
+    watchlist_tickers = {w["ticker"] for w in watchlist_items}
+    own_tickers = holding_tickers | watchlist_tickers
+    if not own_tickers:
+        return None
+
+    frames = []
+    if os.path.exists("supertrend_signals_daily.csv"):
+        df_daily = pd.read_csv("supertrend_signals_daily.csv")
+        if not df_daily.empty:
+            df_daily["_days_ago"] = df_daily.get("dagen_geleden")
+            frames.append(df_daily)
+    if os.path.exists("supertrend_signals.csv"):
+        df_weekly = pd.read_csv("supertrend_signals.csv")
+        if not df_weekly.empty:
+            df_weekly["_days_ago"] = (
+                df_weekly["weken_geleden"] * 7 if "weken_geleden" in df_weekly.columns else None
+            )
+            frames.append(df_weekly)
+    if not frames:
+        return None
+
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    matches = combined[combined["ticker"].isin(own_tickers)]
+    if matches.empty or "score" not in matches.columns:
+        return None
+
+    best = matches.sort_values("score", ascending=False).iloc[0]
+    return {
+        "ticker": best["ticker"],
+        "score": float(best["score"]) if pd.notna(best.get("score")) else None,
+        "days_ago": int(best["_days_ago"]) if pd.notna(best.get("_days_ago")) else None,
+        "since_pct": float(best["sinds_omslag_pct"]) if pd.notna(best.get("sinds_omslag_pct")) else None,
+    }
+
+
 def build_opportunities_today(holdings: list, watchlist_items: list, include_weekly: bool = True) -> dict:
     """
     Leest de dagelijkse (+ optioneel wekelijkse) screener-uitkomsten en
@@ -2294,6 +2342,37 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'<span style="font-weight:700; font-size:1.1rem; color:#EAEDF1;">{title}</span></div>'
     )
 
+
+
+def _today_metric_tile_html(label: str, icon_name: str, value_text: str, color: str, bg: str, border: str,
+                             footer_text: str = None) -> str:
+    """
+    Zelfstandige, kleur-meebewegende tegel voor de 'Your Portfolio Today'-
+    rij -- exact dezelfde visuele taal (rgba-achtergrond + rand + 12px
+    afronding, groen/rood afhankelijk van de waarde) als de tegels in de
+    Stress-Test's Systemic Risk Correlation Matrix (_stress_tile_style()),
+    zodat de hele site 1 consistent 'tegel'-idioom gebruikt voor elke
+    losse, op-zichzelf-staande metric i.p.v. kale tekst met een dunne
+    scheidslijn ernaast.
+    """
+    footer_html = (
+        f'<div style="font-size:0.68rem; color:#94A3B8; margin-top:6px; '
+        f'font-family:\'Inter\', sans-serif !important;">{footer_text}</div>'
+        if footer_text else ""
+    )
+    return (
+        f'<div style="background:{bg}; border:1px solid {border}; border-radius:12px; padding:1rem 1.1rem; '
+        f'transition:all 0.3s ease; height:100%; box-sizing:border-box;">'
+        f'<div style="display:flex; align-items:center; gap:0.35rem;">'
+        f'{_icon_span(icon_name, size_px=13, color=color)}'
+        f'<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
+        f'font-weight:700; font-family:\'Inter\', sans-serif !important;">{label}</span>'
+        f'</div>'
+        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
+        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">{value_text}</div>'
+        f'{footer_html}'
+        f'</div>'
+    )
 
 
 def _portfolio_mover_tile_html(label: str, icon_name: str, asset_name: str, pct: float, weight_pct: float, color: str) -> str:
@@ -11437,51 +11516,85 @@ def render_today():
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
 
-                st.markdown(_portfolio_responsive_css(), unsafe_allow_html=True)
                 st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
                 st.markdown(
                     _uniform_section_header_html("Your Portfolio Today", "account_balance_wallet", is_first=True),
                     unsafe_allow_html=True,
                 )
 
+                # VIX vooraf ophalen -- hoort inhoudelijk niet bij het
+                # portfolio-rendement, maar krijgt hier een eigen tegel
+                # ALS 4e kolom in dezelfde rij i.p.v. een hele aparte
+                # sectie verderop (die voor 1 losse regel te zwaar oogde).
+                _vix_value = _get_live_vix_value()
+                if _vix_value is not None:
+                    if _vix_value > 25:
+                        _vix_status, _vix_color = "CRITICAL COOLDOWN", TODAY_NEGATIVE_TEXT
+                        _vix_bg, _vix_border = "rgba(244,63,94,0.08)", "rgba(244,63,94,0.4)"
+                    elif _vix_value >= 15:
+                        _vix_status, _vix_color = "TACTICAL", "#E8A93C"
+                        _vix_bg, _vix_border = "rgba(232,169,60,0.07)", "rgba(232,169,60,0.35)"
+                    else:
+                        _vix_status, _vix_color = "LOW", TODAY_POSITIVE_TEXT
+                        _vix_bg, _vix_border = "rgba(15,23,42,0.3)", "rgba(30,41,59,0.4)"
+                    vix_tile_html = _today_metric_tile_html(
+                        "Market Volatility (VIX)", "speed", f"{_vix_value:.2f}", _vix_color, _vix_bg, _vix_border,
+                        footer_text=f"Status: {_vix_status}",
+                    )
+                else:
+                    vix_tile_html = _today_metric_tile_html(
+                        "Market Volatility (VIX)", "speed", "n/a", "#8992A3",
+                        "rgba(15,23,42,0.3)", "rgba(30,41,59,0.4)", footer_text="Data not available right now",
+                    )
+
                 if daily_stats:
                     vs_yesterday_pct = daily_stats["portfolio_change_pct"]
                     vs_yesterday_color = TODAY_POSITIVE_TEXT if vs_yesterday_pct >= 0 else TODAY_NEGATIVE_TEXT
+                    vs_yesterday_bg = "rgba(16,185,129,0.06)" if vs_yesterday_pct >= 0 else "rgba(244,63,94,0.08)"
+                    vs_yesterday_border = "rgba(16,185,129,0.3)" if vs_yesterday_pct >= 0 else "rgba(244,63,94,0.4)"
 
-                    col1_html = (
-                        f'<div style="display:flex; flex-direction:column; align-items:flex-start; min-width:0;">'
-                        f'<div style="font-size:0.64rem; color:#1FAE96; text-transform:uppercase; letter-spacing:0.1em; '
-                        f'font-weight:700; font-family:\'Inter\', sans-serif !important;">Your Portfolio Today</div>'
-                        f'<div style="font-size:2.75rem; font-weight:800; color:{vs_yesterday_color}; margin-top:8px; '
-                        f'line-height:1.1; font-family:\'Inter\', sans-serif !important; '
-                        f'font-variant-numeric: tabular-nums;">{vs_yesterday_pct:+.1f}%</div>'
-                        f'</div>'
+                    best_pct = daily_stats["best_change_pct"]
+                    best_color = TODAY_POSITIVE_TEXT if best_pct >= 0 else TODAY_NEGATIVE_TEXT
+                    best_bg = "rgba(16,185,129,0.06)" if best_pct >= 0 else "rgba(244,63,94,0.08)"
+                    best_border = "rgba(16,185,129,0.3)" if best_pct >= 0 else "rgba(244,63,94,0.4)"
+
+                    worst_pct = daily_stats["worst_change_pct"]
+                    worst_color = TODAY_POSITIVE_TEXT if worst_pct >= 0 else TODAY_NEGATIVE_TEXT
+                    worst_bg = "rgba(16,185,129,0.06)" if worst_pct >= 0 else "rgba(244,63,94,0.08)"
+                    worst_border = "rgba(16,185,129,0.3)" if worst_pct >= 0 else "rgba(244,63,94,0.4)"
+
+                    tile1 = _today_metric_tile_html(
+                        "Your Portfolio Today", "account_balance_wallet", f"{vs_yesterday_pct:+.1f}%",
+                        vs_yesterday_color, vs_yesterday_bg, vs_yesterday_border,
                     )
-                    col2_html = _portfolio_mover_tile_html(
-                        "Best today", "trending_up", daily_stats["best_performer"], daily_stats["best_change_pct"],
-                        daily_stats["best_weight_pct"], TODAY_POSITIVE_TEXT,
+                    tile2 = _today_metric_tile_html(
+                        "Best Today", "trending_up", f"{best_pct:+.1f}%", best_color, best_bg, best_border,
+                        footer_text=f"{daily_stats['best_performer'].upper()} &middot; Weight: {daily_stats['best_weight_pct']:.1f}%",
                     )
-                    col3_html = _portfolio_mover_tile_html(
-                        "Worst today", "trending_down", daily_stats["worst_performer"], daily_stats["worst_change_pct"],
-                        daily_stats["worst_weight_pct"], TODAY_NEGATIVE_TEXT,
+                    tile3 = _today_metric_tile_html(
+                        "Worst Today", "trending_down", f"{worst_pct:+.1f}%", worst_color, worst_bg, worst_border,
+                        footer_text=f"{daily_stats['worst_performer'].upper()} &middot; Weight: {daily_stats['worst_weight_pct']:.1f}%",
                     )
 
-                    three_col_html = (
-                        f'<div class="hesty-portfolio-row">'
-                        f'<div class="hesty-portfolio-hero-col">{col1_html}</div>'
-                        f'<div class="hesty-portfolio-col">{col2_html}</div>'
-                        f'<div class="hesty-portfolio-col hesty-portfolio-col-last">{col3_html}</div>'
-                        f'</div>'
-                    )
-                    st.markdown(three_col_html, unsafe_allow_html=True)
+                    tile_col1, tile_col2, tile_col3, tile_col4 = st.columns(4, gap="medium")
+                    with tile_col1:
+                        st.markdown(tile1, unsafe_allow_html=True)
+                    with tile_col2:
+                        st.markdown(tile2, unsafe_allow_html=True)
+                    with tile_col3:
+                        st.markdown(tile3, unsafe_allow_html=True)
+                    with tile_col4:
+                        st.markdown(vix_tile_html, unsafe_allow_html=True)
                 else:
-                    mcol1, mcol2, mcol3 = st.columns(3, gap="medium")
+                    mcol1, mcol2, mcol3, mcol4 = st.columns(4, gap="medium")
                     with mcol1:
                         st.metric("Your Portfolio Today", "n/a")
                     with mcol2:
                         st.metric("Best today", "n/a")
                     with mcol3:
                         st.metric("Worst today", "n/a")
+                    with mcol4:
+                        st.markdown(vix_tile_html, unsafe_allow_html=True)
 
             # --- Daily Radar -- 2e hoofdsectie van de pagina (direct onder
             # Your Portfolio Today). Geen klikbare Stories-cirkels meer: de
@@ -11601,10 +11714,19 @@ def render_today():
             # naam van vandaag's best/worst performer opgezocht in holdings
             # (om de bijbehorende ticker te vinden), en die ticker(s) worden
             # expliciet UITGESLOTEN als kandidaat voor het radar-signaal.
-            # Wat overblijft is een ECHT ANDER signaal (een verse screener-
-            # hit of macro-uitschieter, geen dubbele koersbeweging) -- en
-            # als daar ook niets van beschikbaar is, een eerlijke, statische
-            # statusregel i.p.v. een verzonnen/nietszeggende metriek.
+            #
+            # GEVONDEN, DERDE PROBLEEM (na live-gebruik): een 'nieuwe
+            # screener-opportunity' zoals DDOG is per DEFINITIE een ticker
+            # die je niet bezit en niet volgt (zie build_opportunities_
+            # today()'s eigen 'new_opportunities = ... - holding_tickers -
+            # watchlist_tickers') -- dus weinig direct bruikbaar op een
+            # persoonlijke Daily Radar. Nu vervangen door
+            # _find_held_or_watched_technical_signal(): een ECHT technisch
+            # Supertrend-signaal, maar UITSLUITEND op een ticker die al in
+            # je portfolio of watchlist staat. Geen macro-catalyst-fallback
+            # meer hier (die uitschieters horen al bij hun eigen 'MACRO
+            # CATALYST'-regel verderop) -- als er geen match is, gewoon de
+            # eerlijke 'system stable'-statusregel.
             _excluded_radar_tickers = set()
             if daily_stats:
                 _name_to_ticker = {h["naam"]: h["ticker"] for h in holdings}
@@ -11614,19 +11736,19 @@ def render_today():
                 }
                 _excluded_radar_tickers.discard(None)
 
+            _held_signal = _find_held_or_watched_technical_signal(holdings, watchlist_items)
             _radar_asset = None
             _radar_trigger = None
-            for _candidate_ticker in new_opportunity_tickers:
-                if _candidate_ticker not in _excluded_radar_tickers:
-                    _radar_asset = _candidate_ticker
-                    _radar_trigger = "NEW SCREENER OPPORTUNITY DETECTED"
-                    break
-            if _radar_asset is None:
-                for _candidate_ticker in macro_top_movers:
-                    if _candidate_ticker not in _excluded_radar_tickers:
-                        _radar_asset = _candidate_ticker
-                        _radar_trigger = "MACRO CATALYST MOVEMENT DETECTED"
-                        break
+            if _held_signal and _held_signal["ticker"] not in _excluded_radar_tickers:
+                _radar_asset = _held_signal["ticker"]
+                _trigger_parts = ["BULLISH FLIP"]
+                if _held_signal["score"] is not None:
+                    _trigger_parts.append(f"SCORE {_held_signal['score']:.1f}")
+                if _held_signal["days_ago"] is not None:
+                    _trigger_parts.append(f"{_held_signal['days_ago']}D AGO")
+                if _held_signal["since_pct"] is not None:
+                    _trigger_parts.append(f"{_held_signal['since_pct']:+.1f}% SINCE FLIP")
+                _radar_trigger = ", ".join(_trigger_parts)
 
             if _radar_asset:
                 _radar_label = "RADAR SIGNAL"
@@ -11733,47 +11855,10 @@ def render_today():
                     )
                     _render_insight_dismiss_autohide_script()
 
-            # --- Market Volatility & Sector Momentum -- vervangt de oude
-            # Global Sector Heatmap volledig. Die gaf te weinig direct
-            # bruikbare informatie (een raster van sectorblokjes zonder
-            # scherpe, direct-leesbare conclusie); hiervoor in de plaats een
-            # superstrakke macro-balk met de live VIX-stand -- 1 harde,
-            # onmiddellijk scanbare metriek i.p.v. een heel raster om te
-            # moeten interpreteren. ---
-            st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                _uniform_section_header_html("Market Volatility & Sector Momentum", "speed", is_first=False),
-                unsafe_allow_html=True,
-            )
-            _vix_value = _get_live_vix_value()
-            if _vix_value is not None:
-                if _vix_value > 25:
-                    _vix_status = "CRITICAL COOLDOWN"
-                    _vix_color = "#FB7185"
-                    _vix_bg = "rgba(244,63,94,0.08)"
-                    _vix_border = "rgba(244,63,94,0.4)"
-                elif _vix_value >= 15:
-                    _vix_status = "TACTICAL"
-                    _vix_color = "#E8A93C"
-                    _vix_bg = "rgba(232,169,60,0.07)"
-                    _vix_border = "rgba(232,169,60,0.35)"
-                else:
-                    _vix_status = "LOW"
-                    _vix_color = "#34D399"
-                    _vix_bg = "rgba(15,23,42,0.3)"
-                    _vix_border = "rgba(30,41,59,0.4)"
-                st.markdown(
-                    f'<div style="background:{_vix_bg}; border:1px solid {_vix_border}; border-radius:12px; '
-                    f'padding:1rem 1.25rem; transition:all 0.3s ease;">'
-                    f'<div style="font-size:0.9rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; '
-                    f'color:{_vix_color}; font-variant-numeric: tabular-nums; '
-                    f'font-family:\'Inter\', sans-serif !important;">'
-                    f'MARKET VOLATILITY INDEX (VIX): {_vix_value:.2f} | STATUS: {_vix_status}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption("VIX data not available right now.")
+            # Market Volatility (VIX) heeft GEEN eigen sectie meer -- die gaf
+            # voor 1 losse regel te veel gewicht op de pagina. Zit nu als 4e
+            # tegel in de 'Your Portfolio Today'-rij hierboven, in exact
+            # hetzelfde kleur-meebewegende tegel-idioom.
 
             # --- Your Daily Briefing -- eigen hoofdsectie, helemaal onderaan.
             # Zelfde borderloze 'flowing section'-stijl als de rest van de
