@@ -1058,6 +1058,22 @@ def get_cached_ticker_dividends(ticker: str):
         return pd.Series(dtype=float)
 
 
+def _get_live_vix_value() -> float | None:
+    """
+    Haalt de actuele stand van de VIX-index (^VIX) op, voor de 'Market
+    Volatility & Sector Momentum'-balk op Today (vervangt de oude Global
+    Sector Heatmap daar). Hergebruikt de bestaande, 5 minuten gecachete
+    get_cached_ticker_history() -- geen aparte, ongecachete live-aanroep.
+    """
+    try:
+        vix_history = get_cached_ticker_history("^VIX", period="5d")
+        if vix_history is None or vix_history.empty:
+            return None
+        return float(vix_history["Close"].iloc[-1])
+    except Exception:
+        return None
+
+
 def get_annual_dividend_rate(ticker: str, info: dict):
     """
     Geeft het geschatte jaarlijkse dividend per aandeel terug, met 2
@@ -2254,7 +2270,7 @@ def _uniform_section_header_html(title: str, icon_name: str, is_first: bool = Fa
         f'</div>'
         f'{action_html}'
         f'</div>'
-        f'<div style="width:100%; height:1px; background-color:#334155; margin-top:6px; margin-bottom:18px; padding:0;"></div>'
+        f'<div style="width:100%; height:1px; border-bottom:1px solid rgba(255,255,255,0.05); margin-top:6px; margin-bottom:18px; padding:0;"></div>'
         f'</div>'
         f'</div>'
     )
@@ -11412,6 +11428,11 @@ def render_today():
             # onbekende DOM-lagen te hoeven vechten. Geen losse 'View My
             # Portfolio'-link meer in kolom 1 -- laatste stukje handmatige
             # navigatieruis, verwijderd. ---
+            # Alvast op None gezet (i.p.v. alleen binnen 'if holdings:'
+            # gedefinieerd) -- zodat de Daily Radar-sectie hieronder 'm
+            # veilig kan uitlezen ook als er geen holdings zijn (alleen
+            # watchlist-items), zonder een NameError te riskeren.
+            daily_stats = None
             if holdings:
                 with st.spinner("Checking today's price moves..."):
                     daily_stats = build_daily_portfolio_stats(holdings, market_data)
@@ -11564,8 +11585,40 @@ def render_today():
             macro_snippet = (
                 f"Biggest movers: {', '.join(macro_top_movers)}" if macro_top_movers else None
             )
+
+            # GEEN pratende 'X item(s) on your radar today' meer -- die zin
+            # vermeldde WEL een aantal maar liet nooit zien WELK specifiek
+            # aandeel/signaal daar concreet achter zat. Vervangen door de
+            # harde data zelf: eerste keuze is de slechtst presterende
+            # positie van vandaag (al berekend hierboven in daily_stats,
+            # dus geen extra aanroep nodig); zonder holdings (bv. alleen
+            # watchlist) valt dit terug op de eerste concrete screener-hit,
+            # dan de eerste macro-uitschieter, en pas als ECHT niets van dit
+            # alles beschikbaar is een eerlijke 'geen signaal'-tekst -- nooit
+            # een verzonnen/nietszeggende metriek.
+            if daily_stats and daily_stats.get("worst_performer"):
+                _radar_asset = daily_stats["worst_performer"]
+                _radar_change = daily_stats["worst_change_pct"]
+                _radar_trigger = (
+                    f"DAILY VOLATILITY {'DROP' if _radar_change < 0 else 'MOVE'} OF {_radar_change:+.1f}%"
+                )
+            elif new_opportunity_tickers:
+                _radar_asset = new_opportunity_tickers[0]
+                _radar_trigger = "NEW SCREENER OPPORTUNITY DETECTED"
+            elif macro_top_movers:
+                _radar_asset = macro_top_movers[0]
+                _radar_trigger = "MACRO CATALYST MOVEMENT DETECTED"
+            else:
+                _radar_asset = None
+                _radar_trigger = None
+
+            radar_signal_text = (
+                f"ASSET: {_radar_asset.upper()} | TRIGGER: {_radar_trigger}"
+                if _radar_asset else "NO SIGNIFICANT SIGNAL DETECTED TODAY"
+            )
+
             summary_rows = [
-                ("\u2713", "DAILY SUMMARY", f"{len(day_items)} item(s) on your radar today.", None),
+                ("\u2726", "RADAR SIGNAL", radar_signal_text, None),
                 (
                     "\U0001F50D", "SCREENER HITS",
                     f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners.",
@@ -11577,17 +11630,26 @@ def render_today():
                     macro_snippet,
                 ),
             ]
+            # Typografie-fix: loepzuivere text-sm (0.875rem, i.p.v. de
+            # eerdere 0.83rem/0.72rem die in het donker wegvielen),
+            # onwrikbare ALL-CAPS metadata-stijl, helderwitte hoofdtekst
+            # (#F1F5F9) met gedempte text-slate-300 (#CBD5E1) voor de
+            # ingesprongen snippet-regel, en ruimere verticale ademruimte
+            # tussen de alerts (margin-top + padding-bottom, samen goed
+            # voor >1rem lucht per item -- Tailwind's space-y-4-equivalent).
             st.markdown(
                 "".join(
-                    f'<div style="margin-top:8px;">'
+                    f'<div style="margin-top:16px; padding-bottom:14px;">'
                     f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
-                    f'font-size:0.83rem; color:#CBD5E1; line-height:1.5; font-family:\'Inter\', sans-serif !important;">'
+                    f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; text-transform:uppercase; '
+                    f'letter-spacing:0.02em; font-family:\'Inter\', sans-serif !important;">'
                     f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
                     f'align-items:center;">{icon}</span>'
-                    f'<span><b style="color:#EAEDF1; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+                    f'<span><b style="color:#F1F5F9; font-weight:700; letter-spacing:0.03em;">{label}:</b> {text}</span>'
                     f'</div>'
                     + (
-                        f'<div style="margin-left:2rem; margin-top:3px; font-size:0.72rem; color:#94A3B8; '
+                        f'<div style="margin-left:2rem; margin-top:4px; font-size:0.8rem; color:#CBD5E1; '
+                        f'text-transform:uppercase; letter-spacing:0.02em; '
                         f'font-family:\'Inter\', sans-serif !important;">&rarr; {snippet}</div>'
                         if snippet else ""
                     )
@@ -11652,41 +11714,46 @@ def render_today():
                     )
                     _render_insight_dismiss_autohide_script()
 
-            # --- Global Sector Heatmap (vervangt Yesterday's biggest movers --
-            # voor een lange-termijnbelegger zegt 'welke sectoren zijn relatief
-            # sterk/zwak' meer dan de dagkoers van 1 los aandeel). Hergebruikt
-            # build_sector_rotation() (al bestond voor Discover's Sector
-            # rotation) -- zelfde onderliggende data, nu ook hier zichtbaar.
-            # Geen omlijnd kader meer -- zelfde borderloze 'flowing section'-
-            # stijl (icoon + titel) als de secties hierboven. ---
+            # --- Market Volatility & Sector Momentum -- vervangt de oude
+            # Global Sector Heatmap volledig. Die gaf te weinig direct
+            # bruikbare informatie (een raster van sectorblokjes zonder
+            # scherpe, direct-leesbare conclusie); hiervoor in de plaats een
+            # superstrakke macro-balk met de live VIX-stand -- 1 harde,
+            # onmiddellijk scanbare metriek i.p.v. een heel raster om te
+            # moeten interpreteren. ---
             st.markdown(
-                _uniform_section_header_html("Global Sector Heatmap", "grid_view", is_first=False),
+                _uniform_section_header_html("Market Volatility & Sector Momentum", "speed", is_first=False),
                 unsafe_allow_html=True,
             )
-            st.caption("Sector performance (1-month trailing). Block size = approximate market weight, "
-                       "color = performance. 🧭 marks a sector you're already invested in.")
-            heatmap_region = st.segmented_control(
-                "Region", options=["US", "EU"], selection_mode="single",
-                default="US", key="today_heatmap_region", label_visibility="collapsed",
-            )
-            if heatmap_region is None:
-                heatmap_region = "US"
-            with st.spinner("Checking sector performance..."):
-                heatmap_rotation = _session_cached(
-                    f"today_heatmap_{heatmap_region}", 900,
-                    lambda: build_sector_rotation(region=heatmap_region),
+            _vix_value = _get_live_vix_value()
+            if _vix_value is not None:
+                if _vix_value > 25:
+                    _vix_status = "CRITICAL COOLDOWN"
+                    _vix_color = "#FB7185"
+                    _vix_bg = "rgba(244,63,94,0.08)"
+                    _vix_border = "rgba(244,63,94,0.4)"
+                elif _vix_value >= 15:
+                    _vix_status = "TACTICAL"
+                    _vix_color = "#E8A93C"
+                    _vix_bg = "rgba(232,169,60,0.07)"
+                    _vix_border = "rgba(232,169,60,0.35)"
+                else:
+                    _vix_status = "LOW"
+                    _vix_color = "#34D399"
+                    _vix_bg = "rgba(15,23,42,0.3)"
+                    _vix_border = "rgba(30,41,59,0.4)"
+                st.markdown(
+                    f'<div style="background:{_vix_bg}; border:1px solid {_vix_border}; border-radius:12px; '
+                    f'padding:1rem 1.25rem; transition:all 0.3s ease;">'
+                    f'<div style="font-size:0.9rem; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; '
+                    f'color:{_vix_color}; font-variant-numeric: tabular-nums; '
+                    f'font-family:\'Inter\', sans-serif !important;">'
+                    f'MARKET VOLATILITY INDEX (VIX): {_vix_value:.2f} | STATUS: {_vix_status}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
-            if heatmap_rotation:
-                heatmap_weights = US_SECTOR_MARKET_WEIGHTS if heatmap_region == "US" else EU_SECTOR_MARKET_WEIGHTS
-                portfolio_sectors = _get_portfolio_sector_names(holdings) if holdings else set()
-                _render_sector_heatmap(
-                    heatmap_rotation, heatmap_weights, portfolio_sectors,
-                    "/discover-sectors-themes",
-                )
-                st.markdown("<div style='height: 0.4rem'></div>", unsafe_allow_html=True)
-                st.page_link(discover_sectors_themes_page, label="Explore sectors & themes on Discover")
             else:
-                st.caption("No sector data available right now.")
+                st.caption("VIX data not available right now.")
 
             # --- Your Daily Briefing -- eigen hoofdsectie, helemaal onderaan.
             # Zelfde borderloze 'flowing section'-stijl als de rest van de
