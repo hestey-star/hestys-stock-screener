@@ -7792,29 +7792,56 @@ def _render_wealth_engine(user_email: str) -> None:
         if not _upcoming_rows:
             st.caption("No upcoming payouts detected within the next 60 days.")
         else:
-            # IJskoude terminal-stijl: 1 losse HTML-tabel, geen borders/
-            # achtergrondkleuren/kolomkoppen -- alleen een flinterdunne
-            # onderlijn per rij. Kolom 1 = asset (helderwit, all-caps),
-            # kolom 2 = gedempte categorie-uitleg, kolom 3 = datum + bedrag
-            # hard rechts uitgelijnd in Hestys-groen.
-            _row_border = "border-bottom:1px solid rgba(255,255,255,0.05);"
-            _rows_html = "".join(
+            # Premium card-tabel -- zelfde patroon als de Snowball Milestones-
+            # tabel verderop op deze pagina: een eigen st.container(key=...)
+            # met een donkere kaart-achtergrond (dezelfde subtiele slate-tint
+            # als elk ander kader op de site) + een echte <thead> met
+            # kolomnamen, en expliciete CSS die Streamlit's/de browser's
+            # eigen default-tabelranden hard onderdrukt (anders komen er
+            # alsnog ongewenste verticale kolomlijnen doorheen).
+            _upcoming_table_key = "wealth_engine_upcoming_table"
+            _upcoming_header_style = (
+                "text-transform:uppercase; font-size:10px; font-weight:700; color:#64748b; "
+                "letter-spacing:0.08em; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.15) !important; "
+                "border-top:none !important; border-left:none !important; border-right:none !important;"
+            )
+            _upcoming_cell_base = (
+                "border-bottom:1px solid rgba(148,163,184,0.08) !important; border-top:none !important; "
+                "border-left:none !important; border-right:none !important; vertical-align:middle;"
+            )
+            _upcoming_rows_html = "".join(
                 f'<tr>'
-                f'<td style="{_row_border} text-transform:uppercase; font-size:12px; '
-                f'font-weight:700; color:#ffffff; padding:14px 24px 14px 0; white-space:nowrap; width:1%;">{name}</td>'
-                f'<td style="{_row_border} text-transform:uppercase; font-size:10px; font-weight:600; '
-                f'color:#475569; padding:14px 0; white-space:nowrap; width:1%;">{asset_type}</td>'
-                f'<td style="{_row_border} text-align:right; font-size:12px; font-weight:700; '
-                f'color:#34d399; letter-spacing:0.05em; padding:14px 0; white-space:nowrap; width:100%;">'
+                f'<td style="{_upcoming_cell_base} padding:14px 24px 14px 0; text-transform:uppercase; '
+                f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap;">{name}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 0; text-transform:uppercase; font-size:10px; '
+                f'font-weight:600; color:#64748b; white-space:nowrap;">{asset_type}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 0; text-align:right; font-size:12px; '
+                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap;">'
                 f'{pay_date.strftime("%b %d, %Y").upper()} &middot; {payout_text}</td>'
                 f'</tr>'
                 for name, asset_type, payout_text, pay_date in _upcoming_rows
             )
             st.markdown(
-                f'<table style="border-collapse:collapse; width:100%; max-width:720px; '
-                f'background:transparent;">{_rows_html}</table>',
+                f'<style>'
+                f'.st-key-{_upcoming_table_key} > div {{ background:rgba(137,146,163,0.05); '
+                f'border:1px solid rgba(137,146,163,0.18); border-radius:12px; padding:0.75rem 1.25rem; }} '
+                f'.st-key-{_upcoming_table_key} table {{ width:100%; border-collapse:collapse; }} '
+                f'.st-key-{_upcoming_table_key} td, .st-key-{_upcoming_table_key} th {{ border:none; }}'
+                f'</style>',
                 unsafe_allow_html=True,
             )
+            with st.container(key=_upcoming_table_key):
+                st.markdown(
+                    f'<table style="width:100%; border-collapse:collapse;">'
+                    f'<thead><tr>'
+                    f'<th style="{_upcoming_header_style} text-align:left;">Asset</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left;">Type</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right;">Next payout</th>'
+                    f'</tr></thead>'
+                    f'<tbody>{_upcoming_rows_html}</tbody>'
+                    f'</table>',
+                    unsafe_allow_html=True,
+                )
 
     else:
         # --- 1. Portfolio dividend-metrics -- volledig live uit de Yahoo
