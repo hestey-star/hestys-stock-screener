@@ -7350,7 +7350,7 @@ def _render_wealth_engine(user_email: str) -> None:
     # hoe hard er verderop aan de Cockpit Central-sliders wordt gedraaid.
     # ================================================================
     st.markdown(
-        _uniform_section_header_html("The Realized History", "history", is_first=True),
+        _uniform_section_header_html("The Realized History", "history"),
         unsafe_allow_html=True,
     )
 
@@ -8328,6 +8328,52 @@ def _render_wealth_engine(user_email: str) -> None:
         )
 
 
+def render_wealth_engine():
+    """
+    'Wealth Engine' -- eigen hoofdpagina in de linker sidebar (net als
+    voorheen 'Dividend'), i.p.v. een pill weggestopt onder Analyze. Toont
+    de gefuseerde dividend-historie + 30-jaar projectie uit
+    _render_wealth_engine() (die functie blijft ongewijzigd/herbruikbaar,
+    dit is uitsluitend de pagina-wrapper eromheen: login-gate, mobiele
+    overflow-vangnet en de paginatitel).
+    """
+    if not current_user.is_logged_in:
+        _render_landing_soft_lock(
+            title="Wealth Engine",
+            icon_name="trending_up",
+            cta_text="&#128274; TRACK YOUR REALIZED DIVIDEND HISTORY AND SIMULATE YOUR "
+                      "30-YEAR PASSIVE INCOME PROJECTION.",
+            button_label="Unlock Wealth Engine →",
+            preview_html=_landing_chart_skeleton_html(),
+            key_prefix="wealth_engine",
+        )
+        st.stop()
+
+    # Zelfde mobiele-overflow-vangnet als Analyze -- deze pagina bevat
+    # dezelfde brede Altair/Plotly-grafieken en tabellen die eerder onder
+    # Analyze stonden, dus hetzelfde risico op ongewenste horizontale
+    # scroll op mobiel.
+    st.markdown(
+        """
+        <style>
+        @media (max-width:768px) {
+            [data-testid="stAppViewContainer"], [data-testid="stMain"], body {
+                overflow-x: hidden !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        _uniform_section_header_html("Wealth Engine", "trending_up", is_first=True),
+        unsafe_allow_html=True,
+    )
+
+    _render_wealth_engine(current_user.email)
+
+
 def render_analyze():
     if not current_user.is_logged_in:
         _render_landing_soft_lock(
@@ -8384,24 +8430,23 @@ def render_analyze():
 
     # Horizontale pills-navigatie i.p.v. losse sidebar-sub-items --
     # 'Conviction Tracker' is de bestaande, volledig uitgewerkte inhoud
-    # van deze pagina; 'Wealth Engine' en 'Stress-Test' zijn nieuwe
-    # secties die nog gebouwd moeten worden (eerlijke placeholder i.p.v.
-    # doen alsof er al functionaliteit achter zit).
+    # van deze pagina. 'Wealth Engine' is VERHUISD naar een eigen
+    # hoofdpagina in de linker sidebar (zie render_wealth_engine() +
+    # wealth_engine_page hieronder) i.p.v. een pill hier -- die kreeg
+    # inmiddels genoeg eigen inhoud (dividend-historie + 30-jaar
+    # projectie) om als volwaardige, losstaande pagina te verdienen i.p.v.
+    # weggestopt te zitten onder Analyze.
     if "active_sub_section_analyze" not in st.session_state:
         st.session_state["active_sub_section_analyze"] = "CONVICTION TRACKER"
     _analyze_sub_choice = st.pills(
         "Analyze section",
-        ["CONVICTION TRACKER", "WEALTH ENGINE", "STRESS-TEST"],
+        ["CONVICTION TRACKER", "STRESS-TEST"],
         key="active_sub_section_analyze", label_visibility="collapsed",
     )
     st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
 
     if _analyze_sub_choice == "STRESS-TEST":
         _render_stress_test(user_email)
-        return
-
-    if _analyze_sub_choice == "WEALTH ENGINE":
-        _render_wealth_engine(user_email)
         return
 
     holdings = filter_active_holdings(database.get_user_holdings(user_email))
@@ -13631,6 +13676,7 @@ discover_earnings_surprises_page = st.Page(
     render_discover_earnings_surprises, title="Earnings Surprises", url_path="discover-earnings-surprises",
 )
 portfolio_page = st.Page(render_portfolio, title="My Portfolio", url_path="portfolio")
+wealth_engine_page = st.Page(render_wealth_engine, title="Wealth Engine", url_path="wealth-engine")
 analyze_page = st.Page(render_analyze, title="Analyze", url_path="analyze")
 settings_page = st.Page(render_settings, title="Settings", url_path="settings")
 premium_page = st.Page(render_premium, title="Premium", url_path="premium")
@@ -13642,7 +13688,7 @@ unsubscribe_page = st.Page(render_unsubscribe, title="Unsubscribe", url_path="un
 
 all_pages = [
     today_page, discover_page, discover_sectors_themes_page, discover_earnings_surprises_page,
-    portfolio_page, analyze_page, settings_page,
+    portfolio_page, wealth_engine_page, analyze_page, settings_page,
     premium_page, support_page, privacy_page, login_page, confirm_page, unsubscribe_page,
 ]
 pg = st.navigation(all_pages, position="hidden")
@@ -13736,10 +13782,10 @@ with st.sidebar:
        knop) al herhaaldelijk volledig kunnen herstijlen, dus dat is de
        betrouwbaardere route -- nu voor ALLE 4 hoofdknoppen consequent
        hetzelfde widget-type, dus gegarandeerd identieke uitlijning. */
-    .st-key-nav_discover, .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze {
+    .st-key-nav_discover, .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_wealth_engine, .st-key-nav_analyze {
         width: 100% !important;
     }
-    .st-key-nav_discover button, .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button {
+    .st-key-nav_discover button, .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_wealth_engine button, .st-key-nav_analyze button {
         display: flex !important; align-items: center !important; justify-content: flex-start !important;
         gap: 0.75rem !important; width: 100% !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
@@ -13747,7 +13793,7 @@ with st.sidebar:
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
-    .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover {
+    .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_wealth_engine button:hover, .st-key-nav_analyze button:hover {
         background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
     }
     /* Support/Premium: verhuisd naar onderaan de sidebar, als kleinere,
@@ -13814,7 +13860,7 @@ with st.sidebar:
     # geen eigen sidebar-item meer, dus lichten ze allemaal hetzelfde
     # ene 'Discover'-item op.
     _main_key_by_path = {
-        "today": "nav_today", "portfolio": "nav_portfolio",
+        "today": "nav_today", "portfolio": "nav_portfolio", "wealth-engine": "nav_wealth_engine",
         "analyze": "nav_analyze", "support": "nav_support", "premium": "nav_premium",
         # Discover EN z'n 2 losse detail-pagina's (nog steeds bereikbaar
         # via een directe URL, ook al staan ze niet meer als aparte
@@ -13887,6 +13933,9 @@ with st.sidebar:
     with st.container(key="nav_portfolio"):
         if st.button("MY PORTFOLIO", key="navbtn_portfolio", icon=":material/work:"):
             st.switch_page(portfolio_page)
+    with st.container(key="nav_wealth_engine"):
+        if st.button("WEALTH ENGINE", key="navbtn_wealth_engine", icon=":material/trending_up:"):
+            st.switch_page(wealth_engine_page)
     with st.container(key="nav_analyze"):
         if st.button("ANALYZE", key="navbtn_analyze", icon=":material/bar_chart:"):
             st.switch_page(analyze_page)
@@ -14049,6 +14098,7 @@ with footer_col1:
         st.page_link(discover_page, label="Discover")
         st.page_link(today_page, label="Today")
         st.page_link(portfolio_page, label="My Portfolio")
+        st.page_link(wealth_engine_page, label="Wealth Engine")
         st.page_link(analyze_page, label="Analyze")
 with footer_col2:
     _header_html, _content_key = _footer_accordion_column_header_html("ACCOUNT", "account")
