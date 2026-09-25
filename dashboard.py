@@ -30,6 +30,7 @@ import base64
 import time
 from datetime import datetime, timezone, timedelta, date
 
+import altair as alt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -7970,10 +7971,26 @@ def render_dividend():
     def _add_one_month(d):
         return d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1)
 
+    # Supabase/PostgREST kan een 'numeric'-kolom (zoals custom_annual_
+    # cashflow of dividend_income.amount) als STRING teruggeven i.p.v. een
+    # kaal getal (om precisieverlies te voorkomen) -- een kale float()/12
+    # zou daar met een TypeError op stuklopen, of (erger, stiller) een
+    # verkeerd bedrag opleveren. Daarom overal hieronder consequent via
+    # deze ene, robuuste _to_float() i.p.v. losse, impliciete conversies.
+    def _to_float(value) -> float:
+        if value is None:
+            return 0.0
+        if isinstance(value, (int, float)):
+            return float(value)
+        try:
+            return float(str(value).strip().replace(",", "."))
+        except (TypeError, ValueError):
+            return 0.0
+
     _custom_assets = [h for h in holdings if h.get("custom_annual_cashflow") is not None]
     _prop_events = []
     for asset in _custom_assets:
-        monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
+        monthly_amount = _to_float(asset.get("custom_annual_cashflow")) / 12.0
         if monthly_amount <= 0:
             continue
         try:
@@ -7992,12 +8009,16 @@ def render_dividend():
             _prop_events.append({"date": cursor, "amount_eur": monthly_amount, "naam": asset["naam"]})
             cursor = _add_one_month(cursor)
 
-    # --- Alles combineren tot 1 chronologische reeks, in EUR. Broker-
-    # dividenden komen native binnen (USD voor Robinhood/Schwab, EUR voor
-    # Trade Republic) -- omgerekend met de HUIDIGE wisselkoers (geen
-    # historische FX-data beschikbaar per uitkeringsdatum, zelfde bewuste
-    # vereenvoudiging als elders in de app bij ontbrekende historische
-    # koersen).
+    # --- Broker-uitkeringen (database.get_dividend_income(), de ECHTE,
+    # PERMANENT opgeslagen historie -- niet de oude, tijdelijke 'dividend_
+    # rows'-parserstructuur) hard omzetten naar EUR en optellen bij de
+    # Prop.com-reeks hierboven, tot 1 chronologische lijst.
+    # Broker-dividenden komen native binnen (USD voor Robinhood/Schwab,
+    # EUR/USD gemengd voor DEGIRO's rekeningoverzicht, EUR voor Trade
+    # Republic) -- omgerekend met de HUIDIGE wisselkoers (geen historische
+    # FX-data beschikbaar per uitkeringsdatum, zelfde bewuste vereenvoudi-
+    # ging als elders in de app bij ontbrekende historische koersen). 1x
+    # per valuta opgehaald en gecached, niet opnieuw per rij.
     _fx_cache: dict = {}
 
     def _to_eur(amount: float, currency: str) -> float:
@@ -8007,22 +8028,35 @@ def render_dividend():
             _fx_cache[currency] = get_fx_rate(currency, "EUR") or 1.0
         return amount * _fx_cache[currency]
 
-    all_events = []
+    broker_events = []
     for row in dividend_income_rows:
+        raw_date = row.get("payout_date")
+        if not raw_date:
+            continue
         try:
-            event_date = datetime.strptime(row["payout_date"], "%Y-%m-%d").date()
+            event_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
         except Exception:
             continue
-        amount_eur = _to_eur(float(row.get("amount") or 0), row.get("currency"))
+        amount_eur = _to_eur(_to_float(row.get("amount")), row.get("currency"))
         if amount_eur <= 0:
             continue
-        all_events.append({
+        broker_events.append({
             "date": event_date, "amount_eur": amount_eur,
             "ticker": row.get("ticker"), "naam": row.get("naam") or row.get("ticker"),
         })
-    all_events.extend({
-        "date": e["date"], "amount_eur": e["amount_eur"], "ticker": "PROP.COM", "naam": e["naam"],
-    } for e in _prop_events)
+
+    prop_events_eur = [
+        {"date": e["date"], "amount_eur": _to_float(e["amount_eur"]), "ticker": "PROP.COM", "naam": e["naam"]}
+        for e in _prop_events
+    ]
+
+    # De 2 bronnen HARD samenvoegen tot 1 chronologische reeks -- geen van
+    # beide overschrijft of verdringt de ander, ze worden simpelweg
+    # allebei in dezelfde lijst gestopt en op datum gesorteerd. Alles
+    # verderop (tegels, Ladder, Snowball) rekent UITSLUITEND met deze ene,
+    # gecombineerde 'all_events'-lijst -- er is geen aparte, deels-Prop.com-
+    # of deels-broker-only berekening meer ergens anders in de functie.
+    all_events = broker_events + prop_events_eur
     all_events.sort(key=lambda e: e["date"])
 
     if not all_events:
@@ -8037,6 +8071,8 @@ def render_dividend():
     # 1. METRICS -- 3 tegels, zelfde visuele taal als Today/Stress-Test
     # ============================================================
     total_collected = sum(e["amount_eur"] for e in all_events)
+    broker_total = sum(e["amount_eur"] for e in all_events if e["ticker"] != "PROP.COM")
+    prop_total = sum(e["amount_eur"] for e in all_events if e["ticker"] == "PROP.COM")
     first_date = all_events[0]["date"]
     today_date = datetime.now().date()
     months_active = max(1, (today_date.year - first_date.year) * 12 + (today_date.month - first_date.month) + 1)
@@ -8056,6 +8092,7 @@ def render_dividend():
             _today_metric_tile_html(
                 "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
                 _tile_color, _tile_bg, _tile_border,
+                footer_text=f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}",
             ),
             unsafe_allow_html=True,
         )
@@ -8081,85 +8118,111 @@ def render_dividend():
     st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
 
     # ============================================================
-    # 2. THE DIVIDEND LADDER -- som per KALENDERMAAND (Jan t/m Dec),
-    # over ALLE jaren heen samengevoegd.
+    # 2 + 3. THE DIVIDEND LADDER + THE DIVIDEND SNOWBALL -- compact
+    # side-by-side (50/50), i.p.v. 2 kamerbrede grafieken onder elkaar.
+    # Beide via Altair (alt.Chart) i.p.v. Plotly -- smallere, elegantere
+    # marks die beter bij Hestys' verfijnde, typografische stijl passen
+    # dan Plotly's dikkere standaard-balken/lijnen.
     # ============================================================
-    st.markdown(
-        _uniform_section_header_html("The Dividend Ladder (Monthly Distribution)", "bar_chart"),
-        unsafe_allow_html=True,
-    )
-    _month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    _month_totals = [0.0] * 12
-    for e in all_events:
-        _month_totals[e["date"].month - 1] += e["amount_eur"]
+    grid_col1, grid_col2 = st.columns([1, 1], gap="medium")
 
-    ladder_fig = go.Figure()
-    ladder_fig.add_trace(go.Bar(
-        x=_month_labels, y=_month_totals,
-        marker=dict(color="#34D399"),
-        text=[f"€{v:,.0f}" if v > 0 else "" for v in _month_totals],
-        textposition="outside",
-        textfont=dict(color="#94A3B8", size=11),
-        hovertemplate="%{x}: €%{y:,.2f}<extra></extra>",
-        width=0.45,
-    ))
-    ladder_fig.update_layout(
-        height=280,
-        margin=dict(l=0, r=0, t=30, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=11)),
-        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
-                   tickprefix="€", tickformat=",.0f", visible=False),
-        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
-    )
-    st.plotly_chart(ladder_fig, use_container_width=True, config={"displayModeBar": False})
+    with grid_col1:
+        st.markdown(
+            _uniform_section_header_html("The Dividend Ladder", "bar_chart"),
+            unsafe_allow_html=True,
+        )
+        # Som per KALENDERMAAND (JAN t/m DEC), over ALLE jaren heen
+        # samengevoegd -- ALL-CAPS labels rechtstreeks in de data i.p.v.
+        # via CSS text-transform (Altair's axis heeft geen betrouwbare
+        # text-transform-optie).
+        _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                          "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+        _month_totals = [0.0] * 12
+        for e in all_events:
+            _month_totals[e["date"].month - 1] += e["amount_eur"]
+        _ladder_df = pd.DataFrame({
+            "month": _month_labels,
+            "amount": _month_totals,
+            "label": [f"€{v:,.0f}" if v > 0 else "" for v in _month_totals],
+        })
 
-    st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+        _ladder_x = alt.X(
+            "month:N", sort=_month_labels, title=None,
+            # paddingInner (i.p.v. discreteBandSize) trekt de balken smal
+            # en strak op elkaar -- een grote inner-padding t.o.v. de band
+            # zelf, precies het 'geen dikke, brede blokken meer'-effect.
+            scale=alt.Scale(paddingInner=0.5, paddingOuter=0.2),
+            axis=alt.Axis(
+                labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
+                labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+            ),
+        )
+        _ladder_bars = alt.Chart(_ladder_df).mark_bar(
+            color="#34D399", cornerRadiusTopLeft=2, cornerRadiusTopRight=2,
+        ).encode(
+            x=_ladder_x,
+            y=alt.Y("amount:Q", axis=None),
+            tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Amount (€)", format=",.2f")],
+        )
+        _ladder_labels = alt.Chart(_ladder_df).mark_text(
+            dy=-8, color="#94A3B8", fontSize=10, fontWeight=600,
+        ).encode(x=_ladder_x, y=alt.Y("amount:Q"), text="label:N")
+        ladder_chart = (
+            (_ladder_bars + _ladder_labels)
+            .properties(height=260, background="transparent")
+            .configure_view(strokeWidth=0)
+        )
+        st.altair_chart(ladder_chart, use_container_width=True)
 
-    # ============================================================
-    # 3. THE DIVIDEND SNOWBALL -- chronologische cumulatieve som, per
-    # kalender-YEAR-MAAND (dus wel degelijk de echte tijdas, niet Jan-Dec
-    # samengevoegd zoals de Ladder hierboven) -- kan per definitie nooit
-    # dalen, want elk punt is een cumulatieve som.
-    # ============================================================
-    st.markdown(
-        _uniform_section_header_html("The Dividend Snowball (Cumulative Cashflow Cruise)", "trending_up"),
-        unsafe_allow_html=True,
-    )
-    _by_year_month: dict = {}
-    for e in all_events:
-        key = (e["date"].year, e["date"].month)
-        _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
-    _sorted_keys = sorted(_by_year_month.keys())
-    _snowball_x = [f"{y}-{m:02d}" for y, m in _sorted_keys]
-    _snowball_y = []
-    _running_total = 0.0
-    for key in _sorted_keys:
-        _running_total += _by_year_month[key]
-        _snowball_y.append(_running_total)
+    with grid_col2:
+        st.markdown(
+            _uniform_section_header_html("The Dividend Snowball", "trending_up"),
+            unsafe_allow_html=True,
+        )
+        # Chronologische cumulatieve som per kalender-JAAR-MAAND (dus de
+        # ECHTE tijdas, niet Jan-Dec samengevoegd zoals de Ladder
+        # hiernaast) -- kan per definitie nooit dalen, elk punt is een
+        # cumulatieve som van alles ervoor.
+        _by_year_month: dict = {}
+        for e in all_events:
+            key = (e["date"].year, e["date"].month)
+            _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
+        _sorted_keys = sorted(_by_year_month.keys())
+        _running_total = 0.0
+        _snowball_rows = []
+        for y, m in _sorted_keys:
+            _running_total += _by_year_month[(y, m)]
+            _snowball_rows.append({"period": f"{y}-{m:02d}", "cumulative": _running_total})
+        _snowball_df = pd.DataFrame(_snowball_rows)
 
-    snowball_fig = go.Figure()
-    snowball_fig.add_trace(go.Scatter(
-        x=_snowball_x, y=_snowball_y, mode="lines", fill="tozeroy",
-        line=dict(color="#34D399", width=2.5),
-        fillcolor="rgba(52,211,153,0.12)",
-        hovertemplate="%{x}: €%{y:,.2f}<extra></extra>",
-    ))
-    snowball_fig.update_layout(
-        height=280,
-        margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
-        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
-                   tickprefix="€", tickformat=",.0f"),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
-    )
-    st.plotly_chart(snowball_fig, use_container_width=True, config={"displayModeBar": False})
+        # Zachte, gedempte emerald-groene verloopkleur -- meer opaak vlak
+        # onder de lijn (offset 1, top), bijna volledig transparant naar
+        # de bodem toe (offset 0) -- een 'gloed' i.p.v. een vlakke,
+        # egale vulkleur.
+        _snowball_gradient = alt.Gradient(
+            gradient="linear",
+            stops=[
+                alt.GradientStop(color="rgba(52,211,153,0.02)", offset=0),
+                alt.GradientStop(color="rgba(52,211,153,0.20)", offset=1),
+            ],
+            x1=1, x2=1, y1=1, y2=0,
+        )
+        snowball_area = alt.Chart(_snowball_df).mark_area(
+            line={"color": "#34D399", "strokeWidth": 2.5},
+            color=_snowball_gradient,
+            interpolate="monotone",
+        ).encode(
+            x=alt.X("period:N", sort=None, title=None, axis=alt.Axis(
+                labelColor="#64748B", labelFontSize=9, labelAngle=-40, labelPadding=6,
+                tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+            )),
+            y=alt.Y("cumulative:Q", title=None, axis=alt.Axis(
+                labelColor="#64748B", labelFontSize=10, format="~s",
+                gridColor="rgba(255,255,255,0.05)", tickColor="transparent", domainColor="transparent",
+            )),
+            tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
+        ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+        st.altair_chart(snowball_area, use_container_width=True)
 
     st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
 
