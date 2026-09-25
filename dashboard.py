@@ -12961,10 +12961,21 @@ def render_today():
             #     ook gebruikt door My Portfolio) i.p.v. los te zweven --
             #     geeft de sectie duidelijke structuur/een randje.
             _pill_color = "#94A3B8"
+            _last_row_idx = len(summary_rows) - 1
             with st.container(border=True):
                 st.markdown(
                     "".join(
-                        f'<div style="margin-top:16px; padding-bottom:14px;">'
+                        # Flinterdunne onderlijn tussen de regels (niet bij de
+                        # laatste) -- zelfde subtiele stijl als overal elders
+                        # in de app (rgba(255,255,255,0.05)), geeft de kaart
+                        # nu ook interne structuur i.p.v. alleen witruimte
+                        # tussen de bulletins.
+                        f'<div style="margin-top:16px; padding-bottom:14px;'
+                        + (
+                            "" if _idx == _last_row_idx
+                            else " border-bottom:1px solid rgba(255,255,255,0.05);"
+                        )
+                        + '">'
                         f'<div style="display:flex; align-items:flex-start; gap:0.6rem; '
                         f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; '
                         f'font-family:\'Inter\', sans-serif !important;">'
@@ -12982,7 +12993,7 @@ def render_today():
                             if snippet else ""
                         )
                         + '</div>'
-                        for icon, label, text, snippet in summary_rows
+                        for _idx, (icon, label, text, snippet) in enumerate(summary_rows)
                     ),
                     unsafe_allow_html=True,
                 )
