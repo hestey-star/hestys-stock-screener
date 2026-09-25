@@ -7829,14 +7829,15 @@ def _render_wealth_engine(user_email: str) -> None:
                 f'.st-key-{_upcoming_table_key} > div {{ background:rgba(137,146,163,0.05); '
                 f'border:1px solid rgba(137,146,163,0.18); border-radius:12px; padding:0.75rem 1.25rem; '
                 f'max-width:600px; }} '
-                f'.st-key-{_upcoming_table_key} table {{ width:100%; border-collapse:collapse; }} '
+                f'.st-key-{_upcoming_table_key} table {{ width:100%; border-collapse:collapse; '
+                f'table-layout:auto !important; }} '
                 f'.st-key-{_upcoming_table_key} td, .st-key-{_upcoming_table_key} th {{ border:none; }}'
                 f'</style>',
                 unsafe_allow_html=True,
             )
             with st.container(key=_upcoming_table_key):
                 st.markdown(
-                    f'<table style="width:100%; border-collapse:collapse;">'
+                    f'<table style="width:100%; border-collapse:collapse; table-layout:auto;">'
                     f'<thead><tr>'
                     f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Asset</th>'
                     f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Type</th>'
