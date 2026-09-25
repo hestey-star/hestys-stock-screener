@@ -12657,8 +12657,30 @@ def render_today():
             ]
             _combined_macro_count = len(macro_items) + len(_extra_theme_movers)
             _combined_macro_movers = list(macro_top_movers) + _extra_theme_movers
+
+            # Kleur draagt weer betekenis i.p.v. dat +/- percentages in
+            # dezelfde neutrale tint verdwijnen als de rest van de zin --
+            # elke '{label} {+/-X.X%}'-mover (altijd dit vaste patroon, zie
+            # hierboven/radar_data.py) krijgt zijn teken-percentage in
+            # Hestys' bestaande groen/rood (TODAY_POSITIVE_TEXT/
+            # TODAY_NEGATIVE_TEXT, dezelfde kleuren als overal elders in de
+            # app). Geen 're' nodig -- het percentage is per constructie
+            # altijd het laatste, spatie-gescheiden token.
+            def _colorize_movers(movers: list) -> str:
+                parts = []
+                for m in movers:
+                    label_part, _, pct_part = m.rpartition(" ")
+                    if pct_part.endswith("%") and pct_part[:1] in ("+", "-"):
+                        _color = TODAY_POSITIVE_TEXT if pct_part.startswith("+") else TODAY_NEGATIVE_TEXT
+                        parts.append(
+                            f'{label_part} <span style="color:{_color}; font-weight:700;">{pct_part}</span>'.strip()
+                        )
+                    else:
+                        parts.append(m)
+                return ", ".join(parts)
+
             macro_snippet = (
-                f"Biggest movers: {', '.join(_combined_macro_movers)}" if _combined_macro_movers else None
+                f"Biggest movers: {_colorize_movers(_combined_macro_movers)}" if _combined_macro_movers else None
             )
 
             # GEEN pratende 'X item(s) on your radar today' meer -- die zin
@@ -12728,82 +12750,120 @@ def render_today():
             _ex_div_hits = radar_data.get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3) if holdings else []
             _ex_div_hits = [e for e in _ex_div_hits if e["ticker"] not in _excluded_radar_tickers]
 
+            # Visuele verbetering (op verzoek): voorheen bouwden deze regels
+            # allemaal een kale ALL-CAPS "ASSET: X | TRIGGER: Y"-zin op, met
+            # exact dezelfde tekstgrootte/gewicht als het label ervoor --
+            # onleesbaar en zonder enige hierarchie. Nu bouwt elk signaal-
+            # type direct zijn eigen natuurlijke, leesbare zin op (gewone
+            # zinstijl, geen ALL-CAPS meer), met de ticker vetgedrukt
+            # uitgelicht en een eventueel percentage in Hestys' bestaande
+            # groen/rood (TODAY_POSITIVE_TEXT/TODAY_NEGATIVE_TEXT) -- zodat
+            # het belangrijkste (welke asset, welk getal) er meteen uitspringt
+            # i.p.v. dat alles even zwaar oogt.
             _radar_signals = []
             _seen_radar_tickers = set()
+
+            def _bold_ticker(ticker: str) -> str:
+                return f'<b style="color:#F1F5F9; font-weight:700;">{ticker.upper()}</b>'
 
             for _hit in _deep_dive_hits:
                 if _hit["ticker"] in _seen_radar_tickers:
                     continue
                 _seen_radar_tickers.add(_hit["ticker"])
-                _radar_signals.append((_hit["ticker"], f"SELL TRIGGER, {_hit['detail'].upper()}"))
+                _radar_signals.append(f"{_bold_ticker(_hit['ticker'])} hit a sell trigger &middot; {_hit['detail']}")
 
             for _hit in _week_52_hits:
                 if _hit["ticker"] in _seen_radar_tickers:
                     continue
                 _seen_radar_tickers.add(_hit["ticker"])
-                _radar_signals.append((_hit["ticker"], f"52-WEEK {_hit['type'].upper()} HIT"))
+                _radar_signals.append(f"{_bold_ticker(_hit['ticker'])} hit a new 52-week {_hit['type'].lower()}")
 
             if _held_signal and _held_signal["ticker"] not in _seen_radar_tickers:
                 _seen_radar_tickers.add(_held_signal["ticker"])
-                _trigger_parts = ["BULLISH FLIP"]
+                _trigger_parts = []
                 if _held_signal["score"] is not None:
-                    _trigger_parts.append(f"SCORE {_held_signal['score']:.1f}")
+                    _trigger_parts.append(f"score {_held_signal['score']:.1f}")
                 if _held_signal["days_ago"] is not None:
-                    _trigger_parts.append(f"{_held_signal['days_ago']}D AGO")
+                    _trigger_parts.append(f"{_held_signal['days_ago']}d ago")
                 if _held_signal["since_pct"] is not None:
-                    _trigger_parts.append(f"{_held_signal['since_pct']:+.1f}% SINCE FLIP")
-                _radar_signals.append((_held_signal["ticker"], ", ".join(_trigger_parts)))
+                    _pct = _held_signal["since_pct"]
+                    _pct_color = TODAY_POSITIVE_TEXT if _pct >= 0 else TODAY_NEGATIVE_TEXT
+                    _trigger_parts.append(
+                        f'<span style="color:{_pct_color}; font-weight:700;">{_pct:+.1f}%</span> since flip'
+                    )
+                _signal_html = f"{_bold_ticker(_held_signal['ticker'])} flipped bullish"
+                if _trigger_parts:
+                    _signal_html += " &middot; " + " &middot; ".join(_trigger_parts)
+                _radar_signals.append(_signal_html)
 
             for _hit in _ex_div_hits:
                 if _hit["ticker"] in _seen_radar_tickers:
                     continue
                 _seen_radar_tickers.add(_hit["ticker"])
-                _radar_signals.append((_hit["ticker"], f"EX-DIVIDEND IN {_hit['days_until']}D ({_hit['ex_div_date']})"))
+                _radar_signals.append(
+                    f"{_bold_ticker(_hit['ticker'])} goes ex-dividend in {_hit['days_until']}d ({_hit['ex_div_date']})"
+                )
 
             if _radar_signals:
-                _radar_rows = [
-                    ("\u2726", "RADAR SIGNAL", f"ASSET: {_asset.upper()} | TRIGGER: {_trigger}", None)
-                    for _asset, _trigger in _radar_signals
-                ]
+                _radar_rows = [("\u2726", "SIGNAL", _signal_html, None) for _signal_html in _radar_signals]
             else:
                 _radar_rows = [(
-                    "\u2726", "RADAR STATUS",
-                    "SYSTEM STABLE | NO ANOMALIES DETECTED WITHIN ACTIVE HOLDINGS", None,
+                    "\u2726", "STATUS",
+                    "System stable &middot; no anomalies detected within active holdings.", None,
                 )]
 
+            _screener_count = opportunities.get('new_opportunities_count', 0)
             summary_rows = [
                 *_radar_rows,
                 (
-                    "\U0001F50D", "SCREENER HITS",
-                    f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners.",
+                    "\U0001F50D", "SCREENER",
+                    f'<b style="color:#F1F5F9; font-weight:700;">{_screener_count}</b> new long-term '
+                    f'idea{"s" if _screener_count != 1 else ""} found in your active screeners.',
                     screener_snippet,
                 ),
                 (
-                    "\u26A1", "MACRO CATALYST",
-                    f"{_combined_macro_count} key global market movement(s) detected today.",
+                    "\u26A1", "MACRO",
+                    f'<b style="color:#F1F5F9; font-weight:700;">{_combined_macro_count}</b> key global '
+                    f'market movement{"s" if _combined_macro_count != 1 else ""} detected today.',
                     macro_snippet,
                 ),
             ]
-            # Typografie-fix: loepzuivere text-sm (0.875rem, i.p.v. de
-            # eerdere 0.83rem/0.72rem die in het donker wegvielen),
-            # onwrikbare ALL-CAPS metadata-stijl, helderwitte hoofdtekst
-            # (#F1F5F9) met gedempte text-slate-300 (#CBD5E1) voor de
-            # ingesprongen snippet-regel, en ruimere verticale ademruimte
-            # tussen de alerts (margin-top + padding-bottom, samen goed
-            # voor >1rem lucht per item -- Tailwind's space-y-4-equivalent).
+            # Herontwerp (op verzoek): voorheen stond alles -- label EN
+            # inhoud -- in exact dezelfde ALL-CAPS, dezelfde tekstgrootte,
+            # enkel het label was bold. Dat liet elke regel even 'zwaar'
+            # ogen en niets sprong eruit. Nu:
+            #  1. Het label wordt een eigen, klein gekleurd PILLETJE
+            #     (per categorie een eigen accentkleur) i.p.v. inline bold
+            #     tekst -- isoleert 'wat voor melding' visueel van 'de
+            #     inhoud'.
+            #  2. De hoofdtekst gaat naar gewone zinstijl (geen ALL-CAPS
+            #     meer over een hele zin -- dat is juist minder leesbaar),
+            #     met alleen de kern-datapunten (ticker/aantal) vetgedrukt
+            #     uitgelicht (al ingebakken in de tekst zelf hierboven).
+            #  3. Percentages in de tekst/snippet zijn al eerder gekleurd
+            #     (groen/rood) i.p.v. neutraal -- kleur draagt weer
+            #     betekenis i.p.v. decoratie.
+            _pill_colors = {
+                "SIGNAL": "#34D399", "STATUS": "#64748B",
+                "SCREENER": "#38BDF8", "MACRO": "#E8A93C",
+            }
             st.markdown(
                 "".join(
                     f'<div style="margin-top:16px; padding-bottom:14px;">'
-                    f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
-                    f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; text-transform:uppercase; '
-                    f'letter-spacing:0.02em; font-family:\'Inter\', sans-serif !important;">'
-                    f'<span style="flex-shrink:0; width:1.5rem; display:inline-flex; justify-content:center; '
-                    f'align-items:center;">{icon}</span>'
-                    f'<span><b style="color:#F1F5F9; font-weight:700; letter-spacing:0.03em;">{label}:</b> {text}</span>'
+                    f'<div style="display:flex; align-items:flex-start; gap:0.6rem; '
+                    f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; '
+                    f'font-family:\'Inter\', sans-serif !important;">'
+                    f'<span style="flex-shrink:0; width:1.25rem; display:inline-flex; justify-content:center; '
+                    f'align-items:center; margin-top:1px;">{icon}</span>'
+                    f'<span style="flex-shrink:0; display:inline-block; text-transform:uppercase; '
+                    f'font-size:0.66rem; font-weight:800; letter-spacing:0.06em; '
+                    f'color:{_pill_colors.get(label, "#94A3B8")}; '
+                    f'background:{_pill_colors.get(label, "#94A3B8")}1A; '
+                    f'border-radius:4px; padding:2px 7px; margin-top:1px;">{label}</span>'
+                    f'<span>{text}</span>'
                     f'</div>'
                     + (
-                        f'<div style="margin-left:2rem; margin-top:4px; font-size:0.8rem; color:#CBD5E1; '
-                        f'text-transform:uppercase; letter-spacing:0.02em; '
+                        f'<div style="margin-left:1.85rem; margin-top:4px; font-size:0.8rem; color:#94A3B8; '
                         f'font-family:\'Inter\', sans-serif !important;">&rarr; {snippet}</div>'
                         if snippet else ""
                     )
