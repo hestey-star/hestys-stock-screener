@@ -7638,9 +7638,6 @@ def _render_wealth_engine(user_email: str) -> None:
                     .configure_view(strokeWidth=0)
                 )
                 st.altair_chart(ladder_chart, use_container_width=True)
-                if _peak_idx:
-                    _peak_names = " & ".join(_month_labels[i] for i in sorted(_peak_idx))
-                    st.caption(f"PEAK IN {_peak_names}: TYPICALLY OVERLAPPING QUARTERLY DIVIDEND PAYOUTS.")
 
             with grid_col2:
                 st.markdown(
@@ -7730,7 +7727,7 @@ def _render_wealth_engine(user_email: str) -> None:
         )
         _watch_tickers = {"TDIV", "KHC", "TMUS"}
         _holdings_by_ticker = {h["ticker"].upper(): h for h in holdings}
-        _upcoming_rows = []  # (company, payout_text, date, sort_key)
+        _upcoming_rows = []  # (asset_name, asset_type, payout_text, date)
 
         for _wt in _watch_tickers:
             _h = _holdings_by_ticker.get(_wt)
@@ -7751,12 +7748,17 @@ def _render_wealth_engine(user_email: str) -> None:
                 if not per_share:
                     continue
                 expected_amount = per_share * _h["shares"]
-                _upcoming_rows.append((_h["naam"] or _wt, f"€{expected_amount:,.2f}", ex_div_date))
+                _upcoming_rows.append((
+                    _h["naam"] or _wt, "TYPE: EQUITY DIVIDEND", f"€{expected_amount:,.2f}", ex_div_date,
+                ))
             except Exception:
                 continue
 
         # Prop.com (en elke andere custom-cashflow asset): eerstvolgende 1e van
-        # de maand, altijd binnen 60 dagen.
+        # de maand, altijd binnen 60 dagen. 'REAL ESTATE' is een eerlijke
+        # aanname voor de enige custom asset die deze app op dit moment kent
+        # (Prop.com, fractioneel vastgoed) -- geen apart 'asset category'-veld
+        # in de database om dit generiek per asset te kunnen afleiden.
         _next_first = (
             today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
         )
@@ -7764,7 +7766,9 @@ def _render_wealth_engine(user_email: str) -> None:
             monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
             if monthly_amount <= 0:
                 continue
-            _upcoming_rows.append((asset["naam"], f"€{monthly_amount:,.2f}", _next_first))
+            _upcoming_rows.append((
+                asset["naam"], "TYPE: REAL ESTATE", f"€{monthly_amount:,.2f}", _next_first,
+            ))
 
         # Staking (SOL en elke andere gestakete positie): zelfde synthetische
         # maandbedrag als in de historie hierboven, ook geland op de
@@ -7778,58 +7782,39 @@ def _render_wealth_engine(user_email: str) -> None:
             monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
             if monthly_amount <= 0:
                 continue
-            _upcoming_rows.append((f"{h.get('naam') or h.get('ticker')} (Staking)", f"€{monthly_amount:,.2f}", _next_first))
+            _upcoming_rows.append((
+                f"{h.get('naam') or h.get('ticker')} (Staking)", "TYPE: WEB3 STAKING",
+                f"€{monthly_amount:,.2f}", _next_first,
+            ))
 
-        _upcoming_rows.sort(key=lambda r: r[2])
+        _upcoming_rows.sort(key=lambda r: r[3])
 
         if not _upcoming_rows:
             st.caption("No upcoming payouts detected within the next 60 days.")
         else:
-            _header_style = (
-                "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
-                "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
-                "border-top:none !important; border-left:none !important; border-right:none !important;"
-            )
-            _cell_base = (
-                "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
-                "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
-            )
-            # Vaste, content-krappe kolombreedtes i.p.v. procentuele (40/30/30%
-            # op de volle paginabreedte) -- bij 1-2 rijen anders een kamerbrede
-            # tabel met absurd veel lege ruimte tussen de kolommen. Tabel zelf
-            # ook op een max-breedte gehouden i.p.v. altijd de volle breedte
-            # te vullen; groeit gewoon mee zodra er meer rijen/langere namen
-            # bijkomen, tot die max-breedte.
+            # IJskoude terminal-stijl: 1 losse HTML-tabel, geen borders/
+            # achtergrondkleuren/kolomkoppen -- alleen een flinterdunne
+            # onderlijn per rij. Kolom 1 = asset (helderwit, all-caps),
+            # kolom 2 = gedempte categorie-uitleg, kolom 3 = datum + bedrag
+            # hard rechts uitgelijnd in Hestys-groen.
+            _row_border = "border-bottom:1px solid rgba(255,255,255,0.05);"
             _rows_html = "".join(
                 f'<tr>'
-                f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:700; '
-                f'color:#F1F5F9; white-space:nowrap;">{company}</td>'
-                f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:600; '
-                f'color:#CBD5E1; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
-                f'<td style="{_cell_base} text-align:right; font-size:0.78rem; color:#94A3B8; '
-                f'white-space:nowrap; padding-left:28px;">{pay_date.strftime("%b %d, %Y")}</td>'
+                f'<td style="{_row_border} text-transform:uppercase; font-size:12px; '
+                f'font-weight:700; color:#ffffff; padding:14px 0; white-space:nowrap;">{name}</td>'
+                f'<td style="{_row_border} text-transform:uppercase; font-size:10px; font-weight:600; '
+                f'color:#475569; padding:14px 0 14px 20px; white-space:nowrap;">{asset_type}</td>'
+                f'<td style="{_row_border} text-align:right; font-size:12px; font-weight:700; '
+                f'color:#34d399; letter-spacing:0.05em; padding:14px 0; white-space:nowrap;">'
+                f'{pay_date.strftime("%b %d, %Y").upper()} &middot; {payout_text}</td>'
                 f'</tr>'
-                for company, payout_text, pay_date in _upcoming_rows
+                for name, asset_type, payout_text, pay_date in _upcoming_rows
             )
-            _upcoming_key = "wealth_engine_upcoming_table"
             st.markdown(
-                f'<style>.st-key-{_upcoming_key} table {{ border-collapse:collapse; width:auto; '
-                f'max-width:560px; }} .st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th '
-                f'{{ border:none; }}</style>',
+                f'<table style="border-collapse:collapse; width:auto; max-width:560px; '
+                f'background:transparent;">{_rows_html}</table>',
                 unsafe_allow_html=True,
             )
-            with st.container(key=_upcoming_key):
-                st.markdown(
-                    f'<table style="border-collapse:collapse; width:auto; max-width:560px;">'
-                    f'<thead><tr>'
-                    f'<th style="{_header_style} text-align:left;">Company</th>'
-                    f'<th style="{_header_style} text-align:left; padding-left:28px;">Expected Payout</th>'
-                    f'<th style="{_header_style} text-align:right; padding-left:28px;">Payout Date</th>'
-                    f'</tr></thead>'
-                    f'<tbody>{_rows_html}</tbody>'
-                    f'</table>',
-                    unsafe_allow_html=True,
-                )
 
     else:
         # --- 1. Portfolio dividend-metrics -- volledig live uit de Yahoo
