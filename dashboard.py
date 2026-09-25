@@ -7587,28 +7587,42 @@ def _render_wealth_engine(user_email: str) -> None:
                     _uniform_section_header_html("The Dividend Ladder", "bar_chart"),
                     unsafe_allow_html=True,
                 )
-                # Som per KALENDERMAAND (JAN t/m DEC), over ALLE jaren heen
-                # samengevoegd -- ALL-CAPS labels rechtstreeks in de data i.p.v.
-                # via CSS text-transform (Altair's axis heeft geen betrouwbare
-                # text-transform-optie).
+                # Duidelijkheid: dit is een KALENDERMAAND-optelling over ALLE
+                # jaren heen (seizoenspatroon), geen tijdlijn -- zonder deze
+                # ondertitel oogde een balk als 'DEC' verwarrend alsof het over
+                # een toekomstige december zou gaan. De huidige maand krijgt
+                # daarnaast een amber highlight (i.p.v. het standaard-groen) als
+                # duidelijk anker in de 12-maanden-cyclus.
+                st.markdown(
+                    '<div style="color:#64748B; font-size:0.72rem; margin:-0.5rem 0 0.75rem 0;">'
+                    'SEASONALITY &middot; ALL YEARS COMBINED, BY CALENDAR MONTH</div>',
+                    unsafe_allow_html=True,
+                )
                 _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                                   "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
                 _month_totals = [0.0] * 12
                 for e in all_events:
                     _month_totals[e["date"].month - 1] += e["amount_eur"]
 
+                _current_month_idx = today_date.month - 1
+
                 # Alleen de piekmaand(en) direct labelen i.p.v. elke balk -- bij
                 # 12 datapunten wordt 'elke balk een eigen tekstlabel' al snel
                 # rommelig en voegt weinig toe (de balkhoogte zelf laat het
                 # verschil al zien). Top-2 hoogste, niet-nul maanden krijgen een
-                # label; de rest laat alleen de hoogte spreken (tooltip on hover
+                # label (plus de huidige maand, als die nog niet in de top-2
+                # zit); de rest laat alleen de hoogte spreken (tooltip on hover
                 # toont het exacte bedrag voor elke maand).
                 _nonzero_idx = [i for i, v in enumerate(_month_totals) if v > 0]
                 _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_totals[i], reverse=True)[:2]
+                _label_idx = set(_peak_idx)
+                if _month_totals[_current_month_idx] > 0:
+                    _label_idx.add(_current_month_idx)
                 _ladder_df = pd.DataFrame({
                     "month": _month_labels,
                     "amount": _month_totals,
-                    "label": [f"€{v:,.0f}" if i in _peak_idx else "" for i, v in enumerate(_month_totals)],
+                    "label": [f"€{v:,.0f}" if i in _label_idx else "" for i, v in enumerate(_month_totals)],
+                    "is_current": [i == _current_month_idx for i in range(12)],
                 })
 
                 _ladder_x = alt.X(
@@ -7623,15 +7637,25 @@ def _render_wealth_engine(user_email: str) -> None:
                     ),
                 )
                 _ladder_bars = alt.Chart(_ladder_df).mark_bar(
-                    color="#34D399", cornerRadiusTopLeft=2, cornerRadiusTopRight=2,
+                    cornerRadiusTopLeft=2, cornerRadiusTopRight=2,
                 ).encode(
                     x=_ladder_x,
                     y=alt.Y("amount:Q", axis=None),
+                    # Huidige maand amber, alle andere maanden Hestys-groen --
+                    # geeft in 1 oogopslag een anker in de 12-maanden-cyclus.
+                    color=alt.condition(
+                        alt.datum.is_current, alt.value("#F59E0B"), alt.value("#34D399")
+                    ),
                     tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Amount (€)", format=",.2f")],
                 )
                 _ladder_labels = alt.Chart(_ladder_df).mark_text(
-                    dy=-8, color="#94A3B8", fontSize=10, fontWeight=600,
-                ).encode(x=_ladder_x, y=alt.Y("amount:Q"), text="label:N")
+                    dy=-8, fontSize=10, fontWeight=600,
+                ).encode(
+                    x=_ladder_x, y=alt.Y("amount:Q"), text="label:N",
+                    color=alt.condition(
+                        alt.datum.is_current, alt.value("#F59E0B"), alt.value("#94A3B8")
+                    ),
+                )
                 ladder_chart = (
                     (_ladder_bars + _ladder_labels)
                     .properties(height=260, background="transparent")
