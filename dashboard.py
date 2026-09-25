@@ -7580,6 +7580,19 @@ def _render_wealth_engine(user_email: str) -> None:
             # marks die beter bij Hestys' verfijnde, typografische stijl passen
             # dan Plotly's dikkere standaard-balken/lijnen.
             # ============================================================
+            # De scheidingslijn-CSS voor de Snowball-kolom hoort HIER, VOOR de
+            # kolom-split -- niet als losse st.markdown()-call binnenin
+            # grid_col2 zelf, want dat voegt daar een extra (onzichtbaar)
+            # element toe v??r de sectiekop, wat de kop een fractie lager
+            # duwde dan die van de Ladder ernaast (Streamlit's standaard
+            # verticale gap tussen elementen telt ook mee voor een <style>-tag
+            # zonder zichtbare inhoud).
+            _snowball_col_key = "wealth_engine_snowball_col"
+            st.markdown(
+                f'<style>.st-key-{_snowball_col_key} {{ border-left:1px solid '
+                f'rgba(148,163,184,0.12); padding-left:1.5rem; }}</style>',
+                unsafe_allow_html=True,
+            )
             grid_col1, grid_col2 = st.columns([1, 1], gap="medium")
 
             with grid_col1:
@@ -7681,17 +7694,10 @@ def _render_wealth_engine(user_email: str) -> None:
                 # Dunne verticale scheidingslijn t.o.v. de Ladder ernaast --
                 # zonder deze rand liepen de 2 secties zonder enige visuele
                 # knip in elkaar over. Via een eigen st.container(key=...) +
-                # CSS i.p.v. een los <div> in st.markdown, want een los,
-                # ongesloten <div>-tag omvat geen latere, losse Streamlit-
-                # elementen (elk krijgt zijn eigen DOM-knooppunt) -- dit
-                # patroon (CSS op '.st-key-<naam>') is elders op deze pagina
-                # ook al de gangbare aanpak voor container-brede styling.
-                _snowball_col_key = "wealth_engine_snowball_col"
-                st.markdown(
-                    f'<style>.st-key-{_snowball_col_key} {{ border-left:1px solid '
-                    f'rgba(148,163,184,0.12); padding-left:1.5rem; }}</style>',
-                    unsafe_allow_html=True,
-                )
+                # CSS (hierboven, v??r de kolom-split gedefinieerd -- zie de
+                # toelichting daar) i.p.v. een los <div> in st.markdown, want
+                # een los, ongesloten <div>-tag omvat geen latere, losse
+                # Streamlit-elementen (elk krijgt zijn eigen DOM-knooppunt).
                 _snowball_col_ctx = st.container(key=_snowball_col_key)
                 _snowball_col_ctx.markdown(
                     _uniform_section_header_html("The Dividend Snowball", "trending_up"),
@@ -7865,15 +7871,17 @@ def _render_wealth_engine(user_email: str) -> None:
             )
             _upcoming_rows_html = "".join(
                 f'<tr>'
-                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-transform:uppercase; '
-                f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap; width:1%;">{name}</td>'
-                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-transform:uppercase; font-size:10px; '
-                f'font-weight:600; color:#64748b; white-space:nowrap; width:1%;">{asset_type}</td>'
-                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-align:right; font-size:12px; '
-                f'font-weight:600; color:#94a3b8; letter-spacing:0.03em; white-space:nowrap; width:100%;">'
+                f'<td style="{_upcoming_cell_base} padding:14px 24px 14px 0; text-transform:uppercase; '
+                f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap; '
+                f'overflow:hidden; text-overflow:ellipsis;">{name}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 24px 14px 0; text-transform:uppercase; font-size:10px; '
+                f'font-weight:600; color:#64748b; white-space:nowrap; '
+                f'overflow:hidden; text-overflow:ellipsis;">{asset_type}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 24px 14px 0; text-align:right; font-size:12px; '
+                f'font-weight:600; color:#94a3b8; letter-spacing:0.03em; white-space:nowrap;">'
                 f'{pay_date.strftime("%b %d, %Y").upper()}</td>'
                 f'<td style="{_upcoming_cell_base} padding:14px 0; text-align:right; font-size:12px; '
-                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap; width:1%;">'
+                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap;">'
                 f'{payout_text}</td>'
                 f'</tr>'
                 for name, asset_type, payout_text, pay_date in _upcoming_rows
@@ -7882,21 +7890,36 @@ def _render_wealth_engine(user_email: str) -> None:
                 f'<style>'
                 f'.st-key-{_upcoming_table_key} > div {{ background:rgba(137,146,163,0.05); '
                 f'border:1px solid rgba(137,146,163,0.18); border-radius:12px; padding:0.75rem 1.25rem; '
-                f'max-width:600px; }} '
+                f'max-width:680px; }} '
                 f'.st-key-{_upcoming_table_key} table {{ width:100%; border-collapse:collapse; '
-                f'table-layout:auto !important; }} '
+                f'table-layout:fixed !important; }} '
                 f'.st-key-{_upcoming_table_key} td, .st-key-{_upcoming_table_key} th {{ border:none; }}'
                 f'</style>',
                 unsafe_allow_html=True,
             )
             with st.container(key=_upcoming_table_key):
                 st.markdown(
-                    f'<table style="width:100%; border-collapse:collapse; table-layout:auto;">'
+                    f'<table style="width:100%; border-collapse:collapse; table-layout:fixed;">'
+                    # Vaste pixelbreedtes per kolom via <colgroup> -- de eerdere
+                    # width:1%/100%-hints lieten de browser de kolombreedte per
+                    # rij content-afhankelijk herberekenen (auto table-layout),
+                    # wat kop en data net iets uit elkaar liet lopen zodra 1 rij
+                    # een langere naam had dan de andere. Met expliciete,
+                    # vaste kolombreedtes (colgroup + table-layout:fixed) staat
+                    # de kolomgrens letterlijk vast, ongeacht de inhoud --
+                    # gegarandeerd pixel-voor-pixel dezelfde uitlijning tussen
+                    # <thead> en elke <tbody>-rij.
+                    f'<colgroup>'
+                    f'<col style="width:200px;">'
+                    f'<col style="width:170px;">'
+                    f'<col style="width:auto;">'
+                    f'<col style="width:100px;">'
+                    f'</colgroup>'
                     f'<thead><tr>'
-                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Asset</th>'
-                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Type</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:32px; width:100%;">Date</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:0; width:1%;">Amount</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:24px;">Asset</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:24px;">Type</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:24px;">Date</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:0;">Amount</th>'
                     f'</tr></thead>'
                     f'<tbody>{_upcoming_rows_html}</tbody>'
                     f'</table>',
