@@ -7749,7 +7749,7 @@ def _render_wealth_engine(user_email: str) -> None:
                     continue
                 expected_amount = per_share * _h["shares"]
                 _upcoming_rows.append((
-                    _h["naam"] or _wt, "TYPE: EQUITY DIVIDEND", f"€{expected_amount:,.2f}", ex_div_date,
+                    _h["naam"] or _wt, "EQUITY DIVIDEND", f"€{expected_amount:,.2f}", ex_div_date,
                 ))
             except Exception:
                 continue
@@ -7767,7 +7767,7 @@ def _render_wealth_engine(user_email: str) -> None:
             if monthly_amount <= 0:
                 continue
             _upcoming_rows.append((
-                asset["naam"], "TYPE: REAL ESTATE", f"€{monthly_amount:,.2f}", _next_first,
+                asset["naam"], "REAL ESTATE", f"€{monthly_amount:,.2f}", _next_first,
             ))
 
         # Staking (SOL en elke andere gestakete positie): zelfde synthetische
@@ -7783,7 +7783,7 @@ def _render_wealth_engine(user_email: str) -> None:
             if monthly_amount <= 0:
                 continue
             _upcoming_rows.append((
-                f"{h.get('naam') or h.get('ticker')} (Staking)", "TYPE: WEB3 STAKING",
+                f"{h.get('naam') or h.get('ticker')} (Staking)", "WEB3 STAKING",
                 f"€{monthly_amount:,.2f}", _next_first,
             ))
 
@@ -7813,11 +7813,14 @@ def _render_wealth_engine(user_email: str) -> None:
                 f'<tr>'
                 f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-transform:uppercase; '
                 f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap; width:1%;">{name}</td>'
-                f'<td style="{_upcoming_cell_base} padding:14px 0; text-transform:uppercase; font-size:10px; '
+                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-transform:uppercase; font-size:10px; '
                 f'font-weight:600; color:#64748b; white-space:nowrap; width:1%;">{asset_type}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-align:right; font-size:12px; '
+                f'font-weight:600; color:#94a3b8; letter-spacing:0.03em; white-space:nowrap; width:100%;">'
+                f'{pay_date.strftime("%b %d, %Y").upper()}</td>'
                 f'<td style="{_upcoming_cell_base} padding:14px 0; text-align:right; font-size:12px; '
-                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap; width:100%;">'
-                f'{pay_date.strftime("%b %d, %Y").upper()} &middot; {payout_text}</td>'
+                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap; width:1%;">'
+                f'{payout_text}</td>'
                 f'</tr>'
                 for name, asset_type, payout_text, pay_date in _upcoming_rows
             )
@@ -7837,7 +7840,8 @@ def _render_wealth_engine(user_email: str) -> None:
                     f'<thead><tr>'
                     f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Asset</th>'
                     f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Type</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right; width:100%;">Next payout</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; width:100%;">Date</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; width:1%;">Amount</th>'
                     f'</tr></thead>'
                     f'<tbody>{_upcoming_rows_html}</tbody>'
                     f'</table>',
