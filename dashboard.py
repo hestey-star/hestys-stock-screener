@@ -12630,8 +12630,21 @@ def render_today():
             # met de daadwerkelijke tickers/uitschieters (ECHTE data, geen
             # mock -- zie radar_data.py's toelichting bij
             # new_opportunity_tickers/macro_top_movers). ---
+            # Elke ticker als eigen klein 'chipje' (i.p.v. platte, met komma's
+            # gescheiden tekst) -- leest als een opsomming i.p.v. 1 lange
+            # zin, en is meteen een klikbare link naar de Yahoo Finance-
+            # pagina van die ticker (nieuw tabblad).
+            def _ticker_chips_html(tickers: list) -> str:
+                return "".join(
+                    f'<a href="https://finance.yahoo.com/quote/{t}" target="_blank" rel="noopener" '
+                    f'style="display:inline-block; color:#38BDF8; text-decoration:none; '
+                    f'background:#38BDF81A; border-radius:4px; padding:2px 7px; margin:0 4px 4px 0; '
+                    f'font-weight:700;">{t}</a>'
+                    for t in tickers
+                )
+
             screener_snippet = (
-                f"Top hits: {', '.join(new_opportunity_tickers)}" if new_opportunity_tickers else None
+                f"Top hits: {_ticker_chips_html(new_opportunity_tickers)}" if new_opportunity_tickers else None
             )
 
             # GEVONDEN, DERDE AANPASSING (op verzoek na live-gebruik): een
