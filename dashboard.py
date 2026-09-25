@@ -12718,12 +12718,20 @@ def render_today():
             # gescheiden tekst) -- leest als een opsomming i.p.v. 1 lange
             # zin, en is meteen een klikbare link naar de Yahoo Finance-
             # pagina van die ticker (nieuw tabblad).
+            # Monochroom/neutraal (i.p.v. een eigen blauwe kleur) -- op
+            # verzoek na live-gebruik: te veel losse, felle kleurtjes naast
+            # elkaar (badges + chips + percentages) liet de sectie 'blij'/
+            # rommelig ogen zonder duidelijke hierarchie. Kleur is nu
+            # gereserveerd voor wat ECHT data-betekenis draagt (de +/-
+            # percentages) -- chips/badges zijn overal dezelfde gedempte
+            # slate-tint, en het icoon ervoor blijft het enige categorie-
+            # onderscheid.
             def _ticker_chips_html(tickers: list) -> str:
                 return "".join(
                     f'<a href="https://finance.yahoo.com/quote/{t}" target="_blank" rel="noopener" '
-                    f'style="display:inline-block; color:#38BDF8; text-decoration:none; '
-                    f'background:#38BDF81A; border-radius:4px; padding:2px 7px; margin:0 4px 4px 0; '
-                    f'font-weight:700;">{t}</a>'
+                    f'style="display:inline-block; color:#CBD5E1; text-decoration:none; '
+                    f'background:rgba(148,163,184,0.12); border-radius:4px; padding:2px 7px; '
+                    f'margin:0 4px 4px 0; font-weight:700;">{t}</a>'
                     for t in tickers
                 )
 
@@ -12861,16 +12869,14 @@ def render_today():
             _seen_radar_tickers = set()
 
             def _bold_ticker(ticker: str) -> str:
-                # Zelfde chip-stijl als de Screener Hits-tickers hierboven
-                # (i.p.v. een losse underline-link) -- nu in emerald, zodat
-                # hij visueel aansluit bij de groene 'SIGNAL'-badge ervoor,
-                # net zoals de blauwe Screener-chips aansluiten bij hun
-                # blauwe 'SCREENER'-badge.
+                # Zelfde neutrale chip-stijl als de Screener Hits-tickers
+                # hierboven -- zie de toelichting daar (kleur is nu alleen
+                # voor de +/- percentages, niet meer voor elke chip/badge).
                 _t = ticker.upper()
                 return (
                     f'<a href="https://finance.yahoo.com/quote/{_t}" target="_blank" rel="noopener" '
-                    f'style="display:inline-block; color:#34D399; text-decoration:none; '
-                    f'background:#34D3991A; border-radius:4px; padding:1px 6px; '
+                    f'style="display:inline-block; color:#CBD5E1; text-decoration:none; '
+                    f'background:rgba(148,163,184,0.12); border-radius:4px; padding:1px 6px; '
                     f'font-weight:700;">{_t}</a>'
                 )
 
@@ -12936,50 +12942,50 @@ def render_today():
                     macro_snippet,
                 ),
             ]
-            # Herontwerp (op verzoek): voorheen stond alles -- label EN
-            # inhoud -- in exact dezelfde ALL-CAPS, dezelfde tekstgrootte,
-            # enkel het label was bold. Dat liet elke regel even 'zwaar'
-            # ogen en niets sprong eruit. Nu:
-            #  1. Het label wordt een eigen, klein gekleurd PILLETJE
-            #     (per categorie een eigen accentkleur) i.p.v. inline bold
-            #     tekst -- isoleert 'wat voor melding' visueel van 'de
-            #     inhoud'.
-            #  2. De hoofdtekst gaat naar gewone zinstijl (geen ALL-CAPS
-            #     meer over een hele zin -- dat is juist minder leesbaar),
-            #     met alleen de kern-datapunten (ticker/aantal) vetgedrukt
-            #     uitgelicht (al ingebakken in de tekst zelf hierboven).
-            #  3. Percentages in de tekst/snippet zijn al eerder gekleurd
-            #     (groen/rood) i.p.v. neutraal -- kleur draagt weer
-            #     betekenis i.p.v. decoratie.
-            _pill_colors = {
-                "SIGNAL": "#34D399", "STATUS": "#64748B",
-                "SCREENER": "#38BDF8", "MACRO": "#E8A93C",
-            }
-            st.markdown(
-                "".join(
-                    f'<div style="margin-top:16px; padding-bottom:14px;">'
-                    f'<div style="display:flex; align-items:flex-start; gap:0.6rem; '
-                    f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; '
-                    f'font-family:\'Inter\', sans-serif !important;">'
-                    f'<span style="flex-shrink:0; width:1.25rem; display:inline-flex; justify-content:center; '
-                    f'align-items:center; margin-top:1px;">{icon}</span>'
-                    f'<span style="flex-shrink:0; display:inline-block; text-transform:uppercase; '
-                    f'font-size:0.66rem; font-weight:800; letter-spacing:0.06em; '
-                    f'color:{_pill_colors.get(label, "#94A3B8")}; '
-                    f'background:{_pill_colors.get(label, "#94A3B8")}1A; '
-                    f'border-radius:4px; padding:2px 7px; margin-top:1px;">{label}</span>'
-                    f'<span>{text}</span>'
-                    f'</div>'
-                    + (
-                        f'<div style="margin-left:1.85rem; margin-top:4px; font-size:0.8rem; color:#94A3B8; '
-                        f'font-family:\'Inter\', sans-serif !important;">&rarr; {snippet}</div>'
-                        if snippet else ""
-                    )
-                    + '</div>'
-                    for icon, label, text, snippet in summary_rows
-                ),
-                unsafe_allow_html=True,
-            )
+            # Herontwerp, 2e ronde (op verzoek na live-gebruik): de eerste
+            # versie gaf elk label een EIGEN felle accentkleur (groen/blauw/
+            # amber) + gekleurde ticker-chips ERBOVENOP de al gekleurde
+            # percentages -- te veel losse, felle kleurtjes tegelijk, oogde
+            # 'blij'/rommelig i.p.v. premium, en liet de sectie bovendien
+            # zonder kader in het luchtledige zweven. Nu:
+            #  1. ALLE badges/chips zijn dezelfde neutrale, gedempte
+            #     slate-tint -- kleur is voortaan UITSLUITEND gereserveerd
+            #     voor wat echt data-betekenis draagt (de +/- percentages),
+            #     die er nu juist DUIDELIJKER uitspringen omdat ze de enige
+            #     kleur in de sectie zijn (zelfde principe als de eerdere
+            #     'hele pagina oogt groen'-opschoning bij Wealth Engine).
+            #  2. De hoofdtekst blijft gewone zinstijl met bold kern-
+            #     datapunten (ticker/aantal), i.p.v. een hele ALL-CAPS zin.
+            #  3. De hele bulletin-lijst zit nu in dezelfde donkere kaart
+            #     (st.container(border=True) -- site-brede standaardkader,
+            #     ook gebruikt door My Portfolio) i.p.v. los te zweven --
+            #     geeft de sectie duidelijke structuur/een randje.
+            _pill_color = "#94A3B8"
+            with st.container(border=True):
+                st.markdown(
+                    "".join(
+                        f'<div style="margin-top:16px; padding-bottom:14px;">'
+                        f'<div style="display:flex; align-items:flex-start; gap:0.6rem; '
+                        f'font-size:0.875rem; color:#F1F5F9; line-height:1.5; '
+                        f'font-family:\'Inter\', sans-serif !important;">'
+                        f'<span style="flex-shrink:0; width:1.25rem; display:inline-flex; justify-content:center; '
+                        f'align-items:center; margin-top:1px;">{icon}</span>'
+                        f'<span style="flex-shrink:0; display:inline-block; text-transform:uppercase; '
+                        f'font-size:0.66rem; font-weight:800; letter-spacing:0.06em; '
+                        f'color:{_pill_color}; background:rgba(148,163,184,0.12); '
+                        f'border-radius:4px; padding:2px 7px; margin-top:1px;">{label}</span>'
+                        f'<span>{text}</span>'
+                        f'</div>'
+                        + (
+                            f'<div style="margin-left:1.85rem; margin-top:4px; font-size:0.8rem; color:#94A3B8; '
+                            f'font-family:\'Inter\', sans-serif !important;">&rarr; {snippet}</div>'
+                            if snippet else ""
+                        )
+                        + '</div>'
+                        for icon, label, text, snippet in summary_rows
+                    ),
+                    unsafe_allow_html=True,
+                )
 
             # --- Portfolio Health & DCA Insights -- horizontale kolommen,
             # net als 'Your Portfolio Today' hierboven, maar BEWUST ZONDER
