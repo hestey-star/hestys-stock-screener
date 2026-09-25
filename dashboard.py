@@ -4778,6 +4778,73 @@ def parse_trade_republic_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows}
 
 
+def _persist_dividend_rows(
+    user_email: str, dividend_rows: list, source: str, currency: str,
+    ticker_naam_lookup: dict = None,
+) -> tuple[int, int]:
+    """
+    Slaat geparste dividend-rijen (het 'dividend_rows'-bijproduct van de
+    broker-parsers hierboven) PERMANENT op in de 'dividend_income'-tabel
+    (database.add_dividend_income()) -- i.p.v. ze, zoals voorheen, alleen
+    1x als caption te tonen en daarna stilzwijgend weg te gooien.
+
+    GEVONDEN, FUNDAMENTEEL PROBLEEM (voor de Dividend-pagina gebouwd kon
+    worden): 'dividend_rows' bleek GEEN bewaarde datastructuur te zijn --
+    puur een tijdelijk bijproduct van de import-stap zelf, dat na het
+    klikken op 'Import' meteen uit session_state verdween. Een Dividend-
+    pagina die daar 'historie' uit zou putten, zou dus altijd leeg zijn.
+    Vanaf nu dus een ECHTE, aparte tabel (bewust GEEN 'DIV'-transactie in
+    portfolio_transactions -- zie add_dividend_income()'s toelichting).
+
+    Gededupliceerd tegen wat er al in de tabel staat (zelfde ticker +
+    datum + bedrag, met een kleine tolerantie voor afrondingsverschillen)
+    -- nodig omdat de gebruiker bewust OUDE, al eerder verwerkte CSV's
+    opnieuw mag aanleveren om de volledige historie alsnog binnen te
+    halen, zonder bij elke herhaalde upload dubbel te gaan tellen.
+    """
+    ticker_naam_lookup = ticker_naam_lookup or {}
+    existing = database.get_dividend_income(user_email)
+
+    def _is_duplicate(ticker: str, amount: float, payout_date: str) -> bool:
+        for e in existing:
+            if e.get("ticker") != ticker or e.get("payout_date") != payout_date:
+                continue
+            if abs(float(e.get("amount") or 0) - amount) <= max(abs(amount) * 0.01, 0.01):
+                return True
+        return False
+
+    imported, skipped = 0, 0
+    for row in dividend_rows:
+        raw_ticker = row.get("asset_code")
+        raw_amount = row.get("amount")
+        raw_date = row.get("date")
+        if raw_ticker is None or raw_amount is None or raw_date is None or pd.isna(raw_ticker) or pd.isna(raw_date):
+            skipped += 1
+            continue
+        ticker = str(raw_ticker).strip().upper()
+        if ticker.endswith("-USD"):
+            ticker = ticker[:-4]
+        try:
+            payout_date = pd.to_datetime(raw_date).date().isoformat()
+        except Exception:
+            skipped += 1
+            continue
+        amount = abs(float(raw_amount))
+        if amount <= 0:
+            skipped += 1
+            continue
+        if _is_duplicate(ticker, amount, payout_date):
+            skipped += 1
+            continue
+        database.add_dividend_income(
+            user_email, ticker, ticker_naam_lookup.get(ticker, ticker),
+            amount, currency, payout_date, source,
+        )
+        existing.append({"ticker": ticker, "amount": amount, "payout_date": payout_date})
+        imported += 1
+    return imported, skipped
+
+
 def filter_active_holdings(holdings: list) -> list:
     """
     Verbergt posities die op 0 shares staan (volledig verkocht, bv. via
@@ -7755,6 +7822,338 @@ def _render_wealth_engine(user_email: str) -> None:
         )
 
 
+def render_dividend():
+    """
+    Dividend-pagina: alle ontvangen dividend-uitkeringen (nu PERMANENT
+    opgeslagen via database.get_dividend_income(), zie de broker-import-
+    aanpassingen hierboven) + de vaste maandelijkse Prop.com-cashflow
+    (afgeleid van elke 'custom yield asset'-holding se custom_annual_
+    cashflow-veld, gedeeld door 12 -- GEEN hardcoded '9,50', zodat dit
+    automatisch meeschaalt als dat bedrag ooit wijzigt), in 4 blokken:
+    metrics-tegels, maandelijkse ladder, cumulatieve snowball, en een
+    60-dagen vooruitblik-tabel.
+    """
+    if not current_user.is_logged_in:
+        _render_landing_soft_lock(
+            title="Dividend Income",
+            icon_name="payments",
+            cta_text="&#128274; TRACK EVERY DIVIDEND PAYMENT YOU'VE EVER RECEIVED, PLUS YOUR "
+                      "UPCOMING PASSIVE CASHFLOW.",
+            button_label="Unlock Dividend Tracking →",
+            preview_html=_landing_chart_skeleton_html(),
+            key_prefix="dividend",
+        )
+        st.stop()
+
+    import database
+
+    user_email = current_user.email
+
+    st.markdown(
+        _uniform_section_header_html("Dividend", "payments", is_first=True),
+        unsafe_allow_html=True,
+    )
+
+    holdings = filter_active_holdings(database.get_user_holdings(user_email))
+    dividend_income_rows = database.get_dividend_income(user_email)
+
+    # --- Prop.com (of elke andere 'custom yield asset') se historische
+    # maandelijkse cashflow -- er is geen aparte 'startdatum van de
+    # investering'-veld; die wordt afgeleid uit de VROEGSTE buy-transactie
+    # die bij het aanmaken van zo'n positie altijd wordt gelogd (zie 'Log
+    # a transaction' -> custom yield asset). Vanaf die maand t/m de
+    # huidige maand krijgt elke kalendermaand 1 cashflow-record.
+    def _add_one_month(d):
+        return d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1)
+
+    _custom_assets = [h for h in holdings if h.get("custom_annual_cashflow") is not None]
+    _prop_events = []
+    for asset in _custom_assets:
+        monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
+        if monthly_amount <= 0:
+            continue
+        try:
+            asset_txs = database.get_transactions_for_holding(user_email, asset["id"])
+            start_date = min(
+                (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
+                default=None,
+            )
+        except Exception:
+            start_date = None
+        if start_date is None:
+            continue
+        cursor = start_date.replace(day=1)
+        current_month = datetime.now().date().replace(day=1)
+        while cursor <= current_month:
+            _prop_events.append({"date": cursor, "amount_eur": monthly_amount, "naam": asset["naam"]})
+            cursor = _add_one_month(cursor)
+
+    # --- Alles combineren tot 1 chronologische reeks, in EUR. Broker-
+    # dividenden komen native binnen (USD voor Robinhood/Schwab, EUR voor
+    # Trade Republic) -- omgerekend met de HUIDIGE wisselkoers (geen
+    # historische FX-data beschikbaar per uitkeringsdatum, zelfde bewuste
+    # vereenvoudiging als elders in de app bij ontbrekende historische
+    # koersen).
+    _fx_cache: dict = {}
+
+    def _to_eur(amount: float, currency: str) -> float:
+        if not currency or currency == "EUR":
+            return amount
+        if currency not in _fx_cache:
+            _fx_cache[currency] = get_fx_rate(currency, "EUR") or 1.0
+        return amount * _fx_cache[currency]
+
+    all_events = []
+    for row in dividend_income_rows:
+        try:
+            event_date = datetime.strptime(row["payout_date"], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        amount_eur = _to_eur(float(row.get("amount") or 0), row.get("currency"))
+        if amount_eur <= 0:
+            continue
+        all_events.append({
+            "date": event_date, "amount_eur": amount_eur,
+            "ticker": row.get("ticker"), "naam": row.get("naam") or row.get("ticker"),
+        })
+    all_events.extend({
+        "date": e["date"], "amount_eur": e["amount_eur"], "ticker": "PROP.COM", "naam": e["naam"],
+    } for e in _prop_events)
+    all_events.sort(key=lambda e: e["date"])
+
+    if not all_events:
+        st.info(
+            "No dividend history yet. Import a broker CSV under Manage -> Import transactions "
+            "(Robinhood, Schwab or Trade Republic dividend rows are now tracked automatically), "
+            "or add a custom yield asset like Prop.com."
+        )
+        return
+
+    # ============================================================
+    # 1. METRICS -- 3 tegels, zelfde visuele taal als Today/Stress-Test
+    # ============================================================
+    total_collected = sum(e["amount_eur"] for e in all_events)
+    first_date = all_events[0]["date"]
+    today_date = datetime.now().date()
+    months_active = max(1, (today_date.year - first_date.year) * 12 + (today_date.month - first_date.month) + 1)
+    avg_monthly = total_collected / months_active
+
+    # Payout consistency: hoeveel van de 12 KALENDERMAANDEN (ongeacht
+    # jaar) ooit minstens 1 uitkering hebben gezien -- 10 van de 12
+    # maanden ooit een uitkering = 83% 'year-round stability'. Meet dus
+    # SPREIDING over het jaar, niet het totale aantal uitkeringen.
+    months_with_payout = len({e["date"].month for e in all_events})
+    consistency_pct = round(months_with_payout / 12 * 100)
+
+    metric_col1, metric_col2, metric_col3 = st.columns(3, gap="medium")
+    _tile_bg, _tile_border, _tile_color = "rgba(16,185,129,0.10)", "rgba(16,185,129,0.45)", "#34D399"
+    with metric_col1:
+        st.markdown(
+            _today_metric_tile_html(
+                "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
+                _tile_color, _tile_bg, _tile_border,
+            ),
+            unsafe_allow_html=True,
+        )
+    with metric_col2:
+        st.markdown(
+            _today_metric_tile_html(
+                "Average Monthly Payout", "calendar_month", f"€{avg_monthly:,.2f} / MONTH",
+                _tile_color, _tile_bg, _tile_border,
+                footer_text=f"Over {months_active} active month(s)",
+            ),
+            unsafe_allow_html=True,
+        )
+    with metric_col3:
+        st.markdown(
+            _today_metric_tile_html(
+                "Payout Consistency", "payments", f"{consistency_pct}% YEAR-ROUND STABILITY",
+                _tile_color, _tile_bg, _tile_border,
+                footer_text=f"Paid out in {months_with_payout}/12 calendar months",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+
+    # ============================================================
+    # 2. THE DIVIDEND LADDER -- som per KALENDERMAAND (Jan t/m Dec),
+    # over ALLE jaren heen samengevoegd.
+    # ============================================================
+    st.markdown(
+        _uniform_section_header_html("The Dividend Ladder (Monthly Distribution)", "bar_chart"),
+        unsafe_allow_html=True,
+    )
+    _month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    _month_totals = [0.0] * 12
+    for e in all_events:
+        _month_totals[e["date"].month - 1] += e["amount_eur"]
+
+    ladder_fig = go.Figure()
+    ladder_fig.add_trace(go.Bar(
+        x=_month_labels, y=_month_totals,
+        marker=dict(color="#34D399"),
+        text=[f"€{v:,.0f}" if v > 0 else "" for v in _month_totals],
+        textposition="outside",
+        textfont=dict(color="#94A3B8", size=11),
+        hovertemplate="%{x}: €%{y:,.2f}<extra></extra>",
+        width=0.45,
+    ))
+    ladder_fig.update_layout(
+        height=280,
+        margin=dict(l=0, r=0, t=30, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=11)),
+        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                   tickprefix="€", tickformat=",.0f", visible=False),
+        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+    )
+    st.plotly_chart(ladder_fig, use_container_width=True, config={"displayModeBar": False})
+
+    st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+
+    # ============================================================
+    # 3. THE DIVIDEND SNOWBALL -- chronologische cumulatieve som, per
+    # kalender-YEAR-MAAND (dus wel degelijk de echte tijdas, niet Jan-Dec
+    # samengevoegd zoals de Ladder hierboven) -- kan per definitie nooit
+    # dalen, want elk punt is een cumulatieve som.
+    # ============================================================
+    st.markdown(
+        _uniform_section_header_html("The Dividend Snowball (Cumulative Cashflow Cruise)", "trending_up"),
+        unsafe_allow_html=True,
+    )
+    _by_year_month: dict = {}
+    for e in all_events:
+        key = (e["date"].year, e["date"].month)
+        _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
+    _sorted_keys = sorted(_by_year_month.keys())
+    _snowball_x = [f"{y}-{m:02d}" for y, m in _sorted_keys]
+    _snowball_y = []
+    _running_total = 0.0
+    for key in _sorted_keys:
+        _running_total += _by_year_month[key]
+        _snowball_y.append(_running_total)
+
+    snowball_fig = go.Figure()
+    snowball_fig.add_trace(go.Scatter(
+        x=_snowball_x, y=_snowball_y, mode="lines", fill="tozeroy",
+        line=dict(color="#34D399", width=2.5),
+        fillcolor="rgba(52,211,153,0.12)",
+        hovertemplate="%{x}: €%{y:,.2f}<extra></extra>",
+    ))
+    snowball_fig.update_layout(
+        height=280,
+        margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                   tickprefix="€", tickformat=",.0f"),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+    )
+    st.plotly_chart(snowball_fig, use_container_width=True, config={"displayModeBar": False})
+
+    st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+
+    # ============================================================
+    # 4. UPCOMING PASSIVE INFLOW -- TDIV/KHC/TMUS (als je die aanhoudt)
+    # + Prop.com's eerstvolgende 1e van de maand, binnen 60 dagen.
+    # Ex-dividend-datum wordt als 'verwachte betaaldatum' gebruikt --
+    # zelfde, al-bestaande conventie als radar_data.py's eigen
+    # get_upcoming_ex_dividend_dates() (yfinance geeft geen betrouwbare,
+    # aparte 'volgende pay-date' terug, ex-dividend-datum is de
+    # standaard proxy die deze app al overal gebruikt).
+    # ============================================================
+    st.markdown(
+        _uniform_section_header_html("Upcoming Passive Inflow (60-Day Outlook)", "event_upcoming"),
+        unsafe_allow_html=True,
+    )
+    _watch_tickers = {"TDIV", "KHC", "TMUS"}
+    _holdings_by_ticker = {h["ticker"].upper(): h for h in holdings}
+    _upcoming_rows = []  # (company, payout_text, date, sort_key)
+
+    for _wt in _watch_tickers:
+        _h = _holdings_by_ticker.get(_wt)
+        if not _h or not _h.get("shares"):
+            continue
+        try:
+            info = get_cached_ticker_info(_wt)
+            ex_div_unix = info.get("exDividendDate")
+            if not ex_div_unix:
+                continue
+            ex_div_date = pd.Timestamp(ex_div_unix, unit="s").date()
+            if not (today_date <= ex_div_date <= today_date + timedelta(days=60)):
+                continue
+            per_share = None
+            dividends = get_cached_ticker_dividends(_wt)
+            if dividends is not None and not dividends.empty:
+                per_share = float(dividends.iloc[-1])
+            if not per_share:
+                continue
+            expected_amount = per_share * _h["shares"]
+            _upcoming_rows.append((_h["naam"] or _wt, f"€{expected_amount:,.2f}", ex_div_date))
+        except Exception:
+            continue
+
+    # Prop.com: eerstvolgende 1e van de maand, altijd binnen 60 dagen.
+    for asset in _custom_assets:
+        monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
+        if monthly_amount <= 0:
+            continue
+        _next_first = (
+            today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
+        )
+        _upcoming_rows.append((asset["naam"], f"€{monthly_amount:,.2f}", _next_first))
+
+    _upcoming_rows.sort(key=lambda r: r[2])
+
+    if not _upcoming_rows:
+        st.caption("No upcoming payouts detected within the next 60 days.")
+    else:
+        _header_style = (
+            "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
+            "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
+            "border-top:none !important; border-left:none !important; border-right:none !important;"
+        )
+        _cell_base = (
+            "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
+            "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
+        )
+        _rows_html = "".join(
+            f'<tr>'
+            f'<td style="{_cell_base} width:40%; text-align:left; font-size:0.82rem; font-weight:700; '
+            f'color:#F1F5F9;">{company}</td>'
+            f'<td style="{_cell_base} width:30%; text-align:left; font-size:0.82rem; font-weight:600; '
+            f'color:#34D399;">{payout_text}</td>'
+            f'<td style="{_cell_base} width:30%; text-align:right; font-size:0.78rem; color:#94A3B8;">'
+            f'{pay_date.strftime("%b %d, %Y")}</td>'
+            f'</tr>'
+            for company, payout_text, pay_date in _upcoming_rows
+        )
+        _upcoming_key = "dividend_upcoming_table"
+        st.markdown(
+            f'<style>.st-key-{_upcoming_key} table {{ width:100%; border-collapse:collapse; }} '
+            f'.st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th {{ border:none; }}</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_upcoming_key):
+            st.markdown(
+                f'<table style="width:100%; border-collapse:collapse;">'
+                f'<thead><tr>'
+                f'<th style="{_header_style} width:40%; text-align:left;">Company</th>'
+                f'<th style="{_header_style} width:30%; text-align:left;">Expected Payout</th>'
+                f'<th style="{_header_style} width:30%; text-align:right;">Payout Date</th>'
+                f'</tr></thead>'
+                f'<tbody>{_rows_html}</tbody>'
+                f'</table>',
+                unsafe_allow_html=True,
+            )
+
+
 def render_analyze():
     if not current_user.is_logged_in:
         _render_landing_soft_lock(
@@ -9305,6 +9704,14 @@ def render_portfolio():
                     st.session_state["degiro_parsed_filename"] = degiro_file.name
                     st.session_state["degiro_grouped"] = parse_result["grouped"]
                     st.session_state["degiro_skipped"] = parse_result["skipped_rows"]
+                    # 'dividend_rows' bestaat ALLEEN bij Trade Republic (DEGIRO's
+                    # eigen export bevat sowieso geen dividend-rijen -- z'n
+                    # parser geeft dan ook geen 'dividend_rows'-sleutel terug,
+                    # vandaar .get() met een lege lijst als terugval). Voorheen
+                    # werd dit hier zelfs helemaal niet opgevangen -- Trade
+                    # Republic-dividenden verdwenen dus spoorloos, zonder zelfs
+                    # maar een 'N rows found'-melding.
+                    st.session_state["degiro_dividends"] = parse_result.get("dividend_rows", [])
                     ticker_matches = {}
                     ticker_candidates = {}
                     # Herken ISIN's die je AL eerder hebt opgelost (bv. bij een vorige
@@ -9329,9 +9736,15 @@ def render_portfolio():
 
                 degiro_grouped = st.session_state["degiro_grouped"]
                 degiro_skipped = st.session_state["degiro_skipped"]
+                degiro_dividends = st.session_state.get("degiro_dividends", [])
 
                 total_tx = sum(len(g["transactions"]) for g in degiro_grouped.values())
                 st.success(f"Found {len(degiro_grouped)} securities, {total_tx} transactions.")
+                if degiro_dividends:
+                    st.caption(
+                        f"{len(degiro_dividends)} dividend row(s) found -- will be added to your "
+                        f"Dividend history (not as buy/sell transactions)."
+                    )
                 if degiro_skipped:
                     reasons_preview = "; ".join(reason for _, reason in degiro_skipped[:5])
                     more = "..." if len(degiro_skipped) > 5 else ""
@@ -9573,9 +9986,41 @@ def render_portfolio():
                     status_text.empty()
                     progress_bar.empty()
 
+                    # Dividend-rijen permanent opslaan -- ALLEEN relevant voor
+                    # Trade Republic (DEGIRO heeft er nooit). Trade Republic's
+                    # 'asset_code' is een ISIN, geen ticker (zie de parser's
+                    # eigen toelichting) -- dus eerst dezelfde ISIN-naar-ticker-
+                    # matching hergebruiken die de gebruiker hierboven al voor
+                    # de buy/sell-rijen deed, i.p.v. de ISIN zelf als 'ticker'
+                    # in dividend_income op te slaan.
+                    degiro_div_imported = degiro_div_skipped = 0
+                    if degiro_dividends:
+                        _isin_to_resolved = {
+                            group.get("isin"): st.session_state["degiro_ticker_matches"].get(key, "").strip()
+                            for key, group in degiro_grouped.items() if group.get("isin")
+                        }
+                        _div_naam_by_isin = {
+                            group.get("isin"): group["product"]
+                            for group in degiro_grouped.values() if group.get("isin")
+                        }
+                        _resolved_degiro_dividends = [
+                            {**d, "asset_code": _isin_to_resolved.get(d.get("asset_code")) or d.get("asset_code")}
+                            for d in degiro_dividends
+                        ]
+                        _div_naam_lookup = {
+                            (_isin_to_resolved.get(isin) or isin): naam
+                            for isin, naam in _div_naam_by_isin.items()
+                        }
+                        degiro_div_imported, degiro_div_skipped = _persist_dividend_rows(
+                            user_email, _resolved_degiro_dividends,
+                            "trade_republic" if is_trade_republic_import else "degiro",
+                            "EUR", ticker_naam_lookup=_div_naam_lookup,
+                        )
+
                     dup_txt = f" ({imported_duplicates_skipped} already-imported duplicates skipped)" if imported_duplicates_skipped else ""
+                    div_txt = f" Plus {degiro_div_imported} dividend payment(s) added to your Dividend history." if degiro_div_imported else ""
                     st.success(f"Imported {imported_transactions} transactions across "
-                               f"{imported_positions} new position(s)!{dup_txt}")
+                               f"{imported_positions} new position(s)!{dup_txt}{div_txt}")
                     already_imported.add(degiro_file.name)
                     st.session_state["degiro_imported_filenames"] = already_imported
                     if hasattr(database, "set_last_csv_import"):
@@ -9584,7 +10029,7 @@ def render_portfolio():
                         except Exception:
                             pass  # het loggen van dit tijdstip mag de daadwerkelijke import nooit blokkeren
                     for state_key in ["degiro_parsed_filename", "degiro_grouped", "degiro_skipped",
-                                       "degiro_ticker_matches", "degiro_ticker_candidates"]:
+                                       "degiro_dividends", "degiro_ticker_matches", "degiro_ticker_candidates"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
@@ -9622,8 +10067,8 @@ def render_portfolio():
                 st.success(f"Found {len(rh_grouped)} securities, {total_rh_tx} buy/sell transaction(s).")
                 if rh_dividends:
                     st.caption(
-                        f"{len(rh_dividends)} dividend row(s) found but not imported -- Hesty's doesn't "
-                        f"track dividend income as a separate transaction type yet."
+                        f"{len(rh_dividends)} dividend row(s) found -- will be added to your "
+                        f"Dividend history (not as buy/sell transactions)."
                     )
                 if rh_other_ignored:
                     # Transparant maken WELKE onherkende codewoorden er waren
@@ -9690,9 +10135,16 @@ def render_portfolio():
 
                     rh_status.empty()
                     rh_progress.empty()
+
+                    rh_div_imported, rh_div_skipped = _persist_dividend_rows(
+                        user_email, rh_dividends, "robinhood", "USD",
+                        ticker_naam_lookup={t: g["product"] for t, g in rh_grouped.items()},
+                    )
+
                     dup_txt_rh = f" ({rh_dup_skipped} already-imported duplicates skipped)" if rh_dup_skipped else ""
+                    div_txt_rh = f" Plus {rh_div_imported} dividend payment(s) added to your Dividend history." if rh_div_imported else ""
                     st.success(f"Imported {rh_imported_tx} transactions across "
-                               f"{rh_imported_pos} new position(s)!{dup_txt_rh}")
+                               f"{rh_imported_pos} new position(s)!{dup_txt_rh}{div_txt_rh}")
                     already_imported_rh.add(robinhood_file.name)
                     st.session_state["robinhood_imported_filenames"] = already_imported_rh
                     for state_key in ["robinhood_parsed_filename", "robinhood_grouped",
@@ -9729,8 +10181,8 @@ def render_portfolio():
                 st.success(f"Found {len(sw_grouped)} securities, {total_sw_tx} buy/sell transaction(s).")
                 if sw_dividends:
                     st.caption(
-                        f"{len(sw_dividends)} dividend row(s) found but not imported -- Hesty's doesn't "
-                        f"track dividend income as a separate transaction type yet."
+                        f"{len(sw_dividends)} dividend row(s) found -- will be added to your "
+                        f"Dividend history (not as buy/sell transactions)."
                     )
                 if sw_skipped:
                     reasons_preview = "; ".join(reason for _, reason in sw_skipped[:5])
@@ -9791,9 +10243,16 @@ def render_portfolio():
 
                     sw_status.empty()
                     sw_progress.empty()
+
+                    sw_div_imported, sw_div_skipped = _persist_dividend_rows(
+                        user_email, sw_dividends, "schwab", "USD",
+                        ticker_naam_lookup={t: g["product"] for t, g in sw_grouped.items()},
+                    )
+
                     dup_txt_sw = f" ({sw_dup_skipped} already-imported duplicates skipped)" if sw_dup_skipped else ""
+                    div_txt_sw = f" Plus {sw_div_imported} dividend payment(s) added to your Dividend history." if sw_div_imported else ""
                     st.success(f"Imported {sw_imported_tx} transactions across "
-                               f"{sw_imported_pos} new position(s)!{dup_txt_sw}")
+                               f"{sw_imported_pos} new position(s)!{dup_txt_sw}{div_txt_sw}")
                     already_imported_sw.add(schwab_file.name)
                     st.session_state["schwab_imported_filenames"] = already_imported_sw
                     for state_key in ["schwab_parsed_filename", "schwab_grouped",
@@ -11791,42 +12250,49 @@ def render_today():
             # actiegerichte dag-gebeurtenissen die nergens los zichtbaar
             # waren (alleen meegeteld in day_items): een deep-dive sell-
             # trigger die vandaag geraakt is, een 52-week high/low, en een
-            # ex-dividend datum binnen 5 dagen. Die horen wat mij betreft
-            # ALLEMAAL onder dezelfde RADAR SIGNAL-regel thuis i.p.v. een
-            # aparte regel per soort -- er is toch maar 1 regel beschikbaar,
-            # dus een vaste prioriteit: een sell-trigger is het meest
-            # actiegericht (je eigen vooraf ingestelde regel wordt geraakt),
-            # dan een 52-week record (zeldzaam en prijs-relevant), dan een
-            # ex-dividend datum (gepland, minder urgent), en pas als geen
-            # van die 3 iets oplevert valt het terug op het technische
-            # Supertrend-signaal van hiervoor.
+            # ex-dividend datum binnen 5 dagen.
+            #
+            # EERSTE VERSIE toonde hiervan maar 1 (de "belangrijkste") op 1
+            # regel -- maar als er op dezelfde dag toevallig 2 of 3 van deze
+            # dingen spelen (bv. een sell-trigger EN een 52-week high op
+            # verschillende tickers), wil je die allebei zien, niet alleen
+            # de "winnaar". Daarom nu: ALLE gevonden signalen worden verzameld
+            # (elk als eigen regel), gededupliceerd per TICKER (dezelfde asset
+            # verschijnt maar 1x -- met de belangrijkste soort signaal als er
+            # toevallig meerdere types op dezelfde ticker spelen), in deze
+            # volgorde van belangrijkheid: sell-trigger (je eigen vooraf
+            # ingestelde regel wordt geraakt) > 52-week record (zeldzaam en
+            # prijs-relevant) > technisch Supertrend-signaal > ex-dividend
+            # (gepland, minst urgent). Geen enkel signaal gevonden -> 1x de
+            # eerlijke "system stable"-statusregel.
             _deep_dive_hits = radar_data.get_deep_dive_triggers_hit(user_email, max_items=5)
             _deep_dive_hits = [d for d in _deep_dive_hits if d["ticker"] not in _excluded_radar_tickers]
 
             _week_52_hits = radar_data.get_52_week_records(holdings, market_data, max_items=3) if holdings else []
             _week_52_hits = [r for r in _week_52_hits if r["ticker"] not in _excluded_radar_tickers]
 
+            _held_signal = _find_held_or_watched_technical_signal(holdings, watchlist_items)
+
             _ex_div_hits = radar_data.get_upcoming_ex_dividend_dates(holdings, market_data, days_ahead=5, max_items=3) if holdings else []
             _ex_div_hits = [e for e in _ex_div_hits if e["ticker"] not in _excluded_radar_tickers]
 
-            _held_signal = _find_held_or_watched_technical_signal(holdings, watchlist_items)
+            _radar_signals = []
+            _seen_radar_tickers = set()
 
-            _radar_asset = None
-            _radar_trigger = None
-            if _deep_dive_hits:
-                _hit = _deep_dive_hits[0]
-                _radar_asset = _hit["ticker"]
-                _radar_trigger = f"SELL TRIGGER, {_hit['detail'].upper()}"
-            elif _week_52_hits:
-                _hit = _week_52_hits[0]
-                _radar_asset = _hit["ticker"]
-                _radar_trigger = f"52-WEEK {_hit['type'].upper()} HIT"
-            elif _ex_div_hits:
-                _hit = _ex_div_hits[0]
-                _radar_asset = _hit["ticker"]
-                _radar_trigger = f"EX-DIVIDEND IN {_hit['days_until']}D ({_hit['ex_div_date']})"
-            elif _held_signal and _held_signal["ticker"] not in _excluded_radar_tickers:
-                _radar_asset = _held_signal["ticker"]
+            for _hit in _deep_dive_hits:
+                if _hit["ticker"] in _seen_radar_tickers:
+                    continue
+                _seen_radar_tickers.add(_hit["ticker"])
+                _radar_signals.append((_hit["ticker"], f"SELL TRIGGER, {_hit['detail'].upper()}"))
+
+            for _hit in _week_52_hits:
+                if _hit["ticker"] in _seen_radar_tickers:
+                    continue
+                _seen_radar_tickers.add(_hit["ticker"])
+                _radar_signals.append((_hit["ticker"], f"52-WEEK {_hit['type'].upper()} HIT"))
+
+            if _held_signal and _held_signal["ticker"] not in _seen_radar_tickers:
+                _seen_radar_tickers.add(_held_signal["ticker"])
                 _trigger_parts = ["BULLISH FLIP"]
                 if _held_signal["score"] is not None:
                     _trigger_parts.append(f"SCORE {_held_signal['score']:.1f}")
@@ -11834,17 +12300,27 @@ def render_today():
                     _trigger_parts.append(f"{_held_signal['days_ago']}D AGO")
                 if _held_signal["since_pct"] is not None:
                     _trigger_parts.append(f"{_held_signal['since_pct']:+.1f}% SINCE FLIP")
-                _radar_trigger = ", ".join(_trigger_parts)
+                _radar_signals.append((_held_signal["ticker"], ", ".join(_trigger_parts)))
 
-            if _radar_asset:
-                _radar_label = "RADAR SIGNAL"
-                radar_signal_text = f"ASSET: {_radar_asset.upper()} | TRIGGER: {_radar_trigger}"
+            for _hit in _ex_div_hits:
+                if _hit["ticker"] in _seen_radar_tickers:
+                    continue
+                _seen_radar_tickers.add(_hit["ticker"])
+                _radar_signals.append((_hit["ticker"], f"EX-DIVIDEND IN {_hit['days_until']}D ({_hit['ex_div_date']})"))
+
+            if _radar_signals:
+                _radar_rows = [
+                    ("\u2726", "RADAR SIGNAL", f"ASSET: {_asset.upper()} | TRIGGER: {_trigger}", None)
+                    for _asset, _trigger in _radar_signals
+                ]
             else:
-                _radar_label = "RADAR STATUS"
-                radar_signal_text = "SYSTEM STABLE | NO ANOMALIES DETECTED WITHIN ACTIVE HOLDINGS"
+                _radar_rows = [(
+                    "\u2726", "RADAR STATUS",
+                    "SYSTEM STABLE | NO ANOMALIES DETECTED WITHIN ACTIVE HOLDINGS", None,
+                )]
 
             summary_rows = [
-                ("\u2726", _radar_label, radar_signal_text, None),
+                *_radar_rows,
                 (
                     "\U0001F50D", "SCREENER HITS",
                     f"{opportunities.get('new_opportunities_count', 0)} new long-term ideas found in your active screeners.",
@@ -12847,6 +13323,7 @@ discover_earnings_surprises_page = st.Page(
     render_discover_earnings_surprises, title="Earnings Surprises", url_path="discover-earnings-surprises",
 )
 portfolio_page = st.Page(render_portfolio, title="My Portfolio", url_path="portfolio")
+dividend_page = st.Page(render_dividend, title="Dividend", url_path="dividend")
 analyze_page = st.Page(render_analyze, title="Analyze", url_path="analyze")
 settings_page = st.Page(render_settings, title="Settings", url_path="settings")
 premium_page = st.Page(render_premium, title="Premium", url_path="premium")
@@ -12858,7 +13335,7 @@ unsubscribe_page = st.Page(render_unsubscribe, title="Unsubscribe", url_path="un
 
 all_pages = [
     today_page, discover_page, discover_sectors_themes_page, discover_earnings_surprises_page,
-    portfolio_page, analyze_page, settings_page,
+    portfolio_page, dividend_page, analyze_page, settings_page,
     premium_page, support_page, privacy_page, login_page, confirm_page, unsubscribe_page,
 ]
 pg = st.navigation(all_pages, position="hidden")
@@ -12952,10 +13429,10 @@ with st.sidebar:
        knop) al herhaaldelijk volledig kunnen herstijlen, dus dat is de
        betrouwbaardere route -- nu voor ALLE 4 hoofdknoppen consequent
        hetzelfde widget-type, dus gegarandeerd identieke uitlijning. */
-    .st-key-nav_discover, .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_analyze {
+    .st-key-nav_discover, .st-key-nav_today, .st-key-nav_portfolio, .st-key-nav_dividend, .st-key-nav_analyze {
         width: 100% !important;
     }
-    .st-key-nav_discover button, .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_analyze button {
+    .st-key-nav_discover button, .st-key-nav_today button, .st-key-nav_portfolio button, .st-key-nav_dividend button, .st-key-nav_analyze button {
         display: flex !important; align-items: center !important; justify-content: flex-start !important;
         gap: 0.75rem !important; width: 100% !important;
         font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important; font-weight: 600 !important;
@@ -12963,7 +13440,7 @@ with st.sidebar:
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
     }
-    .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_analyze button:hover {
+    .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_dividend button:hover, .st-key-nav_analyze button:hover {
         background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
     }
     /* Support/Premium: verhuisd naar onderaan de sidebar, als kleinere,
@@ -13030,8 +13507,8 @@ with st.sidebar:
     # geen eigen sidebar-item meer, dus lichten ze allemaal hetzelfde
     # ene 'Discover'-item op.
     _main_key_by_path = {
-        "today": "nav_today", "portfolio": "nav_portfolio", "analyze": "nav_analyze",
-        "support": "nav_support", "premium": "nav_premium",
+        "today": "nav_today", "portfolio": "nav_portfolio", "dividend": "nav_dividend",
+        "analyze": "nav_analyze", "support": "nav_support", "premium": "nav_premium",
         # Discover EN z'n 2 losse detail-pagina's (nog steeds bereikbaar
         # via een directe URL, ook al staan ze niet meer als aparte
         # items in de sidebar) lichten allemaal hetzelfde ene
@@ -13103,6 +13580,9 @@ with st.sidebar:
     with st.container(key="nav_portfolio"):
         if st.button("MY PORTFOLIO", key="navbtn_portfolio", icon=":material/work:"):
             st.switch_page(portfolio_page)
+    with st.container(key="nav_dividend"):
+        if st.button("DIVIDEND", key="navbtn_dividend", icon=":material/payments:"):
+            st.switch_page(dividend_page)
     with st.container(key="nav_analyze"):
         if st.button("ANALYZE", key="navbtn_analyze", icon=":material/bar_chart:"):
             st.switch_page(analyze_page)
@@ -13265,6 +13745,7 @@ with footer_col1:
         st.page_link(discover_page, label="Discover")
         st.page_link(today_page, label="Today")
         st.page_link(portfolio_page, label="My Portfolio")
+        st.page_link(dividend_page, label="Dividend")
         st.page_link(analyze_page, label="Analyze")
 with footer_col2:
     _header_html, _content_key = _footer_accordion_column_header_html("ACCOUNT", "account")

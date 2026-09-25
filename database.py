@@ -178,6 +178,43 @@ def get_transactions_for_holding(user_email: str, holding_id: int) -> list:
     return response.data or []
 
 
+def add_dividend_income(
+    user_email: str, ticker: str, naam: str, amount: float,
+    currency: str, payout_date: str, source: str,
+) -> None:
+    """
+    Logt 1 ontvangen dividend-uitkering PERMANENT -- in een eigen tabel,
+    NIET als 'DIV'-transaction_type in portfolio_transactions. Dat laatste
+    zou price/shares moeten misbruiken om een cashbedrag vast te leggen,
+    wat de shares-telling en gemiddelde kostprijs van de positie zou
+    corrumperen (zie de parsers' eigen toelichting in dashboard.py). Deze
+    tabel is dus bewust volledig losgekoppeld van portfolio_transactions.
+    """
+    client = get_supabase_client()
+    client.table("dividend_income").insert({
+        "user_email": hash_email(user_email),
+        "ticker": ticker,
+        "naam": naam,
+        "amount": amount,
+        "currency": currency,
+        "payout_date": payout_date,
+        "source": source,
+    }).execute()
+
+
+def get_dividend_income(user_email: str) -> list[dict]:
+    """Geeft ALLE ontvangen dividend-uitkeringen van deze gebruiker terug, oudste eerst."""
+    client = get_supabase_client()
+    response = (
+        client.table("dividend_income")
+        .select("*")
+        .eq("user_email", hash_email(user_email))
+        .order("payout_date", desc=False)
+        .execute()
+    )
+    return response.data or []
+
+
 def get_all_transactions(user_email: str) -> dict:
     """Geeft ALLE transacties van een gebruiker terug, gegroepeerd per holding_id."""
     client = get_supabase_client()
