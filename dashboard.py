@@ -7838,10 +7838,10 @@ def _render_wealth_engine(user_email: str) -> None:
                 st.markdown(
                     f'<table style="width:100%; border-collapse:collapse;">'
                     f'<thead><tr>'
-                    f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Asset</th>'
-                    f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Type</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right; width:100%;">Date</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right; width:1%;">Amount</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Asset</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; padding-right:32px; width:1%;">Type</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:32px; width:100%;">Date</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; padding-right:0; width:1%;">Amount</th>'
                     f'</tr></thead>'
                     f'<tbody>{_upcoming_rows_html}</tbody>'
                     f'</table>',
