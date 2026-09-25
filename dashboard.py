@@ -8237,7 +8237,7 @@ def render_dividend():
         st.altair_chart(ladder_chart, use_container_width=True)
         if _peak_idx:
             _peak_names = " & ".join(_month_labels[i] for i in sorted(_peak_idx))
-            st.caption(f"Peak in {_peak_names} -- typically overlapping quarterly dividend payouts.")
+            st.caption(f"PEAK IN {_peak_names}: TYPICALLY OVERLAPPING QUARTERLY DIVIDEND PAYOUTS.")
 
     with grid_col2:
         st.markdown(
@@ -8287,7 +8287,7 @@ def render_dividend():
             axis=alt.Axis(
                 labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
                 labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
-                labelExpr="endsWith(datum.value, '-01') ? substring(datum.value, 0, 4) : ''",
+                labelExpr="indexof(datum.value, '-01') === 4 ? slice(datum.value, 0, 4) : ''",
             ),
         )
         snowball_area = alt.Chart(_snowball_df).mark_area(
