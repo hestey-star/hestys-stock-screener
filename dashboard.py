@@ -2679,16 +2679,35 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     """
     Herbalanceer-trigger als kolom-content (Insights staat weer naast
     elkaar in kolommen, net als 'Your Portfolio Today' -- maar BEWUST
-    ZONDER verticale scheidslijnen en zonder kaart-achtergrond/-rand,
-    zodat het meteen visueel verschilt van het portfolio-blok erboven).
+    ZONDER kaart-achtergrond, zodat het meteen visueel verschilt van het
+    portfolio-blok erboven).
 
-    Het hoofdcijfer is NEUTRAAL gekleurd (het site-brede lichte
-    tekst-wit, #EAEDF1) i.p.v. rood/groen -- dit is een doel-afwijking,
-    geen dagrendement, en zou anders verward kunnen worden met winst/
-    verlies. '-'/'below target' vs '+'/'above target' blijft het
-    onderscheid duidelijk maken.
+    HERONTWERP (op verzoek, na grondige analyse van de vorige versie):
+    1. ERNST-KLEUR op het hoofdcijfer: neutraal wit tot ~5pp afwijking,
+       amber vanaf ~5pp, rose vanaf ~10pp -- een afwijking van 11pp
+       verdient een andere visuele lading dan 4.8pp. Blijft een
+       doel-afwijking, geen dagrendement (geen groen/rood P&L-verwarring
+       -- rose/amber i.p.v. TODAY_POSITIVE_TEXT's groen voorkomt dat).
+    2. TICKER + NAAM samen i.p.v. alleen de volledige (vaak lange)
+       fondsnaam -- de ticker is het scanbare anker, de naam eronder is
+       ondersteunend/gedempt.
+    3. Mini-VOORTGANGSBALK (huidige allocatie als vulling, target als
+       dunne marker) -- hetzelfde vul-idioom als elders in de app
+       (_position_row_html's allocatiebalkjes), i.p.v. 2 losse cijfers
+       moeten aflezen.
+    4. Een echte, klikbare ACTIE per kaart (naar Yahoo Finance, zelfde
+       patroon als Daily Radar) i.p.v. dode adviestekst zonder link.
+    5. Dunne linker ACCENTRAND in de ernst-kleur -- geeft de kaart net
+       genoeg aanwezigheid zonder een dikke kaart-look, en dient als 2e,
+       perifeer zichtbaar severity-signaal.
     """
-    color = "#EAEDF1"
+    abs_diff = abs(suggestion["diff_pct"])
+    if abs_diff >= 10:
+        color = TODAY_NEGATIVE_TEXT
+    elif abs_diff >= 5:
+        color = "#E8A93C"
+    else:
+        color = "#EAEDF1"
     insight_id = f"rebalance-{suggestion['ticker']}"
     if suggestion["action"] == "buy":
         sign = "-"
@@ -2697,9 +2716,15 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
     else:
         sign = "+"
         target_label = "above target"
-        context = f'{suggestion["current_pct"]:.1f}% vs {suggestion["target_pct"]:.1f}% target.'
+        context = "Consider trimming this position."
+
+    domain_max = max(suggestion["current_pct"], suggestion["target_pct"], 0.01) * 1.15
+    fill_pct = min(suggestion["current_pct"] / domain_max * 100, 100)
+    target_marker_pct = min(suggestion["target_pct"] / domain_max * 100, 100)
+
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; padding-right:26px;">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; padding:1px 26px 0 12px; '
+        f'border-left:2px solid {color};">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
         f'{_icon_span("balance", size_px=13, color="#8992A3")}'
@@ -2708,28 +2733,53 @@ def _rebalance_trigger_card_html(suggestion: dict, currency_symbol: str) -> str:
         f'</div>'
         f'<div style="font-size:1.65rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
-        f'{sign}{abs(suggestion["diff_pct"]):.1f}% <span style="font-size:0.62rem; font-weight:700; '
+        f'{sign}{abs_diff:.1f}% <span style="font-size:0.62rem; font-weight:700; '
         f'color:#8992A3; text-transform:none; letter-spacing:0;">{target_label}</span></div>'
-        f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px; '
+        f'<div style="display:flex; align-items:baseline; gap:0.5rem; margin-top:10px; flex-wrap:wrap;">'
+        f'<span style="font-size:0.95rem; color:#F1F5F9; font-weight:800; '
+        f'font-family:\'Inter\', sans-serif !important;">{suggestion["ticker"]}</span>'
+        f'<span style="font-size:0.72rem; color:#64748B; font-weight:600; '
         f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word;">'
-        f'{suggestion["naam"].upper()}</div>'
-        f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px; font-family:\'Inter\', sans-serif !important;">'
+        f'{suggestion["naam"]}</span>'
+        f'</div>'
+        f'<div style="position:relative; height:6px; background:rgba(137,146,163,0.15); '
+        f'border-radius:3px; margin-top:10px;">'
+        f'<div style="position:absolute; left:0; top:0; height:100%; width:{fill_pct:.1f}%; '
+        f'background:{color}; border-radius:3px;"></div>'
+        f'<div style="position:absolute; left:{target_marker_pct:.1f}%; top:-2px; width:2px; '
+        f'height:10px; background:#F1F5F9; border-radius:1px;" title="Target"></div>'
+        f'</div>'
+        f'<div style="font-size:0.65rem; color:#64748B; margin-top:4px; '
+        f'font-family:\'Inter\', sans-serif !important;">'
+        f'{suggestion["current_pct"]:.1f}% now &middot; {suggestion["target_pct"]:.1f}% target</div>'
+        f'<div style="font-size:0.7rem; color:#64748B; margin-top:6px; font-family:\'Inter\', sans-serif !important;">'
         f'{context}</div>'
+        f'<a href="https://finance.yahoo.com/quote/{suggestion["ticker"]}" target="_blank" rel="noopener" '
+        f'style="display:inline-block; margin-top:6px; font-size:0.7rem; color:{color}; font-weight:700; '
+        f'text-decoration:none; font-family:\'Inter\', sans-serif !important;">&rarr; View {suggestion["ticker"]}</a>'
         f'</div>'
     )
 
 
 def _watchlist_snack_card_html(alert: dict) -> str:
     """
-    'Watchlist-Snack' als kolom-content -- zelfde structuur als
-    _rebalance_trigger_card_html hierboven. Amber blijft hier de
-    accentkleur (dit is een 'watch dit'-signaal, geen rendementscijfer,
-    dus geen verwarring met winst/verlies).
+    'Watchlist-Snack' als kolom-content -- zelfde herontwerp als
+    _rebalance_trigger_card_html hierboven (ticker+naam, voortgangsbalk,
+    klikbare actie, linker accentrand). Amber blijft de basis-accentkleur
+    (dit is een 'watch dit'-signaal, geen rendementscijfer, dus geen
+    verwarring met winst/verlies) -- maar schaalt door naar rose zodra de
+    koers heel dicht (<0.75pp) bij de alert-streefprijs zit, als extra
+    urgentie-signaal.
     """
-    color = "#E8A93C"
+    _NEAR_PCT_MAX = 2.0  # moet gelijk blijven aan get_watchlist_near_target_alerts()'s eigen 'near_pct'-default
+    distance = alert["distance_pct"]
+    color = TODAY_NEGATIVE_TEXT if distance <= 0.75 else "#E8A93C"
     insight_id = f"watchlist-{alert['ticker']}"
+    progress_pct = max(0.0, min(100.0, (_NEAR_PCT_MAX - distance) / _NEAR_PCT_MAX * 100))
+    direction_label = "above" if alert.get("alert_direction") == "above" else "below"
     return (
-        f'<div data-insight-col="{insight_id}" style="position:relative; padding-right:26px;">'
+        f'<div data-insight-col="{insight_id}" style="position:relative; padding:1px 26px 0 12px; '
+        f'border-left:2px solid {color};">'
         f'{_insight_dismiss_button_html(insight_id)}'
         f'<div style="display:flex; align-items:center; gap:0.3rem;">'
         f'{_icon_span("sell", size_px=13, color=color)}'
@@ -2738,12 +2788,24 @@ def _watchlist_snack_card_html(alert: dict) -> str:
         f'</div>'
         f'<div style="font-size:1.65rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
         f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">'
-        f'{alert["distance_pct"]:.1f}% to go</div>'
-        f'<div style="font-size:0.85rem; color:#CBD5E1; font-weight:600; margin-top:10px; '
+        f'{distance:.1f}% to go</div>'
+        f'<div style="display:flex; align-items:baseline; gap:0.5rem; margin-top:10px; flex-wrap:wrap;">'
+        f'<span style="font-size:0.95rem; color:#F1F5F9; font-weight:800; '
+        f'font-family:\'Inter\', sans-serif !important;">{alert["ticker"]}</span>'
+        f'<span style="font-size:0.72rem; color:#64748B; font-weight:600; '
         f'font-family:\'Inter\', sans-serif !important; white-space:normal; overflow-wrap:break-word;">'
-        f'{alert["naam"].upper()}</div>'
-        f'<div style="font-size:0.7rem; color:#64748B; margin-top:3px; font-family:\'Inter\', sans-serif !important;">'
-        f'Now at {alert["current_price"]:.2f}, target {alert["alert_target_price"]:.2f}</div>'
+        f'{alert["naam"]}</span>'
+        f'</div>'
+        f'<div style="position:relative; height:6px; background:rgba(137,146,163,0.15); '
+        f'border-radius:3px; margin-top:10px;">'
+        f'<div style="position:absolute; left:0; top:0; height:100%; width:{progress_pct:.1f}%; '
+        f'background:{color}; border-radius:3px;"></div>'
+        f'</div>'
+        f'<div style="font-size:0.65rem; color:#64748B; margin-top:4px; font-family:\'Inter\', sans-serif !important;">'
+        f'Now {alert["current_price"]:.2f} &middot; alert {direction_label} {alert["alert_target_price"]:.2f}</div>'
+        f'<a href="https://finance.yahoo.com/quote/{alert["ticker"]}" target="_blank" rel="noopener" '
+        f'style="display:inline-block; margin-top:6px; font-size:0.7rem; color:{color}; font-weight:700; '
+        f'text-decoration:none; font-family:\'Inter\', sans-serif !important;">&rarr; View {alert["ticker"]}</a>'
         f'</div>'
     )
 
