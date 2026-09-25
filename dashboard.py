@@ -2371,7 +2371,7 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
 
 
 def _today_metric_tile_html(label: str, icon_name: str, value_text: str, color: str, bg: str, border: str,
-                             footer_text: str = None) -> str:
+                             footer_text: str = None, value_color: str = None) -> str:
     """
     Zelfstandige, kleur-meebewegende tegel voor de 'Your Portfolio Today'-
     rij -- exact dezelfde visuele taal (rgba-achtergrond + rand + 12px
@@ -2394,8 +2394,9 @@ def _today_metric_tile_html(label: str, icon_name: str, value_text: str, color: 
         f'<span style="font-size:0.62rem; color:#8992A3; text-transform:uppercase; letter-spacing:0.1em; '
         f'font-weight:700; font-family:\'Inter\', sans-serif !important;">{label}</span>'
         f'</div>'
-        f'<div style="font-size:1.55rem; font-weight:800; color:{color}; margin-top:6px; line-height:1.1; '
-        f'font-family:\'Inter\', sans-serif !important; font-variant-numeric: tabular-nums;">{value_text}</div>'
+        f'<div style="font-size:1.55rem; font-weight:800; color:{value_color or color}; margin-top:6px; '
+        f'line-height:1.1; font-family:\'Inter\', sans-serif !important; '
+        f'font-variant-numeric: tabular-nums;">{value_text}</div>'
         f'{footer_html}'
         f'</div>'
     )
@@ -8129,12 +8130,18 @@ def render_dividend():
     consistency_pct = round(months_with_payout / 12 * 100)
 
     metric_col1, metric_col2, metric_col3 = st.columns(3, gap="medium")
+    # Groen blijft over als accent (rand + icoon) en als kleur van de echte
+    # datamarks (Ladder-balken, Snowball-fill) -- de tegel-WAARDES zelf
+    # gaan naar neutrale inkt (#F1F5F9), anders schreeuwt letterlijk elk
+    # element op de pagina in dezelfde emerald-tint en verliest de kleur
+    # z'n signaalfunctie ("dit is data die ertoe doet").
     _tile_bg, _tile_border, _tile_color = "rgba(16,185,129,0.10)", "rgba(16,185,129,0.45)", "#34D399"
+    _tile_value_color = "#F1F5F9"
     with metric_col1:
         st.markdown(
             _today_metric_tile_html(
                 "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
-                _tile_color, _tile_bg, _tile_border,
+                _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
                 footer_text=(
                     f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}"
                     + (f" · Staking: €{staking_total:,.2f}" if staking_total > 0 else "")
@@ -8146,7 +8153,7 @@ def render_dividend():
         st.markdown(
             _today_metric_tile_html(
                 "Average Monthly Payout", "calendar_month", f"€{avg_monthly:,.2f} / MONTH",
-                _tile_color, _tile_bg, _tile_border,
+                _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
                 footer_text=f"Over {months_active} active month(s)",
             ),
             unsafe_allow_html=True,
@@ -8155,7 +8162,7 @@ def render_dividend():
         st.markdown(
             _today_metric_tile_html(
                 "Payout Consistency", "payments", f"{consistency_pct}% YEAR-ROUND STABILITY",
-                _tile_color, _tile_bg, _tile_border,
+                _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
                 footer_text=f"Paid out in {months_with_payout}/12 calendar months",
             ),
             unsafe_allow_html=True,
@@ -8362,7 +8369,7 @@ def render_dividend():
             f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:700; '
             f'color:#F1F5F9; white-space:nowrap;">{company}</td>'
             f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:600; '
-            f'color:#34D399; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
+            f'color:#CBD5E1; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
             f'<td style="{_cell_base} text-align:right; font-size:0.78rem; color:#94A3B8; '
             f'white-space:nowrap; padding-left:28px;">{pay_date.strftime("%b %d, %Y")}</td>'
             f'</tr>'
