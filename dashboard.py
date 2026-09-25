@@ -7342,439 +7342,946 @@ def _render_wealth_engine(user_email: str) -> None:
         return
 
     # ================================================================
-    # DEEL 1: THE REALIZED HISTORY (Verleden) -- gefuseerd vanuit de
-    # voormalige, losstaande render_dividend()-pagina (nu volledig uit de
-    # hoofdnavigatie verwijderd, zie de nav-aanpassingen verderop in dit
-    # bestand). Gebruikt de 'holdings' die hierboven al zijn opgehaald --
-    # geen dubbele database-aanroep. Blijft feitelijk stilstaan, ongeacht
-    # hoe hard er verderop aan de Cockpit Central-sliders wordt gedraaid.
+    # SUB-NAVIGATIE: 2 chronologische pills bovenaan -- i.p.v. 1 lange
+    # doorlopende scroll (Verleden+Heden+Toekomst onder elkaar), wat als
+    # een data-dump aanvoelde en het historie/toekomst-onderscheid
+    # vertroebelde. Nu een harde knip: Tab 1 toont UITSLUITEND
+    # gerealiseerde historie (geen sliders/projecties), Tab 2 UITSLUITEND
+    # de interactieve simulator. st.pills + session_state schakelt
+    # flitsloos tussen de twee (gewone Streamlit-widget-rerun, geen
+    # page-reload).
     # ================================================================
-    st.markdown(
-        _uniform_section_header_html("The Realized History", "history"),
-        unsafe_allow_html=True,
+    if "wealth_engine_sub_tab" not in st.session_state:
+        st.session_state["wealth_engine_sub_tab"] = "🕒 HISTORICAL RECORD"
+    _wealth_sub_tab = st.pills(
+        "Wealth Engine section",
+        ["🕒 HISTORICAL RECORD", "🔮 FORWARD PROJECTOR"],
+        key="wealth_engine_sub_tab", label_visibility="collapsed",
     )
+    st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
 
-    dividend_income_rows = _wealth_db.get_dividend_income(user_email)
+    if _wealth_sub_tab == "🕒 HISTORICAL RECORD":
+        # DEEL 1 content: pure geschiedenis -- geen sliders, geen
+        # toekomstgrafieken. De actieve pill hierboven ("HISTORICAL RECORD")
+        # doet al dienst als sectietitel, dus geen aparte kop meer hier.
+        dividend_income_rows = _wealth_db.get_dividend_income(user_email)
 
-    # --- Prop.com (of elke andere 'custom yield asset') se historische
-    # maandelijkse cashflow -- er is geen aparte 'startdatum van de
-    # investering'-veld; die wordt afgeleid uit de VROEGSTE buy-transactie
-    # die bij het aanmaken van zo'n positie altijd wordt gelogd (zie 'Log
-    # a transaction' -> custom yield asset). Vanaf die maand t/m de
-    # huidige maand krijgt elke kalendermaand 1 cashflow-record.
-    def _add_one_month(d):
-        return d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1)
+        # --- Prop.com (of elke andere 'custom yield asset') se historische
+        # maandelijkse cashflow -- er is geen aparte 'startdatum van de
+        # investering'-veld; die wordt afgeleid uit de VROEGSTE buy-transactie
+        # die bij het aanmaken van zo'n positie altijd wordt gelogd (zie 'Log
+        # a transaction' -> custom yield asset). Vanaf die maand t/m de
+        # huidige maand krijgt elke kalendermaand 1 cashflow-record.
+        def _add_one_month(d):
+            return d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1)
 
-    # Supabase/PostgREST kan een 'numeric'-kolom (zoals custom_annual_
-    # cashflow of dividend_income.amount) als STRING teruggeven i.p.v. een
-    # kaal getal (om precisieverlies te voorkomen) -- een kale float()/12
-    # zou daar met een TypeError op stuklopen, of (erger, stiller) een
-    # verkeerd bedrag opleveren. Daarom overal hieronder consequent via
-    # deze ene, robuuste _to_float() i.p.v. losse, impliciete conversies.
-    def _to_float(value) -> float:
-        if value is None:
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        try:
-            return float(str(value).strip().replace(",", "."))
-        except (TypeError, ValueError):
-            return 0.0
+        # Supabase/PostgREST kan een 'numeric'-kolom (zoals custom_annual_
+        # cashflow of dividend_income.amount) als STRING teruggeven i.p.v. een
+        # kaal getal (om precisieverlies te voorkomen) -- een kale float()/12
+        # zou daar met een TypeError op stuklopen, of (erger, stiller) een
+        # verkeerd bedrag opleveren. Daarom overal hieronder consequent via
+        # deze ene, robuuste _to_float() i.p.v. losse, impliciete conversies.
+        def _to_float(value) -> float:
+            if value is None:
+                return 0.0
+            if isinstance(value, (int, float)):
+                return float(value)
+            try:
+                return float(str(value).strip().replace(",", "."))
+            except (TypeError, ValueError):
+                return 0.0
 
-    _custom_assets = [h for h in holdings if h.get("custom_annual_cashflow") is not None]
-    _prop_events = []
-    for asset in _custom_assets:
-        monthly_amount = _to_float(asset.get("custom_annual_cashflow")) / 12.0
-        if monthly_amount <= 0:
-            continue
-        try:
-            asset_txs = _wealth_db.get_transactions_for_holding(user_email, asset["id"])
-            start_date = min(
-                (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
-                default=None,
-            )
-        except Exception:
-            start_date = None
-        if start_date is None:
-            continue
-        cursor = start_date.replace(day=1)
-        current_month = datetime.now().date().replace(day=1)
-        while cursor <= current_month:
-            _prop_events.append({"date": cursor, "amount_eur": monthly_amount, "naam": asset["naam"]})
-            cursor = _add_one_month(cursor)
+        _custom_assets = [h for h in holdings if h.get("custom_annual_cashflow") is not None]
+        _prop_events = []
+        for asset in _custom_assets:
+            monthly_amount = _to_float(asset.get("custom_annual_cashflow")) / 12.0
+            if monthly_amount <= 0:
+                continue
+            try:
+                asset_txs = _wealth_db.get_transactions_for_holding(user_email, asset["id"])
+                start_date = min(
+                    (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
+                    default=None,
+                )
+            except Exception:
+                start_date = None
+            if start_date is None:
+                continue
+            cursor = start_date.replace(day=1)
+            current_month = datetime.now().date().replace(day=1)
+            while cursor <= current_month:
+                _prop_events.append({"date": cursor, "amount_eur": monthly_amount, "naam": asset["naam"]})
+                cursor = _add_one_month(cursor)
 
-    # --- Staking (bv. SOL: X van je Y gestakete coins tegen Z% APY, via
-    # het losse 'staked_amount'/'staking_apy_pct'-veld op een gewone
-    # holding -- HELEMAAL LOS van 'custom_annual_cashflow'/Prop.com
-    # hierboven). Zelfde synthetische-maandbedrag-aanpak als Prop.com: de
-    # jaarlijkse APY over de EUR-waarde van het gestakete deel gedeeld
-    # door 12, vanaf de eerste transactie van die holding. Werkt generiek
-    # voor elke holding met beide velden ingevuld, niet alleen SOL.
-    _staking_holdings = [h for h in holdings if h.get("staked_amount") and h.get("staking_apy_pct")]
-    _staking_events = []
-    for h in _staking_holdings:
-        total_shares = h.get("shares") or 0
-        if total_shares <= 0:
-            continue
-        staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
-        staked_value_eur = _eur_position_value(h) * staked_fraction
-        monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
-        if monthly_amount <= 0:
-            continue
-        try:
-            asset_txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
-            start_date = min(
-                (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
-                default=None,
-            )
-        except Exception:
-            start_date = None
-        if start_date is None:
-            continue
-        cursor = start_date.replace(day=1)
-        current_month = datetime.now().date().replace(day=1)
-        while cursor <= current_month:
-            _staking_events.append({
-                "date": cursor, "amount_eur": monthly_amount,
-                "ticker": h.get("ticker"), "naam": f"{h.get('naam') or h.get('ticker')} (Staking)",
+        # --- Staking (bv. SOL: X van je Y gestakete coins tegen Z% APY, via
+        # het losse 'staked_amount'/'staking_apy_pct'-veld op een gewone
+        # holding -- HELEMAAL LOS van 'custom_annual_cashflow'/Prop.com
+        # hierboven). Zelfde synthetische-maandbedrag-aanpak als Prop.com: de
+        # jaarlijkse APY over de EUR-waarde van het gestakete deel gedeeld
+        # door 12, vanaf de eerste transactie van die holding. Werkt generiek
+        # voor elke holding met beide velden ingevuld, niet alleen SOL.
+        _staking_holdings = [h for h in holdings if h.get("staked_amount") and h.get("staking_apy_pct")]
+        _staking_events = []
+        for h in _staking_holdings:
+            total_shares = h.get("shares") or 0
+            if total_shares <= 0:
+                continue
+            staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
+            staked_value_eur = _eur_position_value(h) * staked_fraction
+            monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
+            if monthly_amount <= 0:
+                continue
+            try:
+                asset_txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
+                start_date = min(
+                    (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
+                    default=None,
+                )
+            except Exception:
+                start_date = None
+            if start_date is None:
+                continue
+            cursor = start_date.replace(day=1)
+            current_month = datetime.now().date().replace(day=1)
+            while cursor <= current_month:
+                _staking_events.append({
+                    "date": cursor, "amount_eur": monthly_amount,
+                    "ticker": h.get("ticker"), "naam": f"{h.get('naam') or h.get('ticker')} (Staking)",
+                })
+                cursor = _add_one_month(cursor)
+
+        # --- Broker-uitkeringen (database.get_dividend_income(), de ECHTE,
+        # PERMANENT opgeslagen historie -- niet de oude, tijdelijke 'dividend_
+        # rows'-parserstructuur) hard omzetten naar EUR en optellen bij de
+        # Prop.com-reeks hierboven, tot 1 chronologische lijst.
+        # Broker-dividenden komen native binnen (USD voor Robinhood/Schwab,
+        # EUR/USD gemengd voor DEGIRO's rekeningoverzicht, EUR voor Trade
+        # Republic) -- omgerekend met de HUIDIGE wisselkoers (geen historische
+        # FX-data beschikbaar per uitkeringsdatum, zelfde bewuste vereenvoudi-
+        # ging als elders in de app bij ontbrekende historische koersen). 1x
+        # per valuta opgehaald en gecached, niet opnieuw per rij.
+        _fx_cache: dict = {}
+
+        def _to_eur(amount: float, currency: str) -> float:
+            if not currency or currency == "EUR":
+                return amount
+            if currency not in _fx_cache:
+                _fx_cache[currency] = get_fx_rate(currency, "EUR") or 1.0
+            return amount * _fx_cache[currency]
+
+        broker_events = []
+        for row in dividend_income_rows:
+            raw_date = row.get("payout_date")
+            if not raw_date:
+                continue
+            try:
+                event_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
+            except Exception:
+                continue
+            amount_eur = _to_eur(_to_float(row.get("amount")), row.get("currency"))
+            if amount_eur <= 0:
+                continue
+            broker_events.append({
+                "date": event_date, "amount_eur": amount_eur,
+                "ticker": row.get("ticker"), "naam": row.get("naam") or row.get("ticker"),
             })
-            cursor = _add_one_month(cursor)
 
-    # --- Broker-uitkeringen (database.get_dividend_income(), de ECHTE,
-    # PERMANENT opgeslagen historie -- niet de oude, tijdelijke 'dividend_
-    # rows'-parserstructuur) hard omzetten naar EUR en optellen bij de
-    # Prop.com-reeks hierboven, tot 1 chronologische lijst.
-    # Broker-dividenden komen native binnen (USD voor Robinhood/Schwab,
-    # EUR/USD gemengd voor DEGIRO's rekeningoverzicht, EUR voor Trade
-    # Republic) -- omgerekend met de HUIDIGE wisselkoers (geen historische
-    # FX-data beschikbaar per uitkeringsdatum, zelfde bewuste vereenvoudi-
-    # ging als elders in de app bij ontbrekende historische koersen). 1x
-    # per valuta opgehaald en gecached, niet opnieuw per rij.
-    _fx_cache: dict = {}
+        prop_events_eur = [
+            {"date": e["date"], "amount_eur": _to_float(e["amount_eur"]), "ticker": "PROP.COM", "naam": e["naam"]}
+            for e in _prop_events
+        ]
 
-    def _to_eur(amount: float, currency: str) -> float:
-        if not currency or currency == "EUR":
-            return amount
-        if currency not in _fx_cache:
-            _fx_cache[currency] = get_fx_rate(currency, "EUR") or 1.0
-        return amount * _fx_cache[currency]
+        # De 3 bronnen (broker-dividenden, Prop.com, staking) HARD samenvoegen
+        # tot 1 chronologische reeks -- geen enkele overschrijft of verdringt
+        # een andere, ze worden simpelweg allemaal in dezelfde lijst gestopt en
+        # op datum gesorteerd. Alles verderop (tegels, Ladder, Snowball,
+        # Upcoming) rekent UITSLUITEND met deze ene, gecombineerde
+        # 'all_events'-lijst -- er is geen aparte, deels-Prop.com- of
+        # deels-broker-only berekening meer ergens anders in de functie.
+        all_events = broker_events + prop_events_eur + _staking_events
+        all_events.sort(key=lambda e: e["date"])
 
-    broker_events = []
-    for row in dividend_income_rows:
-        raw_date = row.get("payout_date")
-        if not raw_date:
-            continue
-        try:
-            event_date = datetime.strptime(str(raw_date)[:10], "%Y-%m-%d").date()
-        except Exception:
-            continue
-        amount_eur = _to_eur(_to_float(row.get("amount")), row.get("currency"))
-        if amount_eur <= 0:
-            continue
-        broker_events.append({
-            "date": event_date, "amount_eur": amount_eur,
-            "ticker": row.get("ticker"), "naam": row.get("naam") or row.get("ticker"),
-        })
+        today_date = datetime.now().date()
 
-    prop_events_eur = [
-        {"date": e["date"], "amount_eur": _to_float(e["amount_eur"]), "ticker": "PROP.COM", "naam": e["naam"]}
-        for e in _prop_events
-    ]
+        if not all_events:
+            st.info(
+                "No dividend history yet. Import a broker CSV under Manage -> Import transactions "
+                "(Robinhood, Schwab or Trade Republic dividend rows are now tracked automatically), "
+                "or add a custom yield asset like Prop.com."
+            )
+        else:
+            # ============================================================
+            # 1. METRICS -- 3 tegels, zelfde visuele taal als Today/Stress-Test
+            # ============================================================
+            _staking_tickers = {h.get("ticker") for h in _staking_holdings}
+            total_collected = sum(e["amount_eur"] for e in all_events)
+            prop_total = sum(e["amount_eur"] for e in all_events if e["ticker"] == "PROP.COM")
+            staking_total = sum(
+                e["amount_eur"] for e in all_events
+                if e["ticker"] in _staking_tickers and e["naam"].endswith("(Staking)")
+            )
+            broker_total = total_collected - prop_total - staking_total
+            first_date = all_events[0]["date"]
+            months_active = max(1, (today_date.year - first_date.year) * 12 + (today_date.month - first_date.month) + 1)
+            avg_monthly = total_collected / months_active
 
-    # De 3 bronnen (broker-dividenden, Prop.com, staking) HARD samenvoegen
-    # tot 1 chronologische reeks -- geen enkele overschrijft of verdringt
-    # een andere, ze worden simpelweg allemaal in dezelfde lijst gestopt en
-    # op datum gesorteerd. Alles verderop (tegels, Ladder, Snowball,
-    # Upcoming) rekent UITSLUITEND met deze ene, gecombineerde
-    # 'all_events'-lijst -- er is geen aparte, deels-Prop.com- of
-    # deels-broker-only berekening meer ergens anders in de functie.
-    all_events = broker_events + prop_events_eur + _staking_events
-    all_events.sort(key=lambda e: e["date"])
+            # Payout consistency: hoeveel van de 12 KALENDERMAANDEN (ongeacht
+            # jaar) ooit minstens 1 uitkering hebben gezien -- 10 van de 12
+            # maanden ooit een uitkering = 83% 'year-round stability'. Meet dus
+            # SPREIDING over het jaar, niet het totale aantal uitkeringen.
+            months_with_payout = len({e["date"].month for e in all_events})
+            consistency_pct = round(months_with_payout / 12 * 100)
 
-    today_date = datetime.now().date()
-
-    if not all_events:
-        st.info(
-            "No dividend history yet. Import a broker CSV under Manage -> Import transactions "
-            "(Robinhood, Schwab or Trade Republic dividend rows are now tracked automatically), "
-            "or add a custom yield asset like Prop.com."
-        )
-    else:
-        # ============================================================
-        # 1. METRICS -- 3 tegels, zelfde visuele taal als Today/Stress-Test
-        # ============================================================
-        _staking_tickers = {h.get("ticker") for h in _staking_holdings}
-        total_collected = sum(e["amount_eur"] for e in all_events)
-        prop_total = sum(e["amount_eur"] for e in all_events if e["ticker"] == "PROP.COM")
-        staking_total = sum(
-            e["amount_eur"] for e in all_events
-            if e["ticker"] in _staking_tickers and e["naam"].endswith("(Staking)")
-        )
-        broker_total = total_collected - prop_total - staking_total
-        first_date = all_events[0]["date"]
-        months_active = max(1, (today_date.year - first_date.year) * 12 + (today_date.month - first_date.month) + 1)
-        avg_monthly = total_collected / months_active
-
-        # Payout consistency: hoeveel van de 12 KALENDERMAANDEN (ongeacht
-        # jaar) ooit minstens 1 uitkering hebben gezien -- 10 van de 12
-        # maanden ooit een uitkering = 83% 'year-round stability'. Meet dus
-        # SPREIDING over het jaar, niet het totale aantal uitkeringen.
-        months_with_payout = len({e["date"].month for e in all_events})
-        consistency_pct = round(months_with_payout / 12 * 100)
-
-        metric_col1, metric_col2, metric_col3 = st.columns(3, gap="medium")
-        # Groen blijft over als accent (rand + icoon) en als kleur van de echte
-        # datamarks (Ladder-balken, Snowball-fill) -- de tegel-WAARDES zelf
-        # gaan naar neutrale inkt (#F1F5F9), anders schreeuwt letterlijk elk
-        # element op de pagina in dezelfde emerald-tint en verliest de kleur
-        # z'n signaalfunctie ("dit is data die ertoe doet").
-        _tile_bg, _tile_border, _tile_color = "rgba(16,185,129,0.10)", "rgba(16,185,129,0.45)", "#34D399"
-        _tile_value_color = "#F1F5F9"
-        with metric_col1:
-            st.markdown(
-                _today_metric_tile_html(
-                    "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
-                    _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
-                    footer_text=(
-                        f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}"
-                        + (f" · Staking: €{staking_total:,.2f}" if staking_total > 0 else "")
+            metric_col1, metric_col2, metric_col3 = st.columns(3, gap="medium")
+            # Groen blijft over als accent (rand + icoon) en als kleur van de echte
+            # datamarks (Ladder-balken, Snowball-fill) -- de tegel-WAARDES zelf
+            # gaan naar neutrale inkt (#F1F5F9), anders schreeuwt letterlijk elk
+            # element op de pagina in dezelfde emerald-tint en verliest de kleur
+            # z'n signaalfunctie ("dit is data die ertoe doet").
+            _tile_bg, _tile_border, _tile_color = "rgba(16,185,129,0.10)", "rgba(16,185,129,0.45)", "#34D399"
+            _tile_value_color = "#F1F5F9"
+            with metric_col1:
+                st.markdown(
+                    _today_metric_tile_html(
+                        "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
+                        _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
+                        footer_text=(
+                            f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}"
+                            + (f" · Staking: €{staking_total:,.2f}" if staking_total > 0 else "")
+                        ),
                     ),
-                ),
-                unsafe_allow_html=True,
-            )
-        with metric_col2:
-            st.markdown(
-                _today_metric_tile_html(
-                    "Average Monthly Payout", "calendar_month", f"€{avg_monthly:,.2f} / MONTH",
-                    _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
-                    footer_text=f"Over {months_active} active month(s)",
-                ),
-                unsafe_allow_html=True,
-            )
-        with metric_col3:
-            st.markdown(
-                _today_metric_tile_html(
-                    "Payout Consistency", "payments", f"{consistency_pct}% YEAR-ROUND STABILITY",
-                    _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
-                    footer_text=f"Paid out in {months_with_payout}/12 calendar months",
-                ),
-                unsafe_allow_html=True,
-            )
+                    unsafe_allow_html=True,
+                )
+            with metric_col2:
+                st.markdown(
+                    _today_metric_tile_html(
+                        "Average Monthly Payout", "calendar_month", f"€{avg_monthly:,.2f} / MONTH",
+                        _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
+                        footer_text=f"Over {months_active} active month(s)",
+                    ),
+                    unsafe_allow_html=True,
+                )
+            with metric_col3:
+                st.markdown(
+                    _today_metric_tile_html(
+                        "Payout Consistency", "payments", f"{consistency_pct}% YEAR-ROUND STABILITY",
+                        _tile_color, _tile_bg, _tile_border, value_color=_tile_value_color,
+                        footer_text=f"Paid out in {months_with_payout}/12 calendar months",
+                    ),
+                    unsafe_allow_html=True,
+                )
 
-        st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
 
+            # ============================================================
+            # 2 + 3. THE DIVIDEND LADDER + THE DIVIDEND SNOWBALL -- compact
+            # side-by-side (50/50), i.p.v. 2 kamerbrede grafieken onder elkaar.
+            # Beide via Altair (alt.Chart) i.p.v. Plotly -- smallere, elegantere
+            # marks die beter bij Hestys' verfijnde, typografische stijl passen
+            # dan Plotly's dikkere standaard-balken/lijnen.
+            # ============================================================
+            grid_col1, grid_col2 = st.columns([1, 1], gap="medium")
+
+            with grid_col1:
+                st.markdown(
+                    _uniform_section_header_html("The Dividend Ladder", "bar_chart"),
+                    unsafe_allow_html=True,
+                )
+                # Som per KALENDERMAAND (JAN t/m DEC), over ALLE jaren heen
+                # samengevoegd -- ALL-CAPS labels rechtstreeks in de data i.p.v.
+                # via CSS text-transform (Altair's axis heeft geen betrouwbare
+                # text-transform-optie).
+                _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                                  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+                _month_totals = [0.0] * 12
+                for e in all_events:
+                    _month_totals[e["date"].month - 1] += e["amount_eur"]
+
+                # Alleen de piekmaand(en) direct labelen i.p.v. elke balk -- bij
+                # 12 datapunten wordt 'elke balk een eigen tekstlabel' al snel
+                # rommelig en voegt weinig toe (de balkhoogte zelf laat het
+                # verschil al zien). Top-2 hoogste, niet-nul maanden krijgen een
+                # label; de rest laat alleen de hoogte spreken (tooltip on hover
+                # toont het exacte bedrag voor elke maand).
+                _nonzero_idx = [i for i, v in enumerate(_month_totals) if v > 0]
+                _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_totals[i], reverse=True)[:2]
+                _ladder_df = pd.DataFrame({
+                    "month": _month_labels,
+                    "amount": _month_totals,
+                    "label": [f"€{v:,.0f}" if i in _peak_idx else "" for i, v in enumerate(_month_totals)],
+                })
+
+                _ladder_x = alt.X(
+                    "month:N", sort=_month_labels, title=None,
+                    # paddingInner (i.p.v. discreteBandSize) trekt de balken smal
+                    # en strak op elkaar -- een grote inner-padding t.o.v. de band
+                    # zelf, precies het 'geen dikke, brede blokken meer'-effect.
+                    scale=alt.Scale(paddingInner=0.5, paddingOuter=0.2),
+                    axis=alt.Axis(
+                        labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
+                        labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+                    ),
+                )
+                _ladder_bars = alt.Chart(_ladder_df).mark_bar(
+                    color="#34D399", cornerRadiusTopLeft=2, cornerRadiusTopRight=2,
+                ).encode(
+                    x=_ladder_x,
+                    y=alt.Y("amount:Q", axis=None),
+                    tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Amount (€)", format=",.2f")],
+                )
+                _ladder_labels = alt.Chart(_ladder_df).mark_text(
+                    dy=-8, color="#94A3B8", fontSize=10, fontWeight=600,
+                ).encode(x=_ladder_x, y=alt.Y("amount:Q"), text="label:N")
+                ladder_chart = (
+                    (_ladder_bars + _ladder_labels)
+                    .properties(height=260, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+                st.altair_chart(ladder_chart, use_container_width=True)
+                if _peak_idx:
+                    _peak_names = " & ".join(_month_labels[i] for i in sorted(_peak_idx))
+                    st.caption(f"PEAK IN {_peak_names}: TYPICALLY OVERLAPPING QUARTERLY DIVIDEND PAYOUTS.")
+
+            with grid_col2:
+                st.markdown(
+                    _uniform_section_header_html("The Dividend Snowball", "trending_up"),
+                    unsafe_allow_html=True,
+                )
+                # Chronologische cumulatieve som per kalender-JAAR-MAAND (dus de
+                # ECHTE tijdas, niet Jan-Dec samengevoegd zoals de Ladder
+                # hiernaast) -- kan per definitie nooit dalen, elk punt is een
+                # cumulatieve som van alles ervoor.
+                _by_year_month: dict = {}
+                for e in all_events:
+                    key = (e["date"].year, e["date"].month)
+                    _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
+                _sorted_keys = sorted(_by_year_month.keys())
+                _running_total = 0.0
+                _snowball_rows = []
+                for y, m in _sorted_keys:
+                    _running_total += _by_year_month[(y, m)]
+                    _snowball_rows.append({"period": f"{y}-{m:02d}", "cumulative": _running_total})
+                _snowball_df = pd.DataFrame(_snowball_rows)
+
+                # Zachte, gedempte emerald-groene verloopkleur -- meer opaak vlak
+                # onder de lijn (offset 1, top), bijna volledig transparant naar
+                # de bodem toe (offset 0) -- een 'gloed' i.p.v. een vlakke,
+                # egale vulkleur.
+                _snowball_gradient = alt.Gradient(
+                    gradient="linear",
+                    stops=[
+                        alt.GradientStop(color="rgba(52,211,153,0.02)", offset=0),
+                        alt.GradientStop(color="rgba(52,211,153,0.20)", offset=1),
+                    ],
+                    x1=1, x2=1, y1=1, y2=0,
+                )
+                # Zelfde 'geen as-drukte, direct labelen'-stijl als de Ladder
+                # hiernaast i.p.v. een aparte y-as met gridlines (was eerder een
+                # inconsistente 2e visuele taal naast de Ladder) -- de y-as +
+                # gridlines vervallen volledig, en het eindtotaal wordt als 1
+                # direct label bij het laatste punt getoond, net als de
+                # pieklabels in de Ladder.
+                # X-as: alleen het JAAR labelen bij de januari-maand van elk jaar
+                # i.p.v. een label per kalendermaand (was gekanteld -40 graden en
+                # oogde druk) -- via labelExpr op de onderliggende 'YYYY-MM'-
+                # stringwaarde, horizontaal (0 graden) net als de Ladder's as.
+                _snowball_x = alt.X(
+                    "period:N", sort=None, title=None,
+                    axis=alt.Axis(
+                        labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
+                        labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+                        labelExpr="indexof(datum.value, '-01') === 4 ? slice(datum.value, 0, 4) : ''",
+                    ),
+                )
+                snowball_area = alt.Chart(_snowball_df).mark_area(
+                    line={"color": "#34D399", "strokeWidth": 2.5},
+                    color=_snowball_gradient,
+                    interpolate="monotone",
+                ).encode(
+                    x=_snowball_x,
+                    y=alt.Y("cumulative:Q", title=None, axis=None),
+                    tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
+                )
+                _snowball_last = _snowball_df.iloc[[-1]].copy()
+                _snowball_last["label"] = f"€{_snowball_last['cumulative'].iloc[0]:,.0f}"
+                _snowball_end_label = alt.Chart(_snowball_last).mark_text(
+                    align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
+                ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
+                snowball_chart = (
+                    (snowball_area + _snowball_end_label)
+                    .properties(height=260, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+                st.altair_chart(snowball_chart, use_container_width=True)
+
+            st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
         # ============================================================
-        # 2 + 3. THE DIVIDEND LADDER + THE DIVIDEND SNOWBALL -- compact
-        # side-by-side (50/50), i.p.v. 2 kamerbrede grafieken onder elkaar.
-        # Beide via Altair (alt.Chart) i.p.v. Plotly -- smallere, elegantere
-        # marks die beter bij Hestys' verfijnde, typografische stijl passen
-        # dan Plotly's dikkere standaard-balken/lijnen.
+        # 4. UPCOMING PASSIVE INFLOW -- TDIV/KHC/TMUS (als je die aanhoudt)
+        # + Prop.com's eerstvolgende 1e van de maand, binnen 60 dagen.
+        # Ex-dividend-datum wordt als 'verwachte betaaldatum' gebruikt --
+        # zelfde, al-bestaande conventie als radar_data.py's eigen
+        # get_upcoming_ex_dividend_dates() (yfinance geeft geen betrouwbare,
+        # aparte 'volgende pay-date' terug, ex-dividend-datum is de
+        # standaard proxy die deze app al overal gebruikt).
         # ============================================================
-        grid_col1, grid_col2 = st.columns([1, 1], gap="medium")
+        st.markdown(
+            _uniform_section_header_html("Upcoming Passive Inflow (60-Day Outlook)", "event_upcoming"),
+            unsafe_allow_html=True,
+        )
+        _watch_tickers = {"TDIV", "KHC", "TMUS"}
+        _holdings_by_ticker = {h["ticker"].upper(): h for h in holdings}
+        _upcoming_rows = []  # (company, payout_text, date, sort_key)
 
-        with grid_col1:
+        for _wt in _watch_tickers:
+            _h = _holdings_by_ticker.get(_wt)
+            if not _h or not _h.get("shares"):
+                continue
+            try:
+                info = get_cached_ticker_info(_wt)
+                ex_div_unix = info.get("exDividendDate")
+                if not ex_div_unix:
+                    continue
+                ex_div_date = pd.Timestamp(ex_div_unix, unit="s").date()
+                if not (today_date <= ex_div_date <= today_date + timedelta(days=60)):
+                    continue
+                per_share = None
+                dividends = get_cached_ticker_dividends(_wt)
+                if dividends is not None and not dividends.empty:
+                    per_share = float(dividends.iloc[-1])
+                if not per_share:
+                    continue
+                expected_amount = per_share * _h["shares"]
+                _upcoming_rows.append((_h["naam"] or _wt, f"€{expected_amount:,.2f}", ex_div_date))
+            except Exception:
+                continue
+
+        # Prop.com (en elke andere custom-cashflow asset): eerstvolgende 1e van
+        # de maand, altijd binnen 60 dagen.
+        _next_first = (
+            today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
+        )
+        for asset in _custom_assets:
+            monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
+            if monthly_amount <= 0:
+                continue
+            _upcoming_rows.append((asset["naam"], f"€{monthly_amount:,.2f}", _next_first))
+
+        # Staking (SOL en elke andere gestakete positie): zelfde synthetische
+        # maandbedrag als in de historie hierboven, ook geland op de
+        # eerstvolgende 1e van de maand.
+        for h in _staking_holdings:
+            total_shares = h.get("shares") or 0
+            if total_shares <= 0:
+                continue
+            staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
+            staked_value_eur = _eur_position_value(h) * staked_fraction
+            monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
+            if monthly_amount <= 0:
+                continue
+            _upcoming_rows.append((f"{h.get('naam') or h.get('ticker')} (Staking)", f"€{monthly_amount:,.2f}", _next_first))
+
+        _upcoming_rows.sort(key=lambda r: r[2])
+
+        if not _upcoming_rows:
+            st.caption("No upcoming payouts detected within the next 60 days.")
+        else:
+            _header_style = (
+                "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
+                "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
+                "border-top:none !important; border-left:none !important; border-right:none !important;"
+            )
+            _cell_base = (
+                "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
+                "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
+            )
+            # Vaste, content-krappe kolombreedtes i.p.v. procentuele (40/30/30%
+            # op de volle paginabreedte) -- bij 1-2 rijen anders een kamerbrede
+            # tabel met absurd veel lege ruimte tussen de kolommen. Tabel zelf
+            # ook op een max-breedte gehouden i.p.v. altijd de volle breedte
+            # te vullen; groeit gewoon mee zodra er meer rijen/langere namen
+            # bijkomen, tot die max-breedte.
+            _rows_html = "".join(
+                f'<tr>'
+                f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:700; '
+                f'color:#F1F5F9; white-space:nowrap;">{company}</td>'
+                f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:600; '
+                f'color:#CBD5E1; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
+                f'<td style="{_cell_base} text-align:right; font-size:0.78rem; color:#94A3B8; '
+                f'white-space:nowrap; padding-left:28px;">{pay_date.strftime("%b %d, %Y")}</td>'
+                f'</tr>'
+                for company, payout_text, pay_date in _upcoming_rows
+            )
+            _upcoming_key = "wealth_engine_upcoming_table"
             st.markdown(
-                _uniform_section_header_html("The Dividend Ladder", "bar_chart"),
+                f'<style>.st-key-{_upcoming_key} table {{ border-collapse:collapse; width:auto; '
+                f'max-width:560px; }} .st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th '
+                f'{{ border:none; }}</style>',
                 unsafe_allow_html=True,
             )
-            # Som per KALENDERMAAND (JAN t/m DEC), over ALLE jaren heen
-            # samengevoegd -- ALL-CAPS labels rechtstreeks in de data i.p.v.
-            # via CSS text-transform (Altair's axis heeft geen betrouwbare
-            # text-transform-optie).
-            _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-                              "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-            _month_totals = [0.0] * 12
-            for e in all_events:
-                _month_totals[e["date"].month - 1] += e["amount_eur"]
+            with st.container(key=_upcoming_key):
+                st.markdown(
+                    f'<table style="border-collapse:collapse; width:auto; max-width:560px;">'
+                    f'<thead><tr>'
+                    f'<th style="{_header_style} text-align:left;">Company</th>'
+                    f'<th style="{_header_style} text-align:left; padding-left:28px;">Expected Payout</th>'
+                    f'<th style="{_header_style} text-align:right; padding-left:28px;">Payout Date</th>'
+                    f'</tr></thead>'
+                    f'<tbody>{_rows_html}</tbody>'
+                    f'</table>',
+                    unsafe_allow_html=True,
+                )
 
-            # Alleen de piekmaand(en) direct labelen i.p.v. elke balk -- bij
-            # 12 datapunten wordt 'elke balk een eigen tekstlabel' al snel
-            # rommelig en voegt weinig toe (de balkhoogte zelf laat het
-            # verschil al zien). Top-2 hoogste, niet-nul maanden krijgen een
-            # label; de rest laat alleen de hoogte spreken (tooltip on hover
-            # toont het exacte bedrag voor elke maand).
-            _nonzero_idx = [i for i, v in enumerate(_month_totals) if v > 0]
-            _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_totals[i], reverse=True)[:2]
-            _ladder_df = pd.DataFrame({
-                "month": _month_labels,
-                "amount": _month_totals,
-                "label": [f"€{v:,.0f}" if i in _peak_idx else "" for i, v in enumerate(_month_totals)],
-            })
-
-            _ladder_x = alt.X(
-                "month:N", sort=_month_labels, title=None,
-                # paddingInner (i.p.v. discreteBandSize) trekt de balken smal
-                # en strak op elkaar -- een grote inner-padding t.o.v. de band
-                # zelf, precies het 'geen dikke, brede blokken meer'-effect.
-                scale=alt.Scale(paddingInner=0.5, paddingOuter=0.2),
-                axis=alt.Axis(
-                    labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
-                    labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
-                ),
-            )
-            _ladder_bars = alt.Chart(_ladder_df).mark_bar(
-                color="#34D399", cornerRadiusTopLeft=2, cornerRadiusTopRight=2,
-            ).encode(
-                x=_ladder_x,
-                y=alt.Y("amount:Q", axis=None),
-                tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Amount (€)", format=",.2f")],
-            )
-            _ladder_labels = alt.Chart(_ladder_df).mark_text(
-                dy=-8, color="#94A3B8", fontSize=10, fontWeight=600,
-            ).encode(x=_ladder_x, y=alt.Y("amount:Q"), text="label:N")
-            ladder_chart = (
-                (_ladder_bars + _ladder_labels)
-                .properties(height=260, background="transparent")
-                .configure_view(strokeWidth=0)
-            )
-            st.altair_chart(ladder_chart, use_container_width=True)
-            if _peak_idx:
-                _peak_names = " & ".join(_month_labels[i] for i in sorted(_peak_idx))
-                st.caption(f"PEAK IN {_peak_names}: TYPICALLY OVERLAPPING QUARTERLY DIVIDEND PAYOUTS.")
-
-        with grid_col2:
-            st.markdown(
-                _uniform_section_header_html("The Dividend Snowball", "trending_up"),
-                unsafe_allow_html=True,
-            )
-            # Chronologische cumulatieve som per kalender-JAAR-MAAND (dus de
-            # ECHTE tijdas, niet Jan-Dec samengevoegd zoals de Ladder
-            # hiernaast) -- kan per definitie nooit dalen, elk punt is een
-            # cumulatieve som van alles ervoor.
-            _by_year_month: dict = {}
-            for e in all_events:
-                key = (e["date"].year, e["date"].month)
-                _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
-            _sorted_keys = sorted(_by_year_month.keys())
-            _running_total = 0.0
-            _snowball_rows = []
-            for y, m in _sorted_keys:
-                _running_total += _by_year_month[(y, m)]
-                _snowball_rows.append({"period": f"{y}-{m:02d}", "cumulative": _running_total})
-            _snowball_df = pd.DataFrame(_snowball_rows)
-
-            # Zachte, gedempte emerald-groene verloopkleur -- meer opaak vlak
-            # onder de lijn (offset 1, top), bijna volledig transparant naar
-            # de bodem toe (offset 0) -- een 'gloed' i.p.v. een vlakke,
-            # egale vulkleur.
-            _snowball_gradient = alt.Gradient(
-                gradient="linear",
-                stops=[
-                    alt.GradientStop(color="rgba(52,211,153,0.02)", offset=0),
-                    alt.GradientStop(color="rgba(52,211,153,0.20)", offset=1),
-                ],
-                x1=1, x2=1, y1=1, y2=0,
-            )
-            # Zelfde 'geen as-drukte, direct labelen'-stijl als de Ladder
-            # hiernaast i.p.v. een aparte y-as met gridlines (was eerder een
-            # inconsistente 2e visuele taal naast de Ladder) -- de y-as +
-            # gridlines vervallen volledig, en het eindtotaal wordt als 1
-            # direct label bij het laatste punt getoond, net als de
-            # pieklabels in de Ladder.
-            # X-as: alleen het JAAR labelen bij de januari-maand van elk jaar
-            # i.p.v. een label per kalendermaand (was gekanteld -40 graden en
-            # oogde druk) -- via labelExpr op de onderliggende 'YYYY-MM'-
-            # stringwaarde, horizontaal (0 graden) net als de Ladder's as.
-            _snowball_x = alt.X(
-                "period:N", sort=None, title=None,
-                axis=alt.Axis(
-                    labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
-                    labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
-                    labelExpr="indexof(datum.value, '-01') === 4 ? slice(datum.value, 0, 4) : ''",
-                ),
-            )
-            snowball_area = alt.Chart(_snowball_df).mark_area(
-                line={"color": "#34D399", "strokeWidth": 2.5},
-                color=_snowball_gradient,
-                interpolate="monotone",
-            ).encode(
-                x=_snowball_x,
-                y=alt.Y("cumulative:Q", title=None, axis=None),
-                tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
-            )
-            _snowball_last = _snowball_df.iloc[[-1]].copy()
-            _snowball_last["label"] = f"€{_snowball_last['cumulative'].iloc[0]:,.0f}"
-            _snowball_end_label = alt.Chart(_snowball_last).mark_text(
-                align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
-            ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
-            snowball_chart = (
-                (snowball_area + _snowball_end_label)
-                .properties(height=260, background="transparent")
-                .configure_view(strokeWidth=0)
-            )
-            st.altair_chart(snowball_chart, use_container_width=True)
-
-        st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
-    # ============================================================
-    # 4. UPCOMING PASSIVE INFLOW -- TDIV/KHC/TMUS (als je die aanhoudt)
-    # + Prop.com's eerstvolgende 1e van de maand, binnen 60 dagen.
-    # Ex-dividend-datum wordt als 'verwachte betaaldatum' gebruikt --
-    # zelfde, al-bestaande conventie als radar_data.py's eigen
-    # get_upcoming_ex_dividend_dates() (yfinance geeft geen betrouwbare,
-    # aparte 'volgende pay-date' terug, ex-dividend-datum is de
-    # standaard proxy die deze app al overal gebruikt).
-    # ============================================================
-    st.markdown(
-        _uniform_section_header_html("Upcoming Passive Inflow (60-Day Outlook)", "event_upcoming"),
-        unsafe_allow_html=True,
-    )
-    _watch_tickers = {"TDIV", "KHC", "TMUS"}
-    _holdings_by_ticker = {h["ticker"].upper(): h for h in holdings}
-    _upcoming_rows = []  # (company, payout_text, date, sort_key)
-
-    for _wt in _watch_tickers:
-        _h = _holdings_by_ticker.get(_wt)
-        if not _h or not _h.get("shares"):
-            continue
-        try:
-            info = get_cached_ticker_info(_wt)
-            ex_div_unix = info.get("exDividendDate")
-            if not ex_div_unix:
-                continue
-            ex_div_date = pd.Timestamp(ex_div_unix, unit="s").date()
-            if not (today_date <= ex_div_date <= today_date + timedelta(days=60)):
-                continue
-            per_share = None
-            dividends = get_cached_ticker_dividends(_wt)
-            if dividends is not None and not dividends.empty:
-                per_share = float(dividends.iloc[-1])
-            if not per_share:
-                continue
-            expected_amount = per_share * _h["shares"]
-            _upcoming_rows.append((_h["naam"] or _wt, f"€{expected_amount:,.2f}", ex_div_date))
-        except Exception:
-            continue
-
-    # Prop.com (en elke andere custom-cashflow asset): eerstvolgende 1e van
-    # de maand, altijd binnen 60 dagen.
-    _next_first = (
-        today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
-    )
-    for asset in _custom_assets:
-        monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
-        if monthly_amount <= 0:
-            continue
-        _upcoming_rows.append((asset["naam"], f"€{monthly_amount:,.2f}", _next_first))
-
-    # Staking (SOL en elke andere gestakete positie): zelfde synthetische
-    # maandbedrag als in de historie hierboven, ook geland op de
-    # eerstvolgende 1e van de maand.
-    for h in _staking_holdings:
-        total_shares = h.get("shares") or 0
-        if total_shares <= 0:
-            continue
-        staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
-        staked_value_eur = _eur_position_value(h) * staked_fraction
-        monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
-        if monthly_amount <= 0:
-            continue
-        _upcoming_rows.append((f"{h.get('naam') or h.get('ticker')} (Staking)", f"€{monthly_amount:,.2f}", _next_first))
-
-    _upcoming_rows.sort(key=lambda r: r[2])
-
-    if not _upcoming_rows:
-        st.caption("No upcoming payouts detected within the next 60 days.")
     else:
+        # --- 1. Portfolio dividend-metrics -- volledig live uit de Yahoo
+        # Finance-koppeling. Een asset zonder dividend (yfinance geeft dan
+        # 'None' terug, bv. HIMS/ASTS) weegt nu ECHT als 0% mee in het
+        # gewogen gemiddelde -- de eerdere 3%-fallback gold daar ten
+        # onrechte ook voor. Die fallback is nu uitsluitend nog een
+        # vangnet voor als de API-aanroep zelf faalt (netwerkfout/rate
+        # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
+        API_FALLBACK_YIELD = 0.03
+        _weighted_yield_sum = 0.0
+        for h in holdings:
+            ticker = h.get("ticker")
+            value = _eur_position_value(h)
+            if not ticker or value <= 0:
+                continue
+            _custom_cashflow = h.get("custom_annual_cashflow")
+            if _custom_cashflow is not None:
+                # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
+                # e.d.) -- geen echte ticker om bij Yahoo Finance op te
+                # zoeken, dus die stap slaan we hier bewust over. Het
+                # rendement wordt direct afgeleid uit de handmatig ingevoerde
+                # jaarlijkse cashflow t.o.v. de (eveneens handmatig
+                # ingevoerde) positiewaarde.
+                y = float(_custom_cashflow) / value
+            else:
+                try:
+                    info = get_cached_ticker_info(ticker)
+                    raw_yield = info.get("dividendYield")
+                    if raw_yield is None:
+                        # Yahoo Finance heeft dit ticker's dividend-veld gewoon
+                        # leeg -- meestal omdat de asset simpelweg geen dividend
+                        # uitkeert. Telt dus terecht als 0%, geen fallback.
+                        y = 0.0
+                    else:
+                        y = float(raw_yield)
+                        # yfinance geeft dividendYield soms als fractie (0.03) en
+                        # soms al als percentage (3.05) -- afhankelijk van de
+                        # yfinance-versie. Alles boven 1 wordt daarom als
+                        # 'al-een-percentage' behandeld.
+                        if y > 1:
+                            y = y / 100
+                        if y < 0:
+                            y = 0.0
+                except Exception:
+                    # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
+                    # dividend'-antwoord) -- hier WEL de fallback, want dit is
+                    # echt ontbrekende data, geen bevestigd 0%-dividend.
+                    y = API_FALLBACK_YIELD
+            _weighted_contribution = value * y
+
+            # Staking -- een DEEL van deze positie (in aandelen/coins, niet
+            # euro's) kan los een eigen yield opleveren, bv. 20 van 50
+            # gehouden SOL gestaked tegen 7% APY. Telt BOVENOP de gewone
+            # markt-yield hierboven mee (niet als vervanging) -- bij crypto
+            # is die toch al 0%, maar dit werkt ook voor een aandeel met
+            # zowel dividend als een apart gestaked deel.
+            _staked_amount = h.get("staked_amount")
+            _staking_apy = h.get("staking_apy_pct")
+            _total_shares = h.get("shares") or 0
+            if _staked_amount and _staking_apy and _total_shares > 0:
+                _staked_fraction = min(float(_staked_amount) / float(_total_shares), 1.0)
+                _staked_value_eur = value * _staked_fraction
+                _staking_contribution = _staked_value_eur * (float(_staking_apy) / 100)
+                _weighted_contribution += _staking_contribution
+
+            _weighted_yield_sum += _weighted_contribution
+        live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
+        annual_cashflow = total_value * live_avg_yield
+
+        # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
+        # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
+        # dat wel live opgehaald kan worden) -- daarom werken we hier met een
+        # eigen, GECUREERDE tabel met bekende dividendgroei-tempo's voor de
+        # tickers die we kennen (op basis van hun eigen track record), en 0%
+        # voor alles wat niet in die tabel staat. Het gewogen gemiddelde
+        # daarvan (naar positiegrootte, exact dezelfde methode als bij
+        # Average Portfolio Yield hierboven) wordt de DYNAMISCHE start-
+        # baseline, i.p.v. een vaste 5% voor iedereen.
+        _KNOWN_DIVIDEND_GROWTH_RATES = {
+            "TDIV": 0.05,
+            "KHC": 0.01,
+            "TMUS": 0.10,
+        }
+        _weighted_growth_sum = 0.0
+        for h in holdings:
+            ticker = (h.get("ticker") or "").upper()
+            value = _eur_position_value(h)
+            if not ticker or value <= 0:
+                continue
+            _weighted_growth_sum += value * _KNOWN_DIVIDEND_GROWTH_RATES.get(ticker, 0.0)
+        DIVIDEND_GROWTH_RATE = (_weighted_growth_sum / total_value) if total_value else 0.0
+
+        # --- Jaarlijkse inleg schatten uit netto buy-activiteit per jaar --
+        # VOOR de tegels berekend (i.p.v. erna), want de 4e tegel toont 'm nu
+        # ook. Zelfde eerlijke aanname als eerder: onze database kent geen
+        # losse DEPOSIT/ACH-regels (die worden bij elke broker-CSV-import
+        # bewust overgeslagen), dus dit is de netto buy-activiteit als
+        # proxy, niet een letterlijke stortingshistorie.
+        _yearly_net_buys = {}
+        for h in holdings:
+            txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
+            for t in txs:
+                try:
+                    yr = int(t["transaction_date"][:4])
+                except (TypeError, ValueError, KeyError):
+                    continue
+                amount = (t.get("shares") or 0) * (t.get("price") or 0) + (t.get("fee") or 0)
+                if t.get("transaction_type") == "buy":
+                    _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) + amount
+                else:
+                    _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) - amount
+
+        if _yearly_net_buys:
+            annual_contribution = max(sum(_yearly_net_buys.values()) / len(_yearly_net_buys), 0.0)
+        else:
+            annual_contribution = 0.0
+
+        # DEEL 2 content: sliders + projectie -- eigen sub-tab, dus geen
+        # scheidingslijn meer nodig boven de sliders (niets hierboven op
+        # dezelfde tab om van te scheiden).
+        # --- 2. Simulation Control Panel -- NU VOOR de tegels gerenderd
+        # (i.p.v. erna), zodat tegel 1 rechtstreeks de teruggegeven waarde
+        # van yield_slider kan gebruiken -- geen omweg via session_state
+        # meer nodig, dus geen enkele twijfel meer over of de koppeling
+        # daadwerkelijk elke rerun meebeweegt.
+        _sim_key = "wealth_engine_sim_panel"
+        st.markdown(
+            f'<style>'
+            f'.st-key-{_sim_key} label p {{ '
+            f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
+            f'text-transform:uppercase !important; color:#64748B !important; }} '
+            f'</style>',
+            unsafe_allow_html=True,
+        )
+        with st.container(key=_sim_key):
+            sim_col1, sim_col2, sim_col3 = st.columns(3, gap="medium")
+            with sim_col1:
+                growth_slider = st.slider(
+                    "Expected annual growth (price)", min_value=0.0, max_value=15.0,
+                    value=7.0, step=0.5, key="wealth_growth_slider", format="%.1f%%",
+                )
+            with sim_col2:
+                yield_slider = st.slider(
+                    "Simulated dividend yield", min_value=0.0, max_value=10.0,
+                    value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
+                )
+                # 'value=' hierboven werkt ALLEEN bij de allereerste keer dat
+                # deze slider in je sessie getekend wordt -- daarna blijft 'ie
+                # op zijn laatst-versleepte positie staan, ook als de live
+                # yield-berekening daarna verandert (bv. door een eerdere,
+                # inmiddels-gefixte yfinance-hik die de starende waarde ooit
+                # verkeerd zette). Deze knop zet 'm expliciet terug naar de
+                # ZOJUIST verse berekening, zonder op een sessie-reset te
+                # hoeven wachten.
+                #
+                # BUGFIX: session_state[key] direct zetten NA het tekenen van
+                # de slider (binnen dezelfde run) is verboden in Streamlit --
+                # StreamlitWidgetAlreadyInstantiatedError. Via on_click i.p.v.
+                # een gewone if-knop: die callback draait VOORDAT de widgets
+                # van de volgende run getekend worden, dus dat is wel
+                # toegestaan.
+                def _reset_yield_to_live(_live_value=round(live_avg_yield * 100, 1)):
+                    st.session_state["wealth_yield_slider"] = _live_value
+
+                st.button("\u21bb Reset to live yield", key="wealth_yield_reset_btn", on_click=_reset_yield_to_live)
+            with sim_col3:
+                contribution_slider = st.slider(
+                    "Simulated annual contribution", min_value=0, max_value=50000,
+                    value=int(round(annual_contribution)), step=500, key="wealth_contribution_slider",
+                    format="\u20ac%d",
+                )
+        st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+        # De pill "FORWARD PROJECTOR" doet al dienst als sectietitel, dus
+        # geen aparte "The Forward Projection"-kop meer hier.
+
+        # --- Strak 4-koloms grid -- tegel 1 gebruikt nu rechtstreeks
+        # yield_slider (de teruggegeven waarde van de widget hierboven), dus
+        # gegarandeerd correct bij elke rerun/sleepbeweging.
+        tile_col1, tile_col2, tile_col3, tile_col4 = st.columns(4, gap="medium")
+        _tile_style = (
+            'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
+            'border-radius:12px; padding:1rem; text-align:left;'
+        )
+        simulated_annual_cashflow = total_value * (yield_slider / 100)
+        with tile_col1:
+            st.markdown(
+                f'<div style="{_tile_style}">'
+                f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+                f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual passive cashflow</div>'
+                f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{simulated_annual_cashflow:,.0f} '
+                f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with tile_col2:
+            st.markdown(
+                f'<div style="{_tile_style}">'
+                f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+                f'color:#8992A3; margin-bottom:0.4rem;">&#128200; Average portfolio yield</div>'
+                f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{live_avg_yield * 100:.2f}% '
+                f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">yield</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with tile_col3:
+            st.markdown(
+                f'<div style="{_tile_style}">'
+                f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+                f'color:#8992A3; margin-bottom:0.4rem;">&#8987; Dividend growth rate</div>'
+                f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{DIVIDEND_GROWTH_RATE * 100:.1f}% '
+                f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">CAGR (est.)</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        with tile_col4:
+            st.markdown(
+                f'<div style="{_tile_style}">'
+                f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
+                f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual contribution (est.)</div>'
+                f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{contribution_slider:,.0f} '
+                f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+        # --- Compounding-engine: 30-jarige projectie -- volledig gekoppeld
+        # aan de 3 sliders hierboven. Streamlit herrekent en hertekent de
+        # grafiek automatisch bij elke slider-beweging (gewone widget-
+        # rerun), dus dit is al flitsloos/live zonder verdere aanpassingen.
+        PROJECTION_YEARS = 30
+        current_year = datetime.now().year
+        simulated_price_growth = growth_slider / 100
+        simulated_starting_cashflow = total_value * (yield_slider / 100)
+        simulated_contribution = float(contribution_slider)
+
+        # Dividend-groeitempo nu deels gekoppeld aan de EXPECTED ANNUAL
+        # GROWTH-slider i.p.v. een volledig losstaande, vaste 5% -- bedrijven
+        # met sterkere koersgroei verhogen doorgaans ook hun dividend sneller
+        # (aangedreven door dezelfde onderliggende winstgroei). 50%-doorwerking
+        # van elke afwijking t.o.v. de 7%-baseline, geclamped tussen 0% en 15%
+        # zodat het nooit een onrealistisch of negatief tempo oplevert. Zonder
+        # deze koppeling bleef het dividendinkomen (en dus de YoY-versnellings-
+        # grafiek hieronder) altijd vlak op +5,0% staan, ongeacht de sliders --
+        # dat leek eerder niet de bedoeling.
+        _baseline_price_growth = 0.07
+        effective_dividend_growth_rate = DIVIDEND_GROWTH_RATE + (simulated_price_growth - _baseline_price_growth) * 0.5
+        effective_dividend_growth_rate = max(0.0, min(0.15, effective_dividend_growth_rate))
+
+        years = [current_year]
+        net_deposits = [total_value]
+        total_wealth = [total_value]
+        dividend_income_by_year = [simulated_starting_cashflow]
+
+        # Het dividendinkomen wordt berekend als (vermogen op dat moment) x
+        # (dividendrendement-per-aandeel op dat moment) -- i.p.v. een
+        # dividendbedrag dat volledig LOSSTAAT van hoeveel vermogen er
+        # daadwerkelijk is opgebouwd. Zo werkt herbeleggen/compounding pas
+        # ECHT door: elk jaar extra ingelegd geld EN elk herbelegd dividend
+        # vergroot de vermogensbasis waarover het VOLGENDE jaar weer dividend
+        # wordt uitgekeerd. Het dividendrendement-per-aandeel zelf groeit nog
+        # steeds licht per jaar (effective_dividend_growth_rate, gekoppeld
+        # aan de groei-slider) -- dat simuleert dat bedrijven hun dividend
+        # per aandeel verhogen, los van hoeveel aandelen je bezit.
+        #
+        # BELANGRIJK (bugfix): vermogen/rendement worden nu EERST voor het
+        # nieuwe jaar bijgewerkt, en PAS DAARNA wordt dat jaar's dividend
+        # berekend uit die vernieuwde stand. Eerder gebeurde dit in de
+        # omgekeerde volgorde, waardoor jaar 1's dividend nog exact de OUDE
+        # (jaar 0-)stand van vermogen/rendement gebruikte -- identiek aan
+        # jaar 0 zelf, dus altijd +0,0% YoY in het eerste jaar, ongeacht de
+        # sliders. Nu groeit elk jaar daadwerkelijk door t.o.v. het vorige.
+        _wealth = total_value
+        _deposits = total_value
+        _yield_rate = yield_slider / 100
+        for i in range(1, PROJECTION_YEARS + 1):
+            _prior_dividend = dividend_income_by_year[-1]
+            capital_growth = _wealth * simulated_price_growth
+            _wealth = _wealth + capital_growth + _prior_dividend + simulated_contribution
+            _deposits = _deposits + simulated_contribution
+            _yield_rate = _yield_rate * (1 + effective_dividend_growth_rate)
+            _dividend_this_year = _wealth * _yield_rate
+            years.append(current_year + i)
+            net_deposits.append(_deposits)
+            total_wealth.append(_wealth)
+            dividend_income_by_year.append(_dividend_this_year)
+
+        # --- 3. Wealth Acceleration chart -- visuele legenda met gekleurde
+        # lijntjes i.p.v. bullet-tekens (nu ONDER de chart, gevolgd door de
+        # gedempte simulatie-parameters). ---
+        wealth_fig = go.Figure()
+        wealth_fig.add_trace(go.Scatter(
+            x=years, y=net_deposits, name="Net Deposits", mode="lines",
+            line=dict(color="rgba(148,163,184,0.55)", width=1.5),
+            fill="tozeroy", fillcolor="rgba(148,163,184,0.08)",
+            hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
+        ))
+        wealth_fig.add_trace(go.Scatter(
+            x=years, y=total_wealth, name="Total Wealth", mode="lines",
+            line=dict(color="#34D399", width=2.5),
+            fill="tonexty", fillcolor="rgba(52,211,153,0.08)",
+            hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
+        ))
+        wealth_fig.update_layout(
+            height=340,
+            margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+            xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
+            yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
+                       tickprefix="\u20ac", tickformat=",.0f"),
+            hovermode="x unified",
+            hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
+        )
+        st.plotly_chart(wealth_fig, use_container_width=True, config={"displayModeBar": False})
+
+        _legend_line_style = (
+            'display:inline-block; width:14px; height:3px; border-radius:2px; '
+            'margin-right:6px; vertical-align:middle;'
+        )
+        st.markdown(
+            f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
+            f'text-transform:uppercase; margin-top:15px; margin-bottom:1.5rem; line-height:1.9;">'
+            f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
+            f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
+            f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
+            f'{yield_slider:.1f}% reinvested yield</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+        # --- Cashflow Velocity -- absolute jaarlijkse passieve cashflow in
+        # euro's, i.p.v. procentuele YoY-groei. Dalende groei-percentages
+        # (het onvermijdelijke gevolg van compounding tegen een VASTE
+        # jaarlijkse inleg, zie de projectie hierboven) voelden demotiverend
+        # aan, terwijl het harde euro-bedrag zelf ieder jaar juist stevig
+        # stijgt -- dat vliegwiel-effect komt hier nu rechtstreeks in beeld.
+        # Geen st.bar_chart/plotly-staafgrafiek meer -- die paste met dikke,
+        # platte balken totaal niet bij Hestys' rustige, typografische stijl.
+        # Nu een pure HTML-datamatrix: 5 kolommen (komende 5 jaar), elk met
+        # jaartal / absoluut eurobedrag / YoY-versnelling eronder. Puur
+        # afgeleid van dezelfde dividend_income_by_year-reeks die de 3
+        # sliders hierboven al voeden, dus deze matrix herrekent vanzelf mee
+        # zodra je aan een slider schuift -- geen aparte logica nodig.
+        st.markdown(
+            '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
+            'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
+            'padding-bottom:8px; margin-bottom:15px;">&#128202; Passive Cashflow Acceleration '
+            '(5-Year Velocity Matrix)</div>',
+            unsafe_allow_html=True,
+        )
+        _matrix_cells_html = ""
+        for i in range(0, 5):
+            _yr = years[i]
+            _eur = dividend_income_by_year[i]
+            if i == 0:
+                # Kolom 1 = HUIDIG jaar (2026) = je echte, actuele live cashflow
+                # -- geen +YoY-berekening nodig/mogelijk, dit IS het startpunt
+                # zelf, exact synchroon met de historische grafiek hierboven
+                # (die ook in het huidige jaar eindigt).
+                _yoy_html = '<div style="font-size:11px; font-weight:700; color:#34d399;">BASELINE</div>'
+            else:
+                _prev = dividend_income_by_year[i - 1]
+                _pct = ((_eur - _prev) / _prev * 100) if _prev > 0 else 0.0
+                _yoy_html = f'<div style="font-size:11px; font-weight:700; color:#34d399;">+{_pct:.1f}% YOY</div>'
+            _matrix_cells_html += (
+                f'<div style="width:20%; text-align:center;">'
+                f'<div style="font-size:10px; font-weight:700; color:#475569; letter-spacing:0.05em; '
+                f'text-transform:uppercase;">{_yr}</div>'
+                f'<div style="font-size:16px; font-weight:700; color:#ffffff; padding:4px 0;">&euro;{_eur:,.0f}</div>'
+                f'{_yoy_html}'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div style="display:flex; width:100%;">{_matrix_cells_html}</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
+
+        # --- 4. Snowball Milestones -- echte <table> met expliciete border-
+        # onderdrukking (zie verderop), 3 kolommen: Milestone / Required
+        # Cashflow / Target Year.
+        st.markdown(
+            _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
+            unsafe_allow_html=True,
+        )
+
+        def _find_milestone_year(condition):
+            for idx, yr in enumerate(years):
+                if condition(idx):
+                    return yr
+            return None
+
+        # Onwrikbare ladder van 6 universele, oplopende mijlpalen -- van een
+        # kopje koffie tot financial independence. Elke drempel is vast
+        # (dividend_income_by_year >= X), behalve The Crossover Event, die
+        # relatief blijft t.o.v. de SIMULEERBARE inleg-slider.
+        _milestone_espresso = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 60)
+        _milestone_dinner = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 250)
+        _milestone_travel = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
+        _milestone_baseline = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 5000)
+        _milestone_crossover = _find_milestone_year(
+            lambda idx: dividend_income_by_year[idx] > simulated_contribution
+        ) if simulated_contribution > 0 else None
+        # Instelbaar via Settings (was eerder een vast €30.000 voor iedereen) --
+        # default €60.000 als de gebruiker nog nooit iets heeft ingesteld.
+        _fi_target = _wealth_db.get_user_preferences(user_email).get("financial_independence_target") or 60000.0
+        _milestone_freedom = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= _fi_target)
+
+        def _milestone_year_html(year_val):
+            if year_val is None:
+                # Buiten de 30-jarige horizon -- gedempte rose/rode waarschuwings-
+                # kleur, i.p.v. dezelfde neutrale grijstint als een bereikte
+                # mijlpaal. Geeft meteen een visuele prikkel welke doelen nog
+                # niet binnen bereik liggen.
+                return '<span style="color:rgba(244,63,94,0.6); font-weight:700; letter-spacing:0.03em; white-space:nowrap;">&gt; 30 YRS</span>'
+            if year_val == current_year:
+                # Al VANDAAG bereikt (jaar 0 van de projectie) -- een groen
+                # vinkje ernaast, ter onderscheid van een toekomstige
+                # projectie die nog moet gebeuren.
+                return (
+                    f'<span style="color:#34d399; font-weight:700;">{year_val}</span> '
+                    f'<span style="color:#34d399;">&#10003;</span>'
+                )
+            # Binnen de 30 jaar, maar pas in de TOEKOMST -- amber/oranje i.p.v.
+            # groen, zodat groen exclusief 'nu al gehaald' betekent en oranje
+            # 'onderweg, nog niet zover'.
+            return f'<span style="color:#FBBF24; font-weight:700;">{year_val}</span>'
+
+        # (naam, technische voorwaarde, jaartal-html)
+        milestone_rows = [
+            ("The Daily Espresso", "&euro;60", _milestone_year_html(_milestone_espresso)),
+            ("The Dinner Appreciation", "&euro;250", _milestone_year_html(_milestone_dinner)),
+            ("The Concierge Travel", "&euro;1,200", _milestone_year_html(_milestone_travel)),
+            ("The Baseline Cover", "&euro;5,000", _milestone_year_html(_milestone_baseline)),
+            ("The Crossover Event", "CASHFLOW &gt; CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
+            ("Financial Independence", f"&euro;{_fi_target:,.0f}", _milestone_year_html(_milestone_freedom)),
+        ]
+
+        # Echte <table> met <thead>, deze keer met HARDE, expliciete
+        # onderdrukking van elke default-tabelrand (border:none !important op
+        # elke cel) -- een vorige poging met een raw <table> kreeg ongewenste
+        # verticale kolomlijnen via Streamlit's eigen basis-stylesheet, dat
+        # voorkomen we nu expliciet i.p.v. te vertrouwen op border-collapse
+        # alleen. Nu ook met een max-width-restrictie op de tabel zelf, zodat
+        # de data compact links/midden blijft i.p.v. tot de rand van het
+        # scherm uit te rekken.
+        _milestones_key = "wealth_engine_milestones_table"
         _header_style = (
             "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
             "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
@@ -7784,548 +8291,35 @@ def _render_wealth_engine(user_email: str) -> None:
             "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
             "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
         )
-        # Vaste, content-krappe kolombreedtes i.p.v. procentuele (40/30/30%
-        # op de volle paginabreedte) -- bij 1-2 rijen anders een kamerbrede
-        # tabel met absurd veel lege ruimte tussen de kolommen. Tabel zelf
-        # ook op een max-breedte gehouden i.p.v. altijd de volle breedte
-        # te vullen; groeit gewoon mee zodra er meer rijen/langere namen
-        # bijkomen, tot die max-breedte.
         _rows_html = "".join(
             f'<tr>'
-            f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:700; '
-            f'color:#F1F5F9; white-space:nowrap;">{company}</td>'
-            f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:600; '
-            f'color:#CBD5E1; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
-            f'<td style="{_cell_base} text-align:right; font-size:0.78rem; color:#94A3B8; '
-            f'white-space:nowrap; padding-left:28px;">{pay_date.strftime("%b %d, %Y")}</td>'
+            f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
+            f'font-size:0.78rem; font-weight:700; color:#F1F5F9;">{name}</td>'
+            f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
+            f'font-size:0.69rem; font-weight:600; color:#64748b;">{value}</td>'
+            f'<td style="{_cell_base} width:30%; text-align:right; font-size:0.78rem;">{year_html}</td>'
             f'</tr>'
-            for company, payout_text, pay_date in _upcoming_rows
+            for name, value, year_html in milestone_rows
         )
-        _upcoming_key = "wealth_engine_upcoming_table"
         st.markdown(
-            f'<style>.st-key-{_upcoming_key} table {{ border-collapse:collapse; width:auto; '
-            f'max-width:560px; }} .st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th '
-            f'{{ border:none; }}</style>',
+            f'<style>.st-key-{_milestones_key} table {{ width:100%; border-collapse:collapse; }} '
+            f'.st-key-{_milestones_key} td, .st-key-{_milestones_key} th {{ border:none; }}</style>',
             unsafe_allow_html=True,
         )
-        with st.container(key=_upcoming_key):
+        with st.container(key=_milestones_key):
             st.markdown(
-                f'<table style="border-collapse:collapse; width:auto; max-width:560px;">'
+                f'<div style="max-width:640px;">'
+                f'<table style="width:100%; border-collapse:collapse;">'
                 f'<thead><tr>'
-                f'<th style="{_header_style} text-align:left;">Company</th>'
-                f'<th style="{_header_style} text-align:left; padding-left:28px;">Expected Payout</th>'
-                f'<th style="{_header_style} text-align:right; padding-left:28px;">Payout Date</th>'
+                f'<th style="{_header_style} width:35%; text-align:left;">Milestone</th>'
+                f'<th style="{_header_style} width:35%; text-align:left;">Required cashflow</th>'
+                f'<th style="{_header_style} width:30%; text-align:right;">Target year</th>'
                 f'</tr></thead>'
                 f'<tbody>{_rows_html}</tbody>'
-                f'</table>',
+                f'</table>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
-
-    # --- 1. Portfolio dividend-metrics -- volledig live uit de Yahoo
-    # Finance-koppeling. Een asset zonder dividend (yfinance geeft dan
-    # 'None' terug, bv. HIMS/ASTS) weegt nu ECHT als 0% mee in het
-    # gewogen gemiddelde -- de eerdere 3%-fallback gold daar ten
-    # onrechte ook voor. Die fallback is nu uitsluitend nog een
-    # vangnet voor als de API-aanroep zelf faalt (netwerkfout/rate
-    # limit), niet voor 'yfinance zegt gewoon: geen dividend'.
-    API_FALLBACK_YIELD = 0.03
-    _weighted_yield_sum = 0.0
-    for h in holdings:
-        ticker = h.get("ticker")
-        value = _eur_position_value(h)
-        if not ticker or value <= 0:
-            continue
-        _custom_cashflow = h.get("custom_annual_cashflow")
-        if _custom_cashflow is not None:
-            # Custom yield asset (fractioneel vastgoed, vaste-inkomsten
-            # e.d.) -- geen echte ticker om bij Yahoo Finance op te
-            # zoeken, dus die stap slaan we hier bewust over. Het
-            # rendement wordt direct afgeleid uit de handmatig ingevoerde
-            # jaarlijkse cashflow t.o.v. de (eveneens handmatig
-            # ingevoerde) positiewaarde.
-            y = float(_custom_cashflow) / value
-        else:
-            try:
-                info = get_cached_ticker_info(ticker)
-                raw_yield = info.get("dividendYield")
-                if raw_yield is None:
-                    # Yahoo Finance heeft dit ticker's dividend-veld gewoon
-                    # leeg -- meestal omdat de asset simpelweg geen dividend
-                    # uitkeert. Telt dus terecht als 0%, geen fallback.
-                    y = 0.0
-                else:
-                    y = float(raw_yield)
-                    # yfinance geeft dividendYield soms als fractie (0.03) en
-                    # soms al als percentage (3.05) -- afhankelijk van de
-                    # yfinance-versie. Alles boven 1 wordt daarom als
-                    # 'al-een-percentage' behandeld.
-                    if y > 1:
-                        y = y / 100
-                    if y < 0:
-                        y = 0.0
-            except Exception:
-                # De API-aanroep zelf faalde (i.p.v. een geldig 'geen
-                # dividend'-antwoord) -- hier WEL de fallback, want dit is
-                # echt ontbrekende data, geen bevestigd 0%-dividend.
-                y = API_FALLBACK_YIELD
-        _weighted_contribution = value * y
-
-        # Staking -- een DEEL van deze positie (in aandelen/coins, niet
-        # euro's) kan los een eigen yield opleveren, bv. 20 van 50
-        # gehouden SOL gestaked tegen 7% APY. Telt BOVENOP de gewone
-        # markt-yield hierboven mee (niet als vervanging) -- bij crypto
-        # is die toch al 0%, maar dit werkt ook voor een aandeel met
-        # zowel dividend als een apart gestaked deel.
-        _staked_amount = h.get("staked_amount")
-        _staking_apy = h.get("staking_apy_pct")
-        _total_shares = h.get("shares") or 0
-        if _staked_amount and _staking_apy and _total_shares > 0:
-            _staked_fraction = min(float(_staked_amount) / float(_total_shares), 1.0)
-            _staked_value_eur = value * _staked_fraction
-            _staking_contribution = _staked_value_eur * (float(_staking_apy) / 100)
-            _weighted_contribution += _staking_contribution
-
-        _weighted_yield_sum += _weighted_contribution
-    live_avg_yield = (_weighted_yield_sum / total_value) if total_value else 0.0
-    annual_cashflow = total_value * live_avg_yield
-
-    # Dividendgroei: Yahoo Finance biedt geen betrouwbaar 'historisch
-    # dividend-CAGR'-veld per ticker (in tegenstelling tot dividendYield,
-    # dat wel live opgehaald kan worden) -- daarom werken we hier met een
-    # eigen, GECUREERDE tabel met bekende dividendgroei-tempo's voor de
-    # tickers die we kennen (op basis van hun eigen track record), en 0%
-    # voor alles wat niet in die tabel staat. Het gewogen gemiddelde
-    # daarvan (naar positiegrootte, exact dezelfde methode als bij
-    # Average Portfolio Yield hierboven) wordt de DYNAMISCHE start-
-    # baseline, i.p.v. een vaste 5% voor iedereen.
-    _KNOWN_DIVIDEND_GROWTH_RATES = {
-        "TDIV": 0.05,
-        "KHC": 0.01,
-        "TMUS": 0.10,
-    }
-    _weighted_growth_sum = 0.0
-    for h in holdings:
-        ticker = (h.get("ticker") or "").upper()
-        value = _eur_position_value(h)
-        if not ticker or value <= 0:
-            continue
-        _weighted_growth_sum += value * _KNOWN_DIVIDEND_GROWTH_RATES.get(ticker, 0.0)
-    DIVIDEND_GROWTH_RATE = (_weighted_growth_sum / total_value) if total_value else 0.0
-
-    # --- Jaarlijkse inleg schatten uit netto buy-activiteit per jaar --
-    # VOOR de tegels berekend (i.p.v. erna), want de 4e tegel toont 'm nu
-    # ook. Zelfde eerlijke aanname als eerder: onze database kent geen
-    # losse DEPOSIT/ACH-regels (die worden bij elke broker-CSV-import
-    # bewust overgeslagen), dus dit is de netto buy-activiteit als
-    # proxy, niet een letterlijke stortingshistorie.
-    _yearly_net_buys = {}
-    for h in holdings:
-        txs = _wealth_db.get_transactions_for_holding(user_email, h["id"])
-        for t in txs:
-            try:
-                yr = int(t["transaction_date"][:4])
-            except (TypeError, ValueError, KeyError):
-                continue
-            amount = (t.get("shares") or 0) * (t.get("price") or 0) + (t.get("fee") or 0)
-            if t.get("transaction_type") == "buy":
-                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) + amount
-            else:
-                _yearly_net_buys[yr] = _yearly_net_buys.get(yr, 0) - amount
-
-    if _yearly_net_buys:
-        annual_contribution = max(sum(_yearly_net_buys.values()) / len(_yearly_net_buys), 0.0)
-    else:
-        annual_contribution = 0.0
-
-    # ================================================================
-    # COCKPIT CENTRAL (Heden) -- flinterdunne scheidingslijn + de 3 live
-    # macro-sliders die UITSLUITEND DEEL 2 hieronder aansturen. DEEL 1
-    # hierboven blijft feitelijk stilstaan, ongeacht hoe hard hieraan
-    # gedraaid wordt -- de historie is per definitie al gebeurd.
-    # ================================================================
-    st.markdown(
-        '<div style="border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:15px; '
-        'margin-bottom:25px;"></div>',
-        unsafe_allow_html=True,
-    )
-
-    # --- 2. Simulation Control Panel -- NU VOOR de tegels gerenderd
-    # (i.p.v. erna), zodat tegel 1 rechtstreeks de teruggegeven waarde
-    # van yield_slider kan gebruiken -- geen omweg via session_state
-    # meer nodig, dus geen enkele twijfel meer over of de koppeling
-    # daadwerkelijk elke rerun meebeweegt.
-    _sim_key = "wealth_engine_sim_panel"
-    st.markdown(
-        f'<style>'
-        f'.st-key-{_sim_key} label p {{ '
-        f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
-        f'text-transform:uppercase !important; color:#64748B !important; }} '
-        f'</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_sim_key):
-        sim_col1, sim_col2, sim_col3 = st.columns(3, gap="medium")
-        with sim_col1:
-            growth_slider = st.slider(
-                "Expected annual growth (price)", min_value=0.0, max_value=15.0,
-                value=7.0, step=0.5, key="wealth_growth_slider", format="%.1f%%",
-            )
-        with sim_col2:
-            yield_slider = st.slider(
-                "Simulated dividend yield", min_value=0.0, max_value=10.0,
-                value=round(live_avg_yield * 100, 1), step=0.1, key="wealth_yield_slider", format="%.1f%%",
-            )
-            # 'value=' hierboven werkt ALLEEN bij de allereerste keer dat
-            # deze slider in je sessie getekend wordt -- daarna blijft 'ie
-            # op zijn laatst-versleepte positie staan, ook als de live
-            # yield-berekening daarna verandert (bv. door een eerdere,
-            # inmiddels-gefixte yfinance-hik die de starende waarde ooit
-            # verkeerd zette). Deze knop zet 'm expliciet terug naar de
-            # ZOJUIST verse berekening, zonder op een sessie-reset te
-            # hoeven wachten.
-            #
-            # BUGFIX: session_state[key] direct zetten NA het tekenen van
-            # de slider (binnen dezelfde run) is verboden in Streamlit --
-            # StreamlitWidgetAlreadyInstantiatedError. Via on_click i.p.v.
-            # een gewone if-knop: die callback draait VOORDAT de widgets
-            # van de volgende run getekend worden, dus dat is wel
-            # toegestaan.
-            def _reset_yield_to_live(_live_value=round(live_avg_yield * 100, 1)):
-                st.session_state["wealth_yield_slider"] = _live_value
-
-            st.button("\u21bb Reset to live yield", key="wealth_yield_reset_btn", on_click=_reset_yield_to_live)
-        with sim_col3:
-            contribution_slider = st.slider(
-                "Simulated annual contribution", min_value=0, max_value=50000,
-                value=int(round(annual_contribution)), step=500, key="wealth_contribution_slider",
-                format="\u20ac%d",
-            )
-    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
-
-    # ================================================================
-    # DEEL 2: THE FORWARD PROJECTION (Toekomst) -- alles vanaf hier
-    # herrekent live (Streamlit's gewone widget-rerun) zodra aan de 3
-    # sliders hierboven wordt gedraaid.
-    # ================================================================
-    st.markdown(
-        _uniform_section_header_html("The Forward Projection", "trending_up"),
-        unsafe_allow_html=True,
-    )
-
-
-    # --- Strak 4-koloms grid -- tegel 1 gebruikt nu rechtstreeks
-    # yield_slider (de teruggegeven waarde van de widget hierboven), dus
-    # gegarandeerd correct bij elke rerun/sleepbeweging.
-    tile_col1, tile_col2, tile_col3, tile_col4 = st.columns(4, gap="medium")
-    _tile_style = (
-        'background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); '
-        'border-radius:12px; padding:1rem; text-align:left;'
-    )
-    simulated_annual_cashflow = total_value * (yield_slider / 100)
-    with tile_col1:
-        st.markdown(
-            f'<div style="{_tile_style}">'
-            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual passive cashflow</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{simulated_annual_cashflow:,.0f} '
-            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with tile_col2:
-        st.markdown(
-            f'<div style="{_tile_style}">'
-            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.4rem;">&#128200; Average portfolio yield</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{live_avg_yield * 100:.2f}% '
-            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">yield</span></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with tile_col3:
-        st.markdown(
-            f'<div style="{_tile_style}">'
-            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.4rem;">&#8987; Dividend growth rate</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">{DIVIDEND_GROWTH_RATE * 100:.1f}% '
-            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">CAGR (est.)</span></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    with tile_col4:
-        st.markdown(
-            f'<div style="{_tile_style}">'
-            f'<div style="font-size:0.68rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; '
-            f'color:#8992A3; margin-bottom:0.4rem;">&#128188; Annual contribution (est.)</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#F1F5F9;">&euro;{contribution_slider:,.0f} '
-            f'<span style="font-size:0.75rem; font-weight:600; color:#64748B;">/ year</span></div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
-
-    # --- Compounding-engine: 30-jarige projectie -- volledig gekoppeld
-    # aan de 3 sliders hierboven. Streamlit herrekent en hertekent de
-    # grafiek automatisch bij elke slider-beweging (gewone widget-
-    # rerun), dus dit is al flitsloos/live zonder verdere aanpassingen.
-    PROJECTION_YEARS = 30
-    current_year = datetime.now().year
-    simulated_price_growth = growth_slider / 100
-    simulated_starting_cashflow = total_value * (yield_slider / 100)
-    simulated_contribution = float(contribution_slider)
-
-    # Dividend-groeitempo nu deels gekoppeld aan de EXPECTED ANNUAL
-    # GROWTH-slider i.p.v. een volledig losstaande, vaste 5% -- bedrijven
-    # met sterkere koersgroei verhogen doorgaans ook hun dividend sneller
-    # (aangedreven door dezelfde onderliggende winstgroei). 50%-doorwerking
-    # van elke afwijking t.o.v. de 7%-baseline, geclamped tussen 0% en 15%
-    # zodat het nooit een onrealistisch of negatief tempo oplevert. Zonder
-    # deze koppeling bleef het dividendinkomen (en dus de YoY-versnellings-
-    # grafiek hieronder) altijd vlak op +5,0% staan, ongeacht de sliders --
-    # dat leek eerder niet de bedoeling.
-    _baseline_price_growth = 0.07
-    effective_dividend_growth_rate = DIVIDEND_GROWTH_RATE + (simulated_price_growth - _baseline_price_growth) * 0.5
-    effective_dividend_growth_rate = max(0.0, min(0.15, effective_dividend_growth_rate))
-
-    years = [current_year]
-    net_deposits = [total_value]
-    total_wealth = [total_value]
-    dividend_income_by_year = [simulated_starting_cashflow]
-
-    # Het dividendinkomen wordt berekend als (vermogen op dat moment) x
-    # (dividendrendement-per-aandeel op dat moment) -- i.p.v. een
-    # dividendbedrag dat volledig LOSSTAAT van hoeveel vermogen er
-    # daadwerkelijk is opgebouwd. Zo werkt herbeleggen/compounding pas
-    # ECHT door: elk jaar extra ingelegd geld EN elk herbelegd dividend
-    # vergroot de vermogensbasis waarover het VOLGENDE jaar weer dividend
-    # wordt uitgekeerd. Het dividendrendement-per-aandeel zelf groeit nog
-    # steeds licht per jaar (effective_dividend_growth_rate, gekoppeld
-    # aan de groei-slider) -- dat simuleert dat bedrijven hun dividend
-    # per aandeel verhogen, los van hoeveel aandelen je bezit.
-    #
-    # BELANGRIJK (bugfix): vermogen/rendement worden nu EERST voor het
-    # nieuwe jaar bijgewerkt, en PAS DAARNA wordt dat jaar's dividend
-    # berekend uit die vernieuwde stand. Eerder gebeurde dit in de
-    # omgekeerde volgorde, waardoor jaar 1's dividend nog exact de OUDE
-    # (jaar 0-)stand van vermogen/rendement gebruikte -- identiek aan
-    # jaar 0 zelf, dus altijd +0,0% YoY in het eerste jaar, ongeacht de
-    # sliders. Nu groeit elk jaar daadwerkelijk door t.o.v. het vorige.
-    _wealth = total_value
-    _deposits = total_value
-    _yield_rate = yield_slider / 100
-    for i in range(1, PROJECTION_YEARS + 1):
-        _prior_dividend = dividend_income_by_year[-1]
-        capital_growth = _wealth * simulated_price_growth
-        _wealth = _wealth + capital_growth + _prior_dividend + simulated_contribution
-        _deposits = _deposits + simulated_contribution
-        _yield_rate = _yield_rate * (1 + effective_dividend_growth_rate)
-        _dividend_this_year = _wealth * _yield_rate
-        years.append(current_year + i)
-        net_deposits.append(_deposits)
-        total_wealth.append(_wealth)
-        dividend_income_by_year.append(_dividend_this_year)
-
-    # --- 3. Wealth Acceleration chart -- visuele legenda met gekleurde
-    # lijntjes i.p.v. bullet-tekens (nu ONDER de chart, gevolgd door de
-    # gedempte simulatie-parameters). ---
-    wealth_fig = go.Figure()
-    wealth_fig.add_trace(go.Scatter(
-        x=years, y=net_deposits, name="Net Deposits", mode="lines",
-        line=dict(color="rgba(148,163,184,0.55)", width=1.5),
-        fill="tozeroy", fillcolor="rgba(148,163,184,0.08)",
-        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
-    ))
-    wealth_fig.add_trace(go.Scatter(
-        x=years, y=total_wealth, name="Total Wealth", mode="lines",
-        line=dict(color="#34D399", width=2.5),
-        fill="tonexty", fillcolor="rgba(52,211,153,0.08)",
-        hovertemplate="%{x}: €%{y:,.0f}<extra></extra>",
-    ))
-    wealth_fig.update_layout(
-        height=340,
-        margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10)),
-        yaxis=dict(showgrid=False, zeroline=False, color="#64748B", tickfont=dict(size=10),
-                   tickprefix="\u20ac", tickformat=",.0f"),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="#101825", font_size=11, font_family="Inter"),
-    )
-    st.plotly_chart(wealth_fig, use_container_width=True, config={"displayModeBar": False})
-
-    _legend_line_style = (
-        'display:inline-block; width:14px; height:3px; border-radius:2px; '
-        'margin-right:6px; vertical-align:middle;'
-    )
-    st.markdown(
-        f'<div style="color:#64748B; font-size:10px; font-weight:700; letter-spacing:0.05em; '
-        f'text-transform:uppercase; margin-top:15px; margin-bottom:1.5rem; line-height:1.9;">'
-        f'<div><span style="{_legend_line_style} background-color:#64748b;"></span>Net Deposits</div>'
-        f'<div><span style="{_legend_line_style} background-color:#34d399;"></span>Total Wealth</div>'
-        f'<div style="margin-top:0.3rem;">Projected at {growth_slider:.1f}% growth + '
-        f'{yield_slider:.1f}% reinvested yield</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    # --- Cashflow Velocity -- absolute jaarlijkse passieve cashflow in
-    # euro's, i.p.v. procentuele YoY-groei. Dalende groei-percentages
-    # (het onvermijdelijke gevolg van compounding tegen een VASTE
-    # jaarlijkse inleg, zie de projectie hierboven) voelden demotiverend
-    # aan, terwijl het harde euro-bedrag zelf ieder jaar juist stevig
-    # stijgt -- dat vliegwiel-effect komt hier nu rechtstreeks in beeld.
-    # Geen st.bar_chart/plotly-staafgrafiek meer -- die paste met dikke,
-    # platte balken totaal niet bij Hestys' rustige, typografische stijl.
-    # Nu een pure HTML-datamatrix: 5 kolommen (komende 5 jaar), elk met
-    # jaartal / absoluut eurobedrag / YoY-versnelling eronder. Puur
-    # afgeleid van dezelfde dividend_income_by_year-reeks die de 3
-    # sliders hierboven al voeden, dus deze matrix herrekent vanzelf mee
-    # zodra je aan een slider schuift -- geen aparte logica nodig.
-    st.markdown(
-        '<div style="color:#94A3B8; font-size:0.875rem; font-weight:700; letter-spacing:0.05em; '
-        'text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.05); '
-        'padding-bottom:8px; margin-bottom:15px;">&#128202; Passive Cashflow Acceleration '
-        '(5-Year Velocity Matrix)</div>',
-        unsafe_allow_html=True,
-    )
-    _matrix_cells_html = ""
-    for i in range(0, 5):
-        _yr = years[i]
-        _eur = dividend_income_by_year[i]
-        if i == 0:
-            # Kolom 1 = HUIDIG jaar (2026) = je echte, actuele live cashflow
-            # -- geen +YoY-berekening nodig/mogelijk, dit IS het startpunt
-            # zelf, exact synchroon met de historische grafiek hierboven
-            # (die ook in het huidige jaar eindigt).
-            _yoy_html = '<div style="font-size:11px; font-weight:700; color:#34d399;">BASELINE</div>'
-        else:
-            _prev = dividend_income_by_year[i - 1]
-            _pct = ((_eur - _prev) / _prev * 100) if _prev > 0 else 0.0
-            _yoy_html = f'<div style="font-size:11px; font-weight:700; color:#34d399;">+{_pct:.1f}% YOY</div>'
-        _matrix_cells_html += (
-            f'<div style="width:20%; text-align:center;">'
-            f'<div style="font-size:10px; font-weight:700; color:#475569; letter-spacing:0.05em; '
-            f'text-transform:uppercase;">{_yr}</div>'
-            f'<div style="font-size:16px; font-weight:700; color:#ffffff; padding:4px 0;">&euro;{_eur:,.0f}</div>'
-            f'{_yoy_html}'
-            f'</div>'
-        )
-    st.markdown(
-        f'<div style="display:flex; width:100%;">{_matrix_cells_html}</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
-
-    # --- 4. Snowball Milestones -- echte <table> met expliciete border-
-    # onderdrukking (zie verderop), 3 kolommen: Milestone / Required
-    # Cashflow / Target Year.
-    st.markdown(
-        _uniform_section_header_html("Snowball Milestones", "shield", is_first=False),
-        unsafe_allow_html=True,
-    )
-
-    def _find_milestone_year(condition):
-        for idx, yr in enumerate(years):
-            if condition(idx):
-                return yr
-        return None
-
-    # Onwrikbare ladder van 6 universele, oplopende mijlpalen -- van een
-    # kopje koffie tot financial independence. Elke drempel is vast
-    # (dividend_income_by_year >= X), behalve The Crossover Event, die
-    # relatief blijft t.o.v. de SIMULEERBARE inleg-slider.
-    _milestone_espresso = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 60)
-    _milestone_dinner = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 250)
-    _milestone_travel = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 1200)
-    _milestone_baseline = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= 5000)
-    _milestone_crossover = _find_milestone_year(
-        lambda idx: dividend_income_by_year[idx] > simulated_contribution
-    ) if simulated_contribution > 0 else None
-    # Instelbaar via Settings (was eerder een vast €30.000 voor iedereen) --
-    # default €60.000 als de gebruiker nog nooit iets heeft ingesteld.
-    _fi_target = _wealth_db.get_user_preferences(user_email).get("financial_independence_target") or 60000.0
-    _milestone_freedom = _find_milestone_year(lambda idx: dividend_income_by_year[idx] >= _fi_target)
-
-    def _milestone_year_html(year_val):
-        if year_val is None:
-            # Buiten de 30-jarige horizon -- gedempte rose/rode waarschuwings-
-            # kleur, i.p.v. dezelfde neutrale grijstint als een bereikte
-            # mijlpaal. Geeft meteen een visuele prikkel welke doelen nog
-            # niet binnen bereik liggen.
-            return '<span style="color:rgba(244,63,94,0.6); font-weight:700; letter-spacing:0.03em; white-space:nowrap;">&gt; 30 YRS</span>'
-        if year_val == current_year:
-            # Al VANDAAG bereikt (jaar 0 van de projectie) -- een groen
-            # vinkje ernaast, ter onderscheid van een toekomstige
-            # projectie die nog moet gebeuren.
-            return (
-                f'<span style="color:#34d399; font-weight:700;">{year_val}</span> '
-                f'<span style="color:#34d399;">&#10003;</span>'
-            )
-        # Binnen de 30 jaar, maar pas in de TOEKOMST -- amber/oranje i.p.v.
-        # groen, zodat groen exclusief 'nu al gehaald' betekent en oranje
-        # 'onderweg, nog niet zover'.
-        return f'<span style="color:#FBBF24; font-weight:700;">{year_val}</span>'
-
-    # (naam, technische voorwaarde, jaartal-html)
-    milestone_rows = [
-        ("The Daily Espresso", "&euro;60", _milestone_year_html(_milestone_espresso)),
-        ("The Dinner Appreciation", "&euro;250", _milestone_year_html(_milestone_dinner)),
-        ("The Concierge Travel", "&euro;1,200", _milestone_year_html(_milestone_travel)),
-        ("The Baseline Cover", "&euro;5,000", _milestone_year_html(_milestone_baseline)),
-        ("The Crossover Event", "CASHFLOW &gt; CONTRIBUTION", _milestone_year_html(_milestone_crossover)),
-        ("Financial Independence", f"&euro;{_fi_target:,.0f}", _milestone_year_html(_milestone_freedom)),
-    ]
-
-    # Echte <table> met <thead>, deze keer met HARDE, expliciete
-    # onderdrukking van elke default-tabelrand (border:none !important op
-    # elke cel) -- een vorige poging met een raw <table> kreeg ongewenste
-    # verticale kolomlijnen via Streamlit's eigen basis-stylesheet, dat
-    # voorkomen we nu expliciet i.p.v. te vertrouwen op border-collapse
-    # alleen. Nu ook met een max-width-restrictie op de tabel zelf, zodat
-    # de data compact links/midden blijft i.p.v. tot de rand van het
-    # scherm uit te rekken.
-    _milestones_key = "wealth_engine_milestones_table"
-    _header_style = (
-        "text-transform:uppercase; font-size:10px; font-weight:700; color:#475569; "
-        "letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1) !important; "
-        "border-top:none !important; border-left:none !important; border-right:none !important;"
-    )
-    _cell_base = (
-        "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
-        "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
-    )
-    _rows_html = "".join(
-        f'<tr>'
-        f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
-        f'font-size:0.78rem; font-weight:700; color:#F1F5F9;">{name}</td>'
-        f'<td style="{_cell_base} width:35%; text-align:left; text-transform:uppercase; '
-        f'font-size:0.69rem; font-weight:600; color:#64748b;">{value}</td>'
-        f'<td style="{_cell_base} width:30%; text-align:right; font-size:0.78rem;">{year_html}</td>'
-        f'</tr>'
-        for name, value, year_html in milestone_rows
-    )
-    st.markdown(
-        f'<style>.st-key-{_milestones_key} table {{ width:100%; border-collapse:collapse; }} '
-        f'.st-key-{_milestones_key} td, .st-key-{_milestones_key} th {{ border:none; }}</style>',
-        unsafe_allow_html=True,
-    )
-    with st.container(key=_milestones_key):
-        st.markdown(
-            f'<div style="max-width:640px;">'
-            f'<table style="width:100%; border-collapse:collapse;">'
-            f'<thead><tr>'
-            f'<th style="{_header_style} width:35%; text-align:left;">Milestone</th>'
-            f'<th style="{_header_style} width:35%; text-align:left;">Required cashflow</th>'
-            f'<th style="{_header_style} width:30%; text-align:right;">Target year</th>'
-            f'</tr></thead>'
-            f'<tbody>{_rows_html}</tbody>'
-            f'</table>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
 
 
 def render_wealth_engine():
