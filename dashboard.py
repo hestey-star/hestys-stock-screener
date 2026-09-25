@@ -7591,8 +7591,8 @@ def _render_wealth_engine(user_email: str) -> None:
                 # jaren heen (seizoenspatroon), geen tijdlijn -- zonder deze
                 # ondertitel oogde een balk als 'DEC' verwarrend alsof het over
                 # een toekomstige december zou gaan. De huidige maand krijgt
-                # daarnaast een amber highlight (i.p.v. het standaard-groen) als
-                # duidelijk anker in de 12-maanden-cyclus.
+                # daarnaast een koraalroze/neon highlight (i.p.v. het
+                # standaard-groen) als duidelijk anker in de 12-maanden-cyclus.
                 _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                                   "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
                 _month_totals = [0.0] * 12
@@ -7653,11 +7653,12 @@ def _render_wealth_engine(user_email: str) -> None:
                 ).encode(
                     x=_ladder_x,
                     y=alt.Y("amount:Q", axis=None),
-                    # Huidige maand amber (echt goudkleurig, niet fel-oranje),
-                    # alle andere maanden Hestys-groen -- geeft in 1 oogopslag
-                    # een anker in de 12-maanden-cyclus.
+                    # Huidige maand koraalroze/neon-oranje (dezelfde vibe als
+                    # Hestys' eigen accentkleur-familie), alle andere maanden
+                    # Hestys-groen -- geeft in 1 oogopslag een anker in de
+                    # 12-maanden-cyclus.
                     color=alt.condition(
-                        alt.datum.is_current, alt.value("#D4A017"), alt.value("#34D399")
+                        alt.datum.is_current, alt.value("#FF5A6B"), alt.value("#34D399")
                     ),
                     tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Avg per year (€)", format=",.2f")],
                 )
@@ -7666,7 +7667,7 @@ def _render_wealth_engine(user_email: str) -> None:
                 ).encode(
                     x=_ladder_x, y=alt.Y("amount:Q"), text="label:N",
                     color=alt.condition(
-                        alt.datum.is_current, alt.value("#D4A017"), alt.value("#94A3B8")
+                        alt.datum.is_current, alt.value("#FF5A6B"), alt.value("#94A3B8")
                     ),
                 )
                 ladder_chart = (
