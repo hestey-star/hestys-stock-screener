@@ -8193,10 +8193,19 @@ def render_dividend():
         _month_totals = [0.0] * 12
         for e in all_events:
             _month_totals[e["date"].month - 1] += e["amount_eur"]
+
+        # Alleen de piekmaand(en) direct labelen i.p.v. elke balk -- bij
+        # 12 datapunten wordt 'elke balk een eigen tekstlabel' al snel
+        # rommelig en voegt weinig toe (de balkhoogte zelf laat het
+        # verschil al zien). Top-2 hoogste, niet-nul maanden krijgen een
+        # label; de rest laat alleen de hoogte spreken (tooltip on hover
+        # toont het exacte bedrag voor elke maand).
+        _nonzero_idx = [i for i, v in enumerate(_month_totals) if v > 0]
+        _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_totals[i], reverse=True)[:2]
         _ladder_df = pd.DataFrame({
             "month": _month_labels,
             "amount": _month_totals,
-            "label": [f"€{v:,.0f}" if v > 0 else "" for v in _month_totals],
+            "label": [f"€{v:,.0f}" if i in _peak_idx else "" for i, v in enumerate(_month_totals)],
         })
 
         _ladder_x = alt.X(
@@ -8226,6 +8235,9 @@ def render_dividend():
             .configure_view(strokeWidth=0)
         )
         st.altair_chart(ladder_chart, use_container_width=True)
+        if _peak_idx:
+            _peak_names = " & ".join(_month_labels[i] for i in sorted(_peak_idx))
+            st.caption(f"Peak in {_peak_names} -- typically overlapping quarterly dividend payouts.")
 
     with grid_col2:
         st.markdown(
@@ -8260,24 +8272,46 @@ def render_dividend():
             ],
             x1=1, x2=1, y1=1, y2=0,
         )
+        # Zelfde 'geen as-drukte, direct labelen'-stijl als de Ladder
+        # hiernaast i.p.v. een aparte y-as met gridlines (was eerder een
+        # inconsistente 2e visuele taal naast de Ladder) -- de y-as +
+        # gridlines vervallen volledig, en het eindtotaal wordt als 1
+        # direct label bij het laatste punt getoond, net als de
+        # pieklabels in de Ladder.
+        # X-as: alleen het JAAR labelen bij de januari-maand van elk jaar
+        # i.p.v. een label per kalendermaand (was gekanteld -40 graden en
+        # oogde druk) -- via labelExpr op de onderliggende 'YYYY-MM'-
+        # stringwaarde, horizontaal (0 graden) net als de Ladder's as.
+        _snowball_x = alt.X(
+            "period:N", sort=None, title=None,
+            axis=alt.Axis(
+                labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
+                labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+                labelExpr="endsWith(datum.value, '-01') ? substring(datum.value, 0, 4) : ''",
+            ),
+        )
         snowball_area = alt.Chart(_snowball_df).mark_area(
             line={"color": "#34D399", "strokeWidth": 2.5},
             color=_snowball_gradient,
             interpolate="monotone",
         ).encode(
-            x=alt.X("period:N", sort=None, title=None, axis=alt.Axis(
-                labelColor="#64748B", labelFontSize=9, labelAngle=-40, labelPadding=6,
-                tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
-            )),
-            y=alt.Y("cumulative:Q", title=None, axis=alt.Axis(
-                labelColor="#64748B", labelFontSize=10, format="~s",
-                gridColor="rgba(255,255,255,0.05)", tickColor="transparent", domainColor="transparent",
-            )),
+            x=_snowball_x,
+            y=alt.Y("cumulative:Q", title=None, axis=None),
             tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
-        ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-        st.altair_chart(snowball_area, use_container_width=True)
+        )
+        _snowball_last = _snowball_df.iloc[[-1]].copy()
+        _snowball_last["label"] = f"€{_snowball_last['cumulative'].iloc[0]:,.0f}"
+        _snowball_end_label = alt.Chart(_snowball_last).mark_text(
+            align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
+        ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
+        snowball_chart = (
+            (snowball_area + _snowball_end_label)
+            .properties(height=260, background="transparent")
+            .configure_view(strokeWidth=0)
+        )
+        st.altair_chart(snowball_chart, use_container_width=True)
 
-    st.markdown("<div style='height: 2rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
     # ============================================================
     # 4. UPCOMING PASSIVE INFLOW -- TDIV/KHC/TMUS (als je die aanhoudt)
