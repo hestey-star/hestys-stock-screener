@@ -7801,8 +7801,8 @@ def _render_wealth_engine(user_email: str) -> None:
             # alsnog ongewenste verticale kolomlijnen doorheen).
             _upcoming_table_key = "wealth_engine_upcoming_table"
             _upcoming_header_style = (
-                "text-transform:uppercase; font-size:10px; font-weight:700; color:#64748b; "
-                "letter-spacing:0.08em; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.15) !important; "
+                "text-transform:uppercase; font-size:11px; font-weight:800; color:#94a3b8; "
+                "letter-spacing:0.1em; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,0.15) !important; "
                 "border-top:none !important; border-left:none !important; border-right:none !important;"
             )
             _upcoming_cell_base = (
@@ -7811,12 +7811,12 @@ def _render_wealth_engine(user_email: str) -> None:
             )
             _upcoming_rows_html = "".join(
                 f'<tr>'
-                f'<td style="{_upcoming_cell_base} padding:14px 24px 14px 0; text-transform:uppercase; '
-                f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap;">{name}</td>'
+                f'<td style="{_upcoming_cell_base} padding:14px 32px 14px 0; text-transform:uppercase; '
+                f'font-size:12px; font-weight:700; color:#ffffff; white-space:nowrap; width:1%;">{name}</td>'
                 f'<td style="{_upcoming_cell_base} padding:14px 0; text-transform:uppercase; font-size:10px; '
-                f'font-weight:600; color:#64748b; white-space:nowrap;">{asset_type}</td>'
+                f'font-weight:600; color:#64748b; white-space:nowrap; width:1%;">{asset_type}</td>'
                 f'<td style="{_upcoming_cell_base} padding:14px 0; text-align:right; font-size:12px; '
-                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap;">'
+                f'font-weight:700; color:#34d399; letter-spacing:0.05em; white-space:nowrap; width:100%;">'
                 f'{pay_date.strftime("%b %d, %Y").upper()} &middot; {payout_text}</td>'
                 f'</tr>'
                 for name, asset_type, payout_text, pay_date in _upcoming_rows
@@ -7824,7 +7824,8 @@ def _render_wealth_engine(user_email: str) -> None:
             st.markdown(
                 f'<style>'
                 f'.st-key-{_upcoming_table_key} > div {{ background:rgba(137,146,163,0.05); '
-                f'border:1px solid rgba(137,146,163,0.18); border-radius:12px; padding:0.75rem 1.25rem; }} '
+                f'border:1px solid rgba(137,146,163,0.18); border-radius:12px; padding:0.75rem 1.25rem; '
+                f'max-width:600px; }} '
                 f'.st-key-{_upcoming_table_key} table {{ width:100%; border-collapse:collapse; }} '
                 f'.st-key-{_upcoming_table_key} td, .st-key-{_upcoming_table_key} th {{ border:none; }}'
                 f'</style>',
@@ -7834,9 +7835,9 @@ def _render_wealth_engine(user_email: str) -> None:
                 st.markdown(
                     f'<table style="width:100%; border-collapse:collapse;">'
                     f'<thead><tr>'
-                    f'<th style="{_upcoming_header_style} text-align:left;">Asset</th>'
-                    f'<th style="{_upcoming_header_style} text-align:left;">Type</th>'
-                    f'<th style="{_upcoming_header_style} text-align:right;">Next payout</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Asset</th>'
+                    f'<th style="{_upcoming_header_style} text-align:left; width:1%;">Type</th>'
+                    f'<th style="{_upcoming_header_style} text-align:right; width:100%;">Next payout</th>'
                     f'</tr></thead>'
                     f'<tbody>{_upcoming_rows_html}</tbody>'
                     f'</table>',
