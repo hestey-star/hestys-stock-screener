@@ -8009,6 +8009,43 @@ def render_dividend():
             _prop_events.append({"date": cursor, "amount_eur": monthly_amount, "naam": asset["naam"]})
             cursor = _add_one_month(cursor)
 
+    # --- Staking (bv. SOL: X van je Y gestakete coins tegen Z% APY, via
+    # het losse 'staked_amount'/'staking_apy_pct'-veld op een gewone
+    # holding -- HELEMAAL LOS van 'custom_annual_cashflow'/Prop.com
+    # hierboven). Zelfde synthetische-maandbedrag-aanpak als Prop.com: de
+    # jaarlijkse APY over de EUR-waarde van het gestakete deel gedeeld
+    # door 12, vanaf de eerste transactie van die holding. Werkt generiek
+    # voor elke holding met beide velden ingevuld, niet alleen SOL.
+    _staking_holdings = [h for h in holdings if h.get("staked_amount") and h.get("staking_apy_pct")]
+    _staking_events = []
+    for h in _staking_holdings:
+        total_shares = h.get("shares") or 0
+        if total_shares <= 0:
+            continue
+        staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
+        staked_value_eur = _eur_position_value(h) * staked_fraction
+        monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
+        if monthly_amount <= 0:
+            continue
+        try:
+            asset_txs = database.get_transactions_for_holding(user_email, h["id"])
+            start_date = min(
+                (datetime.strptime(t["transaction_date"], "%Y-%m-%d").date() for t in asset_txs),
+                default=None,
+            )
+        except Exception:
+            start_date = None
+        if start_date is None:
+            continue
+        cursor = start_date.replace(day=1)
+        current_month = datetime.now().date().replace(day=1)
+        while cursor <= current_month:
+            _staking_events.append({
+                "date": cursor, "amount_eur": monthly_amount,
+                "ticker": h.get("ticker"), "naam": f"{h.get('naam') or h.get('ticker')} (Staking)",
+            })
+            cursor = _add_one_month(cursor)
+
     # --- Broker-uitkeringen (database.get_dividend_income(), de ECHTE,
     # PERMANENT opgeslagen historie -- niet de oude, tijdelijke 'dividend_
     # rows'-parserstructuur) hard omzetten naar EUR en optellen bij de
@@ -8050,13 +8087,14 @@ def render_dividend():
         for e in _prop_events
     ]
 
-    # De 2 bronnen HARD samenvoegen tot 1 chronologische reeks -- geen van
-    # beide overschrijft of verdringt de ander, ze worden simpelweg
-    # allebei in dezelfde lijst gestopt en op datum gesorteerd. Alles
-    # verderop (tegels, Ladder, Snowball) rekent UITSLUITEND met deze ene,
-    # gecombineerde 'all_events'-lijst -- er is geen aparte, deels-Prop.com-
-    # of deels-broker-only berekening meer ergens anders in de functie.
-    all_events = broker_events + prop_events_eur
+    # De 3 bronnen (broker-dividenden, Prop.com, staking) HARD samenvoegen
+    # tot 1 chronologische reeks -- geen enkele overschrijft of verdringt
+    # een andere, ze worden simpelweg allemaal in dezelfde lijst gestopt en
+    # op datum gesorteerd. Alles verderop (tegels, Ladder, Snowball,
+    # Upcoming) rekent UITSLUITEND met deze ene, gecombineerde
+    # 'all_events'-lijst -- er is geen aparte, deels-Prop.com- of
+    # deels-broker-only berekening meer ergens anders in de functie.
+    all_events = broker_events + prop_events_eur + _staking_events
     all_events.sort(key=lambda e: e["date"])
 
     if not all_events:
@@ -8070,9 +8108,14 @@ def render_dividend():
     # ============================================================
     # 1. METRICS -- 3 tegels, zelfde visuele taal als Today/Stress-Test
     # ============================================================
+    _staking_tickers = {h.get("ticker") for h in _staking_holdings}
     total_collected = sum(e["amount_eur"] for e in all_events)
-    broker_total = sum(e["amount_eur"] for e in all_events if e["ticker"] != "PROP.COM")
     prop_total = sum(e["amount_eur"] for e in all_events if e["ticker"] == "PROP.COM")
+    staking_total = sum(
+        e["amount_eur"] for e in all_events
+        if e["ticker"] in _staking_tickers and e["naam"].endswith("(Staking)")
+    )
+    broker_total = total_collected - prop_total - staking_total
     first_date = all_events[0]["date"]
     today_date = datetime.now().date()
     months_active = max(1, (today_date.year - first_date.year) * 12 + (today_date.month - first_date.month) + 1)
@@ -8092,7 +8135,10 @@ def render_dividend():
             _today_metric_tile_html(
                 "Total Dividends Collected", "payments", f"€{total_collected:,.2f} COLLECTED",
                 _tile_color, _tile_bg, _tile_border,
-                footer_text=f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}",
+                footer_text=(
+                    f"Brokers: €{broker_total:,.2f} · Prop.com: €{prop_total:,.2f}"
+                    + (f" · Staking: €{staking_total:,.2f}" if staking_total > 0 else "")
+                ),
             ),
             unsafe_allow_html=True,
         )
@@ -8266,15 +8312,30 @@ def render_dividend():
         except Exception:
             continue
 
-    # Prop.com: eerstvolgende 1e van de maand, altijd binnen 60 dagen.
+    # Prop.com (en elke andere custom-cashflow asset): eerstvolgende 1e van
+    # de maand, altijd binnen 60 dagen.
+    _next_first = (
+        today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
+    )
     for asset in _custom_assets:
         monthly_amount = (asset.get("custom_annual_cashflow") or 0.0) / 12.0
         if monthly_amount <= 0:
             continue
-        _next_first = (
-            today_date.replace(day=1) if today_date.day == 1 else _add_one_month(today_date.replace(day=1))
-        )
         _upcoming_rows.append((asset["naam"], f"€{monthly_amount:,.2f}", _next_first))
+
+    # Staking (SOL en elke andere gestakete positie): zelfde synthetische
+    # maandbedrag als in de historie hierboven, ook geland op de
+    # eerstvolgende 1e van de maand.
+    for h in _staking_holdings:
+        total_shares = h.get("shares") or 0
+        if total_shares <= 0:
+            continue
+        staked_fraction = min(_to_float(h.get("staked_amount")) / float(total_shares), 1.0)
+        staked_value_eur = _eur_position_value(h) * staked_fraction
+        monthly_amount = staked_value_eur * (_to_float(h.get("staking_apy_pct")) / 100) / 12.0
+        if monthly_amount <= 0:
+            continue
+        _upcoming_rows.append((f"{h.get('naam') or h.get('ticker')} (Staking)", f"€{monthly_amount:,.2f}", _next_first))
 
     _upcoming_rows.sort(key=lambda r: r[2])
 
@@ -8290,30 +8351,37 @@ def render_dividend():
             "border-bottom:1px solid rgba(255,255,255,0.05) !important; border-top:none !important; "
             "border-left:none !important; border-right:none !important; vertical-align:middle; padding:12px 0;"
         )
+        # Vaste, content-krappe kolombreedtes i.p.v. procentuele (40/30/30%
+        # op de volle paginabreedte) -- bij 1-2 rijen anders een kamerbrede
+        # tabel met absurd veel lege ruimte tussen de kolommen. Tabel zelf
+        # ook op een max-breedte gehouden i.p.v. altijd de volle breedte
+        # te vullen; groeit gewoon mee zodra er meer rijen/langere namen
+        # bijkomen, tot die max-breedte.
         _rows_html = "".join(
             f'<tr>'
-            f'<td style="{_cell_base} width:40%; text-align:left; font-size:0.82rem; font-weight:700; '
-            f'color:#F1F5F9;">{company}</td>'
-            f'<td style="{_cell_base} width:30%; text-align:left; font-size:0.82rem; font-weight:600; '
-            f'color:#34D399;">{payout_text}</td>'
-            f'<td style="{_cell_base} width:30%; text-align:right; font-size:0.78rem; color:#94A3B8;">'
-            f'{pay_date.strftime("%b %d, %Y")}</td>'
+            f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:700; '
+            f'color:#F1F5F9; white-space:nowrap;">{company}</td>'
+            f'<td style="{_cell_base} text-align:left; font-size:0.82rem; font-weight:600; '
+            f'color:#34D399; white-space:nowrap; padding-left:28px;">{payout_text}</td>'
+            f'<td style="{_cell_base} text-align:right; font-size:0.78rem; color:#94A3B8; '
+            f'white-space:nowrap; padding-left:28px;">{pay_date.strftime("%b %d, %Y")}</td>'
             f'</tr>'
             for company, payout_text, pay_date in _upcoming_rows
         )
         _upcoming_key = "dividend_upcoming_table"
         st.markdown(
-            f'<style>.st-key-{_upcoming_key} table {{ width:100%; border-collapse:collapse; }} '
-            f'.st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th {{ border:none; }}</style>',
+            f'<style>.st-key-{_upcoming_key} table {{ border-collapse:collapse; width:auto; '
+            f'max-width:560px; }} .st-key-{_upcoming_key} td, .st-key-{_upcoming_key} th '
+            f'{{ border:none; }}</style>',
             unsafe_allow_html=True,
         )
         with st.container(key=_upcoming_key):
             st.markdown(
-                f'<table style="width:100%; border-collapse:collapse;">'
+                f'<table style="border-collapse:collapse; width:auto; max-width:560px;">'
                 f'<thead><tr>'
-                f'<th style="{_header_style} width:40%; text-align:left;">Company</th>'
-                f'<th style="{_header_style} width:30%; text-align:left;">Expected Payout</th>'
-                f'<th style="{_header_style} width:30%; text-align:right;">Payout Date</th>'
+                f'<th style="{_header_style} text-align:left;">Company</th>'
+                f'<th style="{_header_style} text-align:left; padding-left:28px;">Expected Payout</th>'
+                f'<th style="{_header_style} text-align:right; padding-left:28px;">Payout Date</th>'
                 f'</tr></thead>'
                 f'<tbody>{_rows_html}</tbody>'
                 f'</table>',
