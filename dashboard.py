@@ -7683,9 +7683,16 @@ def _render_wealth_engine(user_email: str) -> None:
                         alt.datum.is_current, alt.value("#FF5A6B"), alt.value("#94A3B8")
                     ),
                 )
+                # Vaste padding BOVENAAN reserveren (i.p.v. Vega's eigen
+                # 'autosize: pad'-gedrag dat het canvas per chart anders laat
+                # meegroeien met de hoogte van het pieklabel erboven) -- zonder
+                # dit expliciete, gelijke padding-getal kreeg de Snowball
+                # hiernaast (ander label, andere y-uitloop) een iets andere
+                # totale canvashoogte dan de Ladder, waardoor de 2 x-assen
+                # niet op gelijke hoogte uitkwamen ondanks dezelfde height=260.
                 ladder_chart = (
                     (_ladder_bars + _ladder_labels)
-                    .properties(height=260, background="transparent")
+                    .properties(height=260, background="transparent", padding={"top": 24, "bottom": 0, "left": 0, "right": 0})
                     .configure_view(strokeWidth=0)
                 )
                 st.altair_chart(ladder_chart, use_container_width=True)
@@ -7764,9 +7771,12 @@ def _render_wealth_engine(user_email: str) -> None:
                     _snowball_end_label = alt.Chart(_snowball_last).mark_text(
                         align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
                     ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
+                    # Zelfde vaste top-padding als de Ladder hiernaast (zie
+                    # toelichting daar) -- zorgt dat beide x-assen op precies
+                    # gelijke hoogte uitkomen.
                     snowball_chart = (
                         (snowball_area + _snowball_end_label)
-                        .properties(height=260, background="transparent")
+                        .properties(height=260, background="transparent", padding={"top": 24, "bottom": 0, "left": 0, "right": 0})
                         .configure_view(strokeWidth=0)
                     )
                     st.altair_chart(snowball_chart, use_container_width=True)
