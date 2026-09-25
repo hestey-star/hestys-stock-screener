@@ -12777,7 +12777,15 @@ def render_today():
             _seen_radar_tickers = set()
 
             def _bold_ticker(ticker: str) -> str:
-                return f'<b style="color:#F1F5F9; font-weight:700;">{ticker.upper()}</b>'
+                # Zelfde principe als de Screener Hits-chips hierboven --
+                # de ticker is niet alleen vetgedrukt uitgelicht maar ook
+                # meteen een klikbare link naar zijn Yahoo Finance-pagina.
+                _t = ticker.upper()
+                return (
+                    f'<a href="https://finance.yahoo.com/quote/{_t}" target="_blank" rel="noopener" '
+                    f'style="color:#F1F5F9; font-weight:700; text-decoration:underline; '
+                    f'text-decoration-color:rgba(241,245,249,0.35);">{_t}</a>'
+                )
 
             for _hit in _deep_dive_hits:
                 if _hit["ticker"] in _seen_radar_tickers:
