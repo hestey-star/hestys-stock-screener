@@ -2571,37 +2571,43 @@ def _render_sector_heatmap(rotation: list, weights: dict, portfolio_sectors: set
 
 def _insight_dismiss_button_html(insight_id: str) -> str:
     """
-    Kleine '×'-dismissknop rechtsboven een Insight-kolom. De klik zelf
-    werkt via een gewoon onclick-attribuut -- dat WORDT uitgevoerd, ook
-    via st.markdown(); alleen losse <script>-tags worden genegeerd (zie
-    streamlit_css_lessen.md #1). Verbergt de kolom direct EN schrijft een
-    tijdstempel naar localStorage (5 dagen geldig, voorkomt alert
-    fatigue). Het HERtoepassen van een eerdere dismiss bij de
-    eerstvolgende page-load/Streamlit-rerun gebeurt in
-    _render_insight_dismiss_autohide_script().
+    Kleine '×'-dismissknop rechtsboven een Insight-kolom.
+
+    GEVONDEN BUG (op verzoek na live-gebruik): de knop deed LETTERLIJK
+    NIETS bij een klik. Root cause: een los onclick-attribuut op een
+    element dat via st.markdown(unsafe_allow_html=True) wordt ingevoegd,
+    wordt door Streamlit's huidige frontend NIET meer betrouwbaar
+    uitgevoerd (eerdere aanname in dit bestand -- "dat WORDT uitgevoerd"
+    -- klopte kennelijk niet meer/nooit volledig). Het is dus geen los
+    randgeval, het is exact hetzelfde probleem als bij losse <script>-tags
+    (zie streamlit_css_lessen.md #1), alleen dan voor inline event-
+    handler-attributen i.p.v. <script>. Fix: GEEN onclick meer hier -- dit
+    element is nu puur decoratief/data (class + data-attribuut), de
+    daadwerkelijke klik-afhandeling gebeurt volledig in
+    _render_insight_dismiss_autohide_script() hieronder, via een ECHTE
+    <script>-tag in een components.html()-iframe (bevestigd werkende
+    aanpak, exact zoals de autohide zelf al deed).
     """
     return (
-        f"<span onclick=\"window.localStorage.setItem('hesty_dismissed_insight_{insight_id}', "
-        f"Date.now().toString()); this.closest('[data-insight-col]').style.display='none';\" "
+        f'<span class="hesty-insight-dismiss" data-dismiss-id="{insight_id}" '
         f'style="position:absolute; top:0; right:2px; cursor:pointer; color:#8992A3; '
         f'font-size:0.95rem; line-height:1; opacity:0.5; transition:opacity 0.15s;" '
-        f'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" '
         f'title="Dismiss for 5 days">&times;</span>'
     )
 
 
 def _render_insight_dismiss_autohide_script() -> None:
     """
-    Verbergt bij page-load/rerun automatisch elke Insight-kolom die de
-    afgelopen 5 dagen al gedismissed is. De klik zelf (zie
-    _insight_dismiss_button_html) lost alleen de HUIDIGE render op --
-    bij de eerstvolgende Streamlit-rerun (bv. door een widget elders op
-    de pagina) wordt de hele 3-koloms-HTML opnieuw vanaf 0 opgebouwd, dus
-    moet een eerdere dismiss ELKE keer opnieuw toegepast worden.
-    st.components.v1.html() + MutationObserver is de bevestigd werkende
-    omweg hiervoor (streamlit_css_lessen.md #1): losse <script>-tags in
-    st.markdown() worden nooit uitgevoerd, dit wel (draait in een eigen
-    iframe, bereikt de echte pagina via window.parent.document).
+    Doet nu 2 dingen (voorheen alleen het eerste; zie
+    _insight_dismiss_button_html hierboven voor waarom):
+    1. Verbergt bij page-load/rerun automatisch elke Insight-kolom die de
+       afgelopen 5 dagen al gedismissed is.
+    2. Handelt de daadwerkelijke '×'-klik zelf af, via event-delegatie op
+       window.parent.document (i.p.v. een los onclick-attribuut per knop
+       dat niet betrouwbaar afgaat) -- 1x gebonden (guard-vlag op de
+       document zelf, want dit component.html()-blok wordt bij ELKE
+       Streamlit-rerun opnieuw uitgevoerd en zou anders bij elke rerun een
+       dubbele listener toevoegen).
     """
     components.html(
         """
@@ -2624,7 +2630,22 @@ def _render_insight_dismiss_autohide_script() -> None:
                 }
             });
         }
+        function hestyBindDismissClicks() {
+            var doc = window.parent.document;
+            if (doc.__hestyDismissBound) { return; }
+            doc.__hestyDismissBound = true;
+            doc.addEventListener('click', function(e) {
+                var btn = e.target.closest && e.target.closest('.hesty-insight-dismiss');
+                if (!btn) { return; }
+                var id = btn.getAttribute('data-dismiss-id');
+                if (!id) { return; }
+                window.parent.localStorage.setItem('hesty_dismissed_insight_' + id, Date.now().toString());
+                var col = btn.closest('[data-insight-col]');
+                if (col) { col.style.display = 'none'; }
+            });
+        }
         hestyApplyDismissedInsights();
+        hestyBindDismissClicks();
         new MutationObserver(hestyApplyDismissedInsights).observe(window.parent.document.body, {childList: true, subtree: true});
         </script>
         """,
@@ -12943,6 +12964,11 @@ def render_today():
                         '<style>'
                         '.hesty-insights-row { display:flex; align-items:flex-start; gap:2rem; margin-top:0.4rem; } '
                         '.hesty-insights-col { flex:1; min-width:0; } '
+                        # Hover-highlight voor de dismiss-knop via CSS i.p.v.
+                        # de eerdere onmouseover/onmouseout-inline-attributen
+                        # (die dezelfde "onXXX-attribuut in st.markdown()"-
+                        # betrouwbaarheidsissue hebben als het onclick hierboven).
+                        '.hesty-insight-dismiss:hover { opacity:1 !important; color:#EAEDF1 !important; } '
                         '@media (max-width:768px) { '
                         '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
                         '.hesty-insights-col { width:100%; } '
