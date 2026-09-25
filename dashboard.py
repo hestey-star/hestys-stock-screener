@@ -2599,8 +2599,8 @@ def _insight_dismiss_button_html(insight_id: str) -> str:
 
 def _render_insight_dismiss_autohide_script() -> None:
     """
-    Doet nu 2 dingen (voorheen alleen het eerste; zie
-    _insight_dismiss_button_html hierboven voor waarom):
+    Doet nu 3 dingen (voorheen alleen de eerste 2; zie
+    _insight_dismiss_button_html hierboven voor de voorgeschiedenis):
     1. Verbergt bij page-load/rerun automatisch elke Insight-kolom die de
        afgelopen 5 dagen al gedismissed is.
     2. Handelt de daadwerkelijke '×'-klik zelf af, via event-delegatie op
@@ -2609,6 +2609,15 @@ def _render_insight_dismiss_autohide_script() -> None:
        document zelf, want dit component.html()-blok wordt bij ELKE
        Streamlit-rerun opnieuw uitgevoerd en zou anders bij elke rerun een
        dubbele listener toevoegen).
+    3. GEVONDEN, OP VERZOEK (na live-gebruik): als je ALLE kolommen in de
+       'Portfolio Health & DCA Insights'-sectie dismist, bleef de kop +
+       de lege sectie zelf gewoon staan -- Python weet bij het renderen
+       niet welke kaarten al eerder (in een vorige sessie) gedismissed
+       zijn, dus kan de kop zelf niet conditioneel weglaten. Nu verbergt
+       hestyUpdateSectionVisibility() ELKE '.hesty-insights-section'-
+       wrapper (kop + rij samen, zie de aanroeper) zodra GEEN ENKELE
+       '[data-insight-col]' erbinnen nog zichtbaar is -- draait na zowel
+       de page-load-toepassing als elke losse dismiss-klik.
     """
     components.html(
         """
@@ -2631,6 +2640,18 @@ def _render_insight_dismiss_autohide_script() -> None:
                 }
             });
         }
+        function hestyUpdateSectionVisibility() {
+            var doc = window.parent.document;
+            doc.querySelectorAll('.hesty-insights-section').forEach(function(section) {
+                var cols = section.querySelectorAll('[data-insight-col]');
+                if (cols.length === 0) { return; }
+                var anyVisible = false;
+                cols.forEach(function(col) {
+                    if (col.style.display !== 'none') { anyVisible = true; }
+                });
+                section.style.display = anyVisible ? '' : 'none';
+            });
+        }
         function hestyBindDismissClicks() {
             var doc = window.parent.document;
             if (doc.__hestyDismissBound) { return; }
@@ -2643,11 +2664,16 @@ def _render_insight_dismiss_autohide_script() -> None:
                 window.parent.localStorage.setItem('hesty_dismissed_insight_' + id, Date.now().toString());
                 var col = btn.closest('[data-insight-col]');
                 if (col) { col.style.display = 'none'; }
+                hestyUpdateSectionVisibility();
             });
         }
         hestyApplyDismissedInsights();
+        hestyUpdateSectionVisibility();
         hestyBindDismissClicks();
-        new MutationObserver(hestyApplyDismissedInsights).observe(window.parent.document.body, {childList: true, subtree: true});
+        new MutationObserver(function() {
+            hestyApplyDismissedInsights();
+            hestyUpdateSectionVisibility();
+        }).observe(window.parent.document.body, {childList: true, subtree: true});
         </script>
         """,
         height=0,
@@ -13028,15 +13054,6 @@ def render_today():
                         '<a href="/portfolio" target="_self" class="inline-link" '
                         'style="font-size:0.78rem; white-space:nowrap;">Adjust target allocations in My Portfolio &rarr;</a>'
                     )
-                    st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True)
-                    st.markdown(
-                        _uniform_section_header_html(
-                            "Portfolio Health & DCA Insights", "insights", is_first=False,
-                            action_html=_insights_link_html,
-                        ),
-                        unsafe_allow_html=True,
-                    )
-
                     insight_cols_html = "".join(
                         f'<div class="hesty-insights-col">{card}</div>' for card in health_cards_html
                     )
@@ -13053,8 +13070,30 @@ def render_today():
                         '.hesty-insights-row { flex-direction:column; gap:1.25rem; } '
                         '.hesty-insights-col { width:100%; } '
                         '} '
-                        '</style>'
-                        f'<div class="hesty-insights-row">{insight_cols_html}</div>',
+                        '</style>',
+                        unsafe_allow_html=True,
+                    )
+                    # GEVONDEN, OP VERZOEK (na live-gebruik): als je ALLE
+                    # kaarten in deze sectie dismisst, bleven de sectiekop +
+                    # de link + alle witruimte eromheen gewoon staan -- een
+                    # kale, lege sectie. Root cause: de dismiss-klik verbergt
+                    # alleen de INDIVIDUELE kolom ([data-insight-col]), niet
+                    # de sectie eromheen (Python weet bij het renderen niet
+                    # welke kaarten al eerder gedismissed zijn -- dat zit
+                    # alleen in de browser's localStorage). Fix: kop + rij nu
+                    # SAMEN in 1 wrapper ('hesty-insights-section') gezet, en
+                    # _render_insight_dismiss_autohide_script() verbergt
+                    # voortaan ook die hele wrapper zodra ELKE kolom erin
+                    # verborgen is (zowel bij page-load als bij een live klik).
+                    st.markdown(
+                        '<div class="hesty-insights-section">'
+                        + "<div style='margin-top: 25px;'></div>"
+                        + _uniform_section_header_html(
+                            "Portfolio Health & DCA Insights", "insights", is_first=False,
+                            action_html=_insights_link_html,
+                        )
+                        + f'<div class="hesty-insights-row">{insight_cols_html}</div>'
+                        + '</div>',
                         unsafe_allow_html=True,
                     )
                     _render_insight_dismiss_autohide_script()
