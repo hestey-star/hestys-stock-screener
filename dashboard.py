@@ -96,13 +96,14 @@ html {
    i.p.v. per aanroep opnieuw als losse <style>-tag geinjecteerd (dat gaf
    op pagina's met meerdere secties na elkaar, zoals de 3 Discover-
    screeners, inconsistent gedrag onder Streamlit's React-rendering).
-   mt-10 op desktop (md:), mt-8 op mobiel -- garandeert dat de witruimte
-   tussen ELK paar opeenvolgende secties die deze klasse gebruiken exact
-   gelijk is, want er is nu maar 1 plek waar deze waarde kan worden
-   gedefinieerd. */
-.hesty-section-gap { margin-top: 2rem !important; }
+   mt-14 op desktop (md:), mt-11 op mobiel (op verzoek vergroot t.o.v. de
+   eerdere mt-10/mt-8 -- secties mogen site-breed wat meer ademruimte
+   hebben) -- garandeert dat de witruimte tussen ELK paar opeenvolgende
+   secties die deze klasse gebruiken exact gelijk is, want er is nu maar
+   1 plek waar deze waarde kan worden gedefinieerd. */
+.hesty-section-gap { margin-top: 2.75rem !important; }
 @media (min-width: 768px) {
-    .hesty-section-gap { margin-top: 2.5rem !important; }
+    .hesty-section-gap { margin-top: 3.5rem !important; }
 }
 /* Responsieve, COMPACTE titelgrootte voor _uniform_section_header_html()'s
    <h2> (text-base mobiel, text-lg desktop) -- !important overal, want een
@@ -2360,7 +2361,7 @@ def _flowing_section_header_html(title: str, icon_name: str, is_first: bool = Fa
     een pagina, want daar is geen vorig blok om van te scheiden) + een
     iets groter, steviger lettertype dan een gewone st.markdown("**...**").
     """
-    divider_html = "" if is_first else '<div style="height:1px; background:rgba(137,146,163,0.15); margin:1.75rem 0 1.1rem 0;"></div>'
+    divider_html = "" if is_first else '<div style="height:1px; background:rgba(137,146,163,0.15); margin:2.5rem 0 1.4rem 0;"></div>'
     return (
         f'{divider_html}'
         f'<div style="display:flex; align-items:center; gap:0.55rem; margin-bottom:0.3rem;">'
