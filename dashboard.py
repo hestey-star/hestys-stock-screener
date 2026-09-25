@@ -7593,16 +7593,28 @@ def _render_wealth_engine(user_email: str) -> None:
                 # een toekomstige december zou gaan. De huidige maand krijgt
                 # daarnaast een amber highlight (i.p.v. het standaard-groen) als
                 # duidelijk anker in de 12-maanden-cyclus.
-                st.markdown(
-                    '<div style="color:#64748B; font-size:0.72rem; margin:-0.5rem 0 0.75rem 0;">'
-                    'SEASONALITY &middot; ALL YEARS COMBINED, BY CALENDAR MONTH</div>',
-                    unsafe_allow_html=True,
-                )
                 _month_labels = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
                                   "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
                 _month_totals = [0.0] * 12
                 for e in all_events:
                     _month_totals[e["date"].month - 1] += e["amount_eur"]
+
+                # Gemiddelde per kalendermaand i.p.v. de kale optelling -- een
+                # totaal over bijv. 3 jaar zegt weinig ('is dit veel of
+                # weinig?'), het gemiddelde per jaar is de bruikbare,
+                # vergelijkbare maatstaf ('dit is wat je normaal in deze maand
+                # ontvangt'). Gedeeld door het aantal unieke jaren waarin
+                # daadwerkelijk historie bestaat (nooit door 0).
+                _years_seen = {e["date"].year for e in all_events}
+                _num_years = max(len(_years_seen), 1)
+                _month_avgs = [t / _num_years for t in _month_totals]
+
+                st.markdown(
+                    '<div style="color:#64748B; font-size:0.72rem; margin:-0.5rem 0 0.75rem 0;">'
+                    f'AVERAGE PER CALENDAR MONTH &middot; BASED ON {_num_years} '
+                    f'YEAR{"S" if _num_years != 1 else ""} OF HISTORY</div>',
+                    unsafe_allow_html=True,
+                )
 
                 _current_month_idx = today_date.month - 1
 
@@ -7613,15 +7625,15 @@ def _render_wealth_engine(user_email: str) -> None:
                 # label (plus de huidige maand, als die nog niet in de top-2
                 # zit); de rest laat alleen de hoogte spreken (tooltip on hover
                 # toont het exacte bedrag voor elke maand).
-                _nonzero_idx = [i for i, v in enumerate(_month_totals) if v > 0]
-                _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_totals[i], reverse=True)[:2]
+                _nonzero_idx = [i for i, v in enumerate(_month_avgs) if v > 0]
+                _peak_idx = sorted(_nonzero_idx, key=lambda i: _month_avgs[i], reverse=True)[:2]
                 _label_idx = set(_peak_idx)
-                if _month_totals[_current_month_idx] > 0:
+                if _month_avgs[_current_month_idx] > 0:
                     _label_idx.add(_current_month_idx)
                 _ladder_df = pd.DataFrame({
                     "month": _month_labels,
-                    "amount": _month_totals,
-                    "label": [f"€{v:,.0f}" if i in _label_idx else "" for i, v in enumerate(_month_totals)],
+                    "amount": _month_avgs,
+                    "label": [f"€{v:,.0f}" if i in _label_idx else "" for i, v in enumerate(_month_avgs)],
                     "is_current": [i == _current_month_idx for i in range(12)],
                 })
 
@@ -7641,19 +7653,20 @@ def _render_wealth_engine(user_email: str) -> None:
                 ).encode(
                     x=_ladder_x,
                     y=alt.Y("amount:Q", axis=None),
-                    # Huidige maand amber, alle andere maanden Hestys-groen --
-                    # geeft in 1 oogopslag een anker in de 12-maanden-cyclus.
+                    # Huidige maand amber (echt goudkleurig, niet fel-oranje),
+                    # alle andere maanden Hestys-groen -- geeft in 1 oogopslag
+                    # een anker in de 12-maanden-cyclus.
                     color=alt.condition(
-                        alt.datum.is_current, alt.value("#F59E0B"), alt.value("#34D399")
+                        alt.datum.is_current, alt.value("#D4A017"), alt.value("#34D399")
                     ),
-                    tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Amount (€)", format=",.2f")],
+                    tooltip=[alt.Tooltip("month:N", title="Month"), alt.Tooltip("amount:Q", title="Avg per year (€)", format=",.2f")],
                 )
                 _ladder_labels = alt.Chart(_ladder_df).mark_text(
                     dy=-8, fontSize=10, fontWeight=600,
                 ).encode(
                     x=_ladder_x, y=alt.Y("amount:Q"), text="label:N",
                     color=alt.condition(
-                        alt.datum.is_current, alt.value("#F59E0B"), alt.value("#94A3B8")
+                        alt.datum.is_current, alt.value("#D4A017"), alt.value("#94A3B8")
                     ),
                 )
                 ladder_chart = (
@@ -7664,76 +7677,92 @@ def _render_wealth_engine(user_email: str) -> None:
                 st.altair_chart(ladder_chart, use_container_width=True)
 
             with grid_col2:
+                # Dunne verticale scheidingslijn t.o.v. de Ladder ernaast --
+                # zonder deze rand liepen de 2 secties zonder enige visuele
+                # knip in elkaar over. Via een eigen st.container(key=...) +
+                # CSS i.p.v. een los <div> in st.markdown, want een los,
+                # ongesloten <div>-tag omvat geen latere, losse Streamlit-
+                # elementen (elk krijgt zijn eigen DOM-knooppunt) -- dit
+                # patroon (CSS op '.st-key-<naam>') is elders op deze pagina
+                # ook al de gangbare aanpak voor container-brede styling.
+                _snowball_col_key = "wealth_engine_snowball_col"
                 st.markdown(
+                    f'<style>.st-key-{_snowball_col_key} {{ border-left:1px solid '
+                    f'rgba(148,163,184,0.12); padding-left:1.5rem; }}</style>',
+                    unsafe_allow_html=True,
+                )
+                _snowball_col_ctx = st.container(key=_snowball_col_key)
+                _snowball_col_ctx.markdown(
                     _uniform_section_header_html("The Dividend Snowball", "trending_up"),
                     unsafe_allow_html=True,
                 )
-                # Chronologische cumulatieve som per kalender-JAAR-MAAND (dus de
-                # ECHTE tijdas, niet Jan-Dec samengevoegd zoals de Ladder
-                # hiernaast) -- kan per definitie nooit dalen, elk punt is een
-                # cumulatieve som van alles ervoor.
-                _by_year_month: dict = {}
-                for e in all_events:
-                    key = (e["date"].year, e["date"].month)
-                    _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
-                _sorted_keys = sorted(_by_year_month.keys())
-                _running_total = 0.0
-                _snowball_rows = []
-                for y, m in _sorted_keys:
-                    _running_total += _by_year_month[(y, m)]
-                    _snowball_rows.append({"period": f"{y}-{m:02d}", "cumulative": _running_total})
-                _snowball_df = pd.DataFrame(_snowball_rows)
+                with _snowball_col_ctx:
+                    # Chronologische cumulatieve som per kalender-JAAR-MAAND (dus de
+                    # ECHTE tijdas, niet Jan-Dec samengevoegd zoals de Ladder
+                    # hiernaast) -- kan per definitie nooit dalen, elk punt is een
+                    # cumulatieve som van alles ervoor.
+                    _by_year_month: dict = {}
+                    for e in all_events:
+                        key = (e["date"].year, e["date"].month)
+                        _by_year_month[key] = _by_year_month.get(key, 0.0) + e["amount_eur"]
+                    _sorted_keys = sorted(_by_year_month.keys())
+                    _running_total = 0.0
+                    _snowball_rows = []
+                    for y, m in _sorted_keys:
+                        _running_total += _by_year_month[(y, m)]
+                        _snowball_rows.append({"period": f"{y}-{m:02d}", "cumulative": _running_total})
+                    _snowball_df = pd.DataFrame(_snowball_rows)
 
-                # Zachte, gedempte emerald-groene verloopkleur -- meer opaak vlak
-                # onder de lijn (offset 1, top), bijna volledig transparant naar
-                # de bodem toe (offset 0) -- een 'gloed' i.p.v. een vlakke,
-                # egale vulkleur.
-                _snowball_gradient = alt.Gradient(
-                    gradient="linear",
-                    stops=[
-                        alt.GradientStop(color="rgba(52,211,153,0.02)", offset=0),
-                        alt.GradientStop(color="rgba(52,211,153,0.20)", offset=1),
-                    ],
-                    x1=1, x2=1, y1=1, y2=0,
-                )
-                # Zelfde 'geen as-drukte, direct labelen'-stijl als de Ladder
-                # hiernaast i.p.v. een aparte y-as met gridlines (was eerder een
-                # inconsistente 2e visuele taal naast de Ladder) -- de y-as +
-                # gridlines vervallen volledig, en het eindtotaal wordt als 1
-                # direct label bij het laatste punt getoond, net als de
-                # pieklabels in de Ladder.
-                # X-as: alleen het JAAR labelen bij de januari-maand van elk jaar
-                # i.p.v. een label per kalendermaand (was gekanteld -40 graden en
-                # oogde druk) -- via labelExpr op de onderliggende 'YYYY-MM'-
-                # stringwaarde, horizontaal (0 graden) net als de Ladder's as.
-                _snowball_x = alt.X(
-                    "period:N", sort=None, title=None,
-                    axis=alt.Axis(
-                        labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
-                        labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
-                        labelExpr="indexof(datum.value, '-01') === 4 ? slice(datum.value, 0, 4) : ''",
-                    ),
-                )
-                snowball_area = alt.Chart(_snowball_df).mark_area(
-                    line={"color": "#34D399", "strokeWidth": 2.5},
-                    color=_snowball_gradient,
-                    interpolate="monotone",
-                ).encode(
-                    x=_snowball_x,
-                    y=alt.Y("cumulative:Q", title=None, axis=None),
-                    tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
-                )
-                _snowball_last = _snowball_df.iloc[[-1]].copy()
-                _snowball_last["label"] = f"€{_snowball_last['cumulative'].iloc[0]:,.0f}"
-                _snowball_end_label = alt.Chart(_snowball_last).mark_text(
-                    align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
-                ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
-                snowball_chart = (
-                    (snowball_area + _snowball_end_label)
-                    .properties(height=260, background="transparent")
-                    .configure_view(strokeWidth=0)
-                )
-                st.altair_chart(snowball_chart, use_container_width=True)
+                    # Zachte, gedempte emerald-groene verloopkleur -- meer opaak vlak
+                    # onder de lijn (offset 1, top), bijna volledig transparant naar
+                    # de bodem toe (offset 0) -- een 'gloed' i.p.v. een vlakke,
+                    # egale vulkleur.
+                    _snowball_gradient = alt.Gradient(
+                        gradient="linear",
+                        stops=[
+                            alt.GradientStop(color="rgba(52,211,153,0.02)", offset=0),
+                            alt.GradientStop(color="rgba(52,211,153,0.20)", offset=1),
+                        ],
+                        x1=1, x2=1, y1=1, y2=0,
+                    )
+                    # Zelfde 'geen as-drukte, direct labelen'-stijl als de Ladder
+                    # hiernaast i.p.v. een aparte y-as met gridlines (was eerder een
+                    # inconsistente 2e visuele taal naast de Ladder) -- de y-as +
+                    # gridlines vervallen volledig, en het eindtotaal wordt als 1
+                    # direct label bij het laatste punt getoond, net als de
+                    # pieklabels in de Ladder.
+                    # X-as: alleen het JAAR labelen bij de januari-maand van elk jaar
+                    # i.p.v. een label per kalendermaand (was gekanteld -40 graden en
+                    # oogde druk) -- via labelExpr op de onderliggende 'YYYY-MM'-
+                    # stringwaarde, horizontaal (0 graden) net als de Ladder's as.
+                    _snowball_x = alt.X(
+                        "period:N", sort=None, title=None,
+                        axis=alt.Axis(
+                            labelAngle=0, labelColor="#64748B", labelFontSize=10, labelFontWeight=700,
+                            labelPadding=6, tickColor="transparent", domainColor="rgba(255,255,255,0.08)",
+                            labelExpr="indexof(datum.value, '-01') === 4 ? slice(datum.value, 0, 4) : ''",
+                        ),
+                    )
+                    snowball_area = alt.Chart(_snowball_df).mark_area(
+                        line={"color": "#34D399", "strokeWidth": 2.5},
+                        color=_snowball_gradient,
+                        interpolate="monotone",
+                    ).encode(
+                        x=_snowball_x,
+                        y=alt.Y("cumulative:Q", title=None, axis=None),
+                        tooltip=[alt.Tooltip("period:N", title="Month"), alt.Tooltip("cumulative:Q", title="Cumulative (€)", format=",.2f")],
+                    )
+                    _snowball_last = _snowball_df.iloc[[-1]].copy()
+                    _snowball_last["label"] = f"€{_snowball_last['cumulative'].iloc[0]:,.0f}"
+                    _snowball_end_label = alt.Chart(_snowball_last).mark_text(
+                        align="right", dx=-4, dy=-12, color="#34D399", fontSize=11, fontWeight=700,
+                    ).encode(x=_snowball_x, y=alt.Y("cumulative:Q"), text="label:N")
+                    snowball_chart = (
+                        (snowball_area + _snowball_end_label)
+                        .properties(height=260, background="transparent")
+                        .configure_view(strokeWidth=0)
+                    )
+                    st.altair_chart(snowball_chart, use_container_width=True)
 
             st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
         # ============================================================
