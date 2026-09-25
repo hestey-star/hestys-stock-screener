@@ -4383,6 +4383,95 @@ def parse_degiro_transactions_csv(file_bytes: bytes) -> dict:
     return {"grouped": grouped, "skipped_rows": skipped_rows}
 
 
+def parse_degiro_account_statement_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert DEGIRO's 'Rekeningoverzicht/Activiteitenoverzicht'-export (CSV)
+    -- een ANDER bestand dan de 'Transacties'-export hierboven
+    (parse_degiro_transactions_csv), en het ENIGE DEGIRO-bestand dat
+    daadwerkelijk dividend-cashflow bevat.
+
+    GEVONDEN, FUNDAMENTELE OORZAAK van 'DEGIRO-dividenden verschijnen niet
+    op de Dividend-pagina': de Transacties-export toont UITSLUITEND koop/
+    verkoop-orders -- geen dividenden, punt. Dividend-boekingen staan bij
+    DEGIRO alleen in dit bredere rekeningoverzicht, samen met allerlei
+    andere cash-mutaties (stortingen, Cash Sweep Transfers, transactie-
+    kosten, rente, valuta-creditering/debitering, etc.) die hier bewust
+    genegeerd worden -- alleen 'Omschrijving' == 'Dividend' telt mee.
+
+    Bewuste keuzes:
+    - 'Dividendbelasting' (de ingehouden bronbelasting, een aparte regel
+      met een NEGATIEF bedrag, meestal direct naast de 'Dividend'-regel)
+      wordt NIET verrekend -- het 'Dividend'-bedrag zelf is het BRUTO-
+      bedrag, consistent met hoe de andere broker-parsers ook het
+      brutobedrag vastleggen (Robinhood/Schwab/Trade Republic hebben geen
+      aparte belastingregel in hun export om mee te verrekenen).
+    - De 2 bedragkolommen ('Mutatie' en 'Saldo') zijn in dit bestand RAAR
+      opgebouwd: de kolom met die naam bevat de VALUTA, en het
+      daadwerkelijke bedrag staat in de ONGENAAMDE kolom ERNAAST (pandas
+      noemt die 'Unnamed: 8'/'Unnamed: 10') -- zelfde soort 'kolomnaam
+      hoort eigenlijk bij het VOLGENDE veld'-eigenaardigheid als 'Koers'
+      in de Transacties-export.
+    - 'Mutatie' (niet 'Saldo') geeft de valuta van DIT dividend zelf --
+      DEGIRO mengt EUR- en USD-dividenden gewoon door elkaar in 1 bestand,
+      afhankelijk van de beurs van elke positie.
+    - 'ISIN' wordt als identifier teruggegeven (net als bij de gewone
+      DEGIRO/Trade Republic-parsers) -- de aanroeper matcht 'm naar een
+      echte ticker, bv. via bestaande holdings of get_ticker_candidates().
+    """
+    import io
+
+    def parse_dutch_number(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return None
+        if isinstance(val, (int, float)):
+            return float(val)
+        s = str(val).strip()
+        if not s or s.lower() == "nan":
+            return None
+        return float(s.replace(".", "").replace(",", "."))
+
+    df = pd.read_csv(io.BytesIO(file_bytes))
+
+    mutatie_amount_col = None
+    if "Mutatie" in df.columns:
+        mutatie_idx = df.columns.get_loc("Mutatie")
+        if mutatie_idx + 1 < len(df.columns):
+            mutatie_amount_col = df.columns[mutatie_idx + 1]
+
+    dividend_rows: list = []
+    skipped_rows: list = []
+
+    for idx, row in df.iterrows():
+        if str(row.get("Omschrijving") or "").strip() != "Dividend":
+            continue
+
+        product = row.get("Product")
+        isin = row.get("ISIN")
+        datum = row.get("Datum")
+        currency = row.get("Mutatie")
+        amount = parse_dutch_number(row.get(mutatie_amount_col)) if mutatie_amount_col else None
+
+        if pd.isna(product) or pd.isna(datum) or amount is None:
+            skipped_rows.append((idx, "Missing product, date or amount on a Dividend row"))
+            continue
+
+        try:
+            parsed_date = pd.to_datetime(datum, format="%d-%m-%Y").date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{product}: could not parse date '{datum}'"))
+            continue
+
+        dividend_rows.append({
+            "asset_code": isin if not pd.isna(isin) else product,
+            "product": product,
+            "amount": abs(amount),
+            "currency": str(currency).strip().upper() if not pd.isna(currency) else "EUR",
+            "date": parsed_date,
+        })
+
+    return {"dividend_rows": dividend_rows, "skipped_rows": skipped_rows}
+
+
 def detect_broker_from_csv(file_bytes: bytes) -> str:
     """
     Herkent welke broker een 'Transactions'-CSV heeft opgeleverd, puur op
@@ -4404,6 +4493,15 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
     for line in lines:
         columns = {c.strip().strip('"') for c in line.split(",")}
 
+        # DEGIRO Rekeningoverzicht/Activiteitenoverzicht (ALLE cash-
+        # mutaties, incl. dividenden) -- moet VOOR de gewone DEGIRO-check
+        # hieronder staan: 'Product'/'ISIN'/'Datum' komen in BEIDE DEGIRO-
+        # exports voor, maar 'Omschrijving'/'Mutatie'/'Saldo' zijn uniek
+        # voor dit bredere rekeningoverzicht (de Transacties-export heeft
+        # in plaats daarvan 'Koers'/'Aantal'). Zonder deze volgorde zou dit
+        # bestand nooit als 'degiro_account' herkend worden.
+        if {"Product", "ISIN", "Datum", "Omschrijving", "Mutatie", "Saldo"}.issubset(columns):
+            return "degiro_account"
         # DEGIRO: eigen, Nederlandstalige kolomnamen -- 'Product'/'ISIN'/
         # 'Koers'/'Datum' komen niet voor in een Robinhood-export.
         if {"Product", "ISIN", "Koers", "Datum"}.issubset(columns):
@@ -4779,7 +4877,7 @@ def parse_trade_republic_transactions_csv(file_bytes: bytes) -> dict:
 
 
 def _persist_dividend_rows(
-    user_email: str, dividend_rows: list, source: str, currency: str,
+    user_email: str, dividend_rows: list, source: str, currency: str = None,
     ticker_naam_lookup: dict = None,
 ) -> tuple[int, int]:
     """
@@ -4836,9 +4934,15 @@ def _persist_dividend_rows(
         if _is_duplicate(ticker, amount, payout_date):
             skipped += 1
             continue
+        # 'currency' is een PER-ROW override waar beschikbaar (bv. DEGIRO's
+        # rekeningoverzicht, dat zowel EUR- als USD-dividenden in 1 bestand
+        # mengt, afhankelijk van de beurs van elke individuele positie) --
+        # anders de vaste, voor de hele upload geldende broker-valuta
+        # (Robinhood/Schwab altijd USD, Trade Republic altijd EUR).
+        row_currency = row.get("currency") or currency or "EUR"
         database.add_dividend_income(
             user_email, ticker, ticker_naam_lookup.get(ticker, ticker),
-            amount, currency, payout_date, source,
+            amount, row_currency, payout_date, source,
         )
         existing.append({"ticker": ticker, "amount": amount, "payout_date": payout_date})
         imported += 1
@@ -9585,19 +9689,22 @@ def render_portfolio():
             # de CSV zelf (zie detect_broker_from_csv) -- geen handmatige
             # keuze meer nodig.
             degiro_file = None
+            degiro_account_file = None
             robinhood_file = None
             schwab_file = None
             trade_republic_file = None
             if broker_upload is not None:
                 detected_broker = detect_broker_from_csv(broker_upload.getvalue())
                 _detected_labels = {
-                    "degiro": "DEGIRO", "robinhood": "Robinhood",
-                    "schwab": "Charles Schwab", "trade_republic": "Trade Republic",
+                    "degiro": "DEGIRO", "degiro_account": "DEGIRO (Account statement -- dividends)",
+                    "robinhood": "Robinhood", "schwab": "Charles Schwab", "trade_republic": "Trade Republic",
                 }
                 if detected_broker in _detected_labels:
                     st.caption(f"\U0001F50D Detected: {_detected_labels[detected_broker]}")
                 if detected_broker == "degiro":
                     degiro_file = broker_upload
+                elif detected_broker == "degiro_account":
+                    degiro_account_file = broker_upload
                 elif detected_broker == "robinhood":
                     robinhood_file = broker_upload
                 elif detected_broker == "schwab":
@@ -9645,6 +9752,11 @@ def render_portfolio():
             # DEGIRO-merklogo -- vermijdt trademark-issues.
             st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
             st.markdown("**Supported brokers**")
+            st.caption(
+                "DEGIRO tip: dividends only show up if you upload the **Account statement** "
+                "export (Activiteitenoverzicht) -- the regular Transactions export never "
+                "contains dividend rows, only buy/sell orders."
+            )
             st.markdown(
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=degiro.com&sz=32" '
@@ -10032,6 +10144,132 @@ def render_portfolio():
                                        "degiro_dividends", "degiro_ticker_matches", "degiro_ticker_candidates"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
+
+            # --- DEGIRO Rekeningoverzicht (Account statement) -- de ENIGE
+            # bron van DEGIRO-dividenden (zie parse_degiro_account_
+            # statement_csv's toelichting: de Transacties-export hierboven
+            # bevat er GEEN -- dat was de kern van waarom DEGIRO-dividenden
+            # niet op de Dividend-pagina verschenen). Simpeler dan de volle
+            # Transacties-matching-UI: dividend-only, dus geen buy/sell-
+            # groepering nodig, alleen een ISIN-naar-ticker-resolutie per
+            # UNIEKE ISIN -- met bestaande holdings als eerste, snelste bron
+            # (je hebt de bijbehorende positie hoogstwaarschijnlijk al
+            # eerder via de Transacties-export geimporteerd).
+            already_imported_da = st.session_state.get("degiro_account_imported_filenames", set())
+
+            if degiro_account_file is not None and degiro_account_file.name in already_imported_da:
+                st.success(f"'{degiro_account_file.name}' was already imported.", icon=":material/check_circle:")
+                if st.button("Process this file again anyway", key="degiro_account_reimport_btn"):
+                    already_imported_da.discard(degiro_account_file.name)
+                    st.session_state["degiro_account_imported_filenames"] = already_imported_da
+                    st.session_state.pop("degiro_account_parsed_filename", None)
+                    st.rerun()
+            elif degiro_account_file is not None:
+                if st.session_state.get("degiro_account_parsed_filename") != degiro_account_file.name:
+                    with st.spinner("Reading your file..."):
+                        da_parse_result = parse_degiro_account_statement_csv(degiro_account_file.getvalue())
+                    st.session_state["degiro_account_parsed_filename"] = degiro_account_file.name
+                    st.session_state["degiro_account_dividends"] = da_parse_result["dividend_rows"]
+                    st.session_state["degiro_account_skipped"] = da_parse_result["skipped_rows"]
+
+                    existing_isin_to_ticker = {
+                        h["isin"]: h["ticker"] for h in database.get_user_holdings(user_email) if h.get("isin")
+                    }
+                    isin_matches = {}
+                    isin_candidates = {}
+                    unique_isins = {
+                        (d["asset_code"], d.get("product")) for d in da_parse_result["dividend_rows"]
+                    }
+                    with st.spinner(f"Looking up tickers for {len(unique_isins)} securities..."):
+                        for isin, product in unique_isins:
+                            remembered = existing_isin_to_ticker.get(isin)
+                            if remembered:
+                                isin_matches[isin] = remembered
+                                isin_candidates[isin] = [{"symbol": remembered, "name": product, "exchange": "remembered"}]
+                            else:
+                                candidates = get_ticker_candidates(product or isin, isin)
+                                isin_candidates[isin] = candidates
+                                isin_matches[isin] = candidates[0]["symbol"] if candidates else ""
+                    st.session_state["degiro_account_ticker_matches"] = isin_matches
+                    st.session_state["degiro_account_ticker_candidates"] = isin_candidates
+
+                da_dividends = st.session_state["degiro_account_dividends"]
+                da_skipped = st.session_state["degiro_account_skipped"]
+
+                st.success(f"Found {len(da_dividends)} dividend row(s).")
+                if da_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in da_skipped[:5])
+                    more = "..." if len(da_skipped) > 5 else ""
+                    st.caption(f"{len(da_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                _unique_by_isin = {}
+                for d in da_dividends:
+                    _unique_by_isin.setdefault(d["asset_code"], d.get("product") or d["asset_code"])
+
+                if da_dividends:
+                    st.markdown("**Review the ticker for each security** (auto-suggested from your "
+                                 "existing positions where possible -- double-check before importing):")
+                    for isin, product in _unique_by_isin.items():
+                        current_guess = st.session_state["degiro_account_ticker_matches"].get(isin, "")
+                        candidates = st.session_state["degiro_account_ticker_candidates"].get(isin, [])
+                        st.caption(product)
+                        if len(candidates) >= 2:
+                            options = [f"{c['symbol']} -- {c['name']} ({c['exchange']})" for c in candidates]
+                            options.append("Other (type manually)")
+                            default_index = next(
+                                (i for i, c in enumerate(candidates) if c["symbol"] == current_guess),
+                                len(options) - 1,
+                            )
+                            chosen_label = st.selectbox(
+                                "Ticker", options, index=default_index,
+                                key=f"degiro_account_choice_{isin}", label_visibility="collapsed",
+                            )
+                            if chosen_label == "Other (type manually)":
+                                manual_default = current_guess if current_guess not in [c["symbol"] for c in candidates] else ""
+                                manual_ticker = st.text_input(
+                                    "Manual ticker", value=manual_default, key=f"degiro_account_manual_{isin}",
+                                    label_visibility="collapsed", placeholder="type ticker",
+                                )
+                                st.session_state["degiro_account_ticker_matches"][isin] = manual_ticker
+                            else:
+                                st.session_state["degiro_account_ticker_matches"][isin] = (
+                                    candidates[options.index(chosen_label)]["symbol"]
+                                )
+                        else:
+                            new_ticker = st.text_input(
+                                "Ticker", value=current_guess, key=f"degiro_account_ticker_{isin}",
+                                label_visibility="collapsed", placeholder="leave empty to skip",
+                            )
+                            st.session_state["degiro_account_ticker_matches"][isin] = new_ticker
+
+                    if st.button("Import these dividends", key="degiro_account_import_btn", type="primary"):
+                        _resolved_rows = []
+                        for d in da_dividends:
+                            _resolved_ticker = st.session_state["degiro_account_ticker_matches"].get(
+                                d["asset_code"], "",
+                            ).strip()
+                            if not _resolved_ticker:
+                                continue
+                            _resolved_rows.append({**d, "asset_code": _resolved_ticker})
+                        _naam_lookup = {
+                            st.session_state["degiro_account_ticker_matches"].get(isin, "").strip(): product
+                            for isin, product in _unique_by_isin.items()
+                        }
+                        da_div_imported, da_div_skipped = _persist_dividend_rows(
+                            user_email, _resolved_rows, "degiro", ticker_naam_lookup=_naam_lookup,
+                        )
+                        st.success(
+                            f"Imported {da_div_imported} dividend payment(s) to your Dividend history "
+                            f"({da_div_skipped} skipped as duplicate/invalid/unmatched)."
+                        )
+                        already_imported_da.add(degiro_account_file.name)
+                        st.session_state["degiro_account_imported_filenames"] = already_imported_da
+                        for state_key in ["degiro_account_parsed_filename", "degiro_account_dividends",
+                                           "degiro_account_skipped", "degiro_account_ticker_matches",
+                                           "degiro_account_ticker_candidates"]:
+                            st.session_state.pop(state_key, None)
+                        st.rerun()
 
             # --- Robinhood: veel eenvoudiger dan DEGIRO -- de CSV geeft de
             # ticker al rechtstreeks mee ('Asset Code'), dus geen aparte
