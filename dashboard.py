@@ -7801,17 +7801,17 @@ def _render_wealth_engine(user_email: str) -> None:
             _rows_html = "".join(
                 f'<tr>'
                 f'<td style="{_row_border} text-transform:uppercase; font-size:12px; '
-                f'font-weight:700; color:#ffffff; padding:14px 0; white-space:nowrap;">{name}</td>'
+                f'font-weight:700; color:#ffffff; padding:14px 24px 14px 0; white-space:nowrap; width:1%;">{name}</td>'
                 f'<td style="{_row_border} text-transform:uppercase; font-size:10px; font-weight:600; '
-                f'color:#475569; padding:14px 0 14px 20px; white-space:nowrap;">{asset_type}</td>'
+                f'color:#475569; padding:14px 0; white-space:nowrap; width:1%;">{asset_type}</td>'
                 f'<td style="{_row_border} text-align:right; font-size:12px; font-weight:700; '
-                f'color:#34d399; letter-spacing:0.05em; padding:14px 0; white-space:nowrap;">'
+                f'color:#34d399; letter-spacing:0.05em; padding:14px 0; white-space:nowrap; width:100%;">'
                 f'{pay_date.strftime("%b %d, %Y").upper()} &middot; {payout_text}</td>'
                 f'</tr>'
                 for name, asset_type, payout_text, pay_date in _upcoming_rows
             )
             st.markdown(
-                f'<table style="border-collapse:collapse; width:auto; max-width:560px; '
+                f'<table style="border-collapse:collapse; width:100%; max-width:720px; '
                 f'background:transparent;">{_rows_html}</table>',
                 unsafe_allow_html=True,
             )
