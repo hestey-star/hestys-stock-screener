@@ -1,5 +1,6 @@
 ticker,flip_date,weken_geleden,voorgaande_trend_weken,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema20,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,weken_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-VRSN,2026-09-20,0,12,303.12,303.12,0.0,True,^GSPC,14.9,True,,onbekend,1.1,True,2026-07-23,8,324.4,-6.6,7.48
-GDDY,2026-09-06,2,81,101.31,97.46,-3.8,True,^GSPC,11.24,False,28.5,stijgend,8.0,True,2026-07-30,7,105.19,-7.3,6.05
-SWKS,2026-09-13,1,9,88.35,88.76,0.46,True,^GSPC,26.5,True,6.8,dalend,4.8,True,2026-07-28,7,68.35,29.9,5.59
-TTE.PA,2026-09-13,1,10,78.77,80.03,1.6,True,^FCHI,22.35,False,9.9,dalend,-1.1,False,2026-07-23,8,84.07,-5.6,5.43
+META,2026-09-27,0,26,751.66,751.66,0.0,True,^GSPC,25.58,True,23.5,dalend,-14.4,False,2026-07-29,8,791.63,-5.0,6.95
+SMCI,2026-09-27,0,12,43.26,43.26,0.0,True,^GSPC,55.45,False,13.2,dalend,77.5,True,2026-08-11,6,42.38,2.1,6.87
+VRSN,2026-09-20,1,12,303.12,287.25,-5.24,True,^GSPC,8.87,True,,onbekend,1.1,True,2026-07-23,9,324.4,-11.5,6.44
+SWKS,2026-09-13,2,9,88.35,89.34,1.12,True,^GSPC,39.33,True,6.8,dalend,4.8,True,2026-07-28,8,68.35,30.7,4.84
+TTE.PA,2026-09-13,2,10,78.77,81.05,2.89,True,^FCHI,26.14,False,9.9,dalend,-1.1,False,2026-07-23,9,86.41,-7.4,4.83
