@@ -6766,38 +6766,44 @@ def _stress_tile_style(impact_eur: float, base_eur: float) -> str:
     berekenbaar in platte inline-CSS), consistent met hoe de rest van
     Hestys kleur-drempels al toepast (zie _deep_dive_score_color).
     """
+    # 'animation: hestyTileFlash' zorgt ervoor dat elke tegel een korte,
+    # subtiele fade+scale-pulse afspeelt bij ELKE rerun (dus bij elke
+    # slider-beweging) -- los van of de kleur-tier hieronder wisselt. Zie
+    # de keyframe-definitie bij _sim_key hierboven voor de reden waarom dit
+    # nodig was.
+    _flash = "animation:hestyTileFlash 0.5s ease-out;"
     impact_pct = abs(impact_eur) / base_eur if base_eur else 0.0
     if impact_eur >= 0:
         if impact_pct >= 0.08:
             return (
                 "background:rgba(16,185,129,0.10); border:1px solid rgba(16,185,129,0.45); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
         elif impact_pct >= 0.02:
             return (
                 "background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.3); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
         else:
             return (
                 "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
     else:
         if impact_pct >= 0.08:
             return (
                 "background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.4); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
         elif impact_pct >= 0.02:
             return (
                 "background:rgba(232,169,60,0.07); border:1px solid rgba(232,169,60,0.35); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
         else:
             return (
                 "background:rgba(15,23,42,0.3); border:1px solid rgba(30,41,59,0.4); "
-                "border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease;"
+                f"border-radius:12px; padding:1rem; text-align:left; transition:all 0.3s ease; {_flash}"
             )
 
 
@@ -6879,6 +6885,16 @@ def _render_stress_test(user_email: str) -> None:
         f'.st-key-{_sim_key} label p {{ '
         f'font-size:10px !important; font-weight:700 !important; letter-spacing:0.06em !important; '
         f'text-transform:uppercase !important; color:#64748B !important; }} '
+        f'/* Zonder deze animatie was er geen enkel visueel signaal dat de 6 '
+        f'tegels hieronder daadwerkelijk herberekend zijn na het slepen van '
+        f'een slider -- vooral vervelend als een schuif geen tegel over een '
+        f'kleur-drempel heen tilt (zie _stress_tile_style), want dan bleef de '
+        f'tegel qua kleur exact hetzelfde. Deze keyframe wordt bij ELKE rerun '
+        f'opnieuw afgespeeld (Streamlit vervangt de markdown-inhoud, dus de '
+        f'animatie herstart vanaf 0%), ongeacht of de kleur-tier wisselt. */ '
+        f'@keyframes hestyTileFlash {{ '
+        f'0% {{ opacity:0.45; transform:scale(0.985); }} '
+        f'100% {{ opacity:1; transform:scale(1); }} }} '
         f'</style>',
         unsafe_allow_html=True,
     )
@@ -8629,8 +8645,20 @@ def render_analyze():
     # verhuisd naar de Research Watchlist-sectie hieronder (dat is waar
     # nieuwe research daadwerkelijk aan toegevoegd wordt), dus deze
     # regel pakt nu zelf de -2.5rem-pull-up die eerder voor de knop was.
+    #
+    # Die -2.5rem was een vast getal, uitsluitend afgestemd op de hoogte
+    # van de sectiekop op DESKTOP. Op mobiel wrapt "Portfolio Analytics"
+    # (icoon + tekst) vaak naar een andere hoogte, waardoor deze regel
+    # dwars over/half-in de kop heen kwam te liggen. Nu alleen nog op
+    # desktop (>=768px) de pull-up toepassen; op mobiel gewoon in de
+    # normale flow (margin-top:0) direct onder de kop laten vallen.
     st.markdown(
-        '<div style="display:flex; justify-content:flex-end; margin-top:-2.5rem; margin-bottom:1.25rem;">'
+        '<style>'
+        '.hesty-copilot-badge { display:flex; justify-content:flex-end; '
+        'margin-top:0; margin-bottom:1.25rem; }'
+        '@media (min-width:768px) { .hesty-copilot-badge { margin-top:-2.5rem; } }'
+        '</style>'
+        '<div class="hesty-copilot-badge">'
         '<span style="font-size:10px; font-weight:700; letter-spacing:0.1em; color:#64748B; '
         'text-transform:uppercase;">&#9889; Cognitive co-pilot powered by Anthropic Claude&trade;</span>'
         '</div>',
@@ -9468,7 +9496,20 @@ def render_portfolio():
                             help="The % of your portfolio you want this position to make up",
                         )
                 with target_save_col:
-                    st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
+                    # Deze spacer lijnt de 'Save'-knop verticaal uit met het
+                    # 'Target weight %'-invoerveld ernaast, maar dat klopt
+                    # alleen zolang title_col/target_col/target_save_col
+                    # NAAST elkaar staan (desktop). Op mobiel stapelt
+                    # st.columns() ze automatisch onder elkaar, waardoor
+                    # deze vaste 1.8rem-spacer daar alleen een vreemd, leeg
+                    # gat boven de knop veroorzaakt -- nu uitsluitend nog
+                    # op desktop (>=768px) toegepast.
+                    st.markdown(
+                        "<style>.hesty-target-save-spacer { height:0; } "
+                        "@media (min-width:768px) { .hesty-target-save-spacer { height:1.8rem; } }</style>"
+                        "<div class='hesty-target-save-spacer'></div>",
+                        unsafe_allow_html=True,
+                    )
                     _save_target_key = f"detail_save_target_wrap_{selected_holding['id']}"
                     st.markdown(
                         f'<style>.st-key-{_save_target_key} button {{ '
@@ -14120,6 +14161,20 @@ with st.sidebar:
         background: transparent !important; border: none !important; box-shadow: none !important;
         padding: 0.3rem 0.9rem 0.3rem 0.75rem !important; border-radius: 8px !important;
         color: #EAEDF1 !important; margin: 0 !important; height: auto !important; min-height: 0 !important;
+        white-space: nowrap !important;
+    }
+    /* 'WEALTH ENGINE' is het langste label van de 4 hoofdknoppen en klapte
+       op een smallere sidebar (o.a. mobiel) naar 2 regels om -- de tekst
+       zelf kreeg nooit white-space:nowrap mee (alleen de knop), en de
+       interne tekst-container van st.button() mag van flexbox default
+       best smaller dan zijn inhoud worden. Nu expliciet nowrap op de tekst
+       zelf plus min-width:0 opheffen op de tekstspan zodat 'ie niet meer
+       mag inkrimpen tot break-punt. */
+    .st-key-nav_wealth_engine button span,
+    .st-key-nav_wealth_engine button p,
+    .st-key-nav_wealth_engine button div {
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
     }
     .st-key-nav_discover button:hover, .st-key-nav_today button:hover, .st-key-nav_portfolio button:hover, .st-key-nav_wealth_engine button:hover, .st-key-nav_analyze button:hover {
         background: rgba(255,255,255,0.04) !important; color: #EAEDF1 !important; border: none !important;
