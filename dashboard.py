@@ -526,6 +526,18 @@ div[data-testid="stFileUploader"] section button:hover {
     background: rgba(31,174,150,0.12) !important;
     box-shadow: none !important;
 }
+/* Vangnet tegen horizontale overflow op mobiel (brede Altair/Plotly-
+   grafieken, tabellen, etc. die anders de HELE pagina schuifbaar maken
+   i.p.v. alleen intern netjes af te kappen). Dit was tot voor kort
+   letterlijk gekopieerd als losse <style>-tag in ZOWEL render_analyze()
+   als render_wealth_engine() (2x exact dezelfde 6 regels) -- nu 1x hier
+   in het globale, altijd-geladen stijlblok, dus geldt automatisch
+   site-breed en kan niet meer uit de pas gaan lopen tussen pagina's. */
+@media (max-width: 768px) {
+    [data-testid="stAppViewContainer"], [data-testid="stMain"], body {
+        overflow-x: hidden !important;
+    }
+}
 </style>
 <style>
 /* Watchlist prullenbak-knop compacter, via Streamlit's eigen
@@ -8574,22 +8586,8 @@ def render_wealth_engine():
         )
         st.stop()
 
-    # Zelfde mobiele-overflow-vangnet als Analyze -- deze pagina bevat
-    # dezelfde brede Altair/Plotly-grafieken en tabellen die eerder onder
-    # Analyze stonden, dus hetzelfde risico op ongewenste horizontale
-    # scroll op mobiel.
-    st.markdown(
-        """
-        <style>
-        @media (max-width:768px) {
-            [data-testid="stAppViewContainer"], [data-testid="stMain"], body {
-                overflow-x: hidden !important;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Mobiele-overflow-vangnet zit nu 1x globaal in het top-level
+    # stijlblok (zie bovenaan dashboard.py) i.p.v. hier lokaal herhaald.
 
     st.markdown(
         _uniform_section_header_html("Wealth Engine", "trending_up", is_first=True),
@@ -8619,21 +8617,8 @@ def render_analyze():
     if "selected_research" not in st.session_state:
         st.session_state["selected_research"] = None
 
-    # Vangnet tegen elke horizontale overflow op mobiel (welke bron dan
-    # ook) die de HELE pagina schuifbaar zou maken i.p.v. alleen intern
-    # netjes af te kappen.
-    st.markdown(
-        """
-        <style>
-        @media (max-width:768px) {
-            [data-testid="stAppViewContainer"], [data-testid="stMain"], body {
-                overflow-x: hidden !important;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Mobiele-overflow-vangnet zit nu 1x globaal in het top-level
+    # stijlblok (zie bovenaan dashboard.py) i.p.v. hier lokaal herhaald.
 
     st.markdown(
         _uniform_section_header_html("Portfolio Analytics", "bar_chart", is_first=True),
