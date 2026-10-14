@@ -72,11 +72,32 @@ def _ticker_info(ticker: str) -> dict:
         return {}
 
 
+# Euronext-/lokale notering -> US-notering van HETZELFDE bedrijf. Yahoo's
+# earnings-kalender is voor de lokale ticker vaak leeg (bv. ASML.AS geeft
+# NULL), terwijl de ADR/Nasdaq-notering wel een volledige kalender heeft;
+# de rapportagedatum is identiek. Alleen gebruikt als de eigen ticker niets
+# oplevert. Uitbreiden naar behoefte (zelfde map staat in radar_data.py).
+EARNINGS_TICKER_ALIASES = {
+    "ASML.AS": "ASML",
+    "SHEL.AS": "SHEL",
+    "UNA.AS": "UL",
+    "INGA.AS": "ING",
+    "PHIA.AS": "PHG",
+}
+
+
 def _ticker_earnings_dates(ticker: str, limit: int = 8):
-    try:
-        return yf.Ticker(ticker).get_earnings_dates(limit=limit)
-    except Exception:
-        return None
+    for candidate in (ticker, EARNINGS_TICKER_ALIASES.get(ticker.upper())):
+        if not candidate:
+            continue
+        try:
+            df = yf.Ticker(candidate).get_earnings_dates(limit=limit)
+        except Exception:
+            df = None
+        if df is not None and not df.empty:
+            return df
+    return None
+
 
 
 def _resolve_next_earnings_date(ticker: str, market_data: dict):
