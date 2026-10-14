@@ -79,6 +79,37 @@ def _ticker_earnings_dates(ticker: str, limit: int = 8):
         return None
 
 
+def _resolve_next_earnings_date(ticker: str, market_data: dict):
+    """
+    Eerstvolgende earnings-datum (>= vandaag) voor 1 ticker, of None.
+
+    Eerst de gesynchroniseerde waarde uit ticker_market_data; maar ALS die
+    ontbreekt (rij bestaat wel, bv. door koersdata, maar de earnings-fetch
+    van het sync-script faalde -- vaak bij Euronext-tickers als ASML.AS),
+    of al in het verleden ligt (verouderd), dan alsnog een LIVE
+    yfinance-aanroep. Voorheen werd er alleen live teruggevallen als de
+    ticker helemaal NIET in market_data stond, waardoor een rij zonder
+    next_earnings_date stilzwijgend 'geen earnings' betekende.
+    """
+    today = datetime.now().date()
+    stored = (market_data.get(ticker) or {}).get("next_earnings_date")
+    if stored:
+        try:
+            stored_date = pd.Timestamp(stored).date()
+            if stored_date >= today:
+                return stored_date
+        except Exception:
+            pass
+    dates_df = _ticker_earnings_dates(ticker, limit=8)
+    if dates_df is None or dates_df.empty:
+        return None
+    try:
+        future = sorted({ts.date() for ts in dates_df.index if ts.date() >= today})
+    except Exception:
+        return None
+    return future[0] if future else None
+
+
 def _currency_symbol_for_ticker(ticker: str) -> str:
     try:
         info = _ticker_info(ticker)
@@ -254,33 +285,16 @@ def get_upcoming_ex_dividend_dates(holdings: list, market_data: dict, days_ahead
 
 
 def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_items: int = 3) -> list:
-    # LET OP: tracked_items = holdings + watchlist_items, in die volgorde.
-    # Vroeger stond hier "if len(results) >= max_items: break" IN de loop
-    # zelf -- zodra 3 treffers gevonden waren, stopte de hele scan, en
-    # omdat holdings altijd eerst komen, kwam de loop bij een actieve
-    # portfolio (3+ posities met earnings vandaag) NOOIT meer bij de
-    # watchlist-items terecht. Watchlist-earnings verdwenen daardoor
-    # structureel, niet incidenteel. Nu wordt ALTIJD de volledige lijst
-    # (holdings + watchlist) doorzocht en pas aan het einde afgekapt op
-    # max_items -- zelfde patroon als get_upcoming_portfolio_earnings()
-    # hieronder, die dit probleem nooit had.
+    # tracked_items = holdings + watchlist_items. De HELE lijst wordt
+    # doorzocht en pas aan het einde afgekapt (geen vroege break meer, die
+    # de watchlist liet uithongeren door holdings die altijd eerst komen).
     today = datetime.now().date()
     results = []
     for item in tracked_items:
         ticker = item["ticker"]
         try:
-            if ticker in market_data:
-                next_date_str = market_data[ticker].get("next_earnings_date")
-                if next_date_str and pd.Timestamp(next_date_str).date() == today:
-                    results.append({"naam": item["naam"], "ticker": ticker})
-            else:
-                dates_df = _ticker_earnings_dates(ticker, limit=8)
-                if dates_df is None or dates_df.empty:
-                    continue
-                for earnings_date in dates_df.index:
-                    if earnings_date.date() == today:
-                        results.append({"naam": item["naam"], "ticker": ticker})
-                        break
+            if _resolve_next_earnings_date(ticker, market_data) == today:
+                results.append({"naam": item["naam"], "ticker": ticker})
         except Exception:
             continue
     return results[:max_items]
@@ -292,24 +306,13 @@ def get_upcoming_portfolio_earnings(tracked_items: list, market_data: dict, days
     for item in tracked_items:
         ticker = item["ticker"]
         try:
-            if ticker in market_data:
-                next_date_str = market_data[ticker].get("next_earnings_date")
-                if next_date_str:
-                    earnings_date = pd.Timestamp(next_date_str).date()
-                    days_until = (earnings_date - today).days
-                    if 1 <= days_until <= days_ahead:
-                        results.append({"naam": item["naam"], "ticker": ticker,
-                                         "earnings_date": str(earnings_date), "days_until": days_until})
-            else:
-                dates_df = _ticker_earnings_dates(ticker, limit=8)
-                if dates_df is None or dates_df.empty:
-                    continue
-                for earnings_date_ts in dates_df.index:
-                    days_until = (earnings_date_ts.date() - today).days
-                    if 1 <= days_until <= days_ahead:
-                        results.append({"naam": item["naam"], "ticker": ticker,
-                                         "earnings_date": str(earnings_date_ts.date()), "days_until": days_until})
-                        break
+            earnings_date = _resolve_next_earnings_date(ticker, market_data)
+            if earnings_date is None:
+                continue
+            days_until = (earnings_date - today).days
+            if 1 <= days_until <= days_ahead:
+                results.append({"naam": item["naam"], "ticker": ticker,
+                                 "earnings_date": str(earnings_date), "days_until": days_until})
         except Exception:
             continue
     results.sort(key=lambda r: r["days_until"])
