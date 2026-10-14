@@ -94,10 +94,28 @@ def fetch_market_data_for_ticker(ticker: str) -> dict:
     try:
         dates_df = yf.Ticker(ticker).get_earnings_dates(limit=8)
         if dates_df is not None and not dates_df.empty:
-            today = pd.Timestamp.now().normalize()
-            upcoming = dates_df[dates_df.index > today]
+            # Vergelijken op kalenderdatum (.date), niet op volledige
+            # Timestamp -- yfinance's index kan tijdzone-bewust zijn (bv.
+            # America/New_York), terwijl 'today' hier tijdzone-naief is;
+            # een directe Timestamp-vergelijking kan daardoor stiekem
+            # falen of überhaupt een exception gooien (die dan door de
+            # buitenste try/except wordt opgeslokt).
+            #
+            # Nog belangrijker: dit was voorheen "index > today" (STRIKT
+            # groter), waardoor een ticker die VANDAAG zelf rapporteert
+            # nooit als 'next_earnings_date = vandaag' werd opgeslagen --
+            # de eigen rapportagedatum viel buiten "upcoming" en
+            # next_earnings_date sprong in plaats daarvan door naar het
+            # KWARTAAL ERNA. Daardoor werd "rapporteert vandaag" op de
+            # dag zelf onzichtbaar voor get_todays_portfolio_earnings()
+            # in dashboard.py/radar_data.py, die exact op 'vandaag'
+            # matcht. Nu >= zodat vandaag zelf meetelt als 'upcoming'
+            # totdat de cijfers er daadwerkelijk zijn (dan valt 'ie
+            # vanzelf onder past_with_surprise hieronder).
+            today_date = pd.Timestamp.now().date()
+            upcoming = dates_df[dates_df.index.date >= today_date]
             past_with_surprise = dates_df[
-                (dates_df.index <= today) & dates_df["Surprise(%)"].notna()
+                (dates_df.index.date <= today_date) & dates_df["Surprise(%)"].notna()
             ] if "Surprise(%)" in dates_df.columns else dates_df.iloc[0:0]
 
             if not upcoming.empty:
