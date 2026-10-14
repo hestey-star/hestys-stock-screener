@@ -4111,6 +4111,17 @@ def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_it
     achtergrond-gesynchroniseerde tabel, 'next_earnings_date'-veld) --
     valt netjes terug op een live aanroep voor een ticker die daar nog
     niet in staat.
+
+    LET OP: tracked_items = holdings + watchlist_items, in die volgorde.
+    Er stond hier eerder "if len(results) >= max_items: break" IN de loop
+    zelf -- zodra 3 treffers gevonden waren, stopte de hele scan, en
+    omdat holdings altijd eerst komen, kwam de loop bij een actieve
+    portfolio (3+ posities met earnings vandaag) NOOIT meer bij de
+    watchlist-items terecht. Watchlist-earnings verdwenen daardoor
+    structureel uit Today's agenda, niet incidenteel. Nu wordt ALTIJD de
+    volledige lijst (holdings + watchlist) doorzocht en pas aan het einde
+    afgekapt op max_items -- zelfde patroon als get_upcoming_portfolio_
+    earnings() hieronder, die dit probleem nooit had.
     """
     today = datetime.now().date()
     results = []
@@ -4133,8 +4144,6 @@ def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_it
                         break
         except Exception:
             continue
-        if len(results) >= max_items:
-            break
     return results[:max_items]
 
 

@@ -254,6 +254,16 @@ def get_upcoming_ex_dividend_dates(holdings: list, market_data: dict, days_ahead
 
 
 def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_items: int = 3) -> list:
+    # LET OP: tracked_items = holdings + watchlist_items, in die volgorde.
+    # Vroeger stond hier "if len(results) >= max_items: break" IN de loop
+    # zelf -- zodra 3 treffers gevonden waren, stopte de hele scan, en
+    # omdat holdings altijd eerst komen, kwam de loop bij een actieve
+    # portfolio (3+ posities met earnings vandaag) NOOIT meer bij de
+    # watchlist-items terecht. Watchlist-earnings verdwenen daardoor
+    # structureel, niet incidenteel. Nu wordt ALTIJD de volledige lijst
+    # (holdings + watchlist) doorzocht en pas aan het einde afgekapt op
+    # max_items -- zelfde patroon als get_upcoming_portfolio_earnings()
+    # hieronder, die dit probleem nooit had.
     today = datetime.now().date()
     results = []
     for item in tracked_items:
@@ -273,8 +283,6 @@ def get_todays_portfolio_earnings(tracked_items: list, market_data: dict, max_it
                         break
         except Exception:
             continue
-        if len(results) >= max_items:
-            break
     return results[:max_items]
 
 
