@@ -11150,6 +11150,14 @@ def render_portfolio():
                         value=0.0, key="tx_target_weight_input",
                         help="Optional -- the % of your portfolio you want this position to make up.",
                     )
+                    st.checkbox(
+                        "Synthetic long (long call + short put)",
+                        key="tx_is_synthetic",
+                        help="For an options-based position that behaves like owning the shares. Enter the "
+                             "share-equivalent (e.g. 200) as Shares and your break-even (strike + net premium "
+                             "per share) as Price. The position gets a SYN LONG label; option details stay at "
+                             "your broker.",
+                    )
 
             can_save = (tx_holding is not None) or (new_position_symbol is not None)
 
@@ -11211,6 +11219,13 @@ def render_portfolio():
                             )
                             if tx_target_weight > 0:
                                 database.set_target_weight(new_id, user_email, tx_target_weight)
+                            if st.session_state.get("tx_is_synthetic"):
+                                database.set_synthetic_flag(new_id, user_email, True)
+                                try:
+                                    # Vinkje niet laten 'plakken' voor de volgende nieuwe positie.
+                                    del st.session_state["tx_is_synthetic"]
+                                except Exception:
+                                    pass
                             database.add_transaction(
                                 user_email, new_id, "buy",
                                 shares=tx_shares, price=tx_price, fee=tx_fee,
