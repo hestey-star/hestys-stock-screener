@@ -2983,6 +2983,26 @@ def _portfolio_responsive_css() -> str:
     )
 
 
+def _unique_holding_labels(holdings: list) -> dict:
+    """
+    {label: holding} voor een selectbox. Het label is normaal 'Naam (TICKER)',
+    maar met 2 rijen van dezelfde ticker (bv. 200 gewone GRAB-aandelen bij
+    DEGIRO + een synthetic long op GRAB bij een optiebroker) zou de 2e
+    stilletjes de 1e overschrijven in de dict -- dan kun je 1 van de 2
+    nooit meer selecteren. Synthetic krijgt daarom ' - SYN LONG' erbij, en
+    blijven labels toch gelijk, dan komt er ' #id' achter.
+    """
+    result = {}
+    for h in holdings:
+        label = f"{h['naam']} ({h['ticker']})"
+        if h.get("is_synthetic"):
+            label += " - SYN LONG"
+        if label in result:
+            label += f" #{h['id']}"
+        result[label] = h
+    return result
+
+
 def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio: float, mode: str,
                         currency_symbol: str = "$", logo_url: str = None,
                         day_change_pct: float = None, day_change_value: float = None,
@@ -9205,17 +9225,63 @@ def render_portfolio():
                         f'{total_day_change_pct:+.1f}% {change_arrow}</div>'
                     )
                 label_suffix_html = f'<span style="font-size:0.9rem; color:#8992A3; font-weight:400;"> {label_suffix.strip()}</span>' if label_suffix else ""
+
+                # Optie-/broker-account (bv. MEXEM): de ECHTE waarde daarvan is
+                # cash + optiewaarde en komt als 1 handmatig getal van de
+                # broker. Een synthetic long staat in de tabel als EXPOSURE
+                # (aandelen-equivalent x koers) -- die telt NIET mee in de
+                # headline-totaalwaarde, anders tel je dezelfde euro's dubbel
+                # (zowel als exposure als als cash/optiewaarde in dat account).
+                _opts = database.get_options_account(user_email)
+                _opts_eur = _opts["value"]
+                if shown_currency == "EUR":
+                    _opts_display = _opts_eur
+                else:
+                    _opts_rate = get_fx_rate("EUR", shown_currency)
+                    _opts_display = _opts_eur * _opts_rate if _opts_rate else _opts_eur
+                _synthetic_exposure = sum(
+                    (h.get("position_value") or 0) for h in holdings if h.get("is_synthetic")
+                )
+                headline_total = total_value - _synthetic_exposure + _opts_display
+                _opts_html = ""
+                if _opts_eur > 0 or _synthetic_exposure > 0:
+                    _opts_html = (
+                        f'<div style="font-size:0.9rem; color:#94A3B8; font-weight:500; '
+                        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap;">'
+                        f'Options account: {shown_symbol}{_opts_display:,.0f}</div>'
+                    )
                 st.markdown(
                     f'<div style="display:flex; align-items:baseline; gap:0.9rem; flex-wrap:wrap;">'
                     f'<div style="font-size:2.75rem; font-weight:800; color:#EAEDF1; font-family:\'Inter\', sans-serif !important; '
-                    f'font-variant-numeric: tabular-nums; line-height:1.1;">{shown_symbol}{total_value:,.0f}{label_suffix_html}</div>'
+                    f'font-variant-numeric: tabular-nums; line-height:1.1;">{shown_symbol}{headline_total:,.0f}{label_suffix_html}</div>'
                     f'<div style="font-size:0.9rem; color:#94A3B8; font-weight:500; '
                     f'font-family:\'Inter\', sans-serif !important; white-space:nowrap;">'
                     f'Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
+                    f'{_opts_html}'
                     f'</div>'
                     f'{total_day_change_html}',
                     unsafe_allow_html=True,
                 )
+                with st.expander("Options account value", expanded=False):
+                    st.caption(
+                        "Total value of your options/broker account (e.g. MEXEM: cash + option value), "
+                        "in EUR, as shown at your broker. It counts in the total above; a synthetic long "
+                        "in the table below is exposure only and is not added twice."
+                    )
+                    _opts_new = st.number_input(
+                        "Account value (EUR)", min_value=0.0, step=50.0, value=float(_opts_eur),
+                        key="options_account_input",
+                    )
+                    _updated_at = _opts.get("updated_at")
+                    if _updated_at:
+                        try:
+                            _age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(_updated_at)).days
+                            st.caption(f"Last updated {_age_days} day(s) ago." if _age_days > 0 else "Last updated today.")
+                        except Exception:
+                            pass
+                    if st.button("Save options account value", key="options_account_save"):
+                        database.set_options_account_value(user_email, float(_opts_new))
+                        st.rerun()
             else:
                 st.caption("Click 'Update portfolio value' to fetch current prices.")
 
@@ -9455,7 +9521,7 @@ def render_portfolio():
             )
 
             # --- Positie-detail: transacties + rendement + mini-koersgrafiek ---
-            position_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+            position_options = _unique_holding_labels(holdings)
             # Minimalistische dropdown-stijl (dunne slate-rand, geen
             # glimmend/gevuld standaard-Streamlit-uiterlijk) -- zelfde
             # gedempte designtaal als de rest van de tabel hierboven.
@@ -10962,7 +11028,7 @@ def render_portfolio():
             new_position_name = None
 
             if tx_position_mode == "Existing position":
-                tx_holding_options = {f"{h['naam']} ({h['ticker']})": h for h in holdings}
+                tx_holding_options = _unique_holding_labels(holdings)
                 tx_label = st.selectbox(
                     "Position", list(tx_holding_options.keys()), key="tx_select", label_visibility="collapsed",
                 )

@@ -21,7 +21,7 @@ adres onthoudt -- zie ensure_user_identity() en get_real_email().
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 from supabase import create_client, Client
@@ -538,6 +538,33 @@ def set_cash_value(user_email: str, cash_value: float) -> None:
     client.table("user_preferences").upsert({
         "user_email": hash_email(user_email),
         "cash_value": cash_value,
+    }).execute()
+
+
+def get_options_account(user_email: str) -> dict:
+    """
+    Totaalwaarde (in EUR) van een apart optie-/broker-account (bv. MEXEM) dat
+    meetelt in de headline-totaalwaarde van My Portfolio, plus wanneer die
+    waarde voor het laatst is bijgewerkt. Handmatig ingevoerd (de netto
+    liquidatiewaarde van de broker): de optie-posities zelf (bv. een
+    synthetic long) staan als exposure in de tabel, maar de ECHTE waarde
+    van dat account is cash + optiewaarde, en dat getal komt bij de broker
+    vandaan. Vereist user_preferences.options_account_value (numeric) en
+    options_account_updated_at (timestamptz).
+    """
+    prefs = get_user_preferences(user_email)
+    return {
+        "value": float(prefs.get("options_account_value") or 0.0),
+        "updated_at": prefs.get("options_account_updated_at"),
+    }
+
+
+def set_options_account_value(user_email: str, value_eur: float) -> None:
+    client = get_supabase_client()
+    client.table("user_preferences").upsert({
+        "user_email": hash_email(user_email),
+        "options_account_value": value_eur,
+        "options_account_updated_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
 
