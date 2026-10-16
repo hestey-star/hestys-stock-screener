@@ -9242,23 +9242,25 @@ def render_portfolio():
                 _synthetic_exposure = sum(
                     (h.get("position_value") or 0) for h in holdings if h.get("is_synthetic")
                 )
-                headline_total = total_value - _synthetic_exposure + _opts_display
-                _opts_html = ""
+                _invested_display = total_value - _synthetic_exposure
+                headline_total = _invested_display + _opts_display + cash_display_value
+                # Uitsplitsing onder het totaal: belegd / cash / optie-account, zodat
+                # zichtbaar is waaruit het grote getal is opgebouwd. Onderdelen
+                # van 0 worden weggelaten.
+                _breakdown_parts = [f"Invested {shown_symbol}{_invested_display:,.0f}"]
+                if cash_display_value > 0:
+                    _breakdown_parts.append(f"Cash {cash_symbol}{cash_display_value:,.0f}")
                 if _opts_eur > 0 or _synthetic_exposure > 0:
-                    _opts_html = (
-                        f'<div style="font-size:0.9rem; color:#94A3B8; font-weight:500; '
-                        f'font-family:\'Inter\', sans-serif !important; white-space:nowrap;">'
-                        f'Options account: {shown_symbol}{_opts_display:,.0f}</div>'
-                    )
+                    _breakdown_parts.append(f"Options account {shown_symbol}{_opts_display:,.0f}")
+                _breakdown_html = (
+                    f'<div style="margin-top:6px; font-size:0.85rem; color:#94A3B8; font-weight:500; '
+                    f'font-family:\'Inter\', sans-serif !important;">'
+                    + " &middot; ".join(_breakdown_parts) + '</div>'
+                ) if len(_breakdown_parts) > 1 else ""
                 st.markdown(
-                    f'<div style="display:flex; align-items:baseline; gap:0.9rem; flex-wrap:wrap;">'
                     f'<div style="font-size:2.75rem; font-weight:800; color:#EAEDF1; font-family:\'Inter\', sans-serif !important; '
                     f'font-variant-numeric: tabular-nums; line-height:1.1;">{shown_symbol}{headline_total:,.0f}{label_suffix_html}</div>'
-                    f'<div style="font-size:0.9rem; color:#94A3B8; font-weight:500; '
-                    f'font-family:\'Inter\', sans-serif !important; white-space:nowrap;">'
-                    f'Cash: {cash_symbol}{cash_display_value:,.0f}</div>'
-                    f'{_opts_html}'
-                    f'</div>'
+                    f'{_breakdown_html}'
                     f'{total_day_change_html}',
                     unsafe_allow_html=True,
                 )
