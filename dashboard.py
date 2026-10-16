@@ -4645,7 +4645,7 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
     basis van de kolomkoppen -- geen bestandsnaam-gok (die kan de
     gebruiker altijd wijzigen), maar de daadwerkelijke, unieke kolommen
     die elke broker's export nu eenmaal heeft. Geeft 'degiro', 'robinhood',
-    'schwab', 'trade_republic' of 'unknown' terug.
+    'schwab', 'mexem', 'trade_republic' of 'unknown' terug.
 
     Sommige exports (met name Schwab) beginnen met 1 of meer losse tekst-
     regels VOOR de daadwerkelijke koptekst (bv. een accountnaam-regel) --
@@ -4677,6 +4677,10 @@ def detect_broker_from_csv(file_bytes: bytes) -> str:
         # eigen exportformaat.
         if {"Trans Code", "Asset Code"}.issubset(columns):
             return "robinhood"
+        # MEXEM (Interactive Brokers-formaat, Nederlandstalig): unieke
+        # combinatie 'Transactietype'/'Symbool'/'Prijsvaluta'/'Commissie'.
+        if {"Datum", "Transactietype", "Symbool", "Aantal", "Prijs", "Prijsvaluta"}.issubset(columns):
+            return "mexem"
         # Charles Schwab: 'Fees & Comm' is een vrij unieke kolomnaam.
         if {"Action", "Fees & Comm", "Symbol"}.issubset(columns):
             return "schwab"
@@ -4946,6 +4950,122 @@ def parse_schwab_transactions_csv(file_bytes: bytes) -> dict:
     return {
         "grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows,
         "other_ignored_codes": {},
+    }
+
+
+def parse_mexem_transactions_csv(file_bytes: bytes) -> dict:
+    """
+    Parseert een MEXEM 'Transactiegeschiedenis'-export (Interactive Brokers-
+    formaat, Nederlandstalig). Het bestand bestaat uit meerdere secties
+    (Statement / Samenvatting / Transactiegeschiedenis) in 1 CSV; alleen
+    regels die met 'Transactiegeschiedenis,Data' beginnen zijn transacties.
+
+    Bewuste keuzes:
+    - Alleen aandelen/ETF-koop/verkoop wordt geimporteerd. Stortingen,
+      forex-componenten, rente en kosten worden genegeerd (en geteld in
+      'other_ignored_codes' zodat de UI kan tonen wat er is overgeslagen).
+    - Optiecontracten (symbool met spatie, bv. 'GRAB 261218C00006000')
+      worden NIET geimporteerd: de synthetic long wordt handmatig als
+      positie bijgehouden (zie 'Synthetic long' bij een transactie).
+    - Richting uit het transactietype (Koop/Verkoop/Buy/Sell); als dat
+      onduidelijk is, uit het teken van 'Aantal'.
+    - Valuta per rij uit 'Prijsvaluta'.
+    - NB: afgeleid van het IBKR-formaat; het voorbeeldbestand bevatte
+      alleen storting + forex-rijen, dus de koop/verkoop-labels zijn
+      tolerant gematcht.
+    """
+    import csv
+    import io
+
+    def _num(val):
+        if val is None:
+            return None
+        v = str(val).strip()
+        if v in ("", "-", "--"):
+            return None
+        try:
+            return float(v.replace(" ", ""))
+        except ValueError:
+            try:  # Nederlandse notatie: 1.234,56
+                return float(v.replace(".", "").replace(",", "."))
+            except ValueError:
+                return None
+
+    text = file_bytes.decode("utf-8-sig", errors="replace")
+    header = None
+    grouped: dict = {}
+    skipped_rows: list = []
+    dividend_rows: list = []
+    ignored: dict = {}
+
+    for idx, fields in enumerate(csv.reader(io.StringIO(text))):
+        if not fields or fields[0].strip() != "Transactiegeschiedenis":
+            continue
+        kind = fields[1].strip() if len(fields) > 1 else ""
+        if kind == "Header":
+            header = [f.strip() for f in fields[2:]]
+            continue
+        if kind != "Data" or header is None:
+            continue
+        row = dict(zip(header, fields[2:]))
+        ttype = (row.get("Transactietype") or "").strip()
+        tlow = ttype.lower()
+        symbol = (row.get("Symbool") or "").strip()
+
+        if "dividend" in tlow:
+            dividend_rows.append({
+                "asset_code": symbol or None,
+                "amount": _num(row.get("Brutobedrag")),
+                "date": row.get("Datum"),
+                "currency": (row.get("Prijsvaluta") or "").strip() or None,
+            })
+            continue
+
+        # Verkoop eerst: 'verkoop' bevat 'koop' als deelstring.
+        is_sell = any(k in tlow for k in ("verkoop", "sell", "sale"))
+        is_buy = (not is_sell) and any(k in tlow for k in ("koop", "aankoop", "buy", "purchase"))
+        is_trade_label = is_buy or is_sell or tlow in ("handel", "trade")
+        if "forex" in tlow or not is_trade_label:
+            ignored[ttype or "(leeg)"] = ignored.get(ttype or "(leeg)", 0) + 1
+            continue
+
+        if not symbol or symbol == "-":
+            skipped_rows.append((idx, f"{ttype}: missing symbol"))
+            continue
+        if " " in symbol:
+            skipped_rows.append((idx, f"{symbol}: option contract skipped (track the synthetic long manually)"))
+            continue
+
+        qty = _num(row.get("Aantal"))
+        price = _num(row.get("Prijs"))
+        if qty is None or price is None or qty == 0:
+            skipped_rows.append((idx, f"{symbol}: missing or zero quantity/price"))
+            continue
+        if not is_buy and not is_sell:
+            is_buy = qty > 0
+        try:
+            parsed_date = pd.to_datetime(str(row.get("Datum")).split(",")[0].strip()).date().isoformat()
+        except Exception:
+            skipped_rows.append((idx, f"{symbol}: could not parse date '{row.get('Datum')}'"))
+            continue
+
+        currency = (row.get("Prijsvaluta") or "").strip().upper() or "USD"
+        fee = abs(_num(row.get("Commissie")) or 0.0)
+        ticker = symbol.upper()
+        if ticker not in grouped:
+            grouped[ticker] = {
+                "product": ticker,
+                "ticker": ticker, "currency": currency, "transactions": [],
+            }
+        grouped[ticker]["transactions"].append({
+            "transaction_type": "buy" if is_buy else "sell",
+            "shares": round(abs(qty), 6), "price": round(abs(price), 4),
+            "fee": round(fee, 2), "transaction_date": parsed_date, "currency": currency,
+        })
+
+    return {
+        "grouped": grouped, "skipped_rows": skipped_rows, "dividend_rows": dividend_rows,
+        "other_ignored_codes": ignored,
     }
 
 
@@ -10157,12 +10277,13 @@ def render_portfolio():
             degiro_account_file = None
             robinhood_file = None
             schwab_file = None
+            mexem_file = None
             trade_republic_file = None
             if broker_upload is not None:
                 detected_broker = detect_broker_from_csv(broker_upload.getvalue())
                 _detected_labels = {
                     "degiro": "DEGIRO", "degiro_account": "DEGIRO (Account statement -- dividends)",
-                    "robinhood": "Robinhood", "schwab": "Charles Schwab", "trade_republic": "Trade Republic",
+                    "robinhood": "Robinhood", "schwab": "Charles Schwab", "mexem": "MEXEM", "trade_republic": "Trade Republic",
                 }
                 if detected_broker in _detected_labels:
                     st.caption(f"\U0001F50D Detected: {_detected_labels[detected_broker]}")
@@ -10174,6 +10295,8 @@ def render_portfolio():
                     robinhood_file = broker_upload
                 elif detected_broker == "schwab":
                     schwab_file = broker_upload
+                elif detected_broker == "mexem":
+                    mexem_file = broker_upload
                 elif detected_broker == "trade_republic":
                     trade_republic_file = broker_upload
                 else:
@@ -10240,6 +10363,12 @@ def render_portfolio():
                 'style="width:18px; height:18px; border-radius:4px;">'
                 '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
                 'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">Charles Schwab</span>'
+                '</div>'
+                '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
+                '<img src="https://www.google.com/s2/favicons?domain=mexem.com&sz=32" '
+                'style="width:18px; height:18px; border-radius:4px;">'
+                '<span style="color:#94A3B8; font-size:0.78rem; font-weight:600; text-transform:uppercase; '
+                'letter-spacing:0.04em; font-family:\'Inter\', sans-serif !important;">MEXEM</span>'
                 '</div>'
                 '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0;">'
                 '<img src="https://www.google.com/s2/favicons?domain=traderepublic.com&sz=32" '
@@ -10960,6 +11089,119 @@ def render_portfolio():
                     st.session_state["schwab_imported_filenames"] = already_imported_sw
                     for state_key in ["schwab_parsed_filename", "schwab_grouped",
                                        "schwab_skipped", "schwab_dividends"]:
+                        st.session_state.pop(state_key, None)
+                    st.rerun()
+
+
+            # --- MEXEM: zelfde eenvoudige route als Robinhood --
+            # de CSV geeft de ticker al rechtstreeks mee ('Symbol'), dus
+            # geen aparte ticker-matching-stap nodig.
+            already_imported_mx = st.session_state.get("mexem_imported_filenames", set())
+
+            if mexem_file is not None and mexem_file.name in already_imported_mx:
+                st.success(f"'{mexem_file.name}' was already imported.", icon=":material/check_circle:")
+                if st.button("Process this file again anyway", key="mexem_reimport_btn"):
+                    already_imported_mx.discard(mexem_file.name)
+                    st.session_state["mexem_imported_filenames"] = already_imported_mx
+                    st.session_state.pop("mexem_parsed_filename", None)
+                    st.rerun()
+            elif mexem_file is not None:
+                if st.session_state.get("mexem_parsed_filename") != mexem_file.name:
+                    with st.spinner("Reading your file..."):
+                        mx_parse_result = parse_mexem_transactions_csv(mexem_file.getvalue())
+                    st.session_state["mexem_ignored"] = mx_parse_result["other_ignored_codes"]
+                    st.session_state["mexem_parsed_filename"] = mexem_file.name
+                    st.session_state["mexem_grouped"] = mx_parse_result["grouped"]
+                    st.session_state["mexem_skipped"] = mx_parse_result["skipped_rows"]
+                    st.session_state["mexem_dividends"] = mx_parse_result["dividend_rows"]
+
+                mx_grouped = st.session_state["mexem_grouped"]
+                mx_skipped = st.session_state["mexem_skipped"]
+                mx_dividends = st.session_state["mexem_dividends"]
+                mx_ignored = st.session_state.get("mexem_ignored", {})
+
+                total_mx_tx = sum(len(g["transactions"]) for g in mx_grouped.values())
+                st.success(f"Found {len(mx_grouped)} securities, {total_mx_tx} buy/sell transaction(s).")
+                if mx_ignored:
+                    st.caption("Ignored (not share trades): " + ", ".join(f"{k} x{v}" for k, v in mx_ignored.items()))
+                if mx_dividends:
+                    st.caption(
+                        f"{len(mx_dividends)} dividend row(s) found -- will be added to your "
+                        f"Dividend history (not as buy/sell transactions)."
+                    )
+                if mx_skipped:
+                    reasons_preview = "; ".join(reason for _, reason in mx_skipped[:5])
+                    more = "..." if len(mx_skipped) > 5 else ""
+                    st.caption(f"{len(mx_skipped)} row(s) couldn't be read and were skipped: "
+                               f"{reasons_preview}{more}")
+
+                if mx_grouped and st.button("Import these transactions", key="mexem_import_btn", type="primary"):
+                    all_holdings_mx = database.get_user_holdings(user_email)
+                    mx_progress = st.progress(0.0)
+                    mx_status = st.empty()
+                    mx_imported_tx = 0
+                    mx_imported_pos = 0
+                    mx_dup_skipped = 0
+
+                    for i, (ticker, group) in enumerate(mx_grouped.items()):
+                        mx_status.markdown(f"**Importing {group['product']}...** ({i + 1} of {len(mx_grouped)})")
+                        existing = next((h for h in all_holdings_mx if h["ticker"] == ticker), None)
+                        if existing:
+                            holding_id = existing["id"]
+                        else:
+                            holding_id = database.add_holding(
+                                user_email, group["product"], ticker, shares=None,
+                                value_currency=group.get("currency", "USD"),
+                            )
+                            mx_imported_pos += 1
+
+                        already_logged_mx = database.get_transactions_for_holding(user_email, holding_id)
+
+                        def _is_duplicate_mx(new_tx, existing_list):
+                            # Zelfde 1%-prijstolerantie-logica als bij DEGIRO/
+                            # Robinhood (zie de uitgebreide toelichting bij DEGIRO).
+                            for existing_tx in existing_list:
+                                if existing_tx["transaction_type"] != new_tx["transaction_type"]:
+                                    continue
+                                if existing_tx["transaction_date"] != new_tx["transaction_date"]:
+                                    continue
+                                if abs(existing_tx["shares"] - new_tx["shares"]) >= 0.0001:
+                                    continue
+                                price_tolerance = max(abs(new_tx["price"]) * 0.01, 0.02)
+                                if abs(existing_tx["price"] - new_tx["price"]) <= price_tolerance:
+                                    return True
+                            return False
+
+                        for t in group["transactions"]:
+                            if _is_duplicate_mx(t, already_logged_mx):
+                                mx_dup_skipped += 1
+                                continue
+                            database.add_transaction(
+                                user_email, holding_id, t["transaction_type"],
+                                shares=t["shares"], price=t["price"], fee=t["fee"],
+                                transaction_date=t["transaction_date"], currency=t["currency"],
+                            )
+                            mx_imported_tx += 1
+
+                        sync_holding_shares_from_transactions(holding_id, user_email)
+                        mx_progress.progress((i + 1) / len(mx_grouped))
+
+                    mx_status.empty()
+                    mx_progress.empty()
+
+                    mx_div_imported, mx_div_skipped = _persist_dividend_rows(
+                        user_email, mx_dividends, "mexem", None,
+                        ticker_naam_lookup={t: g["product"] for t, g in mx_grouped.items()},
+                    )
+
+                    dup_txt_mx = f" ({mx_dup_skipped} already-imported duplicates skipped)" if mx_dup_skipped else ""
+                    div_txt_mx = f" Plus {mx_div_imported} dividend payment(s) added to your Dividend history." if mx_div_imported else ""
+                    st.success(f"Imported {mx_imported_tx} transactions across "
+                               f"{mx_imported_pos} new position(s)!{dup_txt_mx}{div_txt_mx}")
+                    already_imported_mx.add(mexem_file.name)
+                    st.session_state["mexem_imported_filenames"] = already_imported_mx
+                    for state_key in ["mexem_parsed_filename", "mexem_grouped",
+                                       "mexem_skipped", "mexem_dividends", "mexem_ignored"]:
                         st.session_state.pop(state_key, None)
                     st.rerun()
 
