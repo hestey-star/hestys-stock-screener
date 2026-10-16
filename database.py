@@ -307,6 +307,19 @@ def set_staking_info(holding_id: int, user_email: str, staked_amount: float = No
     }).eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
 
 
+def set_synthetic_flag(holding_id: int, user_email: str, is_synthetic: bool) -> None:
+    """
+    Markeert een positie als synthetic long (long call + short put, gedraagt
+    zich als aandelenbezit). Puur een label voor de weergave in My Portfolio
+    ('SYN LONG'); de positie zelf blijft een gewone positie (aandelen-
+    equivalent x koers), de optie-details staan bij de broker.
+    Vereist kolom portfolio_holdings.is_synthetic (boolean, default false).
+    """
+    client = get_supabase_client()
+    client.table("portfolio_holdings").update({"is_synthetic": bool(is_synthetic)}) \
+        .eq("id", holding_id).eq("user_email", hash_email(user_email)).execute()
+
+
 def set_watchlist_alert(holding_id: int, user_email: str, target_price: float, current_price: float) -> None:
     """
     Stelt een prijs-alert in voor een WATCHLIST-item (geen eigen

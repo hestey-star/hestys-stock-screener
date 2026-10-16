@@ -2988,7 +2988,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
                         day_change_pct: float = None, day_change_value: float = None,
                         current_price: float = None, avg_cost: float = None,
                         all_time_pct: float = None, all_time_pnl: float = None,
-                        shares: float = None) -> str:
+                        shares: float = None, is_synthetic: bool = False) -> str:
     """
     Positie-rij voor My Portfolio -- rendert BEIDE een compacte, gestapelde
     mobiele versie EN een brede, meerkoloms desktop-tabelversie (CSS
@@ -3081,6 +3081,20 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         if shares is not None else ""
     )
 
+    # 'SYN LONG'-label naast de ticker voor een synthetic long (long call +
+    # short put, gedraagt zich als aandelenbezit). De positie zelf staat als
+    # gewone positie (aantal aandelen-equivalent x koers), dus waarde en
+    # allocatie tonen de EXPOSURE; de optie-details zelf staan bij de broker.
+    # Neutraal grijs i.p.v. kleur: dit is een label, geen data-signaal.
+    syn_badge_html = (
+        '<span title="Synthetic long (long call + short put): behaves like owning these shares. '
+        'Option details live at your broker." '
+        'style="display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px; '
+        'background:rgba(148,163,184,0.12); color:#94A3B8; font-size:0.6rem; font-weight:800; '
+        'letter-spacing:0.06em; vertical-align:middle;">SYN LONG</span>'
+        if is_synthetic else ""
+    )
+
     mobile_html = (
         f'<div class="portfolio-row-mobile" style="border-bottom:1px solid rgba(148,163,184,0.08); '
         f'padding:0.85rem 0.2rem; box-sizing:border-box; overflow:hidden;">'
@@ -3099,7 +3113,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
         # maar stond nergens daadwerkelijk in de mobiele opmaak; dat was
         # de reden dat de koers niet zichtbaar was op mobiel.
         f'<div style="color:#8992A3; font-size:0.7rem; font-family:\'Inter\', sans-serif !important; '
-        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{ticker}{detail_html}</div>'
+        f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{ticker}{syn_badge_html}{detail_html}</div>'
         f'</div>'
         # Rechts: alleen de 2 kerncijfers, gestapeld en rechts uitgelijnd --
         # waarde boven (groot), rendement/verandering eronder (klein).
@@ -3126,7 +3140,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div class="portfolio-row-desktop">'
             f'{logo_html}'
             f'<div style="min-width:0;">'
-            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
+            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}{syn_badge_html}</div>'
             f'<div style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
             f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
             f'</div>'
@@ -3151,7 +3165,7 @@ def _position_row_html(ticker: str, name: str, value_text: str, pct_of_portfolio
             f'<div class="portfolio-row-desktop-alltime">'
             f'{logo_html}'
             f'<div style="min-width:0;">'
-            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}</div>'
+            f'<div style="font-weight:800; color:#EAEDF1; font-size:0.95rem;">{ticker}{syn_badge_html}</div>'
             f'<div style="color:#64748B; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.02em; '
             f'overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{name.upper()}</div>'
             f'</div>'
@@ -9415,7 +9429,7 @@ def render_portfolio():
                         day_change_pct=day_change_pct, day_change_value=day_change_value,
                         current_price=all_time_display_price, avg_cost=avg_cost,
                         all_time_pct=all_time_pct, all_time_pnl=all_time_pnl,
-                        shares=shares,
+                        shares=shares, is_synthetic=bool(h.get("is_synthetic")),
                     ),
                 })
             position_rows_data.sort(key=lambda r: r["pct"], reverse=True)
@@ -9552,7 +9566,12 @@ def render_portfolio():
                             key=f"detail_staking_apy_{selected_holding['id']}",
                         )
                     with _staking_col3:
-                        st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<style>.hesty-target-save-spacer { height:0; } "
+                            "@media (min-width:768px) { .hesty-target-save-spacer { height:1.8rem; } }</style>"
+                            "<div class='hesty-target-save-spacer'></div>",
+                            unsafe_allow_html=True,
+                        )
                         if st.button("Save", key=f"detail_save_staking_{selected_holding['id']}"):
                             database.set_staking_info(
                                 selected_holding["id"], user_email,
@@ -9560,6 +9579,25 @@ def render_portfolio():
                                 staking_apy_pct=detail_staking_apy if detail_staking_apy > 0 else None,
                             )
                             st.rerun()
+
+                # --- Synthetic long (long call + short put): als vinkje op de
+                # positie. Zet je 'm aan, dan krijgt de rij een 'SYN LONG'-
+                # label. Voer de positie zelf in als gewone koop van het
+                # aantal aandelen-equivalent (bv. 200) tegen je break-even
+                # (strike + netto premie per aandeel) -- dan rekenen waarde,
+                # allocatie en rendement automatisch op de exposure. De
+                # optie-details (strike, expiry, marge) blijven bij de broker.
+                def _save_synthetic_flag(_hid=selected_holding["id"], _key=f"detail_synthetic_{selected_holding['id']}"):
+                    database.set_synthetic_flag(_hid, user_email, bool(st.session_state.get(_key)))
+
+                st.checkbox(
+                    "Synthetic long (long call + short put)",
+                    value=bool(selected_holding.get("is_synthetic")),
+                    key=f"detail_synthetic_{selected_holding['id']}",
+                    on_change=_save_synthetic_flag,
+                    help="Marks this position with a SYN LONG label. Log it as a buy of the share-equivalent "
+                         "(e.g. 200) at your break-even price (strike + net premium per share).",
+                )
 
                 # --- Transacties (links) / prijsgrafiek (rechts) -- geen
                 # omlijnde kaders meer, alleen een dunne verticale
