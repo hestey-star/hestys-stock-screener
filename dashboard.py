@@ -783,7 +783,27 @@ TICKER_EXCHANGE_CURRENCY = {
 }
 
 
+# Londen-genoteerde UCITS-ETF's die in USD (of EUR) handelen terwijl het
+# achtervoegsel '.L' op GBP wijst. Dit is de BETROUWBARE basis: yfinance's
+# .info valt in de praktijk regelmatig uit (rate limiting op Streamlit
+# Cloud) en dan zou het achtervoegsel-fallback ('.L' -> GBP) deze ETF's
+# onterecht als GBP behandelen en de koers met de GBP/EUR-koers vermenigvuldigen.
+KNOWN_TICKER_CURRENCY = {
+    "SMH.L": "USD", "CSPX.L": "USD", "SWDA.L": "USD", "CNDX.L": "USD",
+    "VWRA.L": "USD", "SSAC.L": "USD", "SEMI.L": "USD",
+}
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
+def _fetch_info_currency(ticker: str) -> str:
+    """Alleen het yfinance-resultaat; gooit een fout bij ontbrekende waarde,
+    zodat een MISLUKTE lookup NIET 24 uur lang wordt gecachet."""
+    cur = yf.Ticker(ticker).info.get("currency")
+    if not cur:
+        raise ValueError(f"no currency for {ticker}")
+    return cur
+
+
 def get_cached_ticker_currency(ticker: str) -> str:
     """
     Cachet de valuta van een ticker voor 24 uur (i.p.v. de standaard 5
@@ -807,8 +827,10 @@ def get_cached_ticker_currency(ticker: str) -> str:
     blijft correct afgehandeld: als .info geen waarde heeft, valt dit nu
     alsnog terug op het achtervoegsel, niet op een blinde 'USD'-aanname.
     """
+    if ticker.upper() in KNOWN_TICKER_CURRENCY:
+        return KNOWN_TICKER_CURRENCY[ticker.upper()]
     try:
-        info_currency = yf.Ticker(ticker).info.get("currency")
+        info_currency = _fetch_info_currency(ticker)
     except Exception:
         info_currency = None
     if info_currency:
