@@ -1,9 +1,9 @@
 ticker,prijs_nu,roic_pct,roic_trend,fair_value,afwijking_fair_value_pct,volatiliteit_pct
-CMI,450.07,16.5,stijgend,708.66,-36.5,28.1
-IBKR,75.82,1573.2,stijgend,104.16,-27.2,28.6
-NFLX,63.41,31.2,stijgend,84.76,-25.2,28.9
-REN.AS,37.0,23.5,stijgend,47.25,-23.4,26.1
-TT,401.76,26.0,stijgend,518.43,-22.5,24.7
-TJX,135.3,30.9,stijgend,171.16,-21.0,28.2
-BVI.PA,30.22,20.5,stijgend,33.49,-10.6,14.5
-PUB.PA,104.9,16.1,stijgend,115.19,-10.6,24.8
+CMI,452.18,16.5,stijgend,634.06,-28.7,27.6
+NFLX,62.15,31.2,stijgend,84.76,-26.7,28.9
+REN.AS,36.12,23.5,stijgend,47.25,-22.1,25.4
+TJX,134.37,30.9,stijgend,167.5,-19.8,27.8
+TT,417.99,26.0,stijgend,516.51,-19.1,25.5
+TEL,216.34,17.6,stijgend,258.37,-16.3,24.8
+VRSK,207.82,33.3,stijgend,235.94,-11.9,29.6
+JKHY,177.67,22.9,stijgend,200.0,-11.2,29.1
