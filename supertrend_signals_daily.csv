@@ -1,6 +1,4 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-AMD,2026-11-11,2,20,552.9,534.06,-3.41,False,^GSPC,14.8,True,4.5,stijgend,7.4,True,2026-11-03,10,657.74,-18.8,7.26
-AVGO,2026-11-12,1,19,364.36,347.01,-4.76,True,^GSPC,-3.46,True,15.0,stijgend,1.7,True,2026-06-03,163,529.24,-34.4,7.03
-ANET,2026-11-11,2,19,196.68,197.29,0.31,True,^GSPC,8.41,False,27.8,dalend,11.2,True,2026-11-03,10,249.65,-21.0,5.9
-CEG,2026-11-12,1,15,282.4,280.2,-0.78,True,^GSPC,3.71,False,15.8,dalend,30.1,True,2026-11-09,4,338.25,-17.2,5.83
-APO,2026-11-11,2,40,122.95,123.47,0.42,True,^GSPC,-3.97,False,35.5,dalend,-5.8,False,2026-11-03,10,146.45,-15.7,3.84
+AVGO,2026-11-12,2,19,364.36,333.4,-8.5,False,^GSPC,-5.99,True,15.0,stijgend,2.5,True,2026-09-02,75,528.17,-36.9,6.13
+PCG,2026-11-16,0,55,13.68,13.68,0.0,True,^GSPC,-18.59,True,3.9,stijgend,-2.1,False,2026-10-22,25,17.78,-23.1,6.08
+CEG,2026-11-12,2,15,281.97,277.82,-1.47,True,^GSPC,5.32,False,15.8,dalend,30.1,True,2026-11-09,7,339.07,-18.1,5.21
