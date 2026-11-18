@@ -1,4 +1,2 @@
 ticker,flip_date,dagen_geleden,voorgaande_trend_dagen,prijs_bij_omslag,prijs_nu,sinds_omslag_pct,boven_ema,benchmark,relatieve_sterkte,volume_bevestigd,roic_pct,roic_trend,earnings_surprise_pct,earnings_beat,earnings_date,dagen_sinds_earnings,fair_value,afwijking_fair_value_pct,score
-AVGO,2026-11-12,2,19,364.36,333.4,-8.5,False,^GSPC,-5.99,True,15.0,stijgend,2.5,True,2026-09-02,75,528.17,-36.9,6.13
-PCG,2026-11-16,0,55,13.68,13.68,0.0,True,^GSPC,-18.59,True,3.9,stijgend,-2.1,False,2026-10-22,25,17.78,-23.1,6.08
-CEG,2026-11-12,2,15,281.97,277.82,-1.47,True,^GSPC,5.32,False,15.8,dalend,30.1,True,2026-11-09,7,339.07,-18.1,5.21
+PCG,2026-11-16,1,55,13.68,13.54,-1.02,False,^GSPC,-20.85,True,3.9,stijgend,-2.1,False,2026-10-22,26,,,4.47
